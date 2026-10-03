@@ -297,10 +297,11 @@ namespace ImmPlayer
             {
                 _vulkanSampleEventCoroutine = StartCoroutine(IssueVulkanSampleEventAfterEndOfFrame());
             }
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS || UNITY_ANDROID
             if (Application.isPlaying && !_isInitialized &&
                 (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12 ||
-                 SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal) &&
+                 SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal ||
+                 SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan) &&
                 GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset)
                 Initialize();
 #endif
@@ -386,9 +387,10 @@ namespace ImmPlayer
 
             Log("=== IMM Player Initialization Started ===");
 
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS || UNITY_ANDROID
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12 ||
-                (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal &&
+                ((SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal ||
+                  SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan) &&
                  GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset))
             {
                 if (!(GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset))

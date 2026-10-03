@@ -124,6 +124,7 @@
 #if defined(IMM_UNITY_VULKAN)
 #include "IUnityGraphicsVulkanMinimal.h"
 #include "imm_unity_vulkan_render_graph_events.h"
+#include "imm_unity_vulkan_render_graph.h"
 #include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
 #endif
 #if defined(__APPLE__)
@@ -248,6 +249,9 @@ struct ImmUnityPlugin
 
 #if defined(WINDOWS)
         ImmRenderGraphState mRenderGraph;
+#endif
+#if defined(IMM_UNITY_VULKAN)
+        ImmVulkanRenderGraphState mVulkanRenderGraph;
 #endif
 #if defined(__APPLE__)
         ImmMetalRenderGraphState mMetalRenderGraph;
@@ -395,7 +399,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
             if (gImmUnityPlugin.UnityAPI.mVulkan)
             {
                 gImmUnityPlugin.UnityAPI.mVulkanInstance = gImmUnityPlugin.UnityAPI.mVulkan->Instance();
-                ConfigureImmVulkanRenderGraphEvents(gImmUnityPlugin.UnityAPI.mVulkan);
+                gImmUnityPlugin.mVulkanRenderGraph.eventsConfigured = ConfigureImmVulkanRenderGraphEvents(gImmUnityPlugin.UnityAPI.mVulkan);
                 for (int cameraID = 0; cameraID < 256; ++cameraID)
                 {
                     iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
@@ -421,7 +425,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 			if (gImmUnityPlugin.UnityAPI.mVulkan)
 			{
 				gImmUnityPlugin.UnityAPI.mVulkanInstance = gImmUnityPlugin.UnityAPI.mVulkan->Instance();
-                ConfigureImmVulkanRenderGraphEvents(gImmUnityPlugin.UnityAPI.mVulkan);
+                gImmUnityPlugin.mVulkanRenderGraph.eventsConfigured = ConfigureImmVulkanRenderGraphEvents(gImmUnityPlugin.UnityAPI.mVulkan);
 				for (int cameraID = 0; cameraID < 256; ++cameraID)
 				{
 					iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
@@ -469,6 +473,12 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
         ShutdownImmMetalRenderGraph(gImmUnityPlugin.mMetalRenderGraph, gImmUnityPlugin.mBridge);
         gImmUnityPlugin.mMetalRenderGraph.unity = nullptr;
 #endif
+#if defined(IMM_UNITY_VULKAN)
+        ShutdownImmVulkanRenderGraph(gImmUnityPlugin.mVulkanRenderGraph, gImmUnityPlugin.mBridge);
+        gImmUnityPlugin.mVulkanRenderGraph.unity = nullptr;
+        gImmUnityPlugin.mVulkanRenderGraph.eventsConfigured = false;
+#endif
+
 	}
 }
 
@@ -1569,23 +1579,31 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
 static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
 {
     IMM_UNITY_NATIVE_LOCK();
-    if ((eventId != ImmRenderGraphEventId && eventId != ImmRenderGraphShutdownEventId) || !data) return;
+    if ((eventId != ImmRenderGraphEventId && eventId != ImmRenderGraphShutdownEventId && eventId != ImmRenderGraphPreparationEventId) || !data) return;
     auto* packet = static_cast<ImmRenderGraphPacket*>(data);
     // Validate the ABI header before reading or writing any later fields.
     if (packet->version != 2 || packet->size != sizeof(*packet)) return;
     // Queue-access shutdown events cannot query or record render attachments.
     // Vulkan shutdown must use this event so unsubmitted host draws are flushed.
     const bool vulkan = gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan;
-    if ((eventId == ImmRenderGraphShutdownEventId && (!vulkan || packet->operation != 2)) ||
-        (vulkan && packet->operation == 2 && eventId != ImmRenderGraphShutdownEventId))
+    if ((!vulkan && eventId != ImmRenderGraphEventId) ||
+        (eventId == ImmRenderGraphShutdownEventId && (!vulkan || packet->operation != 2)) ||
+        (vulkan && packet->operation == 2 && eventId != ImmRenderGraphShutdownEventId) ||
+        (vulkan && (packet->operation == 0 || packet->operation == 3) && eventId != ImmRenderGraphPreparationEventId))
     {
         packet->result = -2147024809; // E_INVALIDARG.
         packet->completed.store(1, std::memory_order_release);
         return;
     }
     int32_t result = -2147418113; // E_UNEXPECTED.
+    bool acknowledge = true;
     try
     {
+#if defined(IMM_UNITY_VULKAN)
+        if (vulkan)
+            result = ProcessImmVulkanRenderGraph(gImmUnityPlugin.mVulkanRenderGraph,
+                gImmUnityPlugin.mBridge, *packet, eventId, acknowledge);
+#endif
 #if defined(WINDOWS)
         if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12)
             result = ProcessImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge, *packet);
@@ -1597,13 +1615,22 @@ static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
     catch (const std::exception& error)
     {
         std::fprintf(stderr, "IMM_RENDER_GRAPH failed: %.512s\n", error.what());
+#if defined(IMM_UNITY_VULKAN)
+        if (vulkan)
+        {
+            // Preserve the renderer until the managed owner requests flushed shutdown.
+            gImmUnityPlugin.mVulkanRenderGraph.preparationResult = -2147467259;
+            acknowledge = eventId != ImmRenderGraphPreparationEventId || packet->operation != 1;
+        }
+#endif
 #if defined(WINDOWS)
-        ShutdownImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge);
+        if (!vulkan) ShutdownImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge);
 #elif defined(__APPLE__)
         ShutdownImmMetalRenderGraph(gImmUnityPlugin.mMetalRenderGraph, gImmUnityPlugin.mBridge);
 #endif
         result = -2147467259; // E_FAIL.
     }
+    if (!acknowledge) return;
     packet->result = static_cast<int32_t>(result);
     packet->completed.store(1, std::memory_order_release);
 }
@@ -1620,6 +1647,20 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketRe
     return 1;
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetRenderGraphPaths(const char* logFile, const char* tmpFolder)
+{
+    IMM_UNITY_NATIVE_LOCK();
+#if defined(IMM_UNITY_VULKAN)
+    if (!logFile || !tmpFolder || gImmUnityPlugin.mBridge.IsInitialized()) return 0;
+    gImmUnityPlugin.mVulkanRenderGraph.logFileName = logFile;
+    gImmUnityPlugin.mVulkanRenderGraph.tmpFolderName = tmpFolder;
+    return 1;
+#else
+    (void)logFile; (void)tmpFolder;
+    return 0;
+#endif
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketSize()
 {
     return static_cast<int>(sizeof(ImmRenderGraphPacket));
@@ -1627,6 +1668,14 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketSi
 
 extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphEventFunc()
 {
+#if defined(IMM_UNITY_VULKAN)
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan &&
+        gImmUnityPlugin.UnityAPI.mVulkan && gImmUnityPlugin.mVulkanRenderGraph.eventsConfigured)
+    {
+        gImmUnityPlugin.mVulkanRenderGraph.unity = gImmUnityPlugin.UnityAPI.mVulkan;
+        return iOnRenderGraphEvent;
+    }
+#endif
 #if defined(WINDOWS)
     if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12 && gImmUnityPlugin.mRenderGraph.unity != nullptr)
         return iOnRenderGraphEvent;

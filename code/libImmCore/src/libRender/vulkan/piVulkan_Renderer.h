@@ -45,7 +45,7 @@ public:
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height);
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height, bool clearExternalDepth = false);
     bool BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height);
-    bool BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber);
+    bool BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber, bool unityProjectionAdjusted = false);
     bool HostFrameResourcesValid(void) const;
     bool DebugClearHostRenderPassColor(float red, float green, float blue, float alpha);
     void EndExternalImageFrame(void);

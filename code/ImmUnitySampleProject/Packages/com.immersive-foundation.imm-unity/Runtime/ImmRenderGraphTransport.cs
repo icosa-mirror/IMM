@@ -13,6 +13,7 @@ namespace ImmPlayer
         internal const int PacketSize = 480;
         internal const int EventId = 0x494d4d;
         internal const int ShutdownEventId = EventId + 1;
+        internal const int PreparationEventId = EventId + 2;
         private enum Phase { Created, Initializing, Ready, Stopping, Stopped, Faulted }
         private sealed class Slot
         {
@@ -44,11 +45,17 @@ namespace ImmPlayer
         [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         private static extern int GetRenderGraphPacketResult(IntPtr packet, out int result, out ulong gpuCompletion);
 
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int SetRenderGraphPaths(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string logFile,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string tmpFolder);
+
         internal ImmRenderGraphTransport()
         {
             if (IntPtr.Size != 8 || (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D12 &&
-                SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal))
-                throw new NotSupportedException("IMM RenderGraph transport requires 64-bit D3D12 or Metal.");
+                SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal &&
+                SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan))
+                throw new NotSupportedException("IMM RenderGraph transport requires 64-bit D3D12, Metal or Vulkan.");
             if (GetRenderGraphPacketSize() != PacketSize)
                 throw new InvalidOperationException("IMM managed and native RenderGraph packet layouts differ.");
             callback = GetRenderGraphEventFunc();
@@ -81,6 +88,10 @@ namespace ImmPlayer
             Poll();
             if ((phase != Phase.Created && phase != Phase.Stopped) || HasPending())
                 throw new InvalidOperationException("IMM RenderGraph session is already active.");
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan &&
+                SetRenderGraphPaths(System.IO.Path.Combine(Application.temporaryCachePath, "imm-render-graph.log"),
+                    Application.temporaryCachePath) != 1)
+                throw new InvalidOperationException("IMM Vulkan initialization requires writable session paths and no active legacy session.");
             Slot slot = Acquire(0);
             Marshal.WriteInt32(slot.Memory, 28, linearColor ? 0 : 1);
             Marshal.WriteInt32(slot.Memory, 32, 8); // Initial renderer configuration; borrowed attachments determine draw sample counts.
@@ -181,8 +192,13 @@ namespace ImmPlayer
             if (commands == null) throw new ArgumentNullException(nameof(commands));
             // Conservatively retain the packet even if command recording throws.
             slot.Pending = true;
-            int eventId = slot.Operation == 2 && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan
-                ? ShutdownEventId : EventId;
+            int eventId = EventId;
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan)
+            {
+                if (slot.Operation == 1)
+                    commands.IssuePluginEventAndData(callback, PreparationEventId, slot.Memory);
+                else eventId = slot.Operation == 2 ? ShutdownEventId : PreparationEventId;
+            }
             commands.IssuePluginEventAndData(callback, eventId, slot.Memory);
         }
         private bool HasPending()

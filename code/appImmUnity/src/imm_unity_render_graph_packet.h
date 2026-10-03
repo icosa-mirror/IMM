@@ -38,4 +38,5 @@ static_assert(std::is_standard_layout<ImmRenderGraphPacket>::value, "RenderGraph
 static_assert(ATOMIC_INT_LOCK_FREE == 2 && std::is_same<int32_t, int>::value, "RenderGraph completion must be lock-free");
 constexpr int ImmRenderGraphEventId = 0x494d4d;
 constexpr int ImmRenderGraphShutdownEventId = ImmRenderGraphEventId + 1;
+constexpr int ImmRenderGraphPreparationEventId = ImmRenderGraphEventId + 2;
 

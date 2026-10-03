@@ -1960,7 +1960,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
       contains(github.event.pull_request.labels.*.name, 'device-ci'))
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -2117,7 +2117,9 @@ jobs:
         id: cache_unity_android_vulkan_shell
         uses: actions/cache/restore@v4
         with:
-          path: .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+          path: |
+            .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+            .ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk
           key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
 
       - name: Restore Unity Android Library cache
@@ -2148,7 +2150,7 @@ jobs:
       - name: Build Unity Android Vulkan smoke player
         id: unity_android_vulkan_build
         if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true'
-        timeout-minutes: 30
+        timeout-minutes: 45
         uses: game-ci/unity-builder@v4
         env:
           UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
@@ -2180,7 +2182,9 @@ jobs:
         if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true' && steps.unity_android_vulkan_build.outcome == 'success'
         uses: actions/cache/save@v4
         with:
-          path: .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+          path: |
+            .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+            .ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk
           # Reuse the pre-build key. Unity mutates project files during a build,
           # so recomputing hashFiles here would save under an unrestorable key.
           key: ${{ steps.cache_unity_android_vulkan_shell.outputs.cache-primary-key }}
@@ -2197,6 +2201,50 @@ jobs:
           unsigned_apk="$work_dir/ImmUnitySmoke-unsigned.apk"
           aligned_apk="$work_dir/ImmUnitySmoke-aligned.apk"
           output_apk="artifacts/unity-android-vulkan/ImmUnitySmoke.apk"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          if [ -z "$build_tools" ] || [ ! -x "$build_tools/zipalign" ] || [ ! -x "$build_tools/apksigner" ]; then
+            echo "Android SDK zipalign/apksigner tools were not found"
+            exit 1
+          fi
+          mkdir -p "$work_dir" "$(dirname "$output_apk")"
+          python tests/tools/repack_android_native_library.py \
+            --input-apk "$shell_apk" \
+            --library "$plugin" \
+            --entry lib/arm64-v8a/libImmUnityPlugin.so \
+            --output-apk "$unsigned_apk"
+          "$build_tools/zipalign" -P 16 -f 4 "$unsigned_apk" "$aligned_apk"
+          if [ ! -f "$work_dir/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$work_dir/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -noprompt
+          fi
+          "$build_tools/apksigner" sign \
+            --ks "$work_dir/debug.keystore" \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$output_apk" \
+            "$aligned_apk"
+          "$build_tools/apksigner" verify --verbose "$output_apk"
+
+      - name: Inject same-commit plugin into Unity Android Vulkan URP shell APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          shell_apk=".ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk"
+          plugin="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+          # game-ci's Docker container can leave .ci-cache root-owned. Keep all
+          # mutable repack/signing files in GitHub's runner-owned temp directory.
+          work_dir="${RUNNER_TEMP}/unity-android-vulkan-urp-repack"
+          unsigned_apk="$work_dir/ImmUnitySmoke-unsigned.apk"
+          aligned_apk="$work_dir/ImmUnitySmoke-aligned.apk"
+          output_apk="artifacts/unity-android-vulkan/ImmUnityUrpSmoke.apk"
           build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           if [ -z "$build_tools" ] || [ ! -x "$build_tools/zipalign" ] || [ ! -x "$build_tools/apksigner" ]; then
             echo "Android SDK zipalign/apksigner tools were not found"
@@ -2342,6 +2390,30 @@ jobs:
           --required-capture-name unity-android-vulkan.png
           --external-screen-capture-name unity-android-vulkan-robo-final.png
           --client-label "IMM Unity Android Vulkan"
+
+      - name: Validate Unity Android Vulkan URP in Firebase Test Lab
+        timeout-minutes: 30
+        shell: bash
+        run: >
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-unity-android-vulkan-urp"
+          --device "$FTL_UNITY_DEVICE"
+          --app artifacts/unity-android-vulkan/ImmUnityUrpSmoke.apk
+          --test-type robo
+          --robo-script tests/fixtures/firebase/unity_android_vulkan_wait.roboscript
+          --artifact-dir artifacts/unity-android-vulkan/urp
+          --timeout 5m
+          --directory-to-pull /sdcard/Android/data/com.ImmersiveFoundation.IMMUnityTest/files
+          --required-marker "[IMM_URP_SMOKE] graphicsDevice=Vulkan"
+          --required-marker "[IMM_URP_SMOKE] PASS rendered at 1 samples."
+          --required-marker "[IMM_URP_SMOKE] PASS rendered at 4 samples."
+          --required-marker "[IMM_URP_SMOKE] PASS bidirectional depth composition at 1 samples."
+          --required-marker "[IMM_URP_SMOKE] PASS bidirectional depth composition at 4 samples."
+          --required-marker "[IMM_URP_SMOKE] PASS queued camera isolation."
+          --required-marker "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down."
+          --client-label "IMM Unity Android Vulkan URP"
 
       - name: Record Unity Android Vulkan visual metrics
         if: always()

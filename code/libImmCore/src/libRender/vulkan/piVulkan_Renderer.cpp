@@ -1337,6 +1337,7 @@ struct piRTargetS
     uint32_t colorAttachmentCount = 0;
     bool hasDepth = false;
     bool ownsRenderPassObjects = true;
+    bool unityProjectionAdjusted = false;
     // MSAA (native-viewer quality contract): draws rasterize at renderSampleCount
     // into transient tile-memory attachments below and resolve in-pass into the
     // wrapped 1x color image. 1_BIT = classic single-sampled target.
@@ -5651,9 +5652,9 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
-    viewport.y = (float)target->height;
+    viewport.y = target->unityProjectionAdjusted ? 0.0f : (float)target->height;
     viewport.width = (float)target->width;
-    viewport.height = -(float)target->height;
+    viewport.height = target->unityProjectionAdjusted ? (float)target->height : -(float)target->height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     VkRect2D scissor = {};
@@ -6176,9 +6177,9 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
-    viewport.y = (float)target->height;
+    viewport.y = target->unityProjectionAdjusted ? 0.0f : (float)target->height;
     viewport.width = (float)target->width;
-    viewport.height = -(float)target->height;
+    viewport.height = target->unityProjectionAdjusted ? (float)target->height : -(float)target->height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     VkRect2D scissor = {};
@@ -6355,9 +6356,9 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
-    viewport.y = (float)target->height;
+    viewport.y = target->unityProjectionAdjusted ? 0.0f : (float)target->height;
     viewport.width = (float)target->width;
-    viewport.height = -(float)target->height;
+    viewport.height = target->unityProjectionAdjusted ? (float)target->height : -(float)target->height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     VkRect2D scissor = {};
@@ -9558,10 +9559,11 @@ bool piRendererVulkan::UsesDedicatedQueue(void) const
     return mState != nullptr && mState->ownsDedicatedQueue;
 }
 
-bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber)
+bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber, bool unityProjectionAdjusted)
 {
     EndExternalImageFrame();
-    if (!mState || commandBuffer == nullptr || renderPass == nullptr || framebuffer == nullptr || colorVkFormat == 0 || width <= 0 || height <= 0)
+    if (!mState || commandBuffer == nullptr || renderPass == nullptr ||
+        (framebuffer == nullptr && !unityProjectionAdjusted) || colorVkFormat == 0 || width <= 0 || height <= 0)
     {
         return false;
     }
@@ -9611,6 +9613,7 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     target->colorAttachmentCount = 1;
     target->hasDepth = hasDepthAttachment;
     target->ownsRenderPassObjects = false;
+    target->unityProjectionAdjusted = unityProjectionAdjusted;
     ++mState->liveRenderTargets;
 
     mState->hostPreviousCommandBuffer = mState->commandBuffer;
@@ -9621,7 +9624,7 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
 #if defined(__ANDROID__) || defined(ANDROID)
     const bool useHostDepthReverseZ = useHostDepth;
 #else
-    const bool useHostDepthReverseZ = iRendererFlagEnabled("IMM_UNITY_VK_HOST_DEPTH_REVERSE_Z");
+    const bool useHostDepthReverseZ = unityProjectionAdjusted || iRendererFlagEnabled("IMM_UNITY_VK_HOST_DEPTH_REVERSE_Z");
 #endif
     mState->externalFrameUsesHostDepth = useHostDepth;
     mState->externalFrameHostDepthReverseZ = useHostDepth && useHostDepthReverseZ;

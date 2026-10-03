@@ -127,6 +127,8 @@ namespace ImmPlayer.Editor
                     BuildOptions.Development,
                     "Android Vulkan non-XR smoke player",
                     new[] { "IMM_UNITY_ANDROID_VULKAN_CI" });
+                BuildUrpPlayer(BuildTarget.Android, GraphicsDeviceType.Vulkan,
+                    Path.Combine(Path.GetDirectoryName(outputPath), "urp", "ImmUnityUrpSmoke.apk"));
             }
             finally
             {
@@ -485,7 +487,9 @@ namespace ImmPlayer.Editor
                 PlayerSettings.SetGraphicsAPIs(target, new[] { api });
                 Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
                 BuildPlayer(target, outputPath, BuildOptions.Development,
-                    $"{target} {api} URP smoke player", scenes: new[] { ImmUrpSampleSetup.ScenePath });
+                    $"{target} {api} URP smoke player",
+                    extraScriptingDefines: target == BuildTarget.Android ? new[] { "IMM_UNITY_ANDROID_URP_CI" } : null,
+                    scenes: new[] { ImmUrpSampleSetup.ScenePath });
             }
             finally
             {
@@ -529,6 +533,8 @@ namespace ImmPlayer.Editor
             }
 
             BuildPlayer(BuildTarget.StandaloneWindows64, outputPath, BuildOptions.Development, "Windows Vulkan smoke player");
+            BuildUrpPlayer(BuildTarget.StandaloneWindows64, GraphicsDeviceType.Vulkan,
+                Path.Combine(outputDir, "urp", "ImmUnityUrpSmoke.exe"));
         }
 
         public static void RunWindowsOpenXREditorPlayModeSmoke()

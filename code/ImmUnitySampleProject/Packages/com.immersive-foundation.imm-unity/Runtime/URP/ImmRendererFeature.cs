@@ -25,9 +25,10 @@ namespace ImmPlayer
             if (camera == null || camera.cameraType != CameraType.Game ||
                 !camera.TryGetComponent<ImmCamera>(out var optIn) || !optIn.isActiveAndEnabled) return;
             if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D12 &&
-                SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal)
+                SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal &&
+                SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan)
             {
-                Report("The RenderGraph backend currently implements D3D12 and mono Metal.");
+                Report("The RenderGraph backend currently implements D3D12 and mono Metal/Vulkan.");
                 return;
             }
             var current = ImmRenderGraphSession.Current;

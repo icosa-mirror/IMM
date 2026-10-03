@@ -19,7 +19,13 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
     {
-        if (Environment.GetEnvironmentVariable("IMM_UNITY_URP_SMOKE") == "1")
+#if IMM_UNITY_ANDROID_URP_CI
+        Environment.SetEnvironmentVariable("IMM_UNITY_URP_CAPTURE", Path.Combine(Application.persistentDataPath, "unity-urp-scene.png"));
+        bool enabled = true;
+#else
+        bool enabled = Environment.GetEnvironmentVariable("IMM_UNITY_URP_SMOKE") == "1";
+#endif
+        if (enabled)
             new GameObject("IMM URP CI probe").AddComponent<ImmUrpRuntimeSmoke>();
     }
 
@@ -43,13 +49,16 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             yield return probe.Current;
         }
         Debug.Log("[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.");
+#if !IMM_UNITY_ANDROID_URP_CI
         Application.Quit(0);
+#endif
     }
 
     private IEnumerator Run()
     {
         bool metal = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal;
-        Require(metal || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12, "D3D12 or Metal is required.");
+        bool vulkan = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan;
+        Require(metal || vulkan || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12, "D3D12, Metal or Vulkan is required.");
         Debug.Log($"[IMM_URP_SMOKE] graphicsDevice={SystemInfo.graphicsDeviceType}");
         var sample = FindFirstObjectByType<ImmUrpSample>();
         Require(sample != null, "Configured URP sample is missing.");
@@ -114,6 +123,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             Debug.Log($"[IMM_URP_SMOKE] PASS rendered at {samples} samples.");
         }
         ReadVisiblePixels(true);
+        if (vulkan) VerifyQueuedCameras();
         optIn.enabled = false;
         for (int frame = 0; frame < 3; ++frame) yield return null;
         RenderPipeline.SubmitRenderRequest(documentCamera, request);
@@ -208,6 +218,76 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             Destroy(quad);
             Destroy(mesh);
             Destroy(material);
+        }
+    }
+
+    private void VerifyQueuedCameras()
+    {
+        var originalPosition = documentCamera.transform.position;
+        var originalTarget = documentCamera.targetTexture;
+        var first = new RenderTexture(target.descriptor);
+        var second = new RenderTexture(target.descriptor);
+        var control = new RenderTexture(target.descriptor);
+        try
+        {
+            Require(first.Create() && second.Create() && control.Create(), "Could not create queued camera targets.");
+            documentCamera.targetTexture = first;
+            RenderPipeline.SubmitRenderRequest(documentCamera, new UniversalRenderPipeline.SingleCameraRequest { destination = first });
+            documentCamera.transform.position += documentCamera.transform.right * 0.25f;
+            documentCamera.targetTexture = second;
+            RenderPipeline.SubmitRenderRequest(documentCamera, new UniversalRenderPipeline.SingleCameraRequest { destination = second });
+            // No readback separates these two submissions. Earlier GPU draws must
+            // retain the first camera's projection and uniforms.
+            Color32[] firstPixels = ReadTargetPixels(first, "queued-first");
+            Color32[] secondPixels = ReadTargetPixels(second, "queued-second");
+            documentCamera.transform.position = originalPosition;
+            documentCamera.targetTexture = control;
+            RenderPipeline.SubmitRenderRequest(documentCamera, new UniversalRenderPipeline.SingleCameraRequest { destination = control });
+            Color32[] controlPixels = ReadTargetPixels(control, "queued-control");
+            int shifted = 0, mismatched = 0;
+            for (int i = 0; i < firstPixels.Length; ++i)
+            {
+                if (ColorDistance(firstPixels[i], secondPixels[i]) > 15) ++shifted;
+                if (ColorDistance(firstPixels[i], controlPixels[i]) > 15) ++mismatched;
+            }
+            Require(shifted > 100, $"Queued cameras did not produce distinct views: changed={shifted}.");
+            Require(mismatched < 20, $"The earlier queued camera lost its own data: mismatched={mismatched}.");
+            Debug.Log("[IMM_URP_SMOKE] PASS queued camera isolation.");
+        }
+        finally
+        {
+            documentCamera.transform.position = originalPosition;
+            documentCamera.targetTexture = originalTarget;
+            foreach (var texture in new[] { first, second, control }) { texture.Release(); Destroy(texture); }
+        }
+    }
+
+    private static int ColorDistance(Color32 a, Color32 b)
+    {
+        return Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b);
+    }
+
+    private static Color32[] ReadTargetPixels(RenderTexture texture, string label)
+    {
+        var previous = RenderTexture.active;
+        var resolved = RenderTexture.GetTemporary(texture.width, texture.height, 0, RenderTextureFormat.ARGB32);
+        var pixels = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
+        try
+        {
+            Graphics.Blit(texture, resolved);
+            RenderTexture.active = resolved;
+            pixels.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
+            pixels.Apply();
+            string capture = Environment.GetEnvironmentVariable("IMM_UNITY_URP_CAPTURE");
+            string path = Path.Combine(Path.GetDirectoryName(capture), $"{Path.GetFileNameWithoutExtension(capture)}-{label}.png");
+            File.WriteAllBytes(path, pixels.EncodeToPNG());
+            return pixels.GetPixels32();
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(resolved);
+            Destroy(pixels);
         }
     }
 

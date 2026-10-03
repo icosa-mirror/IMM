@@ -1201,3 +1201,28 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     adapter must shut down the native bridge from this dedicated event and
     acknowledge the packet after GPU-backed resources have been retired. Full CI
     and actual queued-draw shutdown validation are required before acceptance.
+15. Full validation run 37154031890 passed for the dedicated shutdown event contract.
+    The Vulkan RenderGraph adapter is now wired for mono cameras on Windows and
+    Android. It queries the explicit URP colour/depth buffers, checks dimensions,
+    formats, layers and sample counts, and records into Unity's host render pass.
+    Unity-adjusted projection, viewport orientation and reversed depth are confined
+    to this route; existing standalone and legacy Vulkan conventions remain intact.
+16. Vulkan initialization, maintenance and camera preparation use a separate
+    queue-access event so IMM asset uploads do not submit through the draw event's
+    borrowed recording context. A camera request remains pending across preparation
+    and drawing, including preparation failures. Shutdown uses the dedicated flush
+    event and acknowledges after bridge shutdown. Writable log/temp paths are copied
+    into native-owned session strings before initialization. Partial initialization
+    retains bridge ownership until safe shutdown.
+17. CI builds an additional Android URP APK, caches its managed shell with the
+    existing APK, and injects the same-commit native library into both. A mandatory
+    Firebase physical-device run requires Vulkan, visible rendering and bidirectional
+    depth at 1x/4x MSAA, two queued camera views compared against a control, opt-out,
+    unload and shutdown. The existing Android checks remain in place. An additional
+    Windows Vulkan URP player is built for GPU validation. Local native compilation,
+    CPU lifetime/event tests and workflow parsing pass; runtime acceptance for this
+    adapter is still unproven until the new device gate passes.
+18. This increment does not complete Vulkan or the feature. Quest multiview is not
+    yet implemented and is rejected before submission. Validate every required
+    layer type and complete one-pass Quest multiview, Windows OpenXR single-pass
+    instancing and the original acceptance criteria before declaring completion.

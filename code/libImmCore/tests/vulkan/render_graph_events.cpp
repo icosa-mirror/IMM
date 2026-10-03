@@ -19,10 +19,15 @@ int main()
     Require(!ConfigureImmVulkanRenderGraphEvents(nullptr), "Accepted absent Vulkan interface");
     Require(!ConfigureImmVulkanRenderGraphEvents(&unity), "Accepted absent event configuration API");
     unity.ConfigureEvent = Capture;
-    Require(ConfigureImmVulkanRenderGraphEvents(&unity) && events.size() == 2,
+    Require(ConfigureImmVulkanRenderGraphEvents(&unity) && events.size() == 3,
         "Failed to configure distinct draw and shutdown events");
     const auto& draw = events[0];
     const auto& shutdown = events[1];
+    const auto& preparation = events[2];
+    Require(preparation.id == ImmRenderGraphPreparationEventId &&
+        preparation.config.graphicsQueueAccess == kUnityVulkanGraphicsQueueAccess_Allow &&
+        !(preparation.config.flags & kUnityVulkanEventConfigFlag_FlushCommandBuffers),
+        "Asset preparation must own queue access without flushing each camera");
     Require(draw.id == ImmRenderGraphEventId && shutdown.id == ImmRenderGraphShutdownEventId &&
         shutdown.id != draw.id, "Shutdown must have its own event ID");
     Require(draw.config.graphicsQueueAccess == kUnityVulkanGraphicsQueueAccess_DontCare &&

@@ -21,5 +21,8 @@ inline bool ConfigureImmVulkanRenderGraphEvents(IUnityGraphicsVulkan* unity)
         kUnityVulkanEventConfigFlag_FlushCommandBuffers |
         kUnityVulkanEventConfigFlag_SyncWorkerThreads;
     unity->ConfigureEvent(ImmRenderGraphShutdownEventId, &shutdown);
+    UnityVulkanPluginEventConfig preparation = shutdown;
+    preparation.flags &= ~kUnityVulkanEventConfigFlag_FlushCommandBuffers;
+    unity->ConfigureEvent(ImmRenderGraphPreparationEventId, &preparation);
     return true;
 }
