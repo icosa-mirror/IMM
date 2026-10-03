@@ -163,6 +163,10 @@ namespace ImmPlayer
             commands.SetViewport(new Rect(0, 0, size.x, size.y));
             IntPtr colorBuffer = c.colorBuffer.GetNativeRenderBufferPtr();
             IntPtr depthBuffer = d.depthBuffer.GetNativeRenderBufferPtr();
+            // iOS MSAA depth can have a texture without a Unity RenderBuffer wrapper.
+            // Keep the native texture's type explicit in the packet operation.
+            bool depthIsMetalTexture = depthBuffer == IntPtr.Zero && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal;
+            if (depthIsMetalTexture) depthBuffer = d.GetNativeDepthBufferPtr();
             if (colorBuffer == IntPtr.Zero || depthBuffer == IntPtr.Zero)
                 throw new InvalidOperationException($"[IMM_RENDER_GRAPH] Missing native attachments: colorMissing={colorBuffer == IntPtr.Zero} depthMissing={depthBuffer == IntPtr.Zero} color={c.name} format={c.graphicsFormat} samples={c.antiAliasing} memoryless={c.memorylessMode} created={c.IsCreated()} depth={d.name} format={d.depthStencilFormat} samples={d.antiAliasing} memoryless={d.memorylessMode} created={d.IsCreated()}.");
             data.Transport.QueueRender(commands, data.CameraId,
@@ -171,7 +175,8 @@ namespace ImmPlayer
                 data.Stereo ? data.LeftView : null,
                 data.Stereo ? GL.GetGPUProjectionMatrix(data.LeftProjection, flipped) : null,
                 data.Stereo ? data.RightView : null,
-                data.Stereo ? GL.GetGPUProjectionMatrix(data.RightProjection, flipped) : null);
+                data.Stereo ? GL.GetGPUProjectionMatrix(data.RightProjection, flipped) : null,
+                depthIsMetalTexture: depthIsMetalTexture);
             // The native event uses its own command list and restores resource states.
             // Rebind Unity attachments/viewport after the event for subsequent graph work.
             commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,

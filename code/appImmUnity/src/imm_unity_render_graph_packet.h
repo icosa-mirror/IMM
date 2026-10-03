@@ -12,7 +12,9 @@
 struct alignas(8) ImmRenderGraphPacket
 {
     uint32_t version = 2, size = sizeof(ImmRenderGraphPacket);
-    uint32_t operation = 0, viewCount = 1; // 0 initialize, 1 render, 2 shutdown, 3 maintenance
+    // 0 initialize, 1 render with Unity buffers, 2 shutdown, 3 maintenance,
+    // 4 Metal render with a Unity colour buffer and an explicitly borrowed MTLTexture depth.
+    uint32_t operation = 0, viewCount = 1;
     uint64_t sequence = 0;
     int32_t camera = 0, colorSpace = 0, samples = 8, enableSound = 1;
     uint64_t colorBuffer = 0, depthBuffer = 0;

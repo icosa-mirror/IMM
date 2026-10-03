@@ -56,7 +56,7 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
     constexpr int32_t invalid = -2147024809; // E_INVALIDARG, shared managed error convention.
     constexpr int32_t failed = -2147467259; // E_FAIL.
     if (packet.version != 2 || packet.size != sizeof(packet) || packet.completed ||
-        packet.operation > 3 || packet.viewCount != 1) return invalid;
+        packet.operation > 4 || packet.viewCount != 1) return invalid;
     if (packet.operation == 2) { ShutdownImmMetalRenderGraph(state, bridge); return 0; }
     auto* unity = state.unity;
     if (!unity || !unity->MetalDevice || !unity->CurrentCommandBuffer ||
@@ -96,9 +96,12 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
     @autoreleasepool
     {
         auto colorBuffer = reinterpret_cast<UnityRenderBuffer>(packet.colorBuffer);
-        auto depthBuffer = reinterpret_cast<UnityRenderBuffer>(packet.depthBuffer);
+        bool nativeDepthTexture = packet.operation == 4;
+        auto depthBuffer = nativeDepthTexture ? nullptr : reinterpret_cast<UnityRenderBuffer>(packet.depthBuffer);
         id<MTLTexture> color = (__bridge id<MTLTexture>)unity->TextureFromRenderBuffer(colorBuffer);
-        id<MTLTexture> depth = (__bridge id<MTLTexture>)unity->TextureFromRenderBuffer(depthBuffer);
+        id<MTLTexture> depth = nativeDepthTexture
+            ? (__bridge id<MTLTexture>)reinterpret_cast<void*>(packet.depthBuffer)
+            : (__bridge id<MTLTexture>)unity->TextureFromRenderBuffer(depthBuffer);
         // A SetRenderTarget before a plugin event need not create a Unity encoder.
         // CurrentRenderPassDescriptor describes the previous encoder in that case,
         // so use the packet's declared attachments for our own render pass.
@@ -149,8 +152,17 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
         pass.depthAttachment.texture = depth;
         pass.depthAttachment.loadAction = MTLLoadActionLoad;
         pass.depthAttachment.storeAction = MTLStoreActionStore;
-        id<MTLTexture> stencil = unity->StencilTextureFromRenderBuffer
-            ? (__bridge id<MTLTexture>)unity->StencilTextureFromRenderBuffer(depthBuffer) : nil;
+        id<MTLTexture> stencil = nil;
+        if (nativeDepthTexture)
+        {
+            if (depth.pixelFormat == MTLPixelFormatDepth32Float_Stencil8
+#if TARGET_OS_OSX
+                || depth.pixelFormat == MTLPixelFormatDepth24Unorm_Stencil8
+#endif
+                ) stencil = depth;
+        }
+        else if (unity->StencilTextureFromRenderBuffer)
+            stencil = (__bridge id<MTLTexture>)unity->StencilTextureFromRenderBuffer(depthBuffer);
         if (stencil)
         {
             pass.stencilAttachment.texture = stencil;

@@ -92,7 +92,7 @@ namespace ImmPlayer
         internal void QueueRender(CommandBuffer commands, int camera, IntPtr color, IntPtr depth,
             uint colorFormat, uint depthFormat, RectInt viewport, Matrix4x4 worldToView, Matrix4x4 projection,
             Matrix4x4? leftView = null, Matrix4x4? leftProjection = null,
-            Matrix4x4? rightView = null, Matrix4x4? rightProjection = null)
+            Matrix4x4? rightView = null, Matrix4x4? rightProjection = null, bool depthIsMetalTexture = false)
         {
             Poll();
             if (!IsReady) throw new InvalidOperationException("IMM RenderGraph session is not ready.");
@@ -102,7 +102,9 @@ namespace ImmPlayer
             bool stereo = leftView.HasValue || leftProjection.HasValue || rightView.HasValue || rightProjection.HasValue;
             if (stereo && !(leftView.HasValue && leftProjection.HasValue && rightView.HasValue && rightProjection.HasValue))
                 throw new ArgumentException("Stereo requires both view and projection matrices for each eye.");
-            Slot slot = Acquire(1);
+            if (depthIsMetalTexture && SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal)
+                throw new ArgumentException("Native Metal depth textures require the Metal backend.");
+            Slot slot = Acquire(depthIsMetalTexture ? 4 : 1);
             Marshal.WriteInt32(slot.Memory, 12, stereo ? 2 : 1);
             Marshal.WriteInt32(slot.Memory, 24, camera);
             Marshal.WriteInt64(slot.Memory, 40, color.ToInt64());
