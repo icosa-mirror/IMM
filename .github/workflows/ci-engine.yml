@@ -189,6 +189,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
           UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
         with:
+          cliVersion: v0.1.71 # Last verified package-import CLI; avoid latest-release API lookup.
           projectPath: artifacts/UnityPackageImportHarness/unity-package-import
           unityVersion: ${{ env.UNITY_VERSION }}
           testMode: all
