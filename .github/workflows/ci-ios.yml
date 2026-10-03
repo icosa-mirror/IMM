@@ -667,6 +667,10 @@ jobs:
                       "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
                       "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading."]
           for samples in (1, 2, 4, 8):
+              # The simulator reports no 2x MSAA support. Keep 1x/4x rendering
+              # mandatory, and require the exact capability marker to omit 2x.
+              if samples == 2 and "[IMM_URP_SMOKE] UNSUPPORTED samples=2 supported=1" in text:
+                  continue
               if samples == 8 and "[IMM_URP_SMOKE] UNSUPPORTED samples=8 " in text:
                   continue
               required.append(f"[IMM_URP_SMOKE] PASS rendered at {samples} samples.")
