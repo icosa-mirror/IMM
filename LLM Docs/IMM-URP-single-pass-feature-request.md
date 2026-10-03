@@ -1173,3 +1173,11 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     subsequent draws of that buffer rather than overwriting the queued version.
     This increment compiles locally and its CPU ownership checks pass; full CI and
     eventual queued-camera GPU rendering checks remain required.
+11. Geometry validation run 37147131495 encountered a Unity Windows DirectX player
+    build killed with exit code 137 before runtime validation. The log does not
+    establish the cause. CI now limits job workers to two and desired/standby import
+    workers to one in its four Linux-container Windows/Android player builds, and
+    collects runner memory/kernel diagnostics after DirectX and Android builds as
+    well as Vulkan. These are CI-only concurrency limits; target platforms, build
+    methods and rendering checks remain intact. Validate this mitigation with a
+    new full run before claiming the geometry increment passes CI.

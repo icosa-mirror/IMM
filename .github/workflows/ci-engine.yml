@@ -794,7 +794,21 @@ jobs:
           targetPlatform: StandaloneWindows64
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
-          customParameters: -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
+          customParameters: -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
+
+      - name: Collect Unity DirectX runner memory diagnostics
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          mkdir -p artifacts/unity-windows-directx-player
+          {
+            date -u
+            free -m
+            cat /proc/pressure/memory
+            sudo -n journalctl -k --since '-30 minutes' --no-pager | \
+              grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+          } > artifacts/unity-windows-directx-player/runner-memory-directx.log 2>&1
 
       - name: Write CI manifest
         if: always()
@@ -1161,7 +1175,7 @@ jobs:
           targetPlatform: StandaloneWindows64
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsVulkanSmokePlayer
-          customParameters: -logFile /github/workspace/artifacts/unity-windows-vulkan-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-vulkan-player/player/ImmUnitySmoke.exe
+          customParameters: -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-vulkan-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-vulkan-player/player/ImmUnitySmoke.exe
 
       - name: Collect Unity Vulkan runner memory diagnostics
         if: always()
@@ -2016,7 +2030,21 @@ jobs:
           targetPlatform: Android
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidOpenXRQuestPlayer
-          customParameters: -logFile /github/workspace/artifacts/unity-android-vulkan/unity-quest-editor.log -immQuestPlayerPath /github/workspace/.ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
+          customParameters: -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-quest-editor.log -immQuestPlayerPath /github/workspace/.ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
+
+      - name: Collect Unity Android Quest runner memory diagnostics
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          mkdir -p artifacts/unity-android-vulkan
+          {
+            date -u
+            free -m
+            cat /proc/pressure/memory
+            sudo -n journalctl -k --since '-30 minutes' --no-pager | \
+              grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+          } > artifacts/unity-android-vulkan/runner-memory-android-quest.log 2>&1
 
       - name: Save Unity Android OpenXR Quest shell APK cache
         if: steps.cache_unity_android_quest_shell.outputs.cache-hit != 'true' && steps.unity_android_quest_build.outcome == 'success'
@@ -2132,7 +2160,21 @@ jobs:
           targetPlatform: Android
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
-          customParameters: -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/.ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+          customParameters: -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/.ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+
+      - name: Collect Unity Android smoke runner memory diagnostics
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          mkdir -p artifacts/unity-android-vulkan
+          {
+            date -u
+            free -m
+            cat /proc/pressure/memory
+            sudo -n journalctl -k --since '-30 minutes' --no-pager | \
+              grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+          } > artifacts/unity-android-vulkan/runner-memory-android-smoke.log 2>&1
 
       - name: Save Unity Android Vulkan shell APK cache
         if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true' && steps.unity_android_vulkan_build.outcome == 'success'
