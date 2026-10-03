@@ -1118,8 +1118,8 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
 
 1. The existing Vulkan renderer can record scene draws in a borrowed host render
    pass through BeginHostRenderPassFrame, but this alone does not establish a safe
-   URP route. Its transient uniform offset resets per camera; queued camera draws
-   must not reuse storage while Unity can still consume earlier data.
+   URP route. The previous transient uniform offset reset per camera; queued camera
+   draws must not reuse storage while Unity can still consume earlier data.
 2. Establish frame-scoped upload and descriptor lifetime using Unity's recording
    currentFrameNumber and safeFrameNumber. Append separate camera/draw snapshots
    within a frame, reuse storage only after the host reports the frame safe, and
@@ -1130,3 +1130,18 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
 4. This is the next implementation increment, not Vulkan URP acceptance. Complete
    mono colour/depth composition and then one-pass Quest multiview for all required
    layer types; preserve the platform matrix and acceptance criteria above.
+5. The host-pass paint and picture draw paths now snapshot bound CPU uniforms at
+   each draw, including camera constants prepared before the pass opens, and use
+   fresh descriptor sets. Frame-owned upload pages and descriptor pools append
+   across cameras and are reused only after safeFrameNumber permits it. The number
+   of retained frames is not limited to an assumed three-frame queue. Allocation
+   failures reject the draw; they do not fall back to shared uniform storage.
+6. The CPU frame-slot test passes locally on Windows, and the Windows native Unity
+   plugin compiles. CI now runs the frame-slot test as a mandatory core check.
+   This test proves slot ownership and completion-counter handling, not queued GPU
+   rendering. Full cross-platform CI for this increment is still required.
+7. Geometry, textures, shader pipelines and shutdown must also respect outstanding
+   host commands before the Vulkan RenderGraph adapter is ready. In particular,
+   waiting for submitted GPU work does not cover Unity commands that have not yet
+   been submitted. Queued-camera GPU colour/depth checks and Quest multiview
+   acceptance remain outstanding.

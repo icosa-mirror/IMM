@@ -1067,7 +1067,9 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
             useHostDepth,
             recordingState.subPassIndex >= 0 ? static_cast<uint32_t>(recordingState.subPassIndex) : 0u,
             width,
-            height))
+            height,
+            recordingState.currentFrameNumber,
+            recordingState.safeFrameNumber))
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan host render skipped: failed to begin host render pass frame for camera=%d", cameraID);
         return true;
@@ -1088,7 +1090,8 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const int eyeID = event_id & 1;
     const bool beginEndOnly = iEnvFlagEnabled("IMM_UNITY_VK_BEGIN_END_ONLY");
     const bool debugClearOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
-    const bool rendered = (beginEndOnly || debugClearOnly) ? false : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false);
+    const bool sceneRendered = (beginEndOnly || debugClearOnly) ? false : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false);
+    const bool rendered = sceneRendered && vulkanRenderer->HostFrameResourcesValid();
     vulkanRenderer->EndExternalImageFrame();
 
     const Player::PerformanceInfo &perf = iPlayer().GetPerformanceInfoForFrame();

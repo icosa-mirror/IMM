@@ -4,12 +4,14 @@
 //
 #include "piVulkan_Renderer.h"
 #include "piVulkan_PrimeDepthShaders.h"
+#include "piVulkan_HostFrameSlots.h"
 
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <mutex>
 
 #if defined(WINDOWS)
@@ -1403,6 +1405,14 @@ enum class piVulkanUnsupportedFeature : int
     Count
 };
 
+struct piVulkanHostFrameResources
+{
+    std::vector<piBuffer> uniformPages;
+    std::vector<VkDescriptorPool> descriptorPools;
+    size_t uniformPage = 0, descriptorPool = 0;
+    unsigned int uniformOffset = 0;
+};
+
 struct piVulkanState
 {
     VkInstance instance = VK_NULL_INSTANCE;
@@ -1555,6 +1565,11 @@ struct piVulkanState
     bool externalFrameFromCache = false;
     bool hostRenderPassFrameActive = false;
     bool hostRenderPassFrameReported = false;
+    piVulkanHostFrameSlots hostFrameSlots;
+    std::vector<piVulkanHostFrameResources> hostFrames;
+    size_t activeHostFrame = 0;
+    bool hostFrameDataFailed = false;
+    piRendererVulkan *hostResourceOwner = nullptr;
     VkBuffer hostTransientUniformBuffer = VK_NULL_BUFFER;
     VkDeviceMemory hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
     uint8_t *hostTransientUniformMapped = nullptr;
@@ -3183,6 +3198,93 @@ static bool iAllocateHostTransientUniformSlice(piVulkanState *state, piBuffer bu
     state->hostTransientUniformOffset = offset + buffer->size;
     return true;
 }
+
+static bool iAllocateHostFrameUniformSlice(piRendererVulkan *renderer, piVulkanState *state,
+    piBuffer buffer, piRenderer::piReporter *reporter)
+{
+    if (state->hostFrameDataFailed || state->activeHostFrame >= state->hostFrames.size()) return false;
+    auto &frame = state->hostFrames[state->activeHostFrame];
+    constexpr unsigned int pageSize = 8u * 1024u * 1024u;
+    unsigned int alignedOffset = (frame.uniformOffset + 255u) & ~255u;
+    if (buffer->size > pageSize)
+    {
+        state->hostFrameDataFailed = true;
+        iError(reporter, "[IMM_VULKAN_HOST_FRAME] Uniform snapshot exceeds page capacity");
+        return false;
+    }
+    if (alignedOffset > pageSize - buffer->size)
+    {
+        ++frame.uniformPage;
+        alignedOffset = 0;
+    }
+    if (frame.uniformPage == frame.uniformPages.size())
+    {
+        piBuffer page = renderer->CreateBuffer(nullptr, pageSize, piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+        if (!page || page->buffer == VK_NULL_BUFFER)
+        {
+            if (page) renderer->DestroyBuffer(page);
+            state->hostFrameDataFailed = true;
+            iError(reporter, "[IMM_VULKAN_HOST_FRAME] Cannot allocate uniform snapshot page");
+            return false;
+        }
+        frame.uniformPages.push_back(page);
+    }
+    piBuffer page = frame.uniformPages[frame.uniformPage];
+    if (!iUploadBufferData(state, page, buffer->data, alignedOffset, buffer->size, reporter))
+    {
+        state->hostFrameDataFailed = true;
+        return false;
+    }
+    buffer->descriptorBuffer = page->buffer;
+    buffer->descriptorOffset = alignedOffset;
+    frame.uniformOffset = alignedOffset + buffer->size;
+    return true;
+}
+
+static bool iCaptureHostUniforms(piVulkanState *state, std::initializer_list<int> bindings, piRenderer::piReporter *reporter)
+{
+    for (int binding : bindings)
+    {
+        piBuffer buffer = state->constantBuffers[binding];
+        if (buffer && !iAllocateHostFrameUniformSlice(state->hostResourceOwner, state, buffer, reporter)) return false;
+    }
+    return !state->hostFrameDataFailed;
+}
+
+// Descriptor updates copy the handles. Restore the shared buffer metadata once
+// the host draw has its own set, preserving our own queue's descriptor routing.
+class piVulkanHostUniformSnapshot
+{
+public:
+    piVulkanHostUniformSnapshot(piVulkanState *state, std::initializer_list<int> bindings,
+        piRenderer::piReporter *reporter)
+    {
+        for (int binding : bindings)
+        {
+            piBuffer buffer = state->constantBuffers[binding];
+            if (!buffer) continue;
+            mBuffers[mCount] = buffer;
+            mHandles[mCount] = buffer->descriptorBuffer;
+            mOffsets[mCount++] = buffer->descriptorOffset;
+        }
+        mValid = iCaptureHostUniforms(state, bindings, reporter);
+    }
+    ~piVulkanHostUniformSnapshot()
+    {
+        for (size_t i = 0; i < mCount; ++i)
+        {
+            mBuffers[i]->descriptorBuffer = mHandles[i];
+            mBuffers[i]->descriptorOffset = mOffsets[i];
+        }
+    }
+    bool Valid() const { return mValid; }
+private:
+    piBuffer mBuffers[16] = {};
+    VkBuffer mHandles[16] = {};
+    VkDeviceSize mOffsets[16] = {};
+    size_t mCount = 0;
+    bool mValid = false;
+};
 
 static VkDescriptorBufferInfo iDescriptorBufferInfo(piBuffer buffer)
 {
@@ -5264,6 +5366,38 @@ static VkDescriptorSet iAllocateBatchDescriptorSet(piVulkanState *state, VkDescr
     return set;
 }
 
+static VkDescriptorSet iAllocateHostDescriptorSet(piVulkanState *state, VkDescriptorSetLayout layout, piRenderer::piReporter *reporter)
+{
+    if (state->hostFrameDataFailed || state->activeHostFrame >= state->hostFrames.size()) return VK_NULL_DESCRIPTOR_SET;
+    auto &frame = state->hostFrames[state->activeHostFrame];
+    while (frame.descriptorPool < frame.descriptorPools.size())
+    {
+        VkDescriptorSet set = iAllocateBatchDescriptorSet(state, frame.descriptorPools[frame.descriptorPool], layout);
+        if (set != VK_NULL_DESCRIPTOR_SET) return set;
+        ++frame.descriptorPool;
+    }
+    constexpr uint32_t setsPerPool = 256;
+    VkDescriptorPoolSize sizes[3] = {};
+    sizes[0] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 8 * setsPerPool };
+    sizes[1] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8 * setsPerPool };
+    sizes[2] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8 * setsPerPool };
+    VkDescriptorPoolCreateInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    info.maxSets = setsPerPool;
+    info.poolSizeCount = 3;
+    info.pPoolSizes = sizes;
+    VkDescriptorPool pool = VK_NULL_DESCRIPTOR_POOL;
+    if (state->vkCreateDescriptorPool(state->device, &info, nullptr, &pool) == VK_SUCCESS)
+    {
+        frame.descriptorPools.push_back(pool);
+        VkDescriptorSet set = iAllocateBatchDescriptorSet(state, pool, layout);
+        if (set != VK_NULL_DESCRIPTOR_SET) return set;
+    }
+    state->hostFrameDataFailed = true;
+    iError(reporter, "[IMM_VULKAN_HOST_FRAME] Cannot allocate draw descriptor snapshot");
+    return VK_NULL_DESCRIPTOR_SET;
+}
+
 static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTarget target, piVertexArray vertexArray, uint32_t num, uint32_t numInstances, uint32_t baseVertex, uint32_t baseInstance, uint32_t baseIndex, piRenderer::piReporter *reporter)
 {
     const uint64_t lockStartNs = iNowNanoseconds();
@@ -5319,7 +5453,18 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     const uint64_t timeout = 5000000000ull;
     const uint64_t drawRecStartNs = iNowNanoseconds();
     VkResult result = VK_SUCCESS;
-    if (batchActive)
+    if (hostRenderPass)
+    {
+        piVulkanHostUniformSnapshot uniforms(state, { 0, 3, 4, 5, 9 }, reporter);
+        if (!uniforms.Valid()) return false;
+        paintSet = iAllocateHostDescriptorSet(state, state->staticPaintDescriptorSetLayout, reporter);
+        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter))
+        {
+            state->hostFrameDataFailed = true;
+            return false;
+        }
+    }
+    else if (batchActive)
     {
         if (!iEnsureBatchOpen(state, target, reporter))
             return false;
@@ -5837,7 +5982,18 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
     const uint64_t timeout = 5000000000ull;
     const uint64_t drawRecStartNs = iNowNanoseconds();
     VkResult result = VK_SUCCESS;
-    if (batchActive)
+    if (hostRenderPass)
+    {
+        piVulkanHostUniformSnapshot uniforms(state, { 3, 4, 5, 9 }, reporter);
+        if (!uniforms.Valid()) return false;
+        pictureSet = iAllocateHostDescriptorSet(state, state->pictureDescriptorSetLayout, reporter);
+        if (pictureSet == VK_NULL_DESCRIPTOR_SET || !iUpdatePictureDescriptorSet(state, pictureSet, reporter))
+        {
+            state->hostFrameDataFailed = true;
+            return false;
+        }
+    }
+    else if (batchActive)
     {
         if (!iEnsureBatchOpen(state, target, reporter))
             return false;
@@ -5994,7 +6150,18 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
     VkDescriptorSet pictureSet = state->pictureDescriptorSet;
     const uint64_t timeout = 5000000000ull;
     VkResult result = VK_SUCCESS;
-    if (batchActive)
+    if (hostRenderPass)
+    {
+        piVulkanHostUniformSnapshot uniforms(state, { 3, 4, 5, 9 }, reporter);
+        if (!uniforms.Valid()) return false;
+        pictureSet = iAllocateHostDescriptorSet(state, state->pictureDescriptorSetLayout, reporter);
+        if (pictureSet == VK_NULL_DESCRIPTOR_SET || !iUpdatePictureDescriptorSet(state, pictureSet, reporter))
+        {
+            state->hostFrameDataFailed = true;
+            return false;
+        }
+    }
+    else if (batchActive)
     {
         // Batched: the quad records into the open eye pass like every other
         // picture draw. The legacy own-pass reopen below is FATAL on the MSAA
@@ -8038,6 +8205,13 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDeviceWaitIdle(mState->device);
         }
+        for (auto &frame : mState->hostFrames)
+        {
+            for (piBuffer page : frame.uniformPages) DestroyBuffer(page);
+            for (VkDescriptorPool pool : frame.descriptorPools)
+                mState->vkDestroyDescriptorPool(mState->device, pool, nullptr);
+        }
+        mState->hostFrames.clear();
         for (int i = 0; i < piVulkanState::kExternalImageCacheSize; ++i)
         {
             piVulkanState::ExternalImageCacheEntry &entry = mState->externalImageCache[i];
@@ -9245,13 +9419,37 @@ bool piRendererVulkan::UsesDedicatedQueue(void) const
     return mState != nullptr && mState->ownsDedicatedQueue;
 }
 
-bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height)
+bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber)
 {
     EndExternalImageFrame();
     if (!mState || commandBuffer == nullptr || renderPass == nullptr || framebuffer == nullptr || colorVkFormat == 0 || width <= 0 || height <= 0)
     {
         return false;
     }
+
+    bool newFrame = false;
+    if (!mState->hostFrameSlots.Acquire(currentFrameNumber, safeFrameNumber, mState->activeHostFrame, newFrame))
+    {
+        iError(mReporter, "[IMM_VULKAN_HOST_FRAME] Invalid host frame/completion counters");
+        return false;
+    }
+    mState->hostFrames.resize(mState->hostFrameSlots.Size());
+    auto &frame = mState->hostFrames[mState->activeHostFrame];
+    if (newFrame)
+    {
+        // This slot is new or the host has completed its previous contents.
+        frame.uniformPage = 0;
+        frame.uniformOffset = 0;
+        frame.descriptorPool = 0;
+        for (VkDescriptorPool pool : frame.descriptorPools)
+            if (mState->vkResetDescriptorPool(mState->device, pool, 0) != VK_SUCCESS)
+            {
+                iError(mReporter, "[IMM_VULKAN_HOST_FRAME] Cannot reset completed descriptor pool");
+                return false;
+            }
+    }
+    mState->hostFrameDataFailed = false;
+    mState->hostResourceOwner = this;
 
     piTextureS *colorTexture = new piTextureS();
     colorTexture->info = { TextureType::T2D, Format::C4_8_UNORM, width, height, 1, static_cast<int>(colorVkSamples != 0 ? colorVkSamples : VK_SAMPLE_COUNT_1_BIT), 1, 0 };
@@ -9287,7 +9485,6 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     mState->externalFrameHostDepthReverseZ = useHostDepth && useHostDepthReverseZ;
     mState->externalFramePreservesHostColor = true;
     mState->hostRenderPassFrameActive = true;
-    mState->hostTransientUniformOffset = 0;
     SetRenderTarget(target);
 
     if (!mState->hostRenderPassFrameReported)
@@ -9296,6 +9493,11 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
         iReport(mReporter, useHostDepth ? "Vulkan renderer began host render pass frame with host depth" : "Vulkan renderer began host render pass frame");
     }
     return true;
+}
+
+bool piRendererVulkan::HostFrameResourcesValid(void) const
+{
+    return mState && !mState->hostFrameDataFailed;
 }
 
 bool piRendererVulkan::DebugClearHostRenderPassColor(float red, float green, float blue, float alpha)
@@ -10405,15 +10607,16 @@ void piRendererVulkan::UpdateBuffer(piBuffer obj, const void *data, int offset, 
     const bool countAsBatchUpload = mState && mState->batchRecording;
     const uint64_t uploadStartNs = countAsBatchUpload ? iNowNanoseconds() : 0;
     std::memcpy(obj->data + offset, data, (size_t)len);
-    // While a batched eye-frame is open (or the host owns the command buffer),
-    // route constant-buffer writes into the per-frame transient ring so each
-    // per-chunk / per-layer update lands in its own GPU slice. Every batched
-    // draw records its own descriptor set pointing at that slice, so a single
-    // end-of-frame submit still sees each draw's own uniforms instead of the
-    // last write. (The first draw's pre-open uniforms stay in the buffer's own
-    // storage, which nothing overwrites once later writes divert to the ring.)
+    // Borrowed host draws snapshot CPU uniforms when each draw is recorded.
+    // Our own queue's batched draws retain their existing transient ring path.
     bool routedToTransientRing = false;
-    if (mState && (mState->hostRenderPassFrameActive || mState->batchRecording) && obj->use == BufferUse::Constant && offset == 0)
+    if (mState && mState->hostRenderPassFrameActive && obj->use == BufferUse::Constant)
+    {
+        // Capture all bound uniforms at each draw, including camera constants
+        // updated before the host pass began. Do not overwrite shared GPU storage.
+        return;
+    }
+    else if (mState && mState->batchRecording && obj->use == BufferUse::Constant && offset == 0)
     {
         routedToTransientRing = iAllocateHostTransientUniformSlice(mState, obj, obj->data, obj->size, mReporter);
     }

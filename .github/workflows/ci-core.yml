@@ -302,6 +302,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  vulkan-host-frame-lifetime:
+    name: Vulkan Host Frame Lifetime
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Configure lifetime checks
+        run: cmake -S code/libImmCore/tests/vulkan -B build/vulkan-host-lifetime -DCMAKE_BUILD_TYPE=Release
+      - name: Build lifetime checks
+        run: cmake --build build/vulkan-host-lifetime
+      - name: Check queued cameras and safe resource reuse
+        run: ctest --test-dir build/vulkan-host-lifetime --output-on-failure
+
   core-evidence-report:
     name: Core Evidence Report
     if: always()
@@ -312,7 +326,13 @@ jobs:
       - package-source-layout
       - matrix-status
       - godot-local-verifier
+      - vulkan-host-frame-lifetime
     steps:
+      - name: Require Vulkan host lifetime checks
+        env:
+          LIFETIME_RESULT: ${{ needs.vulkan-host-frame-lifetime.result }}
+        run: test "$LIFETIME_RESULT" = success
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
