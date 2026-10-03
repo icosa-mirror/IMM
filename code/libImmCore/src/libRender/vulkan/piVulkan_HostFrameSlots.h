@@ -54,4 +54,19 @@ private:
     uint64_t mLastFrame = 0, mLastSafeFrame = 0;
 };
 
+// Mutable geometry keeps its GPU storage until every host use has completed.
+class piVulkanHostBufferUse
+{
+public:
+    void Record(uint64_t frame) { mFrame = frame; mRecorded = true; }
+    void Replaced() { mRecorded = false; }
+    bool NeedsReplacement(const piVulkanHostFrameSlots &frames) const
+    {
+        return mRecorded && !frames.IsComplete(mFrame);
+    }
+private:
+    uint64_t mFrame = 0;
+    bool mRecorded = false;
+};
+
 }

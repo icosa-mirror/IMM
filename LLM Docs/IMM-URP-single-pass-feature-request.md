@@ -1155,9 +1155,21 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    older frame declared safe by Unity and also waits for any IMM-owned queue fences
    before freeing handles. Host frame zero is retained until a subsequent host
    frame provides completion evidence. This change compiles locally and its CPU
-   completion-boundary test passes; its full platform CI is still required.
+   completion-boundary test passes. Full validation run 37144355072 passed for this
+   deferred-destruction increment, including the required Unity and existing native,
+   standalone and Godot platform lanes.
 9. This handles deferred destruction, not every resource mutation or shutdown.
    Geometry updates must preserve bytes referenced by queued host draws, and the
    adapter's shutdown protocol must retain the native renderer until Unity has
    completed commands that were still unsubmitted at the shutdown request. Do not
    enable Vulkan URP on the strength of the CPU lifetime test alone.
+10. Geometry storage now records host use when paint and mesh-picture commands
+    bind their vertex, index and paint-storage buffers. UpdateBuffer and mapped
+    buffer completion preserve queued reads by uploading edited CPU contents into
+    a new allocation when the old one is still referenced by an incomplete host
+    frame. The old allocation follows host deferred destruction. An unused new
+    allocation can accept further edits without another replacement; completed
+    host uses permit the existing in-place upload path. Allocation failure rejects
+    subsequent draws of that buffer rather than overwriting the queued version.
+    This increment compiles locally and its CPU ownership checks pass; full CI and
+    eventual queued-camera GPU rendering checks remain required.

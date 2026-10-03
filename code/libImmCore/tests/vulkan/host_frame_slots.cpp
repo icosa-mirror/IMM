@@ -38,9 +38,17 @@ int main()
     Require(!frames.Acquire(14, 4, slot, newFrame), "Accepted a regressing completion frame");
     ImmCore::piVulkanHostFrameSlots zero;
     Require(zero.Acquire(0, 0, slot, newFrame) && newFrame, "Frame zero must be usable");
+    ImmCore::piVulkanHostBufferUse geometry;
+    Require(!geometry.NeedsReplacement(zero), "Copied geometry that no host command references");
+    geometry.Record(0);
+    Require(geometry.NeedsReplacement(zero), "Allowed mutation of queued geometry");
+    geometry.Replaced();
+    Require(!geometry.NeedsReplacement(zero), "Repeatedly copied an unused replacement buffer");
+    geometry.Record(0);
     Require(!zero.IsComplete(0), "Retired handles in the currently recording frame");
     Require(zero.Acquire(0, 0, slot, newFrame) && !newFrame, "Reclaimed the currently recording frame");
     Require(zero.Acquire(1, 0, slot, newFrame) && newFrame && zero.IsComplete(0),
             "Cannot retire handles after the host completes frame zero");
+    Require(!geometry.NeedsReplacement(zero), "Copied geometry after its host use completed");
     std::puts("IMM_VULKAN_HOST_LIFETIME PASS queued cameras, delayed completion, safe reuse and invalid counters");
 }

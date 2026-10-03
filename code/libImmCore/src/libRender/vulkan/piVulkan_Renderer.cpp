@@ -1307,6 +1307,8 @@ struct piBufferS
     VkDeviceSize descriptorOffset = 0;
     VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
     VkBufferUsageFlags usage = 0;
+    piVulkanHostBufferUse hostUse;
+    bool hostWriteFailed = false;
 };
 
 struct piVertexArrayS
@@ -4256,6 +4258,74 @@ static bool iRetireHostResource(piVulkanState *state, const piVulkanHostRetiredR
     return true;
 }
 
+// CPU edits are already applied. Copy the complete edited contents into fresh
+// GPU storage when earlier host commands still reference the old allocation.
+static bool iPrepareHostBufferWrite(piVulkanState *state, piBuffer buffer,
+    bool &replaced, piRenderer::piReporter *reporter)
+{
+    replaced = false;
+    if (!buffer->hostUse.NeedsReplacement(state->hostFrameSlots) && !buffer->hostWriteFailed) return true;
+    piBufferS replacement;
+    replacement.size = buffer->size;
+    replacement.type = buffer->type;
+    replacement.use = buffer->use;
+    if (!iCreateBufferObject(state, &replacement, buffer->data, reporter) ||
+        replacement.buffer == VK_NULL_BUFFER)
+    {
+        buffer->hostWriteFailed = true;
+        state->hostFrameDataFailed = true;
+        iError(reporter, "[IMM_VULKAN_HOST_FRAME] Cannot preserve queued geometry during update");
+        return false;
+    }
+    piVulkanHostRetiredResource old;
+    old.buffer = buffer->buffer;
+    old.memory = buffer->memory;
+    if (!iRetireHostResource(state, old))
+    {
+        state->vkDestroyBuffer(state->device, replacement.buffer, nullptr);
+        state->vkFreeMemory(state->device, replacement.memory, nullptr);
+        buffer->hostWriteFailed = true;
+        state->hostFrameDataFailed = true;
+        iError(reporter, "[IMM_VULKAN_HOST_FRAME] Cannot retain previous geometry allocation");
+        return false;
+    }
+    buffer->buffer = replacement.buffer;
+    buffer->memory = replacement.memory;
+    buffer->usage = replacement.usage;
+    buffer->descriptorBuffer = replacement.buffer;
+    buffer->descriptorOffset = 0;
+    buffer->hostUse.Replaced();
+    buffer->hostWriteFailed = false;
+    replaced = true;
+    return true;
+}
+
+static bool iRecordHostGeometryUse(piVulkanState *state, piVertexArray vertexArray,
+    bool paintStorage, piRenderer::piReporter *reporter)
+{
+    piBuffer buffers[4] = {};
+    if (vertexArray)
+    {
+        buffers[0] = vertexArray->vertexBuffer[0];
+        buffers[1] = vertexArray->vertexBuffer[1];
+        buffers[2] = vertexArray->indexBuffer;
+    }
+    if (paintStorage) buffers[3] = state->constantBuffers[8];
+    for (piBuffer buffer : buffers)
+    {
+        if (!buffer) continue;
+        if (buffer->hostWriteFailed)
+        {
+            state->hostFrameDataFailed = true;
+            iError(reporter, "[IMM_VULKAN_HOST_FRAME] Draw rejected after failed geometry update");
+            return false;
+        }
+        if (state->hostRenderPassFrameActive)
+            buffer->hostUse.Record(state->hostFrames[state->activeHostFrame].frameNumber);
+    }
+    return true;
+}
+
 static void iDestroyHostPipelineWhenSafe(piVulkanState *state, VkPipeline pipeline)
 {
     piVulkanHostRetiredResource resource;
@@ -5594,6 +5664,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 
     state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
     state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    if (!iRecordHostGeometryUse(state, vertexArray, true, reporter)) return false;
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &paintSet, 0, nullptr);
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
@@ -6139,6 +6210,7 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
     }
     state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
     state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    if (!iRecordHostGeometryUse(state, vertexArray, false, reporter)) return false;
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &pictureSet, 0, nullptr);
     VkDeviceSize vertexOffset = 0;
@@ -10647,7 +10719,9 @@ piBuffer piRendererVulkan::CreateBufferMapped_Start(void **ptr, unsigned int amo
 void piRendererVulkan::CreateBufferMapped_End(piBuffer vme)
 {
     if (!vme || !mState) return;
-    iUploadBufferData(mState, vme, vme->data, 0, vme->size, mReporter);
+    bool replaced = false;
+    if (!iPrepareHostBufferWrite(mState, vme, replaced, mReporter)) return;
+    if (!replaced) iUploadBufferData(mState, vme, vme->data, 0, vme->size, mReporter);
 }
 void piRendererVulkan::DestroyBuffer(piBuffer obj)
 {
@@ -10690,6 +10764,7 @@ void piRendererVulkan::UpdateBuffer(piBuffer obj, const void *data, int offset, 
     // Borrowed host draws snapshot CPU uniforms when each draw is recorded.
     // Our own queue's batched draws retain their existing transient ring path.
     bool routedToTransientRing = false;
+    if (mState && !iPrepareHostBufferWrite(mState, obj, routedToTransientRing, mReporter)) return;
     if (mState && mState->hostRenderPassFrameActive && obj->use == BufferUse::Constant)
     {
         // Capture all bound uniforms at each draw, including camera constants
