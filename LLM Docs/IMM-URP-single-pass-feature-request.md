@@ -1181,3 +1181,23 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     well as Vulkan. These are CI-only concurrency limits; target platforms, build
     methods and rendering checks remain intact. Validate this mitigation with a
     new full run before claiming the geometry increment passes CI.
+12. Full validation run 37149363303, attempt 2, passed for geometry preservation and
+    the CI worker limits. Its macOS first attempt failed to obtain a valid Unity
+    Editor license before player compilation; the same-source failed-job retry
+    passed. The Windows and Android builds passed with the CI limits. This result
+    does not prove the cause of the earlier process kills; the added diagnostics
+    are retained for future failures.
+13. Vulkan shutdown now has a dedicated managed/native event ID. Its Unity event
+    configuration flushes recorded command buffers, synchronizes worker threads
+    and grants queue access before native renderer shutdown can wait for submitted
+    GPU work. Draw events retain command recording access and do not flush the
+    queue per draw. This uses Unity's published Vulkan plugin event contract and
+    avoids depending on future frame-counter polling during synchronous disposal.
+    Native dispatch rejects rendering through the shutdown event and rejects Vulkan
+    shutdown through the draw event. The ABI v2 packet size remains 480 bytes.
+14. The event configuration test passes locally, and the Windows native plugin
+    compiles. These checks prove event routing/configuration only. Vulkan's
+    RenderGraph callback remains disabled until its adapter is implemented; the
+    adapter must shut down the native bridge from this dedicated event and
+    acknowledge the packet after GPU-backed resources have been retired. Full CI
+    and actual queued-draw shutdown validation are required before acceptance.

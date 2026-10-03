@@ -12,6 +12,7 @@ namespace ImmPlayer
     {
         internal const int PacketSize = 480;
         internal const int EventId = 0x494d4d;
+        internal const int ShutdownEventId = EventId + 1;
         private enum Phase { Created, Initializing, Ready, Stopping, Stopped, Faulted }
         private sealed class Slot
         {
@@ -180,7 +181,9 @@ namespace ImmPlayer
             if (commands == null) throw new ArgumentNullException(nameof(commands));
             // Conservatively retain the packet even if command recording throws.
             slot.Pending = true;
-            commands.IssuePluginEventAndData(callback, EventId, slot.Memory);
+            int eventId = slot.Operation == 2 && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan
+                ? ShutdownEventId : EventId;
+            commands.IssuePluginEventAndData(callback, eventId, slot.Memory);
         }
         private bool HasPending()
         {

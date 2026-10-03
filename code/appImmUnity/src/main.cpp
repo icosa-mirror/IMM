@@ -94,6 +94,7 @@
 #include <cstdint>
 #include "imm_unity_render_graph_packet.h"
 #include <cstdio>
+#include <exception>
 #include <cstring>
 // The exporter is linked on every platform, so its headers are unconditional now.
 #include "libImmExporter/src/document/sequence.h"
@@ -122,6 +123,7 @@
 #endif
 #if defined(IMM_UNITY_VULKAN)
 #include "IUnityGraphicsVulkanMinimal.h"
+#include "imm_unity_vulkan_render_graph_events.h"
 #include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
 #endif
 #if defined(__APPLE__)
@@ -393,6 +395,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
             if (gImmUnityPlugin.UnityAPI.mVulkan)
             {
                 gImmUnityPlugin.UnityAPI.mVulkanInstance = gImmUnityPlugin.UnityAPI.mVulkan->Instance();
+                ConfigureImmVulkanRenderGraphEvents(gImmUnityPlugin.UnityAPI.mVulkan);
                 for (int cameraID = 0; cameraID < 256; ++cameraID)
                 {
                     iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
@@ -418,6 +421,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 			if (gImmUnityPlugin.UnityAPI.mVulkan)
 			{
 				gImmUnityPlugin.UnityAPI.mVulkanInstance = gImmUnityPlugin.UnityAPI.mVulkan->Instance();
+                ConfigureImmVulkanRenderGraphEvents(gImmUnityPlugin.UnityAPI.mVulkan);
 				for (int cameraID = 0; cameraID < 256; ++cameraID)
 				{
 					iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
@@ -1561,14 +1565,24 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
 	gImmUnityPlugin.UnityAPI.mGraphics->UnregisterDeviceEventCallback(iOnGraphicsDeviceEvent);
 }
 
-#if defined(WINDOWS) || defined(__APPLE__)
+#if defined(WINDOWS) || defined(__APPLE__) || defined(IMM_UNITY_VULKAN)
 static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
 {
     IMM_UNITY_NATIVE_LOCK();
-    if (eventId != ImmRenderGraphEventId || !data) return;
+    if ((eventId != ImmRenderGraphEventId && eventId != ImmRenderGraphShutdownEventId) || !data) return;
     auto* packet = static_cast<ImmRenderGraphPacket*>(data);
     // Validate the ABI header before reading or writing any later fields.
     if (packet->version != 2 || packet->size != sizeof(*packet)) return;
+    // Queue-access shutdown events cannot query or record render attachments.
+    // Vulkan shutdown must use this event so unsubmitted host draws are flushed.
+    const bool vulkan = gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan;
+    if ((eventId == ImmRenderGraphShutdownEventId && (!vulkan || packet->operation != 2)) ||
+        (vulkan && packet->operation == 2 && eventId != ImmRenderGraphShutdownEventId))
+    {
+        packet->result = -2147024809; // E_INVALIDARG.
+        packet->completed.store(1, std::memory_order_release);
+        return;
+    }
     int32_t result = -2147418113; // E_UNEXPECTED.
     try
     {
@@ -1585,7 +1599,7 @@ static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
         std::fprintf(stderr, "IMM_RENDER_GRAPH failed: %.512s\n", error.what());
 #if defined(WINDOWS)
         ShutdownImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge);
-#else
+#elif defined(__APPLE__)
         ShutdownImmMetalRenderGraph(gImmUnityPlugin.mMetalRenderGraph, gImmUnityPlugin.mBridge);
 #endif
         result = -2147467259; // E_FAIL.
