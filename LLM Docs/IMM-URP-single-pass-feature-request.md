@@ -1253,3 +1253,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     physical Vulkan rendering and queued-camera acceptance remain pending.
     All build-only container steps passed with `-nographics` in this run; this
     single result does not prove the intermittent exit-137 cause is resolved.
+
+21. **Vulkan RenderGraph raster attachment binding:** subsequent device runs
+    cleared the sample-count rejection but revealed that document loading still
+    checked the legacy Android deferred-init flag. Android load readiness now
+    checks the bridge's graphics/player state directly. Run `37176154434` reached
+    the device and reported a valid command buffer with null render-pass and
+    framebuffer handles at the native draw boundary. Vulkan now uses a raster
+    RenderGraph pass declaring colour/depth attachments and its raster plugin
+    event API, instead of an unsafe pass with resource-access declarations only.
+    The undefined `EnsureInsideRenderPass` fallback inside SRP native passes is
+    removed. Existing D3D12/Metal binding routes are unchanged. Both runtime/URP
+    C# projects compile against local Unity 6.6 assemblies, and the native plugin
+    builds. The new raster boundary still requires physical-device validation;
+    this is not Vulkan rendering or stereo acceptance.

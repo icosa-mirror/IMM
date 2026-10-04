@@ -69,36 +69,58 @@ namespace ImmPlayer
                 Report("The IMM pass requires active colour and depth attachments.");
                 return;
             }
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan)
+            {
+                // A raster pass establishes the host native render pass. An unsafe
+                // pass declares resource access but supplies no attachment binding.
+                using (var builder = graph.AddRasterRenderPass<PassData>("IMM Vulkan rendering", out var data))
+                {
+                    PopulateData(data, camera, resources, cameraId, stereo);
+                    builder.SetRenderAttachment(data.Color, 0, AccessFlags.ReadWrite);
+                    builder.SetRenderAttachmentDepth(data.Depth, AccessFlags.ReadWrite);
+                    builder.AllowGlobalStateModification(true);
+                    builder.AllowPassCulling(false);
+                    builder.SetRenderFunc(static (PassData pass, RasterGraphContext context) =>
+                        ExecuteNative(pass, null, context.cmd));
+                }
+                return;
+            }
             using (var builder = graph.AddUnsafePass<PassData>("IMM native rendering", out var data))
             {
-                data.Color = resources.activeColorTexture;
-                data.Depth = resources.activeDepthTexture;
-                data.HasTargetTexture = camera.targetTexture != null;
-                data.Transport = transport;
-                data.CameraId = cameraId;
-                data.Owner = this;
-                data.View = camera.GetViewMatrix();
-                data.Projection = camera.GetProjectionMatrix();
-                data.Stereo = stereo;
-                if (stereo)
-                {
-                    data.XrTarget = new RenderTargetIdentifier(camera.xr.renderTarget, 0, CubemapFace.Unknown, 0);
-                    data.XrViewport = camera.xr.GetViewport(0);
-                    data.View = camera.xr.cullingParams.stereoViewMatrix;
-                    data.Projection = camera.xr.cullingParams.stereoProjectionMatrix;
-                    data.LeftView = camera.GetViewMatrix(0);
-                    data.LeftProjection = camera.GetProjectionMatrix(0);
-                    data.RightView = camera.GetViewMatrix(1);
-                    data.RightProjection = camera.GetProjectionMatrix(1);
-                }
+                PopulateData(data, camera, resources, cameraId, stereo);
                 builder.UseTexture(data.Color, AccessFlags.ReadWrite);
                 builder.UseTexture(data.Depth, AccessFlags.ReadWrite);
                 builder.AllowPassCulling(false);
-                builder.SetRenderFunc(static (PassData pass, UnsafeGraphContext context) => ExecuteNative(pass, context));
+                builder.SetRenderFunc(static (PassData pass, UnsafeGraphContext context) => ExecuteNative(pass, CommandBufferHelpers.GetNativeCommandBuffer(context.cmd)));
             }
         }
 
-        private static void ExecuteNative(PassData data, UnsafeGraphContext context)
+        private void PopulateData(PassData data, UniversalCameraData camera,
+            UniversalResourceData resources, int cameraId, bool stereo)
+        {
+            data.Color = resources.activeColorTexture;
+            data.Depth = resources.activeDepthTexture;
+            data.HasTargetTexture = camera.targetTexture != null;
+            data.Transport = transport;
+            data.CameraId = cameraId;
+            data.Owner = this;
+            data.View = camera.GetViewMatrix();
+            data.Projection = camera.GetProjectionMatrix();
+            data.Stereo = stereo;
+            if (stereo)
+            {
+                data.XrTarget = new RenderTargetIdentifier(camera.xr.renderTarget, 0, CubemapFace.Unknown, 0);
+                data.XrViewport = camera.xr.GetViewport(0);
+                data.View = camera.xr.cullingParams.stereoViewMatrix;
+                data.Projection = camera.xr.cullingParams.stereoProjectionMatrix;
+                data.LeftView = camera.GetViewMatrix(0);
+                data.LeftProjection = camera.GetProjectionMatrix(0);
+                data.RightView = camera.GetViewMatrix(1);
+                data.RightProjection = camera.GetProjectionMatrix(1);
+            }
+        }
+
+        private static void ExecuteNative(PassData data, CommandBuffer commands, RasterCommandBuffer rasterCommands = null)
         {
             if (data.Transport.IsDisposed) return;
             // Resolve handles only while the graph's resource registry is active.
@@ -158,10 +180,13 @@ namespace ImmPlayer
             }
             var colorTarget = new RenderTargetIdentifier(color.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
             var depthTarget = new RenderTargetIdentifier(depth.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
-            CommandBuffer commands = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
-            commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
-                depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            commands.SetViewport(new Rect(0, 0, size.x, size.y));
+            if (commands != null)
+            {
+                commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
+                    depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+                commands.SetViewport(new Rect(0, 0, size.x, size.y));
+            }
+            else rasterCommands.SetViewport(new Rect(0, 0, size.x, size.y));
             IntPtr colorBuffer = c.colorBuffer.GetNativeRenderBufferPtr();
             IntPtr depthBuffer = d.depthBuffer.GetNativeRenderBufferPtr();
             // iOS MSAA depth can have a texture without a Unity RenderBuffer wrapper.
@@ -192,12 +217,16 @@ namespace ImmPlayer
                 data.Stereo ? GL.GetGPUProjectionMatrix(data.LeftProjection, flipped) : null,
                 data.Stereo ? data.RightView : null,
                 data.Stereo ? GL.GetGPUProjectionMatrix(data.RightProjection, flipped) : null,
-                depthIsMetalTexture: depthIsMetalTexture);
+                depthIsMetalTexture: depthIsMetalTexture, rasterCommands: rasterCommands);
             // The native event uses its own command list and restores resource states.
             // Rebind Unity attachments/viewport after the event for subsequent graph work.
-            commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
-                depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            commands.SetViewport(new Rect(0, 0, size.x, size.y));
+            if (commands != null)
+            {
+                commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
+                    depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+                commands.SetViewport(new Rect(0, 0, size.x, size.y));
+            }
+            else rasterCommands.SetViewport(new Rect(0, 0, size.x, size.y));
         }
 
         private void Report(string message)

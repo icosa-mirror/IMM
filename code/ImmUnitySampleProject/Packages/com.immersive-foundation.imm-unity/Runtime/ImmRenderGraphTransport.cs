@@ -104,7 +104,8 @@ namespace ImmPlayer
         internal void QueueRender(CommandBuffer commands, int camera, IntPtr color, IntPtr depth,
             uint colorFormat, uint depthFormat, RectInt viewport, Matrix4x4 worldToView, Matrix4x4 projection,
             Matrix4x4? leftView = null, Matrix4x4? leftProjection = null,
-            Matrix4x4? rightView = null, Matrix4x4? rightProjection = null, bool depthIsMetalTexture = false)
+            Matrix4x4? rightView = null, Matrix4x4? rightProjection = null, bool depthIsMetalTexture = false,
+            RasterCommandBuffer rasterCommands = null)
         {
             Poll();
             if (!IsReady) throw new InvalidOperationException("IMM RenderGraph session is not ready.");
@@ -133,7 +134,7 @@ namespace ImmPlayer
                 WriteMatrixPair(slot.Memory, 208, leftView.Value, leftProjection.Value);
                 WriteMatrixPair(slot.Memory, 336, rightView.Value, rightProjection.Value);
             }
-            Enqueue(commands, slot);
+            Enqueue(commands, slot, rasterCommands);
             ++RenderSubmissions;
         }
 
@@ -187,19 +188,24 @@ namespace ImmPlayer
             return available;
         }
 
-        private void Enqueue(CommandBuffer commands, Slot slot)
+        private void Enqueue(CommandBuffer commands, Slot slot, RasterCommandBuffer rasterCommands = null)
         {
-            if (commands == null) throw new ArgumentNullException(nameof(commands));
+            if (commands == null && rasterCommands == null) throw new ArgumentNullException(nameof(commands));
             // Conservatively retain the packet even if command recording throws.
             slot.Pending = true;
             int eventId = EventId;
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan)
             {
                 if (slot.Operation == 1)
-                    commands.IssuePluginEventAndData(callback, PreparationEventId, slot.Memory);
+                    IssueEvent(commands, rasterCommands, PreparationEventId, slot.Memory);
                 else eventId = slot.Operation == 2 ? ShutdownEventId : PreparationEventId;
             }
-            commands.IssuePluginEventAndData(callback, eventId, slot.Memory);
+            IssueEvent(commands, rasterCommands, eventId, slot.Memory);
+        }
+        private void IssueEvent(CommandBuffer commands, RasterCommandBuffer rasterCommands, int eventId, IntPtr packet)
+        {
+            if (commands != null) commands.IssuePluginEventAndData(callback, eventId, packet);
+            else rasterCommands.IssuePluginEventAndData(callback, eventId, packet);
         }
         private bool HasPending()
         {

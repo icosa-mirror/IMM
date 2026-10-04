@@ -105,7 +105,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
     }
     auto* unity = state.unity;
     if (!unity || !unity->Instance || !unity->CommandRecordingState ||
-        !unity->AccessRenderBufferTexture || !unity->EnsureInsideRenderPass) return failed;
+        !unity->AccessRenderBufferTexture) return failed;
     if (packet.operation == 0)
     {
         if (eventId != ImmRenderGraphPreparationEventId || state.ready || bridge.IsInitialized() ||
@@ -181,11 +181,10 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
     }
     UnityVulkanRecordingState recording = {};
     if (!unity->CommandRecordingState(&recording, kUnityVulkanGraphicsQueueAccess_DontCare)) return reject("command recording access", failed);
+    // RenderGraph's raster pass owns this boundary. Unity's EnsureInside API
+    // is undefined inside SRP native render passes; never use it as a fallback.
     if (!recording.renderPass || recording.subPassIndex < 0)
-    {
-        unity->EnsureInsideRenderPass();
-        if (!unity->CommandRecordingState(&recording, kUnityVulkanGraphicsQueueAccess_DontCare)) return reject("command recording access", failed);
-    }
+        return reject("no native raster render pass", failed);
     auto* renderer = static_cast<ImmCore::piRendererVulkan*>(bridge.GetRenderer());
     if (recording.subPassIndex < 0 || !renderer->BeginHostRenderPassFrame(recording.commandBuffer,
         reinterpret_cast<void*>(recording.renderPass), reinterpret_cast<void*>(recording.framebuffer),
