@@ -1379,3 +1379,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     multiview shader preparation, cubemap/stereo panorama additions and startup
     feature observer; those changes require the next full run. Headset/multiview
     acceptance and complete Unity/Android all-layer composition remain outstanding.
+
+33. **Pause checkpoint preparation:** the Vulkan shader, cubemap, stereo-panorama
+    and logical-device feature-observer increments are committed. The Android CI
+    build exposed out-of-scope stereo indices in the panorama/cubemap mesh input
+    arrays; these now explicitly select variants 0/1/2 and compile with the local
+    Android NDK. Full hosted validation is required before accepting this pause
+    checkpoint. No native multiview frame-boundary implementation has started;
+    Vulkan multiview remains disabled. Resume with that boundary and GPU proof,
+    then Unity/Quest integration. Windows OpenXR headset acceptance remains open.

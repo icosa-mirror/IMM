@@ -483,14 +483,14 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                 if (!m360SphereRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shader_pip360Equirect_vs_size, log))
 #else
                 const void *shaders[3] = {
-                    shader_pip360Equirect_vs_spirv_code[i],
-                    shader_pip360Equirect_vs_spirv_code[i],
-                    shader_pip360Equirect_vs_spirv_code[i]
+                    shader_pip360Equirect_vs_spirv_code[0],
+                    shader_pip360Equirect_vs_spirv_code[1],
+                    shader_pip360Equirect_vs_spirv_code[2]
                 };
                 const int shaderSizes[3] = {
-                    shader_pip360Equirect_vs_spirv_size[i],
-                    shader_pip360Equirect_vs_spirv_size[i],
-                    shader_pip360Equirect_vs_spirv_size[i]
+                    shader_pip360Equirect_vs_spirv_size[0],
+                    shader_pip360Equirect_vs_spirv_size[1],
+                    shader_pip360Equirect_vs_spirv_size[2]
                 };
                 if (!m360SphereRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shaderSizes, log))
 #endif
@@ -531,14 +531,14 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                 if (!m360CubemapRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shader_pip360Equirect_vs_size, log))
 #else
                 const void *shaders[3] = {
-                    shader_pip360Equirect_vs_spirv_code[i],
-                    shader_pip360Equirect_vs_spirv_code[i],
-                    shader_pip360Equirect_vs_spirv_code[i]
+                    shader_pip360Equirect_vs_spirv_code[0],
+                    shader_pip360Equirect_vs_spirv_code[1],
+                    shader_pip360Equirect_vs_spirv_code[2]
                 };
                 const int shaderSizes[3] = {
-                    shader_pip360Equirect_vs_spirv_size[i],
-                    shader_pip360Equirect_vs_spirv_size[i],
-                    shader_pip360Equirect_vs_spirv_size[i]
+                    shader_pip360Equirect_vs_spirv_size[0],
+                    shader_pip360Equirect_vs_spirv_size[1],
+                    shader_pip360Equirect_vs_spirv_size[2]
                 };
                 if (!m360CubemapRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shaderSizes, log))
 #endif
