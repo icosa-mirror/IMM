@@ -1267,3 +1267,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     C# projects compile against local Unity 6.6 assemblies, and the native plugin
     builds. The new raster boundary still requires physical-device validation;
     this is not Vulkan rendering or stereo acceptance.
+
+22. **First physical Vulkan raster rendering evidence:** run `37179506970`,
+    attempt 2, reached Firebase's Adreno 740/Vulkan device after an exit-137
+    startup kill and a Maven HTTP-429 failure blocked attempt 1. The raster pass
+    loads the fixture, renders visible IMM content, passes bidirectional depth
+    composition at 1x/2x/4x and passes queued-camera isolation. Camera opt-out
+    passed before the smoke script incorrectly invoked the D3D12-only synthetic
+    stereo probe on Vulkan. That probe is now restricted to D3D12; Vulkan stereo
+    remains unimplemented and unaccepted. The device reports 8x unsupported
+    (maximum 4x), so the Vulkan smoke now emits its capability marker rather
+    than claiming an 8x result from downgraded attachments. Required 1x/4x and all
+    lifecycle gates remain mandatory. Deferred unload and final shutdown still
+    need a complete passing device run. Intermittent build-startup kills remain
+    unresolved; headless build mode did not eliminate them.

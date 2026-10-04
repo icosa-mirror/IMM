@@ -94,7 +94,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             requestedDescriptor.msaaSamples = samples;
             int supportedSamples = SystemInfo.GetRenderTextureSupportedMSAASampleCount(requestedDescriptor);
             Debug.Log($"[IMM_URP_SMOKE] MSAA requested={samples} supported={supportedSamples} colour={requestedDescriptor.graphicsFormat} depth={requestedDescriptor.depthStencilFormat}");
-            if (metal && supportedSamples != samples)
+            if ((metal || vulkan) && supportedSamples != samples)
             {
                 Debug.Log($"[IMM_URP_SMOKE] UNSUPPORTED samples={samples} supported={supportedSamples}");
                 continue;
@@ -131,7 +131,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         var manager = FindFirstObjectByType<ImmPlayerManager>();
         Require(manager != null && manager.IsInitialized, "Native session was not initialized.");
         Require(sample.Document != null, "Sample document is missing.");
-        if (!metal)
+        if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12)
         {
             var stereoProbe = ImmRenderGraphValidation.VerifyStereoPacket(documentCamera,
                 Mathf.Max(sample.Document.GetBoundingBox().extents.magnitude, 0.1f));
