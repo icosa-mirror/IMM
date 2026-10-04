@@ -1281,3 +1281,19 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     lifecycle gates remain mandatory. Deferred unload and final shutdown still
     need a complete passing device run. Intermittent build-startup kills remain
     unresolved; headless build mode did not eliminate them.
+
+23. **Full CI checkpoint with physical Vulkan mono:** full validation run
+    `37184977197`, source `5b6808c4`, passed on attempt 2. Attempt 1 passed the
+    physical Android URP gate but macOS Unity license activation failed with
+    code 198; the failed-job retry passed macOS without source changes. Firebase
+    device `dm3q`, Android 34, Adreno 740/Vulkan, reports visible rendering and
+    bidirectional depth composition at 1x/2x/4x, 8x explicitly unsupported,
+    queued-camera isolation, camera opt-out, camera-free document unload,
+    deferred unload during loading and final acknowledged shutdown. The captured
+    4x image was inspected. Existing Windows, Apple, standalone, Godot and web
+    validation jobs pass at this checkpoint. This establishes the sample's
+    Vulkan mono foundation, not all-layer or headset acceptance. Intermittent
+    Linux Unity startup kills are still unexplained and must be investigated
+    if they recur; they were not resolved by `-nographics`. Next work must cover
+    the remaining required content layers and implement actual Quest multiview,
+    while retaining every original acceptance criterion and full CI gating.
