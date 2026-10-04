@@ -132,11 +132,9 @@ static void DrawPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& 
 }
 
 
-static void DrawPictureProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, int colorSpace, float offset, int viewportSize, ImmCore::piTexture color, unsigned char* output, bool fallback)
+static void DrawPictureProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, int colorSpace, float offset, int viewportSize, ImmCore::piTexture color, unsigned char* output, bool fallback, int pictureFormat = 4, int cubeFace = 4)
 {
     using namespace ImmCore;
-    constexpr int pictureFormat = 4;
-    constexpr int cubeFace = 4;
     constexpr float opacity = 1.0f;
     constexpr bool layered = false;
     ImmImporter::LayerPicture picture;
@@ -280,6 +278,24 @@ int main()
             const float expectedCenter = 31.5f + offset * 32 + (fallback ? 8 : 0);
             if (visible < 20 || visible > 1000 || std::abs(center - expectedCenter) > 1.5f)
                 throw std::runtime_error("Picture layer/camera transform readback mismatch");
+        }
+        for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
+        for (int pictureFormat : {2, 3})
+        for (int face = 0; face < 6; ++face)
+        {
+            renderer.SetRenderTarget(target);
+            const float black[4] = {0,0,0,1};
+            renderer.Clear(black, nullptr, nullptr, nullptr, true);
+            std::vector<unsigned char> pixels(size * size * 4);
+            DrawPictureProbe(renderer, log, colorSpace, 0, size, color, pixels.data(), false, pictureFormat, face);
+            const int actual = pixels[(size / 2 * size + size / 2) * 4];
+            const float authored = static_cast<float>((face + 1) * 32) / 255;
+            const int expected = colorSpace == 0 ? static_cast<int>(std::pow(authored, 2.2f) * 255) : (face + 1) * 32;
+            if (std::abs(actual - expected) > 4)
+            {
+                std::fprintf(stderr, "IMM_VULKAN_CUBEMAP layout=%d colourSpace=%d face=%d red=%d expected=%d\n", pictureFormat, colorSpace, face, actual, expected);
+                throw std::runtime_error("Production cubemap sampler or face upload mismatch");
+            }
         }
         for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
         {

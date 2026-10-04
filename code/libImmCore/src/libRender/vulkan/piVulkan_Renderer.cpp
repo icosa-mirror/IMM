@@ -294,6 +294,8 @@ static constexpr VkAccessFlags VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT = 0x0
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT = 0x00800000;
 static constexpr VkFormat VK_FORMAT_R8G8_UNORM = 16;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D = 1;
+static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_CUBE = 3;
+static constexpr VkImageCreateFlags VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT = 0x10;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D_ARRAY = 5;
 static constexpr VkComponentSwizzle VK_COMPONENT_SWIZZLE_IDENTITY = 0;
 static constexpr VkFilter VK_FILTER_NEAREST = 0;
@@ -2030,7 +2032,7 @@ static size_t iTextureDataSize(const piRenderer::TextureInfo *info)
     {
         return 0;
     }
-    return (size_t)info->mXres * (size_t)info->mYres * (size_t)info->mZres * bytesPerPixel;
+    return (size_t)info->mXres * (size_t)info->mYres * (info->mType == piRenderer::TextureType::TCUBE ? 6u : (size_t)info->mZres) * bytesPerPixel;
 }
 
 static float iDecodeUnsignedFloat(uint32_t bits, uint32_t mantissaBits)
@@ -7280,8 +7282,9 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
 {
     (void)bindUsage;
     const bool is2D = texture && texture->info.mType == piRenderer::TextureType::T2D;
+    const bool isCube = texture && texture->info.mType == piRenderer::TextureType::TCUBE;
     const bool is2DArray = texture && texture->info.mType == piRenderer::TextureType::T2D_ARRAY;
-    if (!state || !texture || state->device == VK_NULL_DEVICE || (!is2D && !is2DArray) ||
+    if (!state || !texture || state->device == VK_NULL_DEVICE || (!is2D && !is2DArray && !isCube) ||
         texture->info.mXres <= 0 || texture->info.mYres <= 0 || (is2DArray && texture->info.mZres <= 0))
     {
         return true;
@@ -7302,16 +7305,22 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     usage |= depth ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
+    if (isCube && texture->info.mXres != texture->info.mYres)
+    {
+        iError(reporter, "Vulkan cubemap faces must be square");
+        return false;
+    }
     VkImageCreateInfo imageInfo = {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.flags = isCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
     imageInfo.format = vkFormat;
     imageInfo.extent.width = (uint32_t)texture->info.mXres;
     imageInfo.extent.height = (uint32_t)texture->info.mYres;
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = texture->info.mMultisample > 1 ? 1 : (texture->info.mNumMips > 0 ? texture->info.mNumMips : 1);
-    imageInfo.arrayLayers = is2DArray ? (uint32_t)texture->info.mZres : 1u;
-    texture->sampleCount = is2DArray ? VK_SAMPLE_COUNT_1_BIT : iRequestedTextureSampleCount(texture->info);
+    imageInfo.arrayLayers = isCube ? 6u : is2DArray ? (uint32_t)texture->info.mZres : 1u;
+    texture->sampleCount = (is2DArray || isCube) ? VK_SAMPLE_COUNT_1_BIT : iRequestedTextureSampleCount(texture->info);
     imageInfo.samples = texture->sampleCount;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = usage;
@@ -7367,7 +7376,7 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     VkImageViewCreateInfo viewInfo = {};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = texture->image;
-    viewInfo.viewType = is2DArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.viewType = isCube ? VK_IMAGE_VIEW_TYPE_CUBE : is2DArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = vkFormat;
     viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
     viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -8055,7 +8064,7 @@ static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piR
     range.baseMipLevel = 0;
     range.levelCount = texture->info.mMultisample > 1 ? 1u : (texture->info.mNumMips > 0 ? texture->info.mNumMips : 1u);
     range.baseArrayLayer = 0;
-    range.layerCount = texture->info.mType == piRenderer::TextureType::T2D_ARRAY ? (uint32_t)texture->info.mZres : 1u;
+    range.layerCount = texture->info.mType == piRenderer::TextureType::TCUBE ? 6u : texture->info.mType == piRenderer::TextureType::T2D_ARRAY ? (uint32_t)texture->info.mZres : 1u;
 
     VkImageMemoryBarrier toTransfer = {};
     toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -11002,6 +11011,7 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         {
             // Sampled: this fires per picture draw per eye (144/s with a
             // skybox on screen) and logging is real CPU inside the api bracket.
+            ++mState->gpuPictureDrawCount;
             const uint32_t traceIndex = mState->pictureTraceCounter++;
             if (traceIndex < 3 || (traceIndex % 300) == 0)
             {

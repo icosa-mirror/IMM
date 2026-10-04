@@ -147,6 +147,22 @@ void main()
 }
 '@
 
+$fsCubeSource = $fsSource.Replace('sampler2D pictureTexture', 'samplerCube pictureTexture')
+$fsCubeSource = $fsCubeSource.Replace('    vec2 uv = vec2(0.5 + 0.5 * atan(nor.x, -nor.z) / k_pi, acos(clamp(nor.y, -1.0, 1.0)) / k_pi);', '')
+$fsCubeSource = $fsCubeSource.Replace('texture(pictureTexture, uv)', 'texture(pictureTexture, nor)')
+$fsCubePath = Join-Path $workDir "shader_pip360Cubemap_vk.frag"
+Set-Content -Path $fsCubePath -Value $fsCubeSource -NoNewline -Encoding ASCII
+$fsCubeVariants = New-Object System.Collections.Generic.List[string]
+for ($colorSpace = 0; $colorSpace -le 1; ++$colorSpace) {
+    $fsCubeOut = Join-Path $workDir "shader_pip360Cubemap_fs_vk_c${colorSpace}.spv"
+    & $glslang -V -S frag "-DCOLOR_SPACE=$colorSpace" -o $fsCubeOut $fsCubePath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Cubemap fragment compilation failed" }
+    & $spirvVal $fsCubeOut
+    if ($LASTEXITCODE -ne 0) { throw "Cubemap fragment SPIR-V is invalid" }
+    $fsCubeVariants.Add($fsCubeOut)
+}
+Write-SpvInclude (Join-Path $OutputDir "shader_pip360Cubemap_fs_spirv.inc") "shader_pip360Cubemap_fs_spirv" $fsCubeVariants
+
 $vsPath = Join-Path $workDir "shader_pip360Equirect_vk.vert"
 $fsPath = Join-Path $workDir "shader_pip360Equirect_vk.frag"
 Set-Content -Path $vsPath -Value $vsSource -NoNewline -Encoding ASCII

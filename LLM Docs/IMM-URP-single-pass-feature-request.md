@@ -1341,3 +1341,11 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     geometry. Its regenerated fragment shaders pass GPU colour and opaque/half/zero
     coverage checks in both colour spaces. Static and pretessellated fixtures share
     setup code while invoking their actual distinct importer/rendering routes.
+29. **Vulkan cubemap image and sampler route (local):** cubemap pictures now
+    create a cube-compatible six-layer image, upload all six faces and bind a cube
+    image view to a cube fragment sampler. Cross and vertical-strip inputs use the
+    production picture importer and renderer. The native GPU check passes for
+    both layouts, all six camera directions and both colour spaces (24 cases).
+    Panorama/cubemap draws also independently trigger GPU readback. This is owned
+    Windows Vulkan mono evidence; Unity/Android, stereo panoramic asset selection
+    and actual multiview rendering remain required.

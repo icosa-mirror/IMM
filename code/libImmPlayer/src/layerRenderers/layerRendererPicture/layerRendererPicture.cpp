@@ -89,6 +89,10 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 #include "shader_pip360Equirect_fs.glsl"
 #endif
 
+#if defined(WINDOWS) || defined(ANDROID)
+#include "tmp/shader_pip360Cubemap_fs_spirv.inc"
+#endif
+
 #if defined(WINDOWS)
 #include "tmp/shader_pi2D_vs_spirv.inc"
 #include "tmp/shader_pi2D_fs_spirv.inc"
@@ -334,8 +338,17 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                     mShaders[idx][LayerPicture::Image2D] = shader2D ? shader2D : shader;
                     mShaders[idx][LayerPicture::Image360EquirectMono] = shader;
                     mShaders[idx][LayerPicture::Image360EquirectStereo] = shader;
-                    mShaders[idx][LayerPicture::Image360CubemapCrossMono] = shader;
-                    mShaders[idx][LayerPicture::Image360CubemapVstripMono] = shader;
+                    piShader cubeShader = renderer->CreateShaderBinary(&opts,
+                        reinterpret_cast<const uint8_t*>(shader_pip360Equirect_vs_spirv_code[i]), shader_pip360Equirect_vs_spirv_size[i],
+                        nullptr, 0, nullptr, 0, nullptr, 0,
+                        reinterpret_cast<const uint8_t*>(shader_pip360Cubemap_fs_spirv_code[fsIndex]), shader_pip360Cubemap_fs_spirv_size[fsIndex], error);
+                    if (!cubeShader)
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Vulkan cubemap shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+                    mShaders[idx][LayerPicture::Image360CubemapCrossMono] = cubeShader;
+                    mShaders[idx][LayerPicture::Image360CubemapVstripMono] = cubeShader;
                     continue;
 #else
                     log->Printf(LT_ERROR, L"Could not initialize Vulkan picture image layer shader: SPIR-V is unavailable on this platform");
