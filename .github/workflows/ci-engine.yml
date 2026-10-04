@@ -795,7 +795,7 @@ jobs:
           targetPlatform: StandaloneWindows64
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
-          customParameters: -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
+          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
 
       - name: Collect Unity DirectX runner memory diagnostics
         if: always()
@@ -1182,7 +1182,7 @@ jobs:
           targetPlatform: StandaloneWindows64
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsVulkanSmokePlayer
-          customParameters: -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-vulkan-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-vulkan-player/player/ImmUnitySmoke.exe
+          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-vulkan-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-vulkan-player/player/ImmUnitySmoke.exe
 
       - name: Collect Unity Vulkan runner memory diagnostics
         if: always()
@@ -2043,7 +2043,7 @@ jobs:
           targetPlatform: Android
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidOpenXRQuestPlayer
-          customParameters: -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-quest-editor.log -immQuestPlayerPath /github/workspace/.ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
+          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-quest-editor.log -immQuestPlayerPath /github/workspace/.ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
 
       - name: Collect Unity Android Quest runner memory diagnostics
         if: always()
@@ -2181,7 +2181,7 @@ jobs:
           targetPlatform: Android
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
-          customParameters: -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/.ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/.ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
 
       - name: Collect Unity Android smoke runner memory diagnostics
         if: always()

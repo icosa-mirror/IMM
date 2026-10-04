@@ -1226,3 +1226,18 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     yet implemented and is rejected before submission. Validate every required
     layer type and complete one-pass Quest multiview, Windows OpenXR single-pass
     instancing and the original acceptance criteria before declaring completion.
+
+19. **First physical Android URP attempt and CI startup investigation:** full run
+    `37162847722` reached the new Firebase URP gate on Adreno 740/Vulkan but failed:
+    the sample passed an APK StreamingAssets URI to the native file loader, and
+    a native render packet was rejected. The sample now extracts its fixture to
+    persistent storage and reuses that path for deferred unload. Vulkan rejection
+    diagnostics now identify the stage in Android logcat. These corrections still
+    require physical-device validation; the next run (`37167252955`) was killed
+    before the Android build method ran. Package import passes with GameCI CLI
+    pinned to the previous verified release. Exit-137 kills have moved between
+    Android and Windows container startup; retained Docker events and kernel logs
+    contain no OOM evidence, so their cause is unresolved. Build-only container
+    invocations now explicitly skip Editor graphics-device initialization using
+    `-nographics`; actual player rendering gates remain required. A passing build
+    or an infrastructure retry does not establish Vulkan rendering acceptance.
