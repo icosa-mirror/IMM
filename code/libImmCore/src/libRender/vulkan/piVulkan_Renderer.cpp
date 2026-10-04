@@ -212,6 +212,11 @@ static constexpr VkFormat VK_FORMAT_B8G8R8A8_UNORM = 44;
 static constexpr VkFormat VK_FORMAT_R8G8B8A8_UNORM = 37;
 static constexpr VkFormat VK_FORMAT_R8G8B8A8_SRGB = 43;
 static constexpr VkFormat VK_FORMAT_R8_UNORM = 9;
+static constexpr VkFormat VK_FORMAT_R8_UINT = 13;
+static constexpr VkFormat VK_FORMAT_R8G8_UINT = 20;
+static constexpr VkFormat VK_FORMAT_R8G8B8_UNORM = 23;
+static constexpr VkFormat VK_FORMAT_R8G8B8_UINT = 27;
+static constexpr VkFormat VK_FORMAT_R8G8B8A8_UINT = 41;
 static constexpr VkFormat VK_FORMAT_R32_SFLOAT = 100;
 static constexpr VkFormat VK_FORMAT_R32G32_SFLOAT = 103;
 static constexpr VkFormat VK_FORMAT_R32G32B32_SFLOAT = 106;
@@ -1289,6 +1294,7 @@ struct piShaderS
     piVulkanVertexLayout pipelineVertexLayout;
     uint32_t pipelineHostDepthBackdropMode = 0;
     bool isModel = false;
+    bool isPretessellated = false;
     bool isPicture = false;
     bool isPicture2D = false;
     static const int kPipelineVariantCacheSize = 16;
@@ -3605,7 +3611,7 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
     return true;
 }
 
-static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSet set, piRenderer::piReporter *reporter, bool model = false)
+static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSet set, piRenderer::piReporter *reporter, bool vertexInput = false)
 {
     if (!state || set == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets)
     {
@@ -3622,7 +3628,7 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSe
         !frameBuffer || frameBuffer->buffer == VK_NULL_BUFFER ||
         !layerBuffer || layerBuffer->buffer == VK_NULL_BUFFER ||
         !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER ||
-        (!model && (!passBuffer || passBuffer->buffer == VK_NULL_BUFFER ||
+        (!vertexInput && (!passBuffer || passBuffer->buffer == VK_NULL_BUFFER ||
             !vertexData || vertexData->buffer == VK_NULL_BUFFER ||
             !chunkBuffer || chunkBuffer->buffer == VK_NULL_BUFFER)))
     {
@@ -3686,7 +3692,7 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSe
     writes[6].descriptorCount = 1;
     writes[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[6].pBufferInfo = &bufferInfos[5];
-    if (model)
+    if (vertexInput)
     {
         // The shared layout is a superset. Model shaders never statically use
         // paint's storage/chunk descriptors; leave those bindings unwritten.
@@ -4406,8 +4412,8 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
 
     VkVertexInputBindingDescription vertexBindings[2] = {};
     const auto* vertexArray = state->currentVertexArray;
-    if (shader->isModel && (!vertexArray || !vertexArray->vertexBuffer[0])) return false;
-    if (shader->isModel)
+    if ((shader->isModel || shader->isPretessellated) && (!vertexArray || !vertexArray->vertexBuffer[0])) return false;
+    if (shader->isModel || shader->isPretessellated)
         for (uint32_t binding = 0; binding < 2; ++binding)
         {
             vertexBindings[binding].binding = binding;
@@ -4416,7 +4422,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         }
     VkPipelineVertexInputStateCreateInfo vertexInput = {};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    if (shader->isModel)
+    if (shader->isModel || shader->isPretessellated)
     {
         vertexInput.vertexBindingDescriptionCount = vertexArray->vertexBuffer[1] ? 2 : 1;
         vertexInput.pVertexBindingDescriptions = vertexBindings;
@@ -4460,7 +4466,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     const bool alphaToCoverage = blendState && blendState->alphaToCoverage;
     const bool blendEnabled = blendState && blendState->enabled0;
     piVulkanVertexLayout vertexLayout;
-    if (shader->isModel)
+    if (shader->isModel || shader->isPretessellated)
     {
         vertexLayout.bindingCount = vertexInput.vertexBindingDescriptionCount;
         vertexLayout.stride[0] = vertexArray->stride[0];
@@ -5660,7 +5666,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
         piVulkanHostUniformSnapshot uniforms(state, { 0, 3, 4, 5, 9 }, reporter);
         if (!uniforms.Valid()) return false;
         paintSet = iAllocateHostDescriptorSet(state, state->staticPaintDescriptorSetLayout, reporter);
-        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter, shader->isModel))
+        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter, shader->isModel || shader->isPretessellated))
         {
             state->hostFrameDataFailed = true;
             return false;
@@ -5681,7 +5687,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
                 return false;
             paintSet = iAllocateBatchDescriptorSet(state, state->batchPaintDescriptorPool, state->staticPaintDescriptorSetLayout);
         }
-        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter, shader->isModel))
+        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter, shader->isModel || shader->isPretessellated))
             return false;
         state->batchDescNs += iNowNanoseconds() - descStartNs;
     }
@@ -5733,7 +5739,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     if (!iRecordHostGeometryUse(state, vertexArray, true, reporter)) return false;
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &paintSet, 0, nullptr);
-    if (shader->isModel)
+    if (shader->isModel || shader->isPretessellated)
     {
         VkBuffer buffers[2] = {vertexArray->vertexBuffer[0]->buffer,
             vertexArray->vertexBuffer[1] ? vertexArray->vertexBuffer[1]->buffer : VK_NULL_BUFFER};
@@ -10657,6 +10663,7 @@ piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, co
         shader->options = *options;
         shader->hasOptions = true;
         shader->isModel = iShaderOption(shader, "MODEL_LAYER", 0) != 0;
+        shader->isPretessellated = iShaderOption(shader, "PRETESSELLATED", 0) != 0;
         shader->isPicture = iShaderOption(shader, "PICTURE", 0) != 0;
         shader->isPicture2D = iShaderOption(shader, "PICTURE_2D", 0) != 0;
     }
@@ -10899,6 +10906,18 @@ piVertexArray piRendererVulkan::CreateVertexArray(int numStreams, piBuffer vb0, 
                     default: break;
                 }
             }
+            if (layout->mEntry[entry].mType == piRArrayType_UByte)
+            {
+                const bool normalized = layout->mEntry[entry].mNormalize;
+                switch (layout->mEntry[entry].mNumComponents)
+                {
+                    case 1: format = normalized ? VK_FORMAT_R8_UNORM : VK_FORMAT_R8_UINT; size = 1; break;
+                    case 2: format = normalized ? VK_FORMAT_R8G8_UNORM : VK_FORMAT_R8G8_UINT; size = 2; break;
+                    case 3: format = normalized ? VK_FORMAT_R8G8B8_UNORM : VK_FORMAT_R8G8B8_UINT; size = 3; break;
+                    case 4: format = normalized ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_UINT; size = 4; break;
+                    default: break;
+                }
+            }
             if (format != 0 && size != 0)
             {
                 VkVertexInputAttributeDescription *desc = &vertexArray->attributes[attribute];
@@ -11008,7 +11027,9 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
             iError(mReporter, "Vulkan renderer failed to submit picture draw commands");
         }
     }
-    if (pt == PrimitiveType::Triangle && mState->currentShader && mState->currentShader->isModel)
+    if (mState->currentShader &&
+        ((pt == PrimitiveType::Triangle && mState->currentShader->isModel) ||
+         (pt == PrimitiveType::TriangleStrip && mState->currentShader->isPretessellated)))
     {
         if (!mState->currentRenderTarget || !mState->currentVertexArray || !mState->currentVertexArray->indexBuffer ||
             !mState->constantBuffers[0] || !mState->constantBuffers[3] || !mState->constantBuffers[4]) return;
@@ -11016,10 +11037,11 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
             !iEnsureStaticPaintGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, mReporter) ||
             !iSubmitStaticPaintDraw(mState, mState->currentShader, mState->currentRenderTarget,
                 mState->currentVertexArray, num, numInstances, baseVertex, baseInstance, baseIndex, mReporter))
-            iError(mReporter, "Vulkan renderer failed to submit model triangles");
+            iError(mReporter, "Vulkan renderer failed to submit packed paint or model mesh");
         else
         {
-            ++mState->gpuModelDrawCount;
+            if (mState->currentShader->isModel) ++mState->gpuModelDrawCount;
+            else { ++mState->gpuPaintDrawCount; mState->gpuPaintActive = true; }
             mState->pendingPresentTexture = mState->currentRenderTarget->color[0];
         }
         return;

@@ -195,7 +195,21 @@ namespace ImmPlayer
 #endif
 
 				
-					dst->mVertexArray[0] = renderer->CreateVertexArray(1, dst->mVBO, &vf, nullptr, nullptr, dst->mIBO, piRenderer::IndexArrayFormat::UINT_16);
+                    piRArrayLayout vulkanFormat = vf;
+                    if (renderer->GetAPI() == piRenderer::API::Vulkan)
+                    {
+                        // Direction and info occupy one packed RGBA8 integer attribute.
+                        // Avoid relying on optional three-component byte vertex formats.
+                        vulkanFormat.mEntry[2].mNumComponents = 4;
+#if PT_VERTEX_FORMAT==1
+                        vulkanFormat.mNumElements = 3;
+#else
+                        vulkanFormat.mNumElements = 4;
+                        vulkanFormat.mEntry[3] = vf.mEntry[4];
+#endif
+                    }
+                    const auto* format = renderer->GetAPI() == piRenderer::API::Vulkan ? &vulkanFormat : &vf;
+                    dst->mVertexArray[0] = renderer->CreateVertexArray(1, dst->mVBO, format, nullptr, nullptr, dst->mIBO, piRenderer::IndexArrayFormat::UINT_16);
 					if (!dst->mVertexArray[0])
 					{
 						log->Printf(LT_ERROR, L"Couldn't create Vertex Array");
@@ -213,8 +227,13 @@ namespace ImmPlayer
 	//===================================================================
 
 
-	LayerRendererPaintPretessellated::LayerRendererPaintPretessellated() : LayerRendererPaint() {}
+	LayerRendererPaintPretessellated::LayerRendererPaintPretessellated() : LayerRendererPaint(), mShader{} {}
 	LayerRendererPaintPretessellated::~LayerRendererPaintPretessellated() {}
+
+#if defined(WINDOWS) || defined(ANDROID)
+#include "tmp/shader_pretessellated_brush_vs_spirv.inc"
+#include "tmp/shader_pretessellated_brush_fs_spirv.inc"
+#endif
 
 	bool LayerRendererPaintPretessellated::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
 	{
@@ -247,7 +266,7 @@ namespace ImmPlayer
                     dindex++;
                     continue;
                 }
-                if (renderer->GetAPI() == piRenderer::API::GLES &&
+                if ((renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan) &&
                     !renderer->SupportsFeature(piRenderer::RendererFeature::MULTIVIEW))
                 {
                     // skip compiling multiview shaders when the extension isn't available
@@ -270,7 +289,21 @@ namespace ImmPlayer
 			char error[1024] = { 0 };
 
 
-			if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+            if (renderer->GetAPI() == piRenderer::API::Vulkan)
+            {
+#if defined(WINDOWS) || defined(ANDROID)
+                const int vs_index = i + j * 3 + k * 6 + static_cast<int>(colorSpace) * 12;
+                mShader[dindex] = renderer->CreateShaderBinary(&ops,
+                    reinterpret_cast<const uint8_t*>(shader_pretessellated_brush_vs_spirv_code[vs_index]),
+                    shader_pretessellated_brush_vs_spirv_size[vs_index], nullptr, 0, nullptr, 0, nullptr, 0,
+                    reinterpret_cast<const uint8_t*>(shader_pretessellated_brush_fs_spirv_code[0]),
+                    shader_pretessellated_brush_fs_spirv_size[0], error);
+#else
+                log->Printf(LT_ERROR, L"Vulkan pretessellated shaders are unavailable on this build target");
+                return false;
+#endif
+            }
+            else if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
 			{
 				mShader[dindex] = renderer->CreateShader(&ops, shader_pretessellated_brush_vs, nullptr, nullptr, nullptr, shader_pretessellated_brush_fs, error);
 			}

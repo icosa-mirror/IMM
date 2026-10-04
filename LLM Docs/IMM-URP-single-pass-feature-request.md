@@ -1306,3 +1306,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     The Windows build publishes that probe for a mandatory readback check using
     the existing Windows Vulkan CI ICD. This is local mono model evidence;
     CI, Unity borrowed attachments, Android models and multiview remain unverified.
+25. **Production Vulkan pretessellated mono route (local):** pretessellated
+    paint now uses generated production SPIR-V and real indexed vertex streams.
+    Packed colour is normalized; direction/info share an RGBA8 integer attribute
+    and direction is decoded consistently with HLSL. Existing GL, Metal and DX
+    vertex layouts are retained. All 24 vertex variants and the coverage fragment
+    validate as SPIR-V. The native GPU probe now exercises an importer-generated
+    segment through the production layer renderer in both colour spaces, checks
+    opaque/half/zero coverage and reverses authored direction to verify facing.
+    This extends the Windows Vulkan CI readback gate; it does not establish
+    Android/Unity borrowed-attachment or stereo acceptance for this layer.
