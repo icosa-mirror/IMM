@@ -160,3 +160,25 @@ UNITY_DECLARE_INTERFACE(IUnityGraphicsVulkan)
     bool(UNITY_INTERFACE_API *AccessTextureByID)(UnityTextureID textureID, const VkImageSubresource *subResource, VkImageLayout layout, VkPipelineStageFlags pipelineStageFlags, VkAccessFlags accessFlags, UnityVulkanResourceAccessMode accessMode, UnityVulkanImage *outImage);
 };
 UNITY_REGISTER_INTERFACE_GUID(0x95355348d4ef4e11ULL, 0x9789313dfcffcc87ULL, IUnityGraphicsVulkan)
+
+// Unity 6.6 V2 preserves the base interface prefix and adds composable startup hooks.
+UNITY_DECLARE_INTERFACE(IUnityGraphicsVulkanV2)
+{
+    bool(UNITY_INTERFACE_API *InterceptInitialization)(UnityVulkanInitCallback func, void *userdata);
+    PFN_vkVoidFunction(UNITY_INTERFACE_API *InterceptVulkanAPI)(const char *name, PFN_vkVoidFunction func);
+    void(UNITY_INTERFACE_API *ConfigureEvent)(int eventID, const UnityVulkanPluginEventConfig *pluginEventConfig);
+    UnityVulkanInstance(UNITY_INTERFACE_API *Instance)();
+    bool(UNITY_INTERFACE_API *CommandRecordingState)(UnityVulkanRecordingState *outCommandRecordingState, UnityVulkanGraphicsQueueAccess queueAccess);
+    bool(UNITY_INTERFACE_API *AccessTexture)(void *nativeTexture, const VkImageSubresource *subResource, VkImageLayout layout, VkPipelineStageFlags pipelineStageFlags, VkAccessFlags accessFlags, UnityVulkanResourceAccessMode accessMode, UnityVulkanImage *outImage);
+    bool(UNITY_INTERFACE_API *AccessRenderBufferTexture)(UnityRenderBuffer nativeRenderBuffer, const VkImageSubresource *subResource, VkImageLayout layout, VkPipelineStageFlags pipelineStageFlags, VkAccessFlags accessFlags, UnityVulkanResourceAccessMode accessMode, UnityVulkanImage *outImage);
+    bool(UNITY_INTERFACE_API *AccessRenderBufferResolveTexture)(UnityRenderBuffer nativeRenderBuffer, const VkImageSubresource *subResource, VkImageLayout layout, VkPipelineStageFlags pipelineStageFlags, VkAccessFlags accessFlags, UnityVulkanResourceAccessMode accessMode, UnityVulkanImage *outImage);
+    bool(UNITY_INTERFACE_API *AccessBuffer)(void *nativeBuffer, VkPipelineStageFlags pipelineStageFlags, VkAccessFlags accessFlags, UnityVulkanResourceAccessMode accessMode, UnityVulkanBuffer *outBuffer);
+    void(UNITY_INTERFACE_API *EnsureOutsideRenderPass)();
+    void(UNITY_INTERFACE_API *EnsureInsideRenderPass)();
+    void(UNITY_INTERFACE_API *AccessQueue)(UnityRenderingEventAndData callback, int eventId, void *userData, bool flush);
+    bool(UNITY_INTERFACE_API *ConfigureSwapchain)(const UnityVulkanSwapchainConfiguration *swapChainConfig);
+    bool(UNITY_INTERFACE_API *AccessTextureByID)(UnityTextureID textureID, const VkImageSubresource *subResource, VkImageLayout layout, VkPipelineStageFlags pipelineStageFlags, VkAccessFlags accessFlags, UnityVulkanResourceAccessMode accessMode, UnityVulkanImage *outImage);
+    bool(UNITY_INTERFACE_API *AddInterceptInitialization)(UnityVulkanInitCallback func, void *userdata, int32_t priority);
+    bool(UNITY_INTERFACE_API *RemoveInterceptInitialization)(UnityVulkanInitCallback func);
+};
+UNITY_REGISTER_INTERFACE_GUID(0x329334C09DCA4787ULL, 0xB347DD92A0097FFCULL, IUnityGraphicsVulkanV2)

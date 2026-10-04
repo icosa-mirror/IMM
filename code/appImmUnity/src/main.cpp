@@ -125,6 +125,7 @@
 #include "IUnityGraphicsVulkanMinimal.h"
 #include "imm_unity_vulkan_render_graph_events.h"
 #include "imm_unity_vulkan_render_graph.h"
+#include "imm_unity_vulkan_feature_capture.h"
 #include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
 #endif
 #if defined(__APPLE__)
@@ -1563,6 +1564,9 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnityInterfaces* unityInterfaces)
 {
 	gImmUnityPlugin.UnityAPI.mUnityInterfaces = unityInterfaces;
+#if defined(IMM_UNITY_VULKAN)
+    ImmUnityVulkanFeatures::Install(unityInterfaces->Get<IUnityGraphicsVulkanV2>());
+#endif
 	gImmUnityPlugin.UnityAPI.mGraphics = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphics>();
 	gImmUnityPlugin.UnityAPI.mGraphics->RegisterDeviceEventCallback(iOnGraphicsDeviceEvent);
 
@@ -1573,6 +1577,9 @@ extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnit
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
 {
 	gImmUnityPlugin.UnityAPI.mGraphics->UnregisterDeviceEventCallback(iOnGraphicsDeviceEvent);
+#if defined(IMM_UNITY_VULKAN)
+    ImmUnityVulkanFeatures::Remove();
+#endif
 }
 
 #if defined(WINDOWS) || defined(__APPLE__) || defined(IMM_UNITY_VULKAN)

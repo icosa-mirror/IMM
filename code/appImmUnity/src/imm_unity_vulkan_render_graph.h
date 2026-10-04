@@ -1,4 +1,5 @@
 #pragma once
+#include "imm_unity_vulkan_feature_capture.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdarg>
@@ -132,6 +133,9 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         config.logFileName = state.logFileName.c_str();
         config.tmpFolderName = state.tmpFolderName.c_str();
         if (!instance.device) return failed;
+        ImmVulkanRenderGraphDiagnostic("Logical-device multiview: captured=%d enabled=%d",
+            ImmUnityVulkanFeatures::State().IsKnown(instance.device),
+            ImmUnityVulkanFeatures::State().IsEnabled(instance.device));
         state.ownsBridge = true;
         if (!bridge.Init(config)) { ShutdownImmVulkanRenderGraph(state, bridge); return failed; }
         state.ready = true;

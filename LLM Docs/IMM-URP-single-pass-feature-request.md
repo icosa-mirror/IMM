@@ -1356,3 +1356,18 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     atlas halves in both colour spaces using mono/fallback draws. The existing
     mono, 2D and cubemap checks still pass. This verifies asset selection; no
     multiview or headset acceptance is claimed.
+31. **Read-only Unity logical-device feature observation (local):** the plugin
+    registers a priority-0 Vulkan V2 initialization observer before graphics
+    initialization, forwards device creation unchanged and records enabled
+    multiview only for a successfully created matching logical device. Both KHR
+    multiview and Vulkan 1.1 feature structures are decoded. Android plugin
+    metadata now preloads the native library, matching the Windows requirement;
+    late loading leaves capability unknown. Session diagnostics report captured/
+    enabled status. The Unity 6.6 SDK's 16 V2 function fields match our declaration
+    order; local native compilation and four CTest checks pass, including unchanged
+    request/allocator forwarding, successful-device identity, failed creation and
+    both feature structures. Core CI runs the new check. This observer changes no
+    device features and does not advertise multiview rendering; Android preload
+    behavior, actual device capture and the host multiview path still require CI
+    and integration evidence. API reference:
+    [Unity Vulkan V2 startup hooks](https://github.com/Unity-Technologies/NativeRenderingPlugin/blob/master/PluginSource/source/Unity/IUnityGraphicsVulkan.h).
