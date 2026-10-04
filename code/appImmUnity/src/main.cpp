@@ -1734,7 +1734,7 @@ extern "C" void UNITY_INTERFACE_EXPORT Debug()
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API IsReadyForDocumentLoad()
 {
 #if defined(__ANDROID__) || defined(ANDROID)
-    return (gImmUnityPlugin.mBridge.IsInitialized() && sAndroidDeferredInit.isInitialized) ? 1 : 0;
+    return gImmUnityPlugin.mBridge.IsGraphicsInitialized() ? 1 : 0;
 #else
     return gImmUnityPlugin.mBridge.IsInitialized() ? 1 : 0;
 #endif
@@ -2058,11 +2058,10 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
     }
 
 #if defined(__ANDROID__) || defined(ANDROID)
-    // Android Unity creates IMM's GLES renderer from the first render-thread
-    // plugin event. Loading before that event leaves Player partially
-    // initialized and crashes in Player::Load; report a load failure instead
-    // so managed code can wait for the render-thread readiness signal.
-    if (!sAndroidDeferredInit.isInitialized)
+    // Both deferred legacy initialization and RenderGraph must finish graphics
+    // and player initialization before loading. Check the bridge itself: the
+    // legacy deferred-init flag is not set by a RenderGraph session.
+    if (!gImmUnityPlugin.mBridge.IsGraphicsInitialized())
     {
         __android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "LoadFromFile blocked until Android deferred renderer init completes");
         iLog().Printf(LT_ERROR, L"LoadFromFile blocked until Android deferred renderer init completes");
@@ -2096,8 +2095,8 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, v
 {
 #if defined(__ANDROID__) || defined(ANDROID)
     // See LoadFromFile. Memory-backed loads still enter Player::Load and need
-    // the same render-thread GLES initialization to have completed first.
-    if (!sAndroidDeferredInit.isInitialized)
+    // graphics and player initialization to have completed first.
+    if (!gImmUnityPlugin.mBridge.IsGraphicsInitialized())
     {
         __android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "LoadFromMemory blocked until Android deferred renderer init completes");
         iLog().Printf(LT_ERROR, L"LoadFromMemory blocked until Android deferred renderer init completes");
