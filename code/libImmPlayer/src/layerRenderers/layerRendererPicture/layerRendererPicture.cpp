@@ -46,7 +46,7 @@ namespace ImmPlayer
         #endif
     }iLayerDrawInfo;
 
-    LayerRendererPicture::LayerRendererPicture() : LayerRenderer() {}
+    LayerRendererPicture::LayerRendererPicture() : LayerRenderer(), mShaders{} {}
     LayerRendererPicture::~LayerRendererPicture() {}
 
 #if defined(WINDOWS)
@@ -202,7 +202,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                     // skip compiling fast stereo shaders when we don't support the feature
                     continue;
                 }
-                if (renderer->GetAPI() == piRenderer::API::GLES &&
+                if ((renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan) &&
                     !renderer->SupportsFeature(piRenderer::RendererFeature::MULTIVIEW))
                 {
                     // skip compiling multiview shaders when the extension isn't available
@@ -305,7 +305,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                     } };
                     const int fsIndex = static_cast<int>(colorSpace);
                     piShader shader2D = renderer->CreateShaderBinary(&opts2D,
-                        reinterpret_cast<const uint8_t*>(shader_pi2D_vs_spirv_code[0]), shader_pi2D_vs_spirv_size[0],
+                        reinterpret_cast<const uint8_t*>(shader_pi2D_vs_spirv_code[i]), shader_pi2D_vs_spirv_size[i],
                         nullptr, 0, nullptr, 0, nullptr, 0,
                         reinterpret_cast<const uint8_t*>(shader_pi2D_fs_spirv_code[fsIndex]), shader_pi2D_fs_spirv_size[fsIndex],
                         error);
@@ -322,7 +322,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                         { "DEBUG_RENDER_MODE", j },
                     } };
                     piShader shader = renderer->CreateShaderBinary(&opts,
-                        reinterpret_cast<const uint8_t*>(shader_pip360Equirect_vs_spirv_code[0]), shader_pip360Equirect_vs_spirv_size[0],
+                        reinterpret_cast<const uint8_t*>(shader_pip360Equirect_vs_spirv_code[i]), shader_pip360Equirect_vs_spirv_size[i],
                         nullptr, 0, nullptr, 0, nullptr, 0,
                         reinterpret_cast<const uint8_t*>(shader_pip360Equirect_fs_spirv_code[fsIndex]), shader_pip360Equirect_fs_spirv_size[fsIndex],
                         error);
@@ -456,14 +456,14 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                 if (!m360SphereRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shader_pip360Equirect_vs_size, log))
 #else
                 const void *shaders[3] = {
-                    shader_pip360Equirect_vs_spirv_code[0],
-                    shader_pip360Equirect_vs_spirv_code[0],
-                    shader_pip360Equirect_vs_spirv_code[0]
+                    shader_pip360Equirect_vs_spirv_code[i],
+                    shader_pip360Equirect_vs_spirv_code[i],
+                    shader_pip360Equirect_vs_spirv_code[i]
                 };
                 const int shaderSizes[3] = {
-                    shader_pip360Equirect_vs_spirv_size[0],
-                    shader_pip360Equirect_vs_spirv_size[0],
-                    shader_pip360Equirect_vs_spirv_size[0]
+                    shader_pip360Equirect_vs_spirv_size[i],
+                    shader_pip360Equirect_vs_spirv_size[i],
+                    shader_pip360Equirect_vs_spirv_size[i]
                 };
                 if (!m360SphereRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shaderSizes, log))
 #endif
@@ -504,14 +504,14 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                 if (!m360CubemapRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shader_pip360Equirect_vs_size, log))
 #else
                 const void *shaders[3] = {
-                    shader_pip360Equirect_vs_spirv_code[0],
-                    shader_pip360Equirect_vs_spirv_code[0],
-                    shader_pip360Equirect_vs_spirv_code[0]
+                    shader_pip360Equirect_vs_spirv_code[i],
+                    shader_pip360Equirect_vs_spirv_code[i],
+                    shader_pip360Equirect_vs_spirv_code[i]
                 };
                 const int shaderSizes[3] = {
-                    shader_pip360Equirect_vs_spirv_size[0],
-                    shader_pip360Equirect_vs_spirv_size[0],
-                    shader_pip360Equirect_vs_spirv_size[0]
+                    shader_pip360Equirect_vs_spirv_size[i],
+                    shader_pip360Equirect_vs_spirv_size[i],
+                    shader_pip360Equirect_vs_spirv_size[i]
                 };
                 if (!m360CubemapRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shaderSizes, log))
 #endif
@@ -875,7 +875,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
             renderer->SetRasterState(mRasterState);
 
         // Android uses the GL_OVR_multiview extension to render all layers of a 2D texture array.
-        const int numInstances = (mStereoMode == StereoMode::Preferred && renderer->GetAPI() != piRenderer::API::GLES) ? 2 : 1;
+        const int numInstances = (mStereoMode == StereoMode::Preferred && renderer->GetAPI() != piRenderer::API::GLES && renderer->GetAPI() != piRenderer::API::Vulkan) ? 2 : 1;
 
 
         #ifdef RENDER_BUDGET

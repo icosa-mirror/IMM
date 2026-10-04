@@ -47,7 +47,9 @@ function Convert-VertexGlslForVulkan([string]$Source) {
         "float drawingT = 2.0*layer.mDrawInTime-inTime;`n        vg.col_tra.w *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);`n    ")
     $source = $source.Replace('out V2CData', 'layout(location = 0) out V2CData')
     $source = $source.Replace('gl_VertexID', 'gl_VertexIndex')
-    $source = $source.Replace('gl_InstanceID', 'gl_InstanceIndex')
+    $source = $source.Replace('GL_ARB_shader_viewport_layer_array : enable', 'GL_EXT_multiview : require')
+    $source = $source.Replace('gl_InstanceID', 'gl_ViewIndex')
+    $source = $source.Replace('    gl_ViewportIndex = gl_ViewIndex;', '')
     return "#version 460`nstruct DisplayEye { mat4x4 mMatrix_CamPrj; };`nstruct ChunkDataEntry { uint mVertexOffset; float mBiggestStroke; };`n$source"
 }
 
@@ -122,7 +124,7 @@ for ($vertexFormat = 0; $vertexFormat -le 1; ++$vertexFormat) {
                 for ($drawin = 0; $drawin -lt $drawinCount; ++$drawin) {
                     for ($stereo = 0; $stereo -lt 3; ++$stereo) {
                         $out = Join-Path $workDir "shader_static_brush_vs_v${vertexFormat}_c${colorCompressed}_b${brush}_w${wiggle}_d${drawin}_s${stereo}.spv"
-                        & $glslang -V -S vert "-DCOLOR_COMPRESSED=$colorCompressed" "-DBRUSHTYPE=$brush" "-DWIGGLE=$wiggle" "-DDRAWIN=$drawin" "-DSTEREOMODE=$stereo" "-DVERTEX_FORMAT=$vertexFormat" -o $out $vsPath | Out-Host
+                        & $glslang -V -S vert "-DCOLOR_COMPRESSED=$colorCompressed" "-DBRUSHTYPE=$brush" "-DWIGGLE=$wiggle" "-DDRAWIN=$drawin" "-DSTEREOMODE=$stereo" "-DVERTEX_FORMAT=$vertexFormat" -o $out $vsPath | Out-Null
                         if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $out" }
                         & $spirvVal $out
                         if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $out" }
@@ -137,7 +139,7 @@ for ($vertexFormat = 0; $vertexFormat -le 1; ++$vertexFormat) {
 $fsVariants = New-Object System.Collections.Generic.List[string]
 for ($stereo = 0; $stereo -lt 3; ++$stereo) {
     $out = Join-Path $workDir "shader_static_brush_fs_s${stereo}.spv"
-    & $glslang -V -S frag "-DSTEREOMODE=$stereo" "-DRENDERMODE=0" -o $out $fsPath | Out-Host
+    & $glslang -V -S frag "-DSTEREOMODE=$stereo" "-DRENDERMODE=0" -o $out $fsPath | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $out" }
     & $spirvVal $out
     if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $out" }

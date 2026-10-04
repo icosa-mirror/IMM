@@ -309,7 +309,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 			renderer->SetRasterState(mRasterState);
 
 		// Android uses the GL_OVR_multiview extension to render all layers of a 2D texture array.
-		const int numInstances = (mStereoMode == StereoMode::Preferred && renderer->GetAPI() != piRenderer::API::GLES) ? 2 : 1;
+		const int numInstances = (mStereoMode == StereoMode::Preferred && renderer->GetAPI() != piRenderer::API::GLES && renderer->GetAPI() != piRenderer::API::Vulkan) ? 2 : 1;
 
 
         #ifdef RENDER_BUDGET

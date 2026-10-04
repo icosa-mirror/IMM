@@ -59,6 +59,15 @@ New-Item -ItemType Directory -Force $workDir | Out-Null
 
 $vsSource = @'
 #version 460
+#if STEREOMODE==2
+#extension GL_EXT_multiview : require
+#define eyeIndex gl_ViewIndex
+#elif STEREOMODE==1
+#define eyeIndex pass.mID
+#else
+#define eyeIndex 0
+#endif
+layout (std140, binding=5) uniform PassState { int mID; int kk1; int kk2; int kk3; } pass;
 
 layout (std140, row_major, binding=3) uniform LayersState
 {
@@ -90,7 +99,7 @@ void main()
 {
     vec3 viewer_position = (layer.mLayerToViewer * vec4(in_position, 1.0)).xyz;
     out_direction = normalize(in_position);
-    gl_Position = display.mEye[0].mMatrix_CamPrj * vec4(viewer_position, 1.0);
+    gl_Position = display.mEye[eyeIndex].mMatrix_CamPrj * vec4(viewer_position, 1.0);
     if (hostDepthBackdropMode == 1u)
     {
         gl_Position.z = 0.0;
@@ -145,6 +154,15 @@ Set-Content -Path $fsPath -Value $fsSource -NoNewline -Encoding ASCII
 
 $vs2DSource = @'
 #version 460
+#if STEREOMODE==2
+#extension GL_EXT_multiview : require
+#define eyeIndex gl_ViewIndex
+#elif STEREOMODE==1
+#define eyeIndex pass.mID
+#else
+#define eyeIndex 0
+#endif
+layout (std140, binding=5) uniform PassState { int mID; int kk1; int kk2; int kk3; } pass;
 
 layout (std140, row_major, binding=3) uniform LayersState
 {
@@ -186,7 +204,7 @@ void main()
         vec2(0.0, 0.0)
     );
     vec3 position = vec3(picture.size.xy * positions[gl_VertexIndex], 0.0);
-    gl_Position = display.mEye[0].mMatrix_CamPrj * layer.mLayerToViewer * vec4(position, 1.0);
+    gl_Position = display.mEye[eyeIndex].mMatrix_CamPrj * layer.mLayerToViewer * vec4(position, 1.0);
     out_uv = uvs[gl_VertexIndex];
 }
 '@
@@ -232,32 +250,36 @@ $fsVariants = New-Object System.Collections.Generic.List[string]
 $vs2DVariants = New-Object System.Collections.Generic.List[string]
 $fs2DVariants = New-Object System.Collections.Generic.List[string]
 
-$vsOut = Join-Path $workDir "shader_pip360Equirect_vs_vk.spv"
-& $glslang -V -S vert -o $vsOut $vsPath | Out-Host
+for ($stereo = 0; $stereo -lt 3; ++$stereo) {
+$vsOut = Join-Path $workDir "shader_pip360Equirect_vs_vk_s${stereo}.spv"
+& $glslang -V -S vert "-DSTEREOMODE=$stereo" -o $vsOut $vsPath | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $vsOut" }
 & $spirvVal $vsOut
 if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $vsOut" }
 $vsVariants.Add($vsOut)
+}
 
 for ($colorSpace = 0; $colorSpace -le 1; ++$colorSpace) {
     $fsOut = Join-Path $workDir "shader_pip360Equirect_fs_vk_c${colorSpace}.spv"
-    & $glslang -V -S frag "-DCOLOR_SPACE=$colorSpace" -o $fsOut $fsPath | Out-Host
+    & $glslang -V -S frag "-DCOLOR_SPACE=$colorSpace" -o $fsOut $fsPath | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $fsOut" }
     & $spirvVal $fsOut
     if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $fsOut" }
     $fsVariants.Add($fsOut)
 }
 
-$vs2DOut = Join-Path $workDir "shader_pi2D_vs_vk.spv"
-& $glslang -V -S vert -o $vs2DOut $vs2DPath | Out-Host
+for ($stereo = 0; $stereo -lt 3; ++$stereo) {
+$vs2DOut = Join-Path $workDir "shader_pi2D_vs_vk_s${stereo}.spv"
+& $glslang -V -S vert "-DSTEREOMODE=$stereo" -o $vs2DOut $vs2DPath | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $vs2DOut" }
 & $spirvVal $vs2DOut
 if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $vs2DOut" }
 $vs2DVariants.Add($vs2DOut)
+}
 
 for ($colorSpace = 0; $colorSpace -le 1; ++$colorSpace) {
     $fs2DOut = Join-Path $workDir "shader_pi2D_fs_vk_c${colorSpace}.spv"
-    & $glslang -V -S frag "-DCOLOR_SPACE=$colorSpace" -o $fs2DOut $fs2DPath | Out-Host
+    & $glslang -V -S frag "-DCOLOR_SPACE=$colorSpace" -o $fs2DOut $fs2DPath | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $fs2DOut" }
     & $spirvVal $fs2DOut
     if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $fs2DOut" }

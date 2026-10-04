@@ -633,7 +633,7 @@ namespace ImmPlayer
 
 		const int stereoModeInt = static_cast<int>(mStereoMode);
 		// Android uses the GL_OVR_multiview extension to render all layers of a 2D texture array.
-		const int numInstances = (mStereoMode == StereoMode::Preferred && renderer->GetAPI() != piRenderer::API::GLES) ? 2 : 1;
+		const int numInstances = (mStereoMode == StereoMode::Preferred && renderer->GetAPI() != piRenderer::API::GLES && renderer->GetAPI() != piRenderer::API::Vulkan) ? 2 : 1;
 
 		renderer->AttachShaderConstants(mChunkData, 9);
 

@@ -1325,3 +1325,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     translated quads in opposite screen regions. Local native build and GPU
     readback pass. Stereo routing and all-format Unity/Android picture validation
     remain outstanding; no all-layer platform acceptance is inferred here.
+27. **Vulkan multiview shader prerequisites (local):** preferred static-paint
+    SPIR-V now uses the Vulkan multiview capability and `ViewIndex`, rather than
+    viewport instancing. Picture shaders now have mono/fallback/multiview vertex
+    variants and select their actual eye; the fallback picture GPU readback
+    verifies the right-eye projection independently of the layer translation.
+    Vulkan preferred draws use one instance, allowing the render pass to broadcast
+    it to both views. Preferred shader initialization remains capability-gated;
+    multiview is not advertised or enabled yet. Static paint's 180 vertex variants
+    and picture variants validate as SPIR-V, the native build and mono/fallback
+    readback checks pass. A compatible host multiview render pass, validated array
+    attachments, distinct-eye GPU readback and Quest integration are still required.

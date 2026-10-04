@@ -125,7 +125,7 @@ static void DrawPackedPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::p
 }
 
 
-static void DrawPictureProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, int colorSpace, float offset, int viewportSize, ImmCore::piTexture color, unsigned char* output)
+static void DrawPictureProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, int colorSpace, float offset, int viewportSize, ImmCore::piTexture color, unsigned char* output, bool fallback)
 {
     using namespace ImmCore;
     constexpr int pictureFormat = 4;
@@ -190,19 +190,20 @@ static void DrawPictureProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog
             for (int row = 0; row < 3; ++row) for (int col = 0; col < 3; ++col)
                 display[eye * 16 + row * 4 + col] = rotations[cubeFace][row * 3 + col];
     }
+    if (fallback) display[19] += 0.25f;
     display[32] = display[33] = static_cast<float>(viewportSize);
     auto frameBuffer = renderer.CreateBuffer(frame, sizeof(frame), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
     auto displayBuffer = renderer.CreateBuffer(display, sizeof(display), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
     auto layerBuffer = renderer.CreateBuffer(nullptr, sizeof(ImmPlayer::LayersState), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
     if (!frameBuffer || !displayBuffer || !layerBuffer) throw std::runtime_error("Create picture probe constants");
-    const int pass[4] = {};
+    const int pass[4] = {fallback ? 1 : 0, 0, 0, 0};
     auto passBuffer = renderer.CreateBuffer(pass, sizeof(pass), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
     renderer.AttachShaderConstants(passBuffer, 5);
     renderer.AttachShaderConstants(frameBuffer, 0);
     renderer.AttachShaderConstants(layerBuffer, 3);
     renderer.AttachShaderConstants(displayBuffer, 4);
     const int viewport[] = {0, 0, viewportSize, viewportSize}; renderer.SetViewport(0, viewport);
-    pictureRenderer.PrepareForDisplay(layered ? ImmPlayer::StereoMode::Preferred : ImmPlayer::StereoMode::None);
+    pictureRenderer.PrepareForDisplay(fallback ? ImmPlayer::StereoMode::Fallback : ImmPlayer::StereoMode::None);
     pictureRenderer.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()),
         pictureFormat == 4 ? trans3d::translate(offset, 0.0, 0.5) * trans3d::scale(0.25) : trans3d::identity(), opacity);
     pictureRenderer.DisplayRender(&renderer, &log, layerBuffer, 0);
@@ -249,12 +250,13 @@ int main()
         // Run pictures first so their readback cannot depend on paint/model counters.
         for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
         for (float offset : {-0.5f, 0.5f})
+        for (bool fallback : {false, true})
         {
             renderer.SetRenderTarget(target);
             const float black[4] = {0,0,0,1};
             renderer.Clear(black, nullptr, nullptr, nullptr, true);
             std::vector<unsigned char> pixels(size * size * 4);
-            DrawPictureProbe(renderer, log, colorSpace, offset, size, color, pixels.data());
+            DrawPictureProbe(renderer, log, colorSpace, offset, size, color, pixels.data(), fallback);
             int visible = 0, sumX = 0;
             for (int y = 0; y < size; ++y)
             for (int x = 0; x < size; ++x)
@@ -268,9 +270,8 @@ int main()
             }
             const float center = visible ? static_cast<float>(sumX) / visible : -1;
             std::fprintf(stderr, "IMM_VULKAN_PICTURE offset=%.1f visible=%d center=%.1f\n", offset, visible, center);
-            if (visible < 20 || visible > 1000 ||
-                (offset < 0 && (center < 8 || center > 24)) ||
-                (offset > 0 && (center < 40 || center > 56)))
+            const float expectedCenter = 31.5f + offset * 32 + (fallback ? 8 : 0);
+            if (visible < 20 || visible > 1000 || std::abs(center - expectedCenter) > 1.5f)
                 throw std::runtime_error("Picture layer/camera transform readback mismatch");
         }
         for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
