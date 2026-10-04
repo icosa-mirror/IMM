@@ -280,6 +280,24 @@ int main()
                 throw std::runtime_error("Picture layer/camera transform readback mismatch");
         }
         for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
+        for (bool rightEye : {false, true})
+        {
+            renderer.SetRenderTarget(target);
+            const float black[4] = {0,0,0,1};
+            renderer.Clear(black, nullptr, nullptr, nullptr, true);
+            std::vector<unsigned char> pixels(size * size * 4);
+            DrawPictureProbe(renderer, log, colorSpace, 0, size, color, pixels.data(), rightEye, 1);
+            const auto* center = &pixels[(size / 2 * size + size / 2) * 4];
+            const int expectedRed = rightEye ? 0 : colorSpace == 0 ? 55 : 128;
+            const int expectedGreen = rightEye ? 255 : 0;
+            if (std::abs(static_cast<int>(center[0]) - expectedRed) > 3 ||
+                std::abs(static_cast<int>(center[1]) - expectedGreen) > 3)
+            {
+                std::fprintf(stderr, "IMM_VULKAN_PANORAMA right=%d colourSpace=%d rgb=%u/%u/%u\n", rightEye, colorSpace, center[0], center[1], center[2]);
+                throw std::runtime_error("Stereo panorama atlas eye selection mismatch");
+            }
+        }
+        for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
         for (int pictureFormat : {2, 3})
         for (int face = 0; face < 6; ++face)
         {

@@ -1349,3 +1349,10 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Panorama/cubemap draws also independently trigger GPU readback. This is owned
     Windows Vulkan mono evidence; Unity/Android, stereo panoramic asset selection
     and actual multiview rendering remain required.
+30. **Stereo panoramic asset selection (local):** Vulkan now has a distinct
+    fragment route for top/bottom stereo equirectangular assets. The vertex shader
+    passes the selected eye as a flat varying, including `ViewIndex` for the future
+    multiview path. The native GPU fixture verifies red left-eye/green right-eye
+    atlas halves in both colour spaces using mono/fallback draws. The existing
+    mono, 2D and cubemap checks still pass. This verifies asset selection; no
+    multiview or headset acceptance is claimed.

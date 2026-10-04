@@ -91,6 +91,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
 #if defined(WINDOWS) || defined(ANDROID)
 #include "tmp/shader_pip360Cubemap_fs_spirv.inc"
+#include "tmp/shader_pip360EquirectStereo_fs_spirv.inc"
 #endif
 
 #if defined(WINDOWS)
@@ -337,7 +338,20 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                     }
                     mShaders[idx][LayerPicture::Image2D] = shader2D ? shader2D : shader;
                     mShaders[idx][LayerPicture::Image360EquirectMono] = shader;
-                    mShaders[idx][LayerPicture::Image360EquirectStereo] = shader;
+                    const piShaderOptions stereoOpts = { 5,{
+                        { "PICTURE", 1 }, { "COLOR_SPACE", static_cast<int>(colorSpace) },
+                        { "STEREOMODE", i }, { "FORMAT_IS_STEREO", 1 }, { "DEBUG_RENDER_MODE", j }
+                    } };
+                    piShader stereoShader = renderer->CreateShaderBinary(&stereoOpts,
+                        reinterpret_cast<const uint8_t*>(shader_pip360Equirect_vs_spirv_code[i]), shader_pip360Equirect_vs_spirv_size[i],
+                        nullptr, 0, nullptr, 0, nullptr, 0,
+                        reinterpret_cast<const uint8_t*>(shader_pip360EquirectStereo_fs_spirv_code[fsIndex]), shader_pip360EquirectStereo_fs_spirv_size[fsIndex], error);
+                    if (!stereoShader)
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Vulkan stereo panorama shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+                    mShaders[idx][LayerPicture::Image360EquirectStereo] = stereoShader;
                     piShader cubeShader = renderer->CreateShaderBinary(&opts,
                         reinterpret_cast<const uint8_t*>(shader_pip360Equirect_vs_spirv_code[i]), shader_pip360Equirect_vs_spirv_size[i],
                         nullptr, 0, nullptr, 0, nullptr, 0,

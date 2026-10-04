@@ -91,6 +91,7 @@ layout (std140, row_major, binding=4) uniform DisplayState
 layout(location=0) in vec3 in_position;
 layout(location=1) in vec3 in_normal;
 layout(location=0) out vec3 out_direction;
+layout(location=1) flat out uint out_eyeIndex;
 
 // 0 = normal projected depth, 1 = reverse-Z far backdrop, 2 = less/equal far backdrop.
 layout(constant_id = 0) const uint hostDepthBackdropMode = 0u;
@@ -99,6 +100,7 @@ void main()
 {
     vec3 viewer_position = (layer.mLayerToViewer * vec4(in_position, 1.0)).xyz;
     out_direction = normalize(in_position);
+    out_eyeIndex = uint(eyeIndex);
     gl_Position = display.mEye[eyeIndex].mMatrix_CamPrj * vec4(viewer_position, 1.0);
     if (hostDepthBackdropMode == 1u)
     {
@@ -146,6 +148,21 @@ void main()
     out_color = vec4(color, alpha);
 }
 '@
+
+$fsStereoSource = $fsSource.Replace('layout(location=0) in vec3 in_direction;', "layout(location=0) in vec3 in_direction;`nlayout(location=1) flat in uint in_eyeIndex;")
+$fsStereoSource = $fsStereoSource.Replace('    vec4 texel = texture(pictureTexture, uv);', "    uv = clamp(uv * vec2(1.0, 0.5), vec2(0.0), vec2(1.0, 0.5)) + vec2(0.0, 0.5 * float(in_eyeIndex));`n    vec4 texel = texture(pictureTexture, uv);")
+$fsStereoPath = Join-Path $workDir "shader_pip360EquirectStereo_vk.frag"
+Set-Content -Path $fsStereoPath -Value $fsStereoSource -NoNewline -Encoding ASCII
+$fsStereoVariants = New-Object System.Collections.Generic.List[string]
+for ($colorSpace = 0; $colorSpace -le 1; ++$colorSpace) {
+    $fsStereoOut = Join-Path $workDir "shader_pip360EquirectStereo_fs_vk_c${colorSpace}.spv"
+    & $glslang -V -S frag "-DCOLOR_SPACE=$colorSpace" -o $fsStereoOut $fsStereoPath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Stereo panorama fragment compilation failed" }
+    & $spirvVal $fsStereoOut
+    if ($LASTEXITCODE -ne 0) { throw "Stereo panorama fragment SPIR-V is invalid" }
+    $fsStereoVariants.Add($fsStereoOut)
+}
+Write-SpvInclude (Join-Path $OutputDir "shader_pip360EquirectStereo_fs_spirv.inc") "shader_pip360EquirectStereo_fs_spirv" $fsStereoVariants
 
 $fsCubeSource = $fsSource.Replace('sampler2D pictureTexture', 'samplerCube pictureTexture')
 $fsCubeSource = $fsCubeSource.Replace('    vec2 uv = vec2(0.5 + 0.5 * atan(nor.x, -nor.z) / k_pi, acos(clamp(nor.y, -1.0, 1.0)) / k_pi);', '')
