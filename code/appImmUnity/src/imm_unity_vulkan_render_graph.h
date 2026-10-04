@@ -153,7 +153,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
             if (!std::isfinite(packet.worldToView[i]) || !std::isfinite(packet.projection[i])) return finishPreparation(invalid);
         const ImmCore::mat4x4 view(packet.worldToView), projection(packet.projection);
         bridge.SetCameraMatrices(packet.camera, 0, &view, &projection, nullptr, nullptr, nullptr, nullptr);
-        return finishPreparation(bridge.PrepareCamera(packet.camera) ? 0 : failed);
+        return finishPreparation(bridge.PrepareCamera(packet.camera) ? 0 : reject("camera preparation", failed));
     }
     if (eventId != ImmRenderGraphEventId || !prepared) return reject("unmatched preparation", invalid);
     if (preparationResult < 0) return preparationResult;
@@ -180,18 +180,24 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         return invalid;
     }
     UnityVulkanRecordingState recording = {};
-    if (!unity->CommandRecordingState(&recording, kUnityVulkanGraphicsQueueAccess_DontCare)) return failed;
+    if (!unity->CommandRecordingState(&recording, kUnityVulkanGraphicsQueueAccess_DontCare)) return reject("command recording access", failed);
     if (!recording.renderPass || recording.subPassIndex < 0)
     {
         unity->EnsureInsideRenderPass();
-        if (!unity->CommandRecordingState(&recording, kUnityVulkanGraphicsQueueAccess_DontCare)) return failed;
+        if (!unity->CommandRecordingState(&recording, kUnityVulkanGraphicsQueueAccess_DontCare)) return reject("command recording access", failed);
     }
     auto* renderer = static_cast<ImmCore::piRendererVulkan*>(bridge.GetRenderer());
     if (recording.subPassIndex < 0 || !renderer->BeginHostRenderPassFrame(recording.commandBuffer,
         reinterpret_cast<void*>(recording.renderPass), reinterpret_cast<void*>(recording.framebuffer),
         colorFormat, color.samples, true, true,
         static_cast<uint32_t>(recording.subPassIndex), packet.width, packet.height,
-        recording.currentFrameNumber, recording.safeFrameNumber, true)) return failed;
+        recording.currentFrameNumber, recording.safeFrameNumber, true))
+    {
+        ImmVulkanRenderGraphDiagnostic("Host recording: commandBuffer=%d renderPass=%d framebuffer=%d subpass=%d",
+            recording.commandBuffer != nullptr, recording.renderPass != 0,
+            recording.framebuffer != 0, recording.subPassIndex);
+        return reject("host render-pass frame", failed);
+    }
     ImmShared::ImmEngineBridge::ViewportInfo viewport = {};
     viewport.width = static_cast<float>(packet.width);
     viewport.height = static_cast<float>(packet.height);
@@ -201,5 +207,5 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
     catch (...) { renderer->EndExternalImageFrame(); throw; }
     const bool valid = renderer->HostFrameResourcesValid();
     renderer->EndExternalImageFrame();
-    return rendered && valid ? 0 : failed;
+    return rendered && valid ? 0 : reject(rendered ? "host resource lifetime" : "prepared camera draw", failed);
 }
