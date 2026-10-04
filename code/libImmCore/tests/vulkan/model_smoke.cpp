@@ -4,6 +4,9 @@
 #include <vector>
 #include <cmath>
 #include <memory>
+#include "libImmPlayer/src/layerRenderers/layerRendererPicture/layerRendererPicture.h"
+#include "libImmImporter/src/document/layerPicture.h"
+#include "libImmCore/src/libBasics/piImage.h"
 #include "libImmCore/src/libBasics/piTArray.h"
 #include "libImmImporter/src/document/layerPaintPretessellated.h"
 #include "libImmPlayer/src/layerRenderers/layerRendererPaint/pretessellated/layerRendererPaintPretessellated.h"
@@ -122,6 +125,99 @@ static void DrawPackedPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::p
 }
 
 
+static void DrawPictureProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, int colorSpace, float offset, int viewportSize, ImmCore::piTexture color, unsigned char* output)
+{
+    using namespace ImmCore;
+    constexpr int pictureFormat = 4;
+    constexpr int cubeFace = 4;
+    constexpr float opacity = 1.0f;
+    constexpr bool layered = false;
+    ImmImporter::LayerPicture picture;
+    const auto type = pictureFormat == 1 ? ImmImporter::LayerPicture::Image360EquirectStereo :
+        pictureFormat == 2 ? ImmImporter::LayerPicture::Image360CubemapCrossMono :
+        pictureFormat == 3 ? ImmImporter::LayerPicture::Image360CubemapVstripMono :
+        pictureFormat == 4 ? ImmImporter::LayerPicture::Image2D : ImmImporter::LayerPicture::Image360EquirectMono;
+    picture.Init(type, false, &log);
+    const int width = pictureFormat == 3 ? 16 : 64;
+    const int height = pictureFormat == 2 ? 48 : pictureFormat == 3 ? 96 : 64;
+    piImage source;
+    const piImage::Format format = piImage::FORMAT_I_RGBA;
+    if (!source.Init(piImage::TYPE_2D, width, height, 1, 1, &format)) throw std::runtime_error("Allocate panorama image");
+    auto* pixels = static_cast<unsigned char*>(source.GetData(0));
+    for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x)
+    {
+        const int offset = 4 * (y * width + x);
+        pixels[offset] = (pictureFormat != 1 || y < 32) ? 128 : 0;
+        pixels[offset + 1] = (pictureFormat != 1 || y < 32) ? 0 : 255;
+        pixels[offset + 2] = 0; pixels[offset + 3] = 255;
+    }
+    if (pictureFormat == 2 || pictureFormat == 3)
+    {
+        // Input cross layout: +X at (2,1), -X at (0,1), +Y at (1,0),
+        // -Y at (1,2), +Z at (3,1), -Z at (1,1). A strip stores that face order.
+        const int crossX[] = {2, 0, 1, 1, 3, 1};
+        const int crossY[] = {1, 1, 0, 2, 1, 1};
+        for (int face = 0; face < 6; ++face)
+            for (int y = 0; y < 16; ++y) for (int x = 0; x < 16; ++x)
+            {
+                const int px = pictureFormat == 2 ? crossX[face] * 16 + x : x;
+                const int py = pictureFormat == 2 ? crossY[face] * 16 + y : face * 16 + y;
+                pixels[4 * (py * width + px)] = static_cast<unsigned char>((face + 1) * 32);
+            }
+    }
+    piTArray<uint8_t> encoded;
+    if (!encoded.Init(0, false) || !source.WriteToMemory(&encoded, 0, L"png") ||
+        !picture.LoadAssetMemory(encoded, &log, L"png")) throw std::runtime_error("Load panorama image");
+    encoded.End(); source.Free();
+    ImmImporter::Layer layer(nullptr, nullptr, 0);
+    layer.SetImplementation(&picture); layer.SetLoaded(true);
+    ImmPlayer::LayerRendererPicture pictureRenderer;
+    if (!pictureRenderer.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true) ||
+        !pictureRenderer.LoadInCPU(&log, &layer) || !pictureRenderer.LoadInGPU(&renderer, nullptr, &log, &layer))
+        throw std::runtime_error("Load panorama renderer probe");
+    float frame[4] = {};
+    float display[36] = {};
+    for (int eye = 0; eye < 2; ++eye)
+        for (int axis = 0; axis < 4; ++axis) display[eye * 16 + axis * 5] = 1;
+    if (pictureFormat == 2 || pictureFormat == 3)
+    {
+        // Symmetric orthonormal rotations map the requested cube axis onto +Z.
+        const float rotations[6][9] = {
+            {0,0,1, 0,-1,0, 1,0,0}, {0,0,-1, 0,-1,0, -1,0,0},
+            {-1,0,0, 0,0,1, 0,1,0}, {-1,0,0, 0,0,-1, 0,-1,0},
+            {1,0,0, 0,1,0, 0,0,1}, {-1,0,0, 0,1,0, 0,0,-1}};
+        for (int eye = 0; eye < 2; ++eye)
+            for (int row = 0; row < 3; ++row) for (int col = 0; col < 3; ++col)
+                display[eye * 16 + row * 4 + col] = rotations[cubeFace][row * 3 + col];
+    }
+    display[32] = display[33] = static_cast<float>(viewportSize);
+    auto frameBuffer = renderer.CreateBuffer(frame, sizeof(frame), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    auto displayBuffer = renderer.CreateBuffer(display, sizeof(display), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    auto layerBuffer = renderer.CreateBuffer(nullptr, sizeof(ImmPlayer::LayersState), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    if (!frameBuffer || !displayBuffer || !layerBuffer) throw std::runtime_error("Create picture probe constants");
+    const int pass[4] = {};
+    auto passBuffer = renderer.CreateBuffer(pass, sizeof(pass), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    renderer.AttachShaderConstants(passBuffer, 5);
+    renderer.AttachShaderConstants(frameBuffer, 0);
+    renderer.AttachShaderConstants(layerBuffer, 3);
+    renderer.AttachShaderConstants(displayBuffer, 4);
+    const int viewport[] = {0, 0, viewportSize, viewportSize}; renderer.SetViewport(0, viewport);
+    pictureRenderer.PrepareForDisplay(layered ? ImmPlayer::StereoMode::Preferred : ImmPlayer::StereoMode::None);
+    pictureRenderer.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()),
+        pictureFormat == 4 ? trans3d::translate(offset, 0.0, 0.5) * trans3d::scale(0.25) : trans3d::identity(), opacity);
+    pictureRenderer.DisplayRender(&renderer, &log, layerBuffer, 0);
+    if (pictureRenderer.GetDrawCallInfo().numDrawCalls != 1)
+        throw std::runtime_error("Picture probe did not submit a draw");
+    renderer.GetTextureContent(color, output, piRenderer::Format::C4_8_UNORM);
+    pictureRenderer.UnloadInGPU(&renderer, nullptr, &log, &layer);
+    pictureRenderer.UnloadInCPU(&log, &layer);
+    pictureRenderer.Deinit(&renderer, &log);
+    renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer); renderer.DestroyBuffer(layerBuffer);
+    renderer.DestroyBuffer(passBuffer);
+    picture.Deinit();
+}
+
+
 int main()
 {
     using namespace ImmCore;
@@ -150,6 +246,33 @@ int main()
         if (!color || !depth) throw std::runtime_error("Create model probe attachments");
         auto target = renderer.CreateRenderTarget(color, nullptr, nullptr, nullptr, depth);
         if (!target) throw std::runtime_error("Create model probe target");
+        // Run pictures first so their readback cannot depend on paint/model counters.
+        for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
+        for (float offset : {-0.5f, 0.5f})
+        {
+            renderer.SetRenderTarget(target);
+            const float black[4] = {0,0,0,1};
+            renderer.Clear(black, nullptr, nullptr, nullptr, true);
+            std::vector<unsigned char> pixels(size * size * 4);
+            DrawPictureProbe(renderer, log, colorSpace, offset, size, color, pixels.data());
+            int visible = 0, sumX = 0;
+            for (int y = 0; y < size; ++y)
+            for (int x = 0; x < size; ++x)
+            {
+                const auto* pixel = &pixels[(y * size + x) * 4];
+                if (pixel[0] < 8) continue;
+                const int expected = colorSpace == 0 ? 64 : 128;
+                if (std::abs(static_cast<int>(pixel[0]) - expected) > 3)
+                    { std::fprintf(stderr, "IMM_VULKAN_PICTURE colourSpace=%d red=%u expected=%d\n", colorSpace, pixel[0], expected); throw std::runtime_error("Picture colour-space readback mismatch"); }
+                ++visible; sumX += x;
+            }
+            const float center = visible ? static_cast<float>(sumX) / visible : -1;
+            std::fprintf(stderr, "IMM_VULKAN_PICTURE offset=%.1f visible=%d center=%.1f\n", offset, visible, center);
+            if (visible < 20 || visible > 1000 ||
+                (offset < 0 && (center < 8 || center > 24)) ||
+                (offset > 0 && (center < 40 || center > 56)))
+                throw std::runtime_error("Picture layer/camera transform readback mismatch");
+        }
         for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
         {
             ImmPlayer::LayerRendererModel modelRenderer;

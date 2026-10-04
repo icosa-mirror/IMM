@@ -1871,6 +1871,7 @@ struct piVulkanState
     uint32_t cpuPaintDrawCount = 0;
     uint32_t gpuPaintDrawCount = 0;
     uint64_t gpuModelDrawCount = 0;
+    uint64_t gpuPictureDrawCount = 0;
     uint64_t liveRenderTargets = 0;
     uint64_t liveRasterStates = 0;
     uint64_t liveBlendStates = 0;
@@ -10570,7 +10571,7 @@ void piRendererVulkan::GetTextureContent(piTexture me, void *data, const Format 
     {
         iFlushBatch(mState, mReporter);
     }
-    if (me->image != 0 && mState && (mState->gpuPaintDrawCount > 0 || mState->gpuModelDrawCount > 0) && !iReadBackTextureImage(mState, me, mReporter))
+    if (me->image != 0 && mState && (mState->gpuPaintDrawCount > 0 || mState->gpuModelDrawCount > 0 || mState->gpuPictureDrawCount > 0) && !iReadBackTextureImage(mState, me, mReporter))
     {
         iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::TextureReadback, "Vulkan texture GPU readback failed");
         return;
@@ -11366,6 +11367,7 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
             iEnsurePictureGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, nullptr, mReporter) &&
             iSubmitPictureQuadDraw(mState, mState->currentShader, mState->currentRenderTarget, instanceCount, mReporter))
         {
+            ++mState->gpuPictureDrawCount;
             mState->pendingPresentTexture = target;
             return;
         }

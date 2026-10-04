@@ -1316,3 +1316,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     opaque/half/zero coverage and reverses authored direction to verify facing.
     This extends the Windows Vulkan CI readback gate; it does not establish
     Android/Unity borrowed-attachment or stereo acceptance for this layer.
+26. **Vulkan 2D picture transform correction (local):** the generated 2D
+    picture vertex shader now applies authored size, layer transform and camera
+    projection. Vulkan uses the picture constants buffer; Windows selects the
+    actual 2D SPIR-V route instead of a panorama shader/CPU quad fallback. Picture
+    draws independently trigger GPU readback. The native probe renders pictures
+    before any paint/model draw, checks both colour spaces and verifies small
+    translated quads in opposite screen regions. Local native build and GPU
+    readback pass. Stereo routing and all-format Unity/Android picture validation
+    remain outstanding; no all-layer platform acceptance is inferred here.

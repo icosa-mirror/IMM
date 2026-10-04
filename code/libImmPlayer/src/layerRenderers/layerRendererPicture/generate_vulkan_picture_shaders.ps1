@@ -146,6 +146,25 @@ Set-Content -Path $fsPath -Value $fsSource -NoNewline -Encoding ASCII
 $vs2DSource = @'
 #version 460
 
+layout (std140, row_major, binding=3) uniform LayersState
+{
+    mat4x4 mLayerToViewer;
+    float mLayerToViewerScale;
+    float mOpacity;
+    float mkUnused;
+    float mDrawInTime;
+    vec4 mAnimParams;
+    vec4 mKeepAlive[2];
+    uint mID;
+} layer;
+struct DisplayEye { mat4x4 mMatrix_CamPrj; };
+layout (std140, row_major, binding=4) uniform DisplayState
+{
+    DisplayEye mEye[2];
+    vec2 mResolution;
+} display;
+layout (std140, binding=9) uniform PictureState { vec4 size; } picture;
+
 layout(location=0) out vec2 out_uv;
 
 void main()
@@ -166,7 +185,8 @@ void main()
         vec2(1.0, 0.0),
         vec2(0.0, 0.0)
     );
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+    vec3 position = vec3(picture.size.xy * positions[gl_VertexIndex], 0.0);
+    gl_Position = display.mEye[0].mMatrix_CamPrj * layer.mLayerToViewer * vec4(position, 1.0);
     out_uv = uvs[gl_VertexIndex];
 }
 '@

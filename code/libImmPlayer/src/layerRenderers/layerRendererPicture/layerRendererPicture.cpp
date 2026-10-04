@@ -89,6 +89,11 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 #include "shader_pip360Equirect_fs.glsl"
 #endif
 
+#if defined(WINDOWS)
+#include "tmp/shader_pi2D_vs_spirv.inc"
+#include "tmp/shader_pi2D_fs_spirv.inc"
+#endif
+
     // Creates a cube with 6 sides of 16x16 quads each. Note, the sides do NOT share the verties
     // along the edges of the cube. They could, but for the purposes of generating our sky dome
     // it's not very important. If we ever see cracks along the edges, we can revisit this construction
@@ -299,7 +304,6 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                         { "DEBUG_RENDER_MODE", j },
                     } };
                     const int fsIndex = static_cast<int>(colorSpace);
-#if defined(ANDROID)
                     piShader shader2D = renderer->CreateShaderBinary(&opts2D,
                         reinterpret_cast<const uint8_t*>(shader_pi2D_vs_spirv_code[0]), shader_pi2D_vs_spirv_size[0],
                         nullptr, 0, nullptr, 0, nullptr, 0,
@@ -310,9 +314,6 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                         log->Printf(LT_ERROR, L"Could not initialize Vulkan 2D picture image layer shader\n%s", pistr2ws(error));
                         return false;
                     }
-#else
-                    piShader shader2D = nullptr;
-#endif
                     const piShaderOptions opts = { 5,{
                         { "PICTURE", 1 },
                         { "COLOR_SPACE", static_cast<int>(colorSpace) },
@@ -891,7 +892,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
         }
         #endif
 
-        bool useBuffer = renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12;
+        bool useBuffer = renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12 || renderer->GetAPI() == piRenderer::API::Vulkan;
 
 
         renderer->AttachShaderConstants(mShaderConstants, 9);
