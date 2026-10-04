@@ -1241,3 +1241,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     invocations now explicitly skip Editor graphics-device initialization using
     `-nographics`; actual player rendering gates remain required. A passing build
     or an infrastructure retry does not establish Vulkan rendering acceptance.
+
+20. **Vulkan draw attachment sample-count correction:** run `37169739326` passed
+    every build and existing platform validation job; the new Android URP gate
+    alone failed, with dependent evidence reports also failing. Its device log
+    shows matching 256x256 colour/depth attachments at one sample rejected against
+    packet `samples=0`. That packet field configures session initialization and
+    is not populated for draw requests. Vulkan now derives draw samples from the
+    borrowed attachments, matching Metal/D3D12, while requiring matching colour
+    and depth counts and allowing only 1/2/4/8. The native build passes locally;
+    physical Vulkan rendering and queued-camera acceptance remain pending.
+    All build-only container steps passed with `-nographics` in this run; this
+    single result does not prove the intermittent exit-137 cause is resolved.

@@ -162,6 +162,8 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
             0, 0, 0, kUnityVulkanResourceAccess_ObserveOnly, &color) ||
         !unity->AccessRenderBufferTexture(reinterpret_cast<UnityRenderBuffer>(packet.depthBuffer), nullptr,
             0, 0, 0, kUnityVulkanResourceAccess_ObserveOnly, &depth)) return reject("attachment access", failed);
+    // The packet's samples field configures initialization only. Draw sample
+    // counts come from the exact borrowed attachments, as on Metal and D3D12.
     const uint32_t colorFormat = ImmVulkanPacketFormat(packet.colorFormat);
     const uint32_t depthFormat = ImmVulkanPacketFormat(packet.depthFormat);
     if (!color.image || !depth.image || !colorFormat || !depthFormat ||
@@ -169,12 +171,12 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         color.extent.width != depth.extent.width || color.extent.height != depth.extent.height ||
         color.extent.width < static_cast<uint32_t>(packet.width) || color.extent.height < static_cast<uint32_t>(packet.height) ||
         color.layers != 1 || depth.layers != 1 || color.samples != depth.samples ||
-        color.samples != static_cast<uint32_t>(packet.samples))
+        (color.samples != 1 && color.samples != 2 && color.samples != 4 && color.samples != 8))
     {
-        ImmVulkanRenderGraphDiagnostic("Invalid attachments: colour=%ux%u format=%u samples=%u layers=%d depth=%ux%u format=%u samples=%u layers=%d request=%dx%d formats=%u/%u samples=%d",
+        ImmVulkanRenderGraphDiagnostic("Invalid attachments: colour=%ux%u format=%u samples=%u layers=%d depth=%ux%u format=%u samples=%u layers=%d request=%dx%d formats=%u/%u",
             color.extent.width, color.extent.height, color.format, color.samples, color.layers,
             depth.extent.width, depth.extent.height, depth.format, depth.samples, depth.layers,
-            packet.width, packet.height, colorFormat, depthFormat, packet.samples);
+            packet.width, packet.height, colorFormat, depthFormat);
         return invalid;
     }
     UnityVulkanRecordingState recording = {};
