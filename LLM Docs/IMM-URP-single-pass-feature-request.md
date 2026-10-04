@@ -2,25 +2,45 @@
 
 ## Summary
 
-`ImmPlayerManager` only renders automatically under the Built-in Render Pipeline. Under URP,
-the only supported path is the sample's `RenderPipelineManager.endCameraRendering` fallback,
-which is mono-only and draws after URP has finished the camera. URP XR projects (OpenXR with
-the default *Single Pass Instanced* render mode) cannot display IMM content correctly in a
-headset.
+The original integration rendered automatically under the Built-in Render Pipeline and
+provided only a mono `RenderPipelineManager.endCameraRendering` fallback under URP.
+The implementation now provides a RenderGraph integration on D3D12, Metal and Vulkan.
+Actual Windows OpenXR single-pass and Quest Vulkan multiview acceptance remain unfinished;
+the validated mono and synthetic-stereo results below do not establish headset correctness.
 
 We need first-class URP support: a renderer feature that submits IMM inside URP's frame,
 renders both eyes with one native draw sequence, and integrates colour and depth with Unity
 geometry. Both direct rendering into Unity's texture-array eye target and a layered offscreen
 render followed by one stereo composite are permitted under the contracts below.
 
-Windows D3D12 support is a prerequisite workstream: IMM currently implements a D3D11
-renderer, not a D3D12 renderer. The existing D3D12 device-discovery hook does not provide
-working D3D12 rendering. Scope and estimates must include that backend work as well as
-URP integration and layered stereo.
+Windows D3D12 was a prerequisite workstream and is now implemented in the shared renderer
+and Unity host adapter. Flat URP composition and synthetic layered stereo have hosted
+validation. The native Windows player and Godot plugin retain Vulkan as their primary
+rendering path; this feature does not require migrating them to D3D12.
 
 The CI validation workflow is critical to delivery. Every implementation stage must add
 or update its automated validation and fix CI regressions as they arise. The difficulty of
 automating headset VR validation does not exempt non-VR changes from CI.
+
+## Current checkpoint — 2026-10-04
+
+1. Validated source: `dabce216`; synchronized runtime-binary checkpoint: `50278257`.
+   Full [CI validation run 37196388177](https://github.com/icosa-mirror/IMM/actions/runs/37196388177)
+   passed, including Windows DX12 composition, Windows Vulkan GPU readback, macOS
+   Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation.
+2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
+   model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
+   logical-device feature observer are committed. Native all-content GPU readbacks do
+   not establish complete all-layer composition through Unity or Android.
+3. Vulkan multiview remains disabled. Resume with the native multiview frame boundary
+   and borrowed-device GPU proof, then Unity/Quest integration. Windows OpenXR execution,
+   headset composition and per-eye/one-pass acceptance remain required.
+4. No partially edited implementation is pending. Local editor changes to the sample's
+   OpenXR and Package Manager settings, plus the unrelated Godot review handoff, were
+   left untouched and are outside this validated checkpoint.
+5. Progress entries below are chronological evidence. A pending statement in an older
+   entry describes that entry's checkpoint; this section and the latest entry govern
+   the current status. Fix any CI regression before continuing feature work.
 
 ## Motivation
 
@@ -1380,11 +1400,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     feature observer; those changes require the next full run. Headset/multiview
     acceptance and complete Unity/Android all-layer composition remain outstanding.
 
-33. **Pause checkpoint preparation:** the Vulkan shader, cubemap, stereo-panorama
+33. **Validated pause checkpoint (2026-10-04):** the Vulkan shader, cubemap, stereo-panorama
     and logical-device feature-observer increments are committed. The Android CI
     build exposed out-of-scope stereo indices in the panorama/cubemap mesh input
     arrays; these now explicitly select variants 0/1/2 and compile with the local
-    Android NDK. Full hosted validation is required before accepting this pause
-    checkpoint. No native multiview frame-boundary implementation has started;
+    Android NDK. Full hosted validation run
+    [37196388177](https://github.com/icosa-mirror/IMM/actions/runs/37196388177)
+    passed at source `dabce216`; CI-produced runtime binaries were synchronized
+    at `50278257`. This supersedes the pending hosted CI status in entries 27–32; their
+    outstanding content/device/headset acceptance checks remain open.
+    No native multiview frame-boundary implementation has started;
     Vulkan multiview remains disabled. Resume with that boundary and GPU proof,
     then Unity/Quest integration. Windows OpenXR headset acceptance remains open.

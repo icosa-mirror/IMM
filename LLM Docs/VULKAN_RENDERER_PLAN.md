@@ -1,5 +1,23 @@
 # Vulkan renderer plan
 
+## Status reference — 2026-10-04
+
+1. For current Unity URP scope, implementation status and acceptance requirements,
+   follow [the URP single-pass plan](IMM-URP-single-pass-feature-request.md).
+2. Full [CI run 37196388177](https://github.com/icosa-mirror/IMM/actions/runs/37196388177)
+   passed at source `dabce216`; runtime binaries were synchronized at `50278257`.
+   Windows D3D12 composition, Windows Vulkan GPU validation, macOS/iOS Metal and
+   Android Vulkan device validation passed. These results do not prove headset acceptance.
+3. Unity D3D12 mono and synthetic layered stereo are implemented. Unity Vulkan mono
+   is implemented; actual Vulkan multiview remains disabled. Windows OpenXR headset
+   execution, Quest multiview and complete Unity/Android all-layer acceptance remain open.
+4. Windows native-player and Godot work retains Vulkan as its primary backend.
+   Standalone OpenXR work is separate from Unity's OpenXR integration. Preserve all
+   existing platform CI coverage and fix regressions before further feature work.
+5. Earlier current-state statements and validation entries below are dated planning
+   baselines. Use the linked URP plan for current Unity delivery status; retain this
+   document's separate native/Godot/OpenXR workstreams and their outstanding checks.
+
 ## Top-level goals
 
 1. [working baseline; parity hardening remains] Working Vulkan standalone player
@@ -10,9 +28,9 @@
    - Windows Godot Vulkan smoke passes with Godot 4.5 Forward+ Vulkan, host `RenderingDevice` Vulkan resource handoff, compositor callbacks, and successful `sample1.imm` CPU/GPU load plus picture/static-paint draw submission.
    - Android Godot Vulkan smoke exports, installs, runs the Vulkan visual-smoke scene, loads `sample1.imm`, captures visible output, and requires CPU/GPU load markers plus Vulkan compositor/render diagnostics.
    - Remaining work is to broaden Godot coverage beyond the current smoke scene and keep Windows/Android packaging, runtime dependencies, and CI coverage reproducible.
-3. [open] Working Vulkan Unity Plugin for Android and Windows
-   - The existing Unity plugin already has working macOS Metal coverage, but Vulkan-specific Unity runtime integration for Windows and Android has not been completed or verified in this plan.
-   - Required work is to inspect the Unity native plugin path, define the Vulkan host-frame/device contract for Unity on Windows and Android, add renderer selection/API plumbing, add build and smoke coverage, and verify visible `sample1.imm` playback from the Unity sample project.
+3. [mono CI-passing; XR and broader content acceptance remain] Working Vulkan Unity Plugin for Android and Windows
+   - Unity Vulkan host-frame integration and URP mono rendering now have Windows and Android CI evidence at the checkpoint above.
+   - Remaining work is actual Quest multiview, complete all-layer Unity/Android composition and headset acceptance; follow the URP plan for the implementation sequence.
 
 ## Current renderer shape
 
@@ -24,7 +42,7 @@
 ## Current learning
 
 - Metal is a working playback backend used by the macOS standalone player, macOS Unity plugin, and macOS Godot plugin.
-- Vulkan is a blocker for the Godot plugin on Windows and Android.
+- Windows and Android Godot Vulkan have smoke evidence; broader content and product hardening remain.
 - The first target should be a Windows standalone Vulkan player because it is the easiest path to verify locally while building out backend behavior.
 - Vulkan shader generation and validation require `dxc`, `glslangValidator`, `glslc`, `spirv-val`, and `spirv-dis`; build documentation and Windows CI call out/install the Vulkan SDK/SPIR-V toolchain. Android Godot packaging requires Android SDK command-line tools, NDK `28.1.13356709` for Godot 4.5 `godot-cpp`, and NDK `26.1.10909125` for the existing IMM Gradle/CMake modules.
 - The static paint GLSL can now be transformed into Vulkan-compatible GLSL, compiled to SPIR-V variants, validated with `spirv-val`, checked in as generated includes, and passed through `CreateShaderBinary` on the Windows Vulkan path.

@@ -1,5 +1,16 @@
 # Merge Plan: `feature/godot-support` → `main`
 
+## Historical merge record
+
+This document records the earlier Godot branch merge and its conflict-resolution
+choices; its predicted platform state is not the current implementation status.
+For current Unity rendering work, follow
+[the URP single-pass plan](IMM-URP-single-pass-feature-request.md).
+Full [CI run 37196388177](https://github.com/icosa-mirror/IMM/actions/runs/37196388177)
+passed at source `dabce216`, with runtime binaries synchronized at `50278257`.
+Windows Godot retains Vulkan as its primary rendering backend; Unity's D3D12 work
+does not require a Godot D3D12 migration. Preserve existing Godot/platform CI checks.
+
 ## Summary
 
 One file conflicts. Everything else merges cleanly. The conflict is in
