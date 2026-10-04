@@ -809,6 +809,12 @@ jobs:
             cat /proc/pressure/memory
             sudo -n journalctl -k --since '-30 minutes' --no-pager | \
               grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+            sudo -n dmesg --ctime | \
+              grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+            # Containers are removed by the action; Docker retains OOM events.
+            docker events --since 30m --until "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --filter type=container --filter event=oom \
+              --format '{{.Time}} {{.Actor.ID}} {{.Actor.Attributes.image}}' || true
           } > artifacts/unity-windows-directx-player/runner-memory-directx.log 2>&1
 
       - name: Write CI manifest
@@ -1189,6 +1195,12 @@ jobs:
             cat /proc/pressure/memory
             sudo -n journalctl -k --since '-30 minutes' --no-pager | \
               grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+            sudo -n dmesg --ctime | \
+              grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+            # Containers are removed by the action; Docker retains OOM events.
+            docker events --since 30m --until "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --filter type=container --filter event=oom \
+              --format '{{.Time}} {{.Actor.ID}} {{.Actor.Attributes.image}}' || true
           } > artifacts/unity-windows-vulkan-player/runner-memory.log 2>&1
 
       - name: Write CI manifest
