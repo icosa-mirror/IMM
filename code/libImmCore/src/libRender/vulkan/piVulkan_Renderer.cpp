@@ -1223,6 +1223,28 @@ typedef VkResult (*PFN_vkCreateAndroidSurfaceKHR)(VkInstance instance, const VkA
 // per chunk (4 variants) so a single cached pipeline slot thrashed - destroy+recreate
 // EVERY draw (~2ms each x37 = the old ~85ms/eye). Caching each variant makes the
 // per-draw cost a lookup.
+// Model mesh layouts are part of pipeline identity; paint fetches vertices from storage.
+struct piVulkanVertexLayout
+{
+    uint32_t bindingCount = 0;
+    uint32_t stride[2] = {};
+    uint32_t attributeCount = 0;
+    VkVertexInputAttributeDescription attributes[12] = {};
+
+    bool operator==(const piVulkanVertexLayout& other) const
+    {
+        if (bindingCount != other.bindingCount || attributeCount != other.attributeCount) return false;
+        for (uint32_t i = 0; i < bindingCount; ++i)
+            if (stride[i] != other.stride[i]) return false;
+        for (uint32_t i = 0; i < attributeCount; ++i)
+            if (attributes[i].location != other.attributes[i].location ||
+                attributes[i].binding != other.attributes[i].binding ||
+                attributes[i].format != other.attributes[i].format ||
+                attributes[i].offset != other.attributes[i].offset) return false;
+        return true;
+    }
+};
+
 struct piShaderPipelineVariant
 {
     VkPipeline pipeline = VK_NULL_PIPELINE;
@@ -1237,6 +1259,7 @@ struct piShaderPipelineVariant
     VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     bool alphaToCoverage = false;
     bool blendEnabled = false;
+    piVulkanVertexLayout vertexLayout;
     uint32_t hostDepthBackdropMode = 0; // picture pipelines only (spec constant); 0 for paint
 };
 
@@ -1263,7 +1286,9 @@ struct piShaderS
     VkCompareOp pipelineDepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     bool pipelineAlphaToCoverage = false;
     bool pipelineBlendEnabled = false;
+    piVulkanVertexLayout pipelineVertexLayout;
     uint32_t pipelineHostDepthBackdropMode = 0;
+    bool isModel = false;
     bool isPicture = false;
     bool isPicture2D = false;
     static const int kPipelineVariantCacheSize = 16;
@@ -1839,6 +1864,7 @@ struct piVulkanState
     bool presentSelectionReported = false;
     uint32_t cpuPaintDrawCount = 0;
     uint32_t gpuPaintDrawCount = 0;
+    uint64_t gpuModelDrawCount = 0;
     uint64_t liveRenderTargets = 0;
     uint64_t liveRasterStates = 0;
     uint64_t liveBlendStates = 0;
@@ -3579,7 +3605,7 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
     return true;
 }
 
-static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSet set, piRenderer::piReporter *reporter)
+static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSet set, piRenderer::piReporter *reporter, bool model = false)
 {
     if (!state || set == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets)
     {
@@ -3596,9 +3622,9 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSe
         !frameBuffer || frameBuffer->buffer == VK_NULL_BUFFER ||
         !layerBuffer || layerBuffer->buffer == VK_NULL_BUFFER ||
         !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER ||
-        !passBuffer || passBuffer->buffer == VK_NULL_BUFFER ||
-        !vertexData || vertexData->buffer == VK_NULL_BUFFER ||
-        !chunkBuffer || chunkBuffer->buffer == VK_NULL_BUFFER)
+        (!model && (!passBuffer || passBuffer->buffer == VK_NULL_BUFFER ||
+            !vertexData || vertexData->buffer == VK_NULL_BUFFER ||
+            !chunkBuffer || chunkBuffer->buffer == VK_NULL_BUFFER)))
     {
         return false;
     }
@@ -3607,9 +3633,9 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSe
     bufferInfos[0] = iDescriptorBufferInfo(frameBuffer);
     bufferInfos[1] = iDescriptorBufferInfo(layerBuffer);
     bufferInfos[2] = iDescriptorBufferInfo(displayBuffer);
-    bufferInfos[3] = iDescriptorBufferInfo(passBuffer);
-    bufferInfos[4] = iDescriptorBufferInfo(vertexData);
-    bufferInfos[5] = iDescriptorBufferInfo(chunkBuffer);
+    if (passBuffer) bufferInfos[3] = iDescriptorBufferInfo(passBuffer);
+    if (vertexData) bufferInfos[4] = iDescriptorBufferInfo(vertexData);
+    if (chunkBuffer) bufferInfos[5] = iDescriptorBufferInfo(chunkBuffer);
 
     VkDescriptorImageInfo imageInfo = {};
     imageInfo.sampler = blueNoise->sampler;
@@ -3660,7 +3686,14 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSe
     writes[6].descriptorCount = 1;
     writes[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[6].pBufferInfo = &bufferInfos[5];
-    state->vkUpdateDescriptorSets(state->device, 7, writes, 0, nullptr);
+    if (model)
+    {
+        // The shared layout is a superset. Model shaders never statically use
+        // paint's storage/chunk descriptors; leave those bindings unwritten.
+        VkWriteDescriptorSet modelWrites[5] = {writes[0], writes[1], writes[2], writes[4], writes[3]};
+        state->vkUpdateDescriptorSets(state->device, passBuffer ? 5 : 4, modelWrites, 0, nullptr);
+    }
+    else state->vkUpdateDescriptorSets(state->device, 7, writes, 0, nullptr);
 
     if (!state->descriptorSetReported)
     {
@@ -4371,13 +4404,30 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     stages[1].module = shader->fragmentModule;
     stages[1].pName = "main";
 
+    VkVertexInputBindingDescription vertexBindings[2] = {};
+    const auto* vertexArray = state->currentVertexArray;
+    if (shader->isModel && (!vertexArray || !vertexArray->vertexBuffer[0])) return false;
+    if (shader->isModel)
+        for (uint32_t binding = 0; binding < 2; ++binding)
+        {
+            vertexBindings[binding].binding = binding;
+            vertexBindings[binding].stride = vertexArray->stride[binding];
+            vertexBindings[binding].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        }
     VkPipelineVertexInputStateCreateInfo vertexInput = {};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    if (shader->isModel)
+    {
+        vertexInput.vertexBindingDescriptionCount = vertexArray->vertexBuffer[1] ? 2 : 1;
+        vertexInput.pVertexBindingDescriptions = vertexBindings;
+        vertexInput.vertexAttributeDescriptionCount = vertexArray->attributeCount;
+        vertexInput.pVertexAttributeDescriptions = vertexArray->attributes;
+    }
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    inputAssembly.primitiveRestartEnable = 1;
+    inputAssembly.topology = shader->isModel ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    inputAssembly.primitiveRestartEnable = shader->isModel ? 0 : 1;
 
     VkPipelineViewportStateCreateInfo viewport = {};
     viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -4409,6 +4459,16 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     piBlendState blendState = state->currentBlendState;
     const bool alphaToCoverage = blendState && blendState->alphaToCoverage;
     const bool blendEnabled = blendState && blendState->enabled0;
+    piVulkanVertexLayout vertexLayout;
+    if (shader->isModel)
+    {
+        vertexLayout.bindingCount = vertexInput.vertexBindingDescriptionCount;
+        vertexLayout.stride[0] = vertexArray->stride[0];
+        vertexLayout.stride[1] = vertexArray->stride[1];
+        vertexLayout.attributeCount = vertexArray->attributeCount;
+        std::memcpy(vertexLayout.attributes, vertexArray->attributes,
+                    vertexLayout.attributeCount * sizeof(VkVertexInputAttributeDescription));
+    }
     if (shader->pipeline != VK_NULL_PIPELINE &&
         shader->pipelineRenderPass == target->renderPass &&
         shader->pipelineCullMode == cullMode &&
@@ -4420,7 +4480,8 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         shader->pipelineDepthWrite == depthWrite &&
         shader->pipelineDepthCompareOp == depthCompareOp &&
         shader->pipelineAlphaToCoverage == alphaToCoverage &&
-        shader->pipelineBlendEnabled == blendEnabled)
+        shader->pipelineBlendEnabled == blendEnabled &&
+        shader->pipelineVertexLayout == vertexLayout)
     {
         return true;
     }
@@ -4434,7 +4495,8 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
             v.renderPass == target->renderPass && v.cullMode == cullMode && v.frontFace == frontFace &&
             v.sampleCount == sampleCount && v.wireframe == wireframe && v.depthClamp == depthClamp &&
             v.depthTest == depthTest && v.depthWrite == depthWrite && v.depthCompareOp == depthCompareOp &&
-            v.alphaToCoverage == alphaToCoverage && v.blendEnabled == blendEnabled)
+            v.alphaToCoverage == alphaToCoverage && v.blendEnabled == blendEnabled &&
+            v.vertexLayout == vertexLayout)
         {
             shader->pipeline = v.pipeline;
             shader->pipelineRenderPass = v.renderPass;
@@ -4448,6 +4510,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
             shader->pipelineDepthCompareOp = v.depthCompareOp;
             shader->pipelineAlphaToCoverage = v.alphaToCoverage;
             shader->pipelineBlendEnabled = v.blendEnabled;
+            shader->pipelineVertexLayout = v.vertexLayout;
             return true;
         }
     }
@@ -4528,6 +4591,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     shader->pipelineDepthCompareOp = depthCompareOp;
     shader->pipelineAlphaToCoverage = alphaToCoverage;
     shader->pipelineBlendEnabled = blendEnabled;
+    shader->pipelineVertexLayout = vertexLayout;
     // Register this newly-built pipeline in the shader's variant cache so the next
     // draw with the same state reuses it (round-robin evict if the cache ever fills).
     {
@@ -4554,6 +4618,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         v.depthCompareOp = depthCompareOp;
         v.alphaToCoverage = alphaToCoverage;
         v.blendEnabled = blendEnabled;
+        v.vertexLayout = vertexLayout;
     }
     if (state->handleProbeLogCount < 60)
     {
@@ -5595,7 +5660,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
         piVulkanHostUniformSnapshot uniforms(state, { 0, 3, 4, 5, 9 }, reporter);
         if (!uniforms.Valid()) return false;
         paintSet = iAllocateHostDescriptorSet(state, state->staticPaintDescriptorSetLayout, reporter);
-        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter))
+        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter, shader->isModel))
         {
             state->hostFrameDataFailed = true;
             return false;
@@ -5616,7 +5681,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
                 return false;
             paintSet = iAllocateBatchDescriptorSet(state, state->batchPaintDescriptorPool, state->staticPaintDescriptorSetLayout);
         }
-        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter))
+        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter, shader->isModel))
             return false;
         state->batchDescNs += iNowNanoseconds() - descStartNs;
     }
@@ -5668,6 +5733,13 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     if (!iRecordHostGeometryUse(state, vertexArray, true, reporter)) return false;
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &paintSet, 0, nullptr);
+    if (shader->isModel)
+    {
+        VkBuffer buffers[2] = {vertexArray->vertexBuffer[0]->buffer,
+            vertexArray->vertexBuffer[1] ? vertexArray->vertexBuffer[1]->buffer : VK_NULL_BUFFER};
+        const VkDeviceSize offsets[2] = {0, 0};
+        state->vkCmdBindVertexBuffers(state->commandBuffer, 0, vertexArray->vertexBuffer[1] ? 2 : 1, buffers, offsets);
+    }
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
     state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
     state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, (int32_t)baseVertex, baseInstance);
@@ -10492,7 +10564,7 @@ void piRendererVulkan::GetTextureContent(piTexture me, void *data, const Format 
     {
         iFlushBatch(mState, mReporter);
     }
-    if (me->image != 0 && mState && mState->gpuPaintDrawCount > 0 && !iReadBackTextureImage(mState, me, mReporter))
+    if (me->image != 0 && mState && (mState->gpuPaintDrawCount > 0 || mState->gpuModelDrawCount > 0) && !iReadBackTextureImage(mState, me, mReporter))
     {
         iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::TextureReadback, "Vulkan texture GPU readback failed");
         return;
@@ -10584,6 +10656,7 @@ piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, co
     {
         shader->options = *options;
         shader->hasOptions = true;
+        shader->isModel = iShaderOption(shader, "MODEL_LAYER", 0) != 0;
         shader->isPicture = iShaderOption(shader, "PICTURE", 0) != 0;
         shader->isPicture2D = iShaderOption(shader, "PICTURE_2D", 0) != 0;
     }
@@ -10934,6 +11007,22 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
             mState->drawSubmitFailureReported = true;
             iError(mReporter, "Vulkan renderer failed to submit picture draw commands");
         }
+    }
+    if (pt == PrimitiveType::Triangle && mState->currentShader && mState->currentShader->isModel)
+    {
+        if (!mState->currentRenderTarget || !mState->currentVertexArray || !mState->currentVertexArray->indexBuffer ||
+            !mState->constantBuffers[0] || !mState->constantBuffers[3] || !mState->constantBuffers[4]) return;
+        if (!iUpdateStaticPaintDescriptorSet(mState, mState->staticPaintDescriptorSet, mReporter, true) ||
+            !iEnsureStaticPaintGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, mReporter) ||
+            !iSubmitStaticPaintDraw(mState, mState->currentShader, mState->currentRenderTarget,
+                mState->currentVertexArray, num, numInstances, baseVertex, baseInstance, baseIndex, mReporter))
+            iError(mReporter, "Vulkan renderer failed to submit model triangles");
+        else
+        {
+            ++mState->gpuModelDrawCount;
+            mState->pendingPresentTexture = mState->currentRenderTarget->color[0];
+        }
+        return;
     }
     if (pt == PrimitiveType::Triangle && mState->currentRenderTarget && mState->currentRenderTarget->color[0] &&
         mState->currentRenderTarget->color[0]->data && mState->textures[0] && mState->textures[0]->data &&

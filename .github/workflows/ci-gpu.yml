@@ -237,6 +237,19 @@ jobs:
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
           exit 0
 
+      - name: Download Vulkan model readback probe
+        uses: actions/download-artifact@v4
+        with:
+          name: Windows-Vulkan-Model-Probe
+          path: artifacts/vulkan-model-probe
+
+      - name: Validate production Vulkan model mesh readback
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          & .\artifacts\vulkan-model-probe\imm_vulkan_model_smoke.exe *> artifacts\windows-standalone-vulkan\model-readback.log
+          if ($LASTEXITCODE -ne 0) { throw "Vulkan model readback failed; see model-readback.log" }
+
       - name: Capture DirectX baseline
         shell: pwsh
         run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm

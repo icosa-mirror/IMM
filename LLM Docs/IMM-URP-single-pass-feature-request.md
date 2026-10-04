@@ -1297,3 +1297,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     if they recur; they were not resolved by `-nographics`. Next work must cover
     the remaining required content layers and implement actual Quest multiview,
     while retaining every original acceptance criterion and full CI gating.
+24. **Production Vulkan model mono route (local):** model shaders now have
+    checked-in SPIR-V generated from their production GLSL, including mesh colour
+    conversion and blue-noise opacity. Indexed model triangles bind their actual
+    vertex streams; pipeline identity includes the mesh strides and attributes.
+    An owned Windows Vulkan GPU readback check passes for both drawing colour
+    spaces, opaque/half/zero opacity and alternating packed/padded vertex layouts.
+    The Windows build publishes that probe for a mandatory readback check using
+    the existing Windows Vulkan CI ICD. This is local mono model evidence;
+    CI, Unity borrowed attachments, Android models and multiview remain unverified.

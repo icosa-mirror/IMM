@@ -33,7 +33,7 @@ namespace ImmPlayer
         #endif
 	}iLayerDrawInfo;
 
-    LayerRendererModel::LayerRendererModel() : LayerRenderer() {}
+    LayerRendererModel::LayerRendererModel() : LayerRenderer(), mShaders{}, mRasterState(nullptr) {}
     LayerRendererModel::~LayerRendererModel() {}
 
 #if defined(WINDOWS)
@@ -50,6 +50,11 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 #else
 #include "shader_model_vs.glsl"
 #include "shader_model_fs.glsl"
+#endif
+
+#if defined(WINDOWS) || defined(ANDROID)
+#include "tmp/shader_model_vs_spirv.inc"
+#include "tmp/shader_model_fs_spirv.inc"
 #endif
 
 	bool LayerRendererModel::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
@@ -73,7 +78,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
                     // skip compiling fast stereo shaders when we don't support the feature
                     continue;
                 }
-                if (renderer->GetAPI() == piRenderer::API::GLES &&
+                if ((renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan) &&
                     !renderer->SupportsFeature(piRenderer::RendererFeature::MULTIVIEW))
                 {
                     // skip compiling multiview shaders when the extension isn't available
@@ -83,7 +88,28 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 
 			char error[2048];
 
-			if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+            if (renderer->GetAPI() == piRenderer::API::Vulkan)
+            {
+#if defined(WINDOWS) || defined(ANDROID)
+                const piShaderOptions opts = { 2, {
+                    {"STEREOMODE", i}, {"MODEL_LAYER", 1}
+                } };
+                mShaders[i] = renderer->CreateShaderBinary(&opts,
+                    reinterpret_cast<const uint8_t*>(shader_model_vs_spirv_code[i]), shader_model_vs_spirv_size[i],
+                    nullptr, 0, nullptr, 0, nullptr, 0,
+                    reinterpret_cast<const uint8_t*>(shader_model_fs_spirv_code[static_cast<int>(colorSpace)]),
+                    shader_model_fs_spirv_size[static_cast<int>(colorSpace)], error);
+                if (!mShaders[i])
+                {
+                    log->Printf(LT_ERROR, L"Could not initialize Vulkan model layer shader\n%s", pistr2ws(error));
+                    return false;
+                }
+#else
+                log->Printf(LT_ERROR, L"Vulkan model shaders are unavailable on this build target");
+                return false;
+#endif
+            }
+            else if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
 			{
 				const piShaderOptions opts = { 2,{
 					{"COLOR_SPACE", static_cast<int>(colorSpace) },
@@ -133,7 +159,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 		mRasterState = renderer->CreateRasterState(false, true, piRenderer::CullMode::NONE, true, false);
 		if (!mRasterState) return false;
 
-        if (renderer->GetAPI() == piRenderer::API::Metal)
+        if (renderer->GetAPI() == piRenderer::API::Metal || renderer->GetAPI() == piRenderer::API::Vulkan)
         {
             const piRenderer::TextureInfo infob = { piRenderer::TextureType::T2D_ARRAY, piRenderer::Format::C1_8_UNORM, 64, 64, 64, 1 };
             mBlueNoise = renderer->CreateTexture(0, &infob, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::REPEAT, 1.0f, (void*)GetBlueNoise_64x64x64());

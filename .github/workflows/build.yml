@@ -75,6 +75,23 @@ jobs:
       # checkout and make an incremental build package an old DLL.
       run: msbuild imm.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64 /m
 
+    - name: Build Vulkan model readback probe
+      shell: pwsh
+      run: |
+        cmake -S code/libImmCore/tests/vulkan -B artifacts/vulkan-model-tests -DIMM_VULKAN_MODEL_SMOKE=ON
+        if ($LASTEXITCODE -ne 0) { throw "Configure Vulkan model probe failed" }
+        cmake --build artifacts/vulkan-model-tests --config Release --target imm_vulkan_model_smoke
+        if ($LASTEXITCODE -ne 0) { throw "Build Vulkan model probe failed" }
+
+    - name: Upload Vulkan model readback probe
+      uses: actions/upload-artifact@v4
+      with:
+        name: Windows-Vulkan-Model-Probe
+        path: |
+          artifacts/vulkan-model-tests/Release/imm_vulkan_model_smoke.exe
+          artifacts/vulkan-model-tests/Release/*.dll
+        if-no-files-found: error
+
     - name: Validate D3D12 submission and GPU readback
       id: d3d12_submission
       timeout-minutes: 5
