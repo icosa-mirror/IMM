@@ -1336,3 +1336,8 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     and picture variants validate as SPIR-V, the native build and mono/fallback
     readback checks pass. A compatible host multiview render pass, validated array
     attachments, distinct-eye GPU readback and Quest integration are still required.
+28. **Regenerated static paint coverage check (local):** the shared native paint
+    probe now also exercises the production static renderer with importer-generated
+    geometry. Its regenerated fragment shaders pass GPU colour and opaque/half/zero
+    coverage checks in both colour spaces. Static and pretessellated fixtures share
+    setup code while invoking their actual distinct importer/rendering routes.

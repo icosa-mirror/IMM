@@ -123,3 +123,5 @@ code/ImmUnitySampleProject/Assets/Samples.meta
 /.codex-temp/
 /code/projects/android/appImmViewer/build_gles_codex
 /exampleImmFiles
+
+code/libImmPlayer/src/layerRenderers/layerRendererPaint/static/tmp/vulkan_spirv_work/

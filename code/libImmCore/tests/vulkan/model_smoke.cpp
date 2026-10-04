@@ -4,10 +4,12 @@
 #include <vector>
 #include <cmath>
 #include <memory>
+#include "libImmCore/src/libBasics/piTArray.h"
+#include "libImmImporter/src/document/layerPaintStatic.h"
+#include "libImmPlayer/src/layerRenderers/layerRendererPaint/static/layerRendererPaintStatic.h"
 #include "libImmPlayer/src/layerRenderers/layerRendererPicture/layerRendererPicture.h"
 #include "libImmImporter/src/document/layerPicture.h"
 #include "libImmCore/src/libBasics/piImage.h"
-#include "libImmCore/src/libBasics/piTArray.h"
 #include "libImmImporter/src/document/layerPaintPretessellated.h"
 #include "libImmPlayer/src/layerRenderers/layerRendererPaint/pretessellated/layerRendererPaintPretessellated.h"
 #include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
@@ -69,13 +71,14 @@ static void DrawModelProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& 
     mesh->DeInit(); model.Deinit();
 }
 
-static void DrawPackedPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, int colorSpace, float opacity, int viewportSize, ImmCore::piTexture color, unsigned char* pixels, int directional = 0)
+template<typename LayerType, typename DrawingType, typename RendererType>
+static void DrawPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, int colorSpace, float opacity, int viewportSize, ImmCore::piTexture color, unsigned char* pixels, int directional = 0)
 {
     using namespace ImmCore;
-    ImmImporter::LayerPaintPretessellated paint;
+    LayerType paint;
     if (!paint.Init(1, 1, 0, 30, 1)) throw std::runtime_error("Initialize packed paint layer");
     paint.GetFrameBuffer()[0] = 0;
-    auto* drawing = static_cast<ImmImporter::DrawingPretessellated*>(paint.GetDrawing(0));
+    auto* drawing = static_cast<DrawingType*>(paint.GetDrawing(0));
     if (!drawing->Init(1) || !drawing->StartAdding(1.0f)) throw std::runtime_error("Initialize packed drawing");
     auto element = std::make_unique<ImmImporter::Element>();
     ImmImporter::Element::PointSource points[2] = {};
@@ -94,7 +97,7 @@ static void DrawPackedPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::p
     drawing->StopAdding(); drawing->SetLoaded(true);
     ImmImporter::Layer layer(nullptr, nullptr, 0);
     layer.SetImplementation(&paint); layer.SetLoaded(true);
-    ImmPlayer::LayerRendererPaintPretessellated paintRenderer;
+    RendererType paintRenderer;
     if (!paintRenderer.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true) ||
         !paintRenderer.LoadInCPU(&log, &layer) || !paintRenderer.LoadInGPU(&renderer, nullptr, &log, &layer))
         throw std::runtime_error("Load packed paint renderer probe");
@@ -107,6 +110,9 @@ static void DrawPackedPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::p
     auto displayBuffer = renderer.CreateBuffer(display, sizeof(display), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
     auto layerBuffer = renderer.CreateBuffer(nullptr, sizeof(ImmPlayer::LayersState), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
     if (!frameBuffer || !displayBuffer || !layerBuffer) throw std::runtime_error("Create model probe constants");
+    const int pass[4] = {};
+    auto passBuffer = renderer.CreateBuffer(pass, sizeof(pass), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    renderer.AttachShaderConstants(passBuffer, 5);
     renderer.AttachShaderConstants(frameBuffer, 0);
     renderer.AttachShaderConstants(layerBuffer, 3);
     renderer.AttachShaderConstants(displayBuffer, 4);
@@ -121,6 +127,7 @@ static void DrawPackedPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::p
     paintRenderer.UnloadInCPU(&log, &layer);
     renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer); renderer.DestroyBuffer(layerBuffer);
     paintRenderer.Deinit(&renderer, &log);
+    renderer.DestroyBuffer(passBuffer);
     paint.Deinit();
 }
 
@@ -313,12 +320,14 @@ int main()
         }
         for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
         for (float opacity : {1.0f, 0.5f, 0.0f})
+        for (bool staticPaint : {false, true})
         {
             if (!renderer.SetRenderTarget(target)) throw std::runtime_error("Bind packed paint target");
             const float black[4] = {0,0,0,1};
             renderer.Clear(black, nullptr, nullptr, nullptr, true);
             std::vector<unsigned char> pixels(size * size * 4);
-            DrawPackedPaintProbe(renderer, log, colorSpace, opacity, size, color, pixels.data());
+            if (staticPaint) DrawPaintProbe<ImmImporter::LayerPaintStatic, ImmImporter::DrawingStatic, ImmPlayer::LayerRendererPaintStatic>(renderer, log, colorSpace, opacity, size, color, pixels.data());
+            else DrawPaintProbe<ImmImporter::LayerPaintPretessellated, ImmImporter::DrawingPretessellated, ImmPlayer::LayerRendererPaintPretessellated>(renderer, log, colorSpace, opacity, size, color, pixels.data());
             int visible = 0;
             for (int pixel = 0; pixel < size * size; ++pixel)
                 if (pixels[pixel * 4] > 8)
@@ -340,7 +349,7 @@ int main()
         const float black[4] = {0,0,0,1};
         renderer.Clear(black, nullptr, nullptr, nullptr, true);
         std::vector<unsigned char> directionalPixels(size * size * 4);
-        DrawPackedPaintProbe(renderer, log, 0, 1.0f, size, color, directionalPixels.data(), direction);
+        DrawPaintProbe<ImmImporter::LayerPaintPretessellated, ImmImporter::DrawingPretessellated, ImmPlayer::LayerRendererPaintPretessellated>(renderer, log, 0, 1.0f, size, color, directionalPixels.data(), direction);
         int left = 0, right = 0;
         for (int y = 0; y < size; ++y)
             for (int x = 0; x < size; ++x)
