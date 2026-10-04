@@ -2,6 +2,7 @@ using System.Collections;
 using System.IO;
 using ImmPlayer;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
@@ -14,6 +15,7 @@ public sealed class ImmUrpSample : MonoBehaviour
     private ImmPlayerManager manager;
     private bool pipelineAssigned;
     public ImmDocument Document { get; private set; }
+    public string DocumentPath { get; private set; }
 
     private IEnumerator Start()
     {
@@ -34,7 +36,22 @@ public sealed class ImmUrpSample : MonoBehaviour
             Debug.LogError("[IMM_URP_SAMPLE] Native session initialization failed.");
             yield break;
         }
-        var document = Document = manager.LoadDocument(Path.Combine(Application.streamingAssetsPath, "sample1.imm"));
+        DocumentPath = Path.Combine(Application.streamingAssetsPath, "sample1.imm");
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // Android StreamingAssets live inside the APK, beyond native file access.
+        using (var download = UnityWebRequest.Get(DocumentPath))
+        {
+            yield return download.SendWebRequest();
+            if (download.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"[IMM_URP_SAMPLE] Could not extract sample1.imm: {download.error}");
+                yield break;
+            }
+            DocumentPath = Path.Combine(Application.persistentDataPath, "sample1.imm");
+            File.WriteAllBytes(DocumentPath, download.downloadHandler.data);
+        }
+#endif
+        var document = Document = manager.LoadDocument(DocumentPath);
         if (document == null)
         {
             Debug.LogError("[IMM_URP_SAMPLE] Could not load sample1.imm.");

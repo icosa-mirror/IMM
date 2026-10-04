@@ -151,7 +151,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             yield return null;
         Require(!ImmNativePlugin.IsDocumentActive(documentId), "Document unload stalled after camera opt-out.");
         Debug.Log("[IMM_URP_SMOKE] PASS camera-free document unload completed.");
-        var loadingDocument = manager.LoadDocument(Path.Combine(Application.streamingAssetsPath, "sample1.imm"));
+        var loadingDocument = manager.LoadDocument(sample.DocumentPath);
         Require(loadingDocument != null, "Could not queue document for deferred unload.");
         documentId = loadingDocument.DocumentId;
         Require(ImmNativePlugin.IsDocumentActive(documentId), "Queued document is inactive.");
