@@ -1371,3 +1371,11 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     behavior, actual device capture and the host multiview path still require CI
     and integration evidence. API reference:
     [Unity Vulkan V2 startup hooks](https://github.com/Unity-Technologies/NativeRenderingPlugin/blob/master/PluginSource/source/Unity/IUnityGraphicsVulkan.h).
+32. **Full CI checkpoint for model/pretessellated/2D mono changes:** validation
+    run [37192697255](https://github.com/icosa-mirror/IMM/actions/runs/37192697255)
+    passes at source `d0c3d099`, with GPU, Unity and device lanes enabled. This
+    checkpoint includes the mandatory Windows Vulkan production model/paint/2D
+    readback probe and existing platform regression gates. It precedes the local
+    multiview shader preparation, cubemap/stereo panorama additions and startup
+    feature observer; those changes require the next full run. Headset/multiview
+    acceptance and complete Unity/Android all-layer composition remain outstanding.
