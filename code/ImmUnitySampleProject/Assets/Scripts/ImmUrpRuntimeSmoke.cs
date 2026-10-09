@@ -256,8 +256,9 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     var bounds = surface ? document.GetBoundingBox() : new Bounds(Vector3.zero, Vector3.one * 2);
                     float radius = Mathf.Max(bounds.extents.magnitude, 0.1f);
                     Require(!float.IsNaN(radius) && !float.IsInfinity(radius), $"Content fixture bounds are invalid: {name}.");
-                    documentCamera.transform.position = surface ? bounds.center + Vector3.back * radius * 3 : Vector3.back * 3;
-                    documentCamera.transform.LookAt(surface ? bounds.center : Vector3.zero);
+                    documentCamera.transform.position = surface ? bounds.center + Vector3.back * radius * 3 : Vector3.zero;
+                    if (surface) documentCamera.transform.LookAt(bounds.center);
+                    else documentCamera.transform.rotation = Quaternion.identity;
                     documentCamera.nearClipPlane = 0.01f;
                     documentCamera.farClipPlane = Mathf.Max(radius * 8, 100);
                     document.SetTime(0, 0);
@@ -283,6 +284,8 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     foreach (var pixel in ReadTargetPixels(target, $"content-{name}"))
                         if (pixel.r > pixel.g + 10 && pixel.r > pixel.b + 10) ++redPixels;
                     Require(redPixels > 100, $"Content fixture has no expected red geometry: {name}, pixels={redPixels}.");
+                    if (!surface) Require(redPixels > target.width * target.height * 9 / 10,
+                        $"Panorama did not cover the skybox target: {name}, pixels={redPixels}.");
                     if (!surface) Debug.Log($"[IMM_URP_CONTENT] PASS {name} survives Unity skybox with opt-out control.");
                     if (surface)
                     {

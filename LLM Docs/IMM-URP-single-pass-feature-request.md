@@ -1865,3 +1865,7 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Sample and Android-conditional C# compilation pass locally. Shader compilation,
     actual skybox controls and platform composition remain unverified until CI;
     no local Unity Editor refresh or launch was performed.
+    Review places the panorama camera at the authored origin, inside the backdrop
+    geometry, and requires red content over 90 percent of the target. The existing
+    small visible-pixel threshold is retained for bounded surfaces only. This
+    prevents a partial backdrop from satisfying the skybox composition check.
