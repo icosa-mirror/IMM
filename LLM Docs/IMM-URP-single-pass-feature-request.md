@@ -35,6 +35,10 @@ automating headset VR validation does not exempt non-VR changes from CI.
    so this remains the last confirmed full-green source.
    Corrections and the prepared acceptance checks are pushed at `963193e5`;
    full validation run `37979446772` is in progress.
+   Its Unity iOS simulator lane fails the attribution fixture with two main-camera
+   submissions: that camera was also eligible for automatic rendering. The local
+   correction disables automatic rendering for both explicitly driven test cameras
+   and restores the main camera afterwards; runtime confirmation remains required.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
@@ -1631,3 +1635,21 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     and 31-row matrix validation pass locally. No device was contacted. Hosted build
     and actual Quest execution are pending; the preceding full run 37979446772
     still validates the already-pushed corrections and acceptance checks.
+50. **Explicit camera attribution isolation (local, 2026-10-09):** run
+    37979446772 reports two main-camera events at frame 37, with 12 observations
+    across four frames. The fixture disabled only the second camera while making
+    explicit requests for both. The main camera is now disabled during this check
+    and its previous state restored in finally. The strict one-event assertion is
+    retained. Isolated managed compilation passes; hosted runtime acceptance is
+    still required. This supersedes the assumption that completion polling alone
+    resolved the iOS fixture failure in entry 46.
+51. **All picture formats in borrowed Vulkan multiview (local, 2026-10-09):**
+    the production picture renderer now has two-layer GPU readback checks for
+    equirectangular mono/stereo, cubemap cross/vertical strip and flat images in
+    both colour spaces. Each case compares colour against a matched mono render,
+    verifies both layers have content and requires equal mono/multiview draw and
+    triangle counts. Stereo panorama sources distinguish the two eyes. All four
+    native Vulkan tests pass with validation enabled and no validation errors;
+    the required Windows Vulkan CI lane checks the new completion marker.
+    Workflow contracts pass locally. Hosted confirmation, paint variant coverage,
+    Unity all-content stereo/depth composition and headset acceptance remain open.
