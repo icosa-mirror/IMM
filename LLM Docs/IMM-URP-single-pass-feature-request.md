@@ -1904,3 +1904,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     plus bidirectional opaque/transparent depth, with all four mono platform
     lanes requiring the ten-document completion marker. Actual model rendering
     through Unity remains unverified, and this increment is held locally.
+68. **Imported model scene GPU readback (local, 2026-10-09):** the normal player
+    loads `model-unlit.imm` and the existing Vulkan Unity-packet adapter submits
+    that document into two eye slices. Hardware readback reports 594 visible
+    pixels per eye, 132 differing pixels and centroids at 30 and 33, with zero
+    validation errors. The same model-document CTest passes on CI-matched lavapipe.
+    A dedicated Windows Vulkan CI step now requires the selected filename,
+    enabled validation and the existing stereo image checks. This establishes
+    native document-to-renderer integration, not actual Unity RenderGraph,
+    headset pose/depth correctness or one GPU draw-sequence acceptance.

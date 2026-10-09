@@ -262,7 +262,9 @@ void RunUnityAdapterProbe(Host& host)
         !state.ready || !state.device.multiviewEnabled || !acknowledge) throw std::runtime_error("Initialize Unity Vulkan adapter");
     auto* player = bridge.GetPlayer();
     const wchar_t* sample = _wgetenv(L"IMM_VULKAN_SAMPLE_FILE");
-    const int document = player->Load(sample && *sample ? sample : IMM_VULKAN_SAMPLE_FILE);
+    const wchar_t* source = sample && *sample ? sample : IMM_VULKAN_SAMPLE_FILE;
+    std::printf("IMM_VULKAN_UNITY_ADAPTER source=%ls\n", source);
+    const int document = player->Load(source);
     if (document < 0) throw std::runtime_error("Queue adapter sample load");
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
     for (;;) {

@@ -59,6 +59,9 @@ if(IMM_VULKAN_MODEL_SMOKE)
     endforeach()
     add_test(NAME vulkan_model_readback COMMAND imm_vulkan_model_smoke)
     set_tests_properties(vulkan_model_readback PROPERTIES TIMEOUT 60)
+    add_test(NAME vulkan_model_document_readback COMMAND imm_vulkan_model_smoke)
+    set_tests_properties(vulkan_model_document_readback PROPERTIES TIMEOUT 60
+        ENVIRONMENT "IMM_VULKAN_SAMPLE_FILE=${IMM_ROOT}/exampleImmFiles/urp-content/model-unlit.imm")
     # Offline IMM authoring utility. Reuse the native probe's library/toolchain
     # configuration and DLL output directory; generation never initializes a GPU.
     add_executable(imm_urp_content_fixtures content_fixtures.cpp)

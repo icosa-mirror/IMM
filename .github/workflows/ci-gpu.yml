@@ -282,6 +282,26 @@ jobs:
             }
           }
 
+      - name: Validate imported model document through Vulkan packet adapter
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          $env:VK_LAYER_PATH = (Resolve-Path artifacts/vulkan-model-probe).Path
+          $env:VK_INSTANCE_LAYERS = 'VK_LAYER_KHRONOS_validation'
+          $env:IMM_VULKAN_SAMPLE_FILE = (Resolve-Path exampleImmFiles/urp-content/model-unlit.imm).Path
+          $log = 'artifacts/windows-standalone-vulkan/model-document-readback.log'
+          & .\artifacts\vulkan-model-probe\imm_vulkan_model_smoke.exe *> $log
+          if ($LASTEXITCODE -ne 0) { throw "Vulkan model document readback exited $LASTEXITCODE" }
+          if (Select-String -LiteralPath $log -SimpleMatch 'Validation Error:' -Quiet) {
+            throw 'Vulkan model document readback reported a validation error'
+          }
+          foreach ($marker in @('model-unlit.imm', 'IMM_VULKAN_MULTIVIEW validation=enabled',
+              'IMM_VULKAN_UNITY_ADAPTER PASS prepared two-view packet and scene GPU readback')) {
+            if (!(Select-String -LiteralPath $log -SimpleMatch $marker -Quiet)) {
+              throw "Vulkan model document probe missing marker: $marker"
+            }
+          }
+
       - name: Capture DirectX baseline
         shell: pwsh
         run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm
