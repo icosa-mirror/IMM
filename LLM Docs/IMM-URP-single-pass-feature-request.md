@@ -1928,3 +1928,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     polls at fifteen-minute intervals. CI binary updates merged locally without
     changing any of the three unrelated dirty files. Prepared model commits remain
     unpublished, and no new full-green source is claimed.
+70. **Unity paint-mode selection gap (review, 2026-10-09):**
+    `ImmEngineBridge::InitializePlayer` selects static paint for the required
+    D3D12/Metal/Vulkan URP backends. Its pretessellated fallback applies only to
+    Android GLES. The managed initialization API currently exposes no paint-mode
+    choice. Native importer/renderer tests cover both techniques, but repeating
+    the current Unity content gate would still exercise static paint twice.
+    Add an explicit initialization choice and separate Unity coverage for both
+    techniques while retaining existing platform defaults. This remains required
+    implementation work; no initialization ABI change is included in the pending
+    recovery or prepared model checkpoints.
