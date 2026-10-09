@@ -1980,3 +1980,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     count. Captures retain fixture, technique and sample count. Sample and
     Android-conditional compilation pass locally. Hosted execution, quantitative
     stroke-edge quality and stereo content acceptance remain outstanding.
+
+74. **Same-commit plugin ABI check (local, 2026-10-09):** review found the
+    standalone packet acknowledgement probe still expected version 3. It now
+    expects version 4 and explicitly rejects version 3 alongside other unsupported
+    versions. A freshly rebuilt Windows Unity plugin passes size, pending/completed
+    acknowledgement, result/fence offsets and invalid-version checks. The Windows
+    native-plugin staging job now executes this probe before publishing its artifact;
+    previously it inspected exports only. The local build's copied sample binary was
+    restored to the tracked CI binary afterwards. Hosted confirmation remains required.
