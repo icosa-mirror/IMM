@@ -54,18 +54,19 @@ automating headset VR validation does not exempt non-VR changes from CI.
    capture after the actual capture step was skipped. Its hash matches the tracked
    file exactly; the workflow now clears those outputs before validation. No visual
    threshold has been relaxed, and fresh hosted capture confirmation remains required.
-   Recovery changes are pushed at `623a5b1e`; full validation run `37994572862`
-   is in progress. The new Unity content-fixture gate is held separately while
-   this recovery checkpoint is validated.
-   That run has reported standalone iOS and both Windows Vulkan lane failures.
+   Recovery source `623a5b1e`, full validation run `37994572862`, completed with
+   37 successful, 14 skipped and five failed jobs. Unity iOS Metal, Android Vulkan,
+   macOS Metal, Windows DirectX composition, Windows Vulkan synthetic stereo and
+   Godot iOS pass. Standalone iOS and both Windows Vulkan lanes fail, along with
+   GPU Evidence Report and Validation Evidence as downstream failures.
    The iOS runtime subsequently reports successful rendering after the capture
    wait expired; `85fc7730` increases bounded startup time. Windows setup requests
    an unavailable optional package; `c55f372a` removes it. Both corrections are
-   committed locally and await pushing. Native model and both paint techniques
+   prepared for the next hosted checkpoint. Native model and both paint techniques
    now pass exact half-opacity coverage at 4x/8x MSAA locally on hardware and the
    CI-matched lavapipe runtime (`035d9fe8`, `bf1a22d6`). Unity content and skybox
-   composition gates are prepared locally (`20f7bc64`, `5dc9cdc0`, `11054235`);
-   their actual rendering remains unverified. This is not a new green checkpoint.
+   composition gates are prepared (`20f7bc64`, `5dc9cdc0`, `11054235`) for that
+   checkpoint; their actual rendering remains unverified. This is not a new green checkpoint.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
