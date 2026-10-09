@@ -1981,3 +1981,11 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     status section now separates the last full-green source, active recovery failures,
     unpublished increments and outstanding acceptance; chronological entries retain
     their checkpoint-specific evidence and limitations.
+
+78. **Android shell fixture cache input (local, 2026-10-10):** the APK shell
+    cache keys included project Assets/Packages/ProjectSettings but omitted the
+    externally staged `exampleImmFiles/urp-content` corpus. Both mono and Quest
+    shell keys now include that corpus so fixture-only changes force a rebuild;
+    native-only changes retain the existing injection workflow. YAML parsing passes.
+    At the scheduled 23:28 UTC recovery refresh, Android builds and the legacy
+    Firebase smoke have passed; the URP Firebase device test is still running.
