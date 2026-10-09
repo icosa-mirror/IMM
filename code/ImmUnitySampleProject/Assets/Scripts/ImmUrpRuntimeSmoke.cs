@@ -272,38 +272,56 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     documentCamera.farClipPlane = Mathf.Max(radius * 8, 100);
                     document.SetTime(0, 0);
                     document.Show();
-                    if (!surface)
+                    foreach (int samples in new[] { 1, 2, 4, 8 })
                     {
-                        optIn.enabled = false;
-                        yield return null;
-                        RenderPipeline.SubmitRenderRequest(documentCamera, request);
-                        int bluePixels = 0;
-                        foreach (var pixel in ReadTargetPixels(target, $"skybox-control-{name}-{manager.UrpPaintRenderingTechnique}"))
-                            if (pixel.b > pixel.r + 10 && pixel.b > pixel.g + 10) ++bluePixels;
-                        Require(bluePixels > target.width * target.height * 9 / 10,
-                            $"Skybox control did not render for {name}: pixels={bluePixels}.");
-                        optIn.enabled = true;
+                        var descriptor = target.descriptor;
+                        descriptor.msaaSamples = samples;
+                        int supportedSamples = SystemInfo.GetRenderTextureSupportedMSAASampleCount(descriptor);
+                        if (supportedSamples != samples)
+                        {
+                            Require(SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D12,
+                                $"Required DX12 content sample count unavailable: requested={samples} supported={supportedSamples}.");
+                            Debug.Log($"[IMM_URP_CONTENT] UNSUPPORTED {name} samples={samples} supported={supportedSamples} technique={manager.UrpPaintRenderingTechnique}.");
+                            continue;
+                        }
+                        target.Release();
+                        target.antiAliasing = samples;
+                        Require(target.Create(), $"Could not create the content target at {samples} samples.");
+                        pipeline.msaaSampleCount = samples;
+                        Require(target.antiAliasing == samples, $"Content target downgraded from {samples} samples.");
+                        if (!surface)
+                        {
+                            optIn.enabled = false;
+                            yield return null;
+                            RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                            int bluePixels = 0;
+                            foreach (var pixel in ReadTargetPixels(target, $"skybox-control-{name}-{manager.UrpPaintRenderingTechnique}-{samples}x"))
+                                if (pixel.b > pixel.r + 10 && pixel.b > pixel.g + 10) ++bluePixels;
+                            Require(bluePixels > target.width * target.height * 9 / 10,
+                                $"Skybox control did not render for {name}: pixels={bluePixels}.");
+                            optIn.enabled = true;
+                        }
+                        for (int frame = 0; frame < 3; ++frame)
+                        {
+                            yield return null;
+                            RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                        }
+                        int redPixels = 0;
+                        foreach (var pixel in ReadTargetPixels(target, $"content-{name}-{manager.UrpPaintRenderingTechnique}-{samples}x"))
+                            if (pixel.r > pixel.g + 10 && pixel.r > pixel.b + 10) ++redPixels;
+                        Require(redPixels > 100, $"Content fixture has no expected red geometry: {name}, pixels={redPixels}.");
+                        if (!surface) Require(redPixels > target.width * target.height * 9 / 10,
+                            $"Panorama did not cover the skybox target: {name}, pixels={redPixels}.");
+                        if (!surface) Debug.Log($"[IMM_URP_CONTENT] PASS {name} survives Unity skybox with opt-out control.");
+                        if (surface)
+                        {
+                            var depth = VerifyDepthComposition(samples, bounds, $"{name}-{manager.UrpPaintRenderingTechnique}-{samples}x");
+                            try { while (depth.MoveNext()) yield return depth.Current; }
+                            finally { (depth as IDisposable)?.Dispose(); }
+                        }
+                        Require(renderError == null, $"Unity reported for {name}: {renderError}");
+                        Debug.Log($"[IMM_URP_CONTENT] PASS {name} loaded document, mono colour and {(surface ? "bidirectional depth" : "backdrop")} samples={samples} technique={manager.UrpPaintRenderingTechnique}.");
                     }
-                    for (int frame = 0; frame < 3; ++frame)
-                    {
-                        yield return null;
-                        RenderPipeline.SubmitRenderRequest(documentCamera, request);
-                    }
-                    int redPixels = 0;
-                    foreach (var pixel in ReadTargetPixels(target, $"content-{name}-{manager.UrpPaintRenderingTechnique}"))
-                        if (pixel.r > pixel.g + 10 && pixel.r > pixel.b + 10) ++redPixels;
-                    Require(redPixels > 100, $"Content fixture has no expected red geometry: {name}, pixels={redPixels}.");
-                    if (!surface) Require(redPixels > target.width * target.height * 9 / 10,
-                        $"Panorama did not cover the skybox target: {name}, pixels={redPixels}.");
-                    if (!surface) Debug.Log($"[IMM_URP_CONTENT] PASS {name} survives Unity skybox with opt-out control.");
-                    if (surface)
-                    {
-                        var depth = VerifyDepthComposition(1, bounds, $"{name}-{manager.UrpPaintRenderingTechnique}");
-                        try { while (depth.MoveNext()) yield return depth.Current; }
-                        finally { (depth as IDisposable)?.Dispose(); }
-                    }
-                    Require(renderError == null, $"Unity reported for {name}: {renderError}");
-                    Debug.Log($"[IMM_URP_CONTENT] PASS {name} loaded document, mono colour and {(surface ? "bidirectional depth" : "backdrop")}.");
                 }
                 finally { manager.UnloadDocument(document); }
                 float unloadDeadline = Time.realtimeSinceStartup + 30;
