@@ -38,15 +38,16 @@ automating headset VR validation does not exempt non-VR changes from CI.
    evidence aggregators. Android device logs confirm the same duplicate
    automatic/explicit camera fixture failure as iOS; the local correction is
    committed at `be2760f2`. This is not a new full-green checkpoint.
-   Its Unity iOS simulator lane fails the attribution fixture with two main-camera
-   submissions: that camera was also eligible for automatic rendering. The local
-   correction disables automatic rendering for both explicitly driven test cameras
-   and restores the main camera afterwards; runtime confirmation remains required.
+   That run's iOS fixture submitted the main camera twice because automatic rendering
+   remained enabled. The correction disables automatic rendering for both explicitly
+   driven test cameras and restores the main camera afterwards. Source `209f6d41`
+   confirms the strict attribution and allocation checks on both iOS and Android.
    The shared camera correction, expanded native content probes and prepared XR
    per-eye depth harness are now pushed at `209f6d41`. Full validation run
-   `37986974593` is in progress; it must pass before promoting the checkpoint.
-   It has failed Matrix Status, Core Evidence Report, Windows Standalone Vulkan,
-   Windows Godot Vulkan and GPU Evidence Report while other lanes continue.
+   `37986974593` completed with 36 successful, 14 skipped and six failed jobs:
+   Matrix Status, Core Evidence Report, Windows Standalone Vulkan, Windows Godot
+   Vulkan, GPU Evidence Report and Validation Evidence. Unity iOS and Android pass.
+   This failed run is not a promoted checkpoint.
    Local corrections update the Quest-row audit expectations and supply the
    LLVM 22 DLL required by the pinned Mesa driver; hosted confirmation is pending.
    The standalone Vulkan surface-detail comparison consumed a historical tracked
@@ -1776,8 +1777,11 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     results support the correction but do not replace the pending full hosted run.
     This run's Unity iOS Metal Simulator job completes successfully: its strict
     URP check confirms camera attribution, warmed allocation, supported MSAA/depth,
-    opt-out and unload markers. Android validation is still running; the source
-    checkpoint is not promoted while that and the recovery rerun remain pending.
+    opt-out and unload markers. Android's legacy and URP Firebase Test Lab steps
+    also pass, including the strict URP attribution/allocation gates. The complete
+    run ends with 36 successful, 14 skipped and six failed jobs: the two root failures
+    above and their four evidence aggregators. The recovery rerun remains required;
+    this failed run does not promote the source checkpoint.
 59. **Deterministic document inputs (local, 2026-10-09):**
     exampleImmFiles/urp-content contains nine authored documents: four paint brush
     sections and five picture formats, plus a machine-readable manifest. The native
@@ -1785,7 +1789,9 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     loaded geometry, picture format/dimensions and initial spawn. Explicit spawn
     volume/tracking initialization removes an uninitialized translation flag found
     by rebuilding and comparing bytes. The CTest roundtrip/reference check passes;
-    the Windows build workflow now requires it. These inputs still need Unity
+    the Windows build workflow now requires it. The manifest writer explicitly
+    emits LF bytes to match Git checkouts on Windows; that byte-comparison check
+    passes after normalizing the reference to its committed bytes. These inputs still need Unity
     mono/stereo composition tests, including skybox ordering for backdrops.
     Model export and mesh import are unfinished stubs, so no model fixture or
     document-level model support is claimed. Existing in-memory model probes remain
