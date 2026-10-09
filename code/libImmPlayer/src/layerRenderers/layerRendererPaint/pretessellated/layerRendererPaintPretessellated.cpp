@@ -700,7 +700,7 @@ namespace ImmPlayer
                 if (stateID != lastStateID) { lastStateID = stateID; renderer->SetRasterState(mRasterState[stateID]); }
 
                 // attach vertex and index data
-                if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+                if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan)
                     renderer->AttachVertexArray(info->mVertexArray[0]);
                 else
                     renderer->AttachVertexArray2(info->mVertexArray[stereoModeInt]);

@@ -1653,3 +1653,20 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     the required Windows Vulkan CI lane checks the new completion marker.
     Workflow contracts pass locally. Hosted confirmation, paint variant coverage,
     Unity all-content stereo/depth composition and headset acceptance remain open.
+52. **Vulkan paint multiview binding and readbacks (local, 2026-10-09):**
+    the expanded fixture exposed a production bug: pretessellated Vulkan paint
+    created only vertex array 0 but selected array 2 for preferred stereo. Vulkan
+    now binds the shared vertex array for all view modes, as its upload route
+    requires; other graphics APIs retain their existing selection. A shared
+    mono/multiview readback helper checks both paint storage paths, Segment,
+    Circle, Ellipse and Square, linear/gamma colour spaces and opaque/half/zero
+    opacity: 48 cases. It requires matching draw/triangle counts, colour and
+    coverage against mono, plus distinct eye centroids for visible paint.
+    All four native Vulkan tests pass with validation enabled and no errors;
+    Windows Vulkan CI requires the paint completion marker. Hosted confirmation
+    remains pending. The legacy Point enum is not counted as supported authorable
+    content: ImmExporter::Element::Init explicitly rejects it and the existing
+    static shader emits unexpanded line positions. No new Point rendering
+    semantics or format constraint is introduced by this fixture. Unity stereo
+    integration, directional/wiggle/draw-in variants and headset evidence remain
+    separate acceptance work.
