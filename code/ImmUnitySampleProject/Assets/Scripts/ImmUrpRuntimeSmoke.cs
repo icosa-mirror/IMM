@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using ImmPlayer;
 using UnityEngine;
@@ -14,6 +15,9 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
     private Camera documentCamera;
     private string renderError;
     private int cameraFrames;
+    private readonly List<ImmSceneSubmission> sceneSubmissions = new List<ImmSceneSubmission>(64);
+    private Camera attributionCamera;
+    private bool captureSubmissions, submissionOverflow;
     private UniversalRenderPipeline.SingleCameraRequest request;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -34,6 +38,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         Application.logMessageReceived += OnLog;
         Application.runInBackground = true;
         RenderPipelineManager.beginCameraRendering += OnCamera;
+        ImmRenderingDiagnostics.SubmissionCompleted += OnSubmission;
         var probe = Run();
         while (true)
         {
@@ -123,6 +128,9 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             Debug.Log($"[IMM_URP_SMOKE] PASS rendered at {samples} samples.");
         }
         ReadVisiblePixels(true);
+        var attribution = VerifySubmissionAttribution();
+        try { while (attribution.MoveNext()) yield return attribution.Current; }
+        finally { (attribution as IDisposable)?.Dispose(); }
         if (vulkan) VerifyQueuedCameras();
         optIn.enabled = false;
         for (int frame = 0; frame < 3; ++frame) yield return null;
@@ -219,6 +227,101 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             Destroy(mesh);
             Destroy(material);
         }
+    }
+
+    private IEnumerator VerifySubmissionAttribution()
+    {
+        var descriptor = target.descriptor;
+        descriptor.msaaSamples = 1;
+        var otherTarget = new RenderTexture(descriptor);
+        var cameraObject = new GameObject("IMM URP attributed camera", typeof(Camera), typeof(ImmCamera));
+        attributionCamera = cameraObject.GetComponent<Camera>();
+        attributionCamera.CopyFrom(documentCamera);
+        attributionCamera.enabled = false;
+        attributionCamera.transform.SetPositionAndRotation(documentCamera.transform.position +
+            documentCamera.transform.right * 0.25f, documentCamera.transform.rotation);
+        attributionCamera.targetTexture = otherTarget;
+        attributionCamera.GetUniversalAdditionalCameraData();
+        var otherRequest = new UniversalRenderPipeline.SingleCameraRequest { destination = otherTarget };
+        var optIn = documentCamera.GetComponent<ImmCamera>();
+        bool previousOptIn = optIn.enabled;
+        try
+        {
+            Require(otherTarget.Create(), "Could not create attributed camera target.");
+            for (int phase = 0; phase < 2; ++phase)
+            {
+                optIn.enabled = phase == 0;
+                sceneSubmissions.Clear();
+                submissionOverflow = false;
+                captureSubmissions = true;
+                int firstFrame = -1, lastFrame = -1;
+                for (int frame = 0; frame < 4; ++frame)
+                {
+                    yield return null;
+                    if (firstFrame < 0) firstFrame = Time.frameCount;
+                    lastFrame = Time.frameCount;
+                    RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                    RenderPipeline.SubmitRenderRequest(attributionCamera, otherRequest);
+                }
+                // Readback drains the submitted GPU work; camera-free maintenance
+                // then polls acknowledgements without introducing extra scene events.
+                var mainPixels = ReadTargetPixels(target, $"attributed-main-{phase}");
+                var otherPixels = ReadTargetPixels(otherTarget, $"attributed-other-{phase}");
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                captureSubmissions = false;
+                Require(!submissionOverflow, "Submission attribution fixture overflowed.");
+                int mainVisible = 0, otherVisible = 0, changed = 0;
+                for (int pixel = 0; pixel < otherPixels.Length; ++pixel)
+                {
+                    if (mainPixels[pixel].r > 8 || mainPixels[pixel].g > 8 || mainPixels[pixel].b > 8) ++mainVisible;
+                    if (otherPixels[pixel].r > 8 || otherPixels[pixel].g > 8 || otherPixels[pixel].b > 8) ++otherVisible;
+                    if (ColorDistance(mainPixels[pixel], otherPixels[pixel]) > 15) ++changed;
+                }
+                Require(otherVisible > 100 && changed > 100, "Attributed camera views are missing or indistinguishable.");
+                Require(phase == 0 ? mainVisible > 100 : mainVisible == 0,
+                    $"Attributed main camera visibility differs: optIn={phase == 0} visible={mainVisible}.");
+                for (int frame = firstFrame; frame <= lastFrame; ++frame)
+                {
+                    Require(CountSceneEvents(documentCamera, frame) == (phase == 0 ? 1 : 0),
+                        $"Main camera submission count differs at frame {frame}, optIn={phase == 0}.");
+                    Require(CountSceneEvents(attributionCamera, frame) == 1,
+                        $"Second camera submission count differs at frame {frame}.");
+                }
+            }
+            Debug.Log("[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out.");
+        }
+        finally
+        {
+            captureSubmissions = false;
+            optIn.enabled = previousOptIn;
+            attributionCamera.targetTexture = null;
+            otherTarget.Release();
+            Destroy(otherTarget);
+            Destroy(cameraObject);
+            attributionCamera = null;
+        }
+    }
+
+    private int CountSceneEvents(Camera camera, int frame)
+    {
+        int count = 0;
+        foreach (var submission in sceneSubmissions)
+        {
+            if (!ReferenceEquals(submission.Camera, camera) || submission.FrameIndex != frame) continue;
+            Require(submission.Result == 0 && submission.NativeSceneEvents == 1 &&
+                submission.ViewCount == 1 && submission.XrPassIndex == -1,
+                $"Invalid native scene acknowledgement: camera={submission.NativeCameraId} frame={frame} result={submission.Result} events={submission.NativeSceneEvents}.");
+            count += submission.NativeSceneEvents;
+        }
+        return count;
+    }
+
+    private void OnSubmission(ImmSceneSubmission submission)
+    {
+        if (!captureSubmissions || (!ReferenceEquals(submission.Camera, documentCamera) &&
+            !ReferenceEquals(submission.Camera, attributionCamera))) return;
+        if (sceneSubmissions.Count == sceneSubmissions.Capacity) { submissionOverflow = true; return; }
+        sceneSubmissions.Add(submission);
     }
 
     private void VerifyQueuedCameras()
@@ -344,6 +447,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
     {
         Application.logMessageReceived -= OnLog;
         RenderPipelineManager.beginCameraRendering -= OnCamera;
+        ImmRenderingDiagnostics.SubmissionCompleted -= OnSubmission;
         if (documentCamera != null) documentCamera.targetTexture = null;
         if (target != null) { target.Release(); Destroy(target); }
     }

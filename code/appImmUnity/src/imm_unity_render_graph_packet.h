@@ -4,14 +4,16 @@
 #include <cstdint>
 #include <type_traits>
 
-// ABI v2, 64-bit targets. Caller owns this immutable request until completed becomes
-// 1 (read with acquire semantics). Native code writes gpuCompletion/result/completed.
+constexpr uint32_t ImmRenderGraphPacketVersion = 3;
+
+// ABI v3, 64-bit targets. Caller owns this immutable request until completed becomes
+// 1 (read with acquire semantics). Native writes gpuCompletion/result/nativeSceneEvents/completed.
 // Targets must be bound before the event; viewCount selects mono or two-slice stereo.
 // Matrices use the native row-major array convention. GPU completion is a renderer
 // fence token, not permission for the caller to signal Unity or renderer fences.
 struct alignas(8) ImmRenderGraphPacket
 {
-    uint32_t version = 2, size = sizeof(ImmRenderGraphPacket);
+    uint32_t version = ImmRenderGraphPacketVersion, size = sizeof(ImmRenderGraphPacket);
     // 0 initialize, 1 render with Unity buffers, 2 shutdown, 3 maintenance,
     // 4 Metal render with a Unity colour buffer and an explicitly borrowed MTLTexture depth.
     uint32_t operation = 0, viewCount = 1;
@@ -26,8 +28,14 @@ struct alignas(8) ImmRenderGraphPacket
     uint64_t gpuCompletion = 0;
     int32_t result = 0;
     std::atomic<int32_t> completed{0};
+    int32_t frameIndex = -1, xrPassIndex = -1;
+    // Render-thread output, published by completed's release store.
+    uint32_t nativeSceneEvents = 0;
 };
-static_assert(sizeof(ImmRenderGraphPacket) == 480, "RenderGraph packet ABI size");
+static_assert(sizeof(ImmRenderGraphPacket) == 496, "RenderGraph packet ABI size");
+static_assert(offsetof(ImmRenderGraphPacket, frameIndex) == 480, "RenderGraph frame ABI offset");
+static_assert(offsetof(ImmRenderGraphPacket, xrPassIndex) == 484, "RenderGraph XR pass ABI offset");
+static_assert(offsetof(ImmRenderGraphPacket, nativeSceneEvents) == 488, "RenderGraph scene event ABI offset");
 static_assert(offsetof(ImmRenderGraphPacket, worldToView) == 80, "RenderGraph matrix ABI offset");
 static_assert(offsetof(ImmRenderGraphPacket, leftView) == 208, "RenderGraph left-eye ABI offset");
 static_assert(offsetof(ImmRenderGraphPacket, rightView) == 336, "RenderGraph right-eye ABI offset");

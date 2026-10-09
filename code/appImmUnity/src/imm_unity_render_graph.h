@@ -26,7 +26,7 @@ inline void ShutdownImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmEng
 }
 inline HRESULT ProcessImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmEngineBridge& bridge, ImmRenderGraphPacket& packet)
 {
-    if (packet.version != 2 || packet.size != sizeof(packet) || (packet.viewCount != 1 && packet.viewCount != 2) || packet.completed || packet.operation > 3)
+    if (packet.version != ImmRenderGraphPacketVersion || packet.size != sizeof(packet) || (packet.viewCount != 1 && packet.viewCount != 2) || packet.completed || packet.operation > 3)
         return E_INVALIDARG;
     if (packet.operation == 2) { ShutdownImmRenderGraph(state, bridge); return S_OK; }
     if (packet.operation == 0)

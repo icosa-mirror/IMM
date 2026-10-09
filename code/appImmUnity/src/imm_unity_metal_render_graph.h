@@ -55,7 +55,7 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
 {
     constexpr int32_t invalid = -2147024809; // E_INVALIDARG, shared managed error convention.
     constexpr int32_t failed = -2147467259; // E_FAIL.
-    if (packet.version != 2 || packet.size != sizeof(packet) || packet.completed ||
+    if (packet.version != ImmRenderGraphPacketVersion || packet.size != sizeof(packet) || packet.completed ||
         packet.operation > 4 || packet.viewCount != 1) return invalid;
     if (packet.operation == 2) { ShutdownImmMetalRenderGraph(state, bridge); return 0; }
     auto* unity = state.unity;

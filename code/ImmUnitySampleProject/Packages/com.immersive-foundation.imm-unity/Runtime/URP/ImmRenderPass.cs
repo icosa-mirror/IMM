@@ -21,6 +21,8 @@ namespace ImmPlayer
             internal ImmRenderGraphTransport Transport;
             internal ImmRenderPass Owner;
             internal int CameraId;
+            internal int FrameIndex;
+            internal Camera SourceCamera;
             internal Matrix4x4 View, Projection;
             internal Matrix4x4 LeftView, LeftProjection, RightView, RightProjection;
         }
@@ -51,10 +53,11 @@ namespace ImmPlayer
                 return;
             }
             if (stereo && (!camera.xr.singlePassEnabled || camera.xr.viewCount != 2 ||
+                !camera.xr.isFirstCameraPass || !camera.xr.isLastCameraPass ||
                 camera.xr.GetTextureArraySlice(0) != 0 || camera.xr.GetTextureArraySlice(1) != 1 ||
                 camera.xr.GetViewport(0) != camera.xr.GetViewport(1)))
             {
-                Report("IMM XR requires two single-pass views in slices 0 and 1 with matching viewports.");
+                Report("IMM XR requires one XR pass with two single-pass views in slices 0 and 1 and matching viewports.");
                 return;
             }
             if (camera.renderType != CameraRenderType.Base || camera.camera.rect != new Rect(0, 0, 1, 1))
@@ -102,6 +105,8 @@ namespace ImmPlayer
             data.HasTargetTexture = camera.targetTexture != null;
             data.Transport = transport;
             data.CameraId = cameraId;
+            data.FrameIndex = Time.frameCount;
+            data.SourceCamera = camera.camera;
             data.Owner = this;
             data.View = camera.GetViewMatrix();
             data.Projection = camera.GetProjectionMatrix();
@@ -216,7 +221,8 @@ namespace ImmPlayer
                 data.Stereo ? GL.GetGPUProjectionMatrix(data.LeftProjection, flipped) : null,
                 data.Stereo ? data.RightView : null,
                 data.Stereo ? GL.GetGPUProjectionMatrix(data.RightProjection, flipped) : null,
-                depthIsMetalTexture: depthIsMetalTexture, rasterCommands: rasterCommands);
+                depthIsMetalTexture: depthIsMetalTexture, rasterCommands: rasterCommands,
+                sourceCamera: data.SourceCamera, frameIndex: data.FrameIndex);
             // The native event uses its own command list and restores resource states.
             // Rebind Unity attachments/viewport after the event for subsequent graph work.
             if (commands != null)

@@ -1589,7 +1589,8 @@ static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
     if ((eventId != ImmRenderGraphEventId && eventId != ImmRenderGraphShutdownEventId && eventId != ImmRenderGraphPreparationEventId) || !data) return;
     auto* packet = static_cast<ImmRenderGraphPacket*>(data);
     // Validate the ABI header before reading or writing any later fields.
-    if (packet->version != 2 || packet->size != sizeof(*packet)) return;
+    if (packet->version != ImmRenderGraphPacketVersion || packet->size != sizeof(*packet)) return;
+    if (packet->completed.load(std::memory_order_acquire)) return;
     // Queue-access shutdown events cannot query or record render attachments.
     // Vulkan shutdown must use this event so unsubmitted host draws are flushed.
     const bool vulkan = gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan;
@@ -1604,6 +1605,8 @@ static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
     }
     int32_t result = -2147418113; // E_UNEXPECTED.
     bool acknowledge = true;
+    if (eventId == ImmRenderGraphEventId && (packet->operation == 1 || packet->operation == 4))
+        ++packet->nativeSceneEvents;
     try
     {
 #if defined(IMM_UNITY_VULKAN)
@@ -1647,7 +1650,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketRe
 {
     if (!data || !result || !gpuCompletion) return -1;
     auto* packet = static_cast<ImmRenderGraphPacket*>(data);
-    if (packet->version != 2 || packet->size != sizeof(*packet)) return -1;
+    if (packet->version != ImmRenderGraphPacketVersion || packet->size != sizeof(*packet)) return -1;
     if (packet->completed.load(std::memory_order_acquire) == 0) return 0;
     *result = packet->result;
     *gpuCompletion = packet->gpuCompletion;

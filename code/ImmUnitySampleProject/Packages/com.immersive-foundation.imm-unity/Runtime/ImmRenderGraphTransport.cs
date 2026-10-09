@@ -10,7 +10,7 @@ namespace ImmPlayer
     // operation in the plugin. The owner must poll and queue shutdown before disposal.
     internal sealed class ImmRenderGraphTransport : IDisposable
     {
-        internal const int PacketSize = 480;
+        internal const int PacketSize = 496;
         internal const int EventId = 0x494d4d;
         internal const int ShutdownEventId = EventId + 1;
         internal const int PreparationEventId = EventId + 2;
@@ -20,6 +20,7 @@ namespace ImmPlayer
             internal IntPtr Memory;
             internal int Operation;
             internal bool Pending;
+            internal Camera SceneCamera;
         }
         private readonly List<Slot> slots = new List<Slot>();
         private readonly float[] matrices = new float[32];
@@ -80,6 +81,16 @@ namespace ImmPlayer
                 }
                 else if (slot.Operation == 0 && phase == Phase.Initializing) phase = Phase.Ready;
                 else if (slot.Operation == 2) phase = Phase.Stopped;
+                if ((slot.Operation == 1 || slot.Operation == 4) && ImmRenderingDiagnostics.HasSubscribers)
+                {
+                    var submission = new ImmSceneSubmission(slot.SceneCamera,
+                        unchecked((ulong)Marshal.ReadInt64(slot.Memory, 16)), Marshal.ReadInt32(slot.Memory, 24),
+                        Marshal.ReadInt32(slot.Memory, 480), Marshal.ReadInt32(slot.Memory, 484),
+                        Marshal.ReadInt32(slot.Memory, 12), Marshal.ReadInt32(slot.Memory, 488), result);
+                    slot.SceneCamera = null;
+                    ImmRenderingDiagnostics.Publish(submission);
+                }
+                else slot.SceneCamera = null;
             }
         }
 
@@ -105,7 +116,7 @@ namespace ImmPlayer
             uint colorFormat, uint depthFormat, RectInt viewport, Matrix4x4 worldToView, Matrix4x4 projection,
             Matrix4x4? leftView = null, Matrix4x4? leftProjection = null,
             Matrix4x4? rightView = null, Matrix4x4? rightProjection = null, bool depthIsMetalTexture = false,
-            RasterCommandBuffer rasterCommands = null)
+            RasterCommandBuffer rasterCommands = null, Camera sourceCamera = null, int frameIndex = -1)
         {
             Poll();
             if (!IsReady) throw new InvalidOperationException("IMM RenderGraph session is not ready.");
@@ -118,7 +129,10 @@ namespace ImmPlayer
             if (depthIsMetalTexture && SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal)
                 throw new ArgumentException("Native Metal depth textures require the Metal backend.");
             Slot slot = Acquire(depthIsMetalTexture ? 4 : 1);
+            slot.SceneCamera = sourceCamera;
             Marshal.WriteInt32(slot.Memory, 12, stereo ? 2 : 1);
+            Marshal.WriteInt32(slot.Memory, 480, frameIndex >= 0 ? frameIndex : Time.frameCount);
+            Marshal.WriteInt32(slot.Memory, 484, stereo ? 0 : -1);
             Marshal.WriteInt32(slot.Memory, 24, camera);
             Marshal.WriteInt64(slot.Memory, 40, color.ToInt64());
             Marshal.WriteInt64(slot.Memory, 48, depth.ToInt64());
@@ -179,12 +193,13 @@ namespace ImmPlayer
             }
             // Clear stale results and unused fields before publishing another request.
             for (int offset = 0; offset < PacketSize; offset += 8) Marshal.WriteInt64(available.Memory, offset, 0);
-            Marshal.WriteInt32(available.Memory, 0, 2);
+            Marshal.WriteInt32(available.Memory, 0, 3);
             Marshal.WriteInt32(available.Memory, 12, 1);
             Marshal.WriteInt32(available.Memory, 4, PacketSize);
             Marshal.WriteInt32(available.Memory, 8, operation);
             Marshal.WriteInt64(available.Memory, 16, unchecked((long)++sequence));
             available.Operation = operation;
+            available.SceneCamera = null;
             return available;
         }
 

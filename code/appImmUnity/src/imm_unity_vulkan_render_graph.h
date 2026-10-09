@@ -96,7 +96,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
     acknowledge = !preparation;
     if (preparation) { state.prepared = &packet; state.preparationResult = failed; }
     auto finishPreparation = [&](int32_t result) { state.preparationResult = result; return result; };
-    if (packet.version != 2 || packet.size != sizeof(packet) || packet.completed ||
+    if (packet.version != ImmRenderGraphPacketVersion || packet.size != sizeof(packet) || packet.completed ||
         packet.operation > 3 || (packet.viewCount != 1 &&
         (packet.operation != 1 || packet.viewCount != 2))) return preparation ? finishPreparation(reject("packet header", invalid)) : reject("packet header", invalid);
     if (packet.operation == 2)

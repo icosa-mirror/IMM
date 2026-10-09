@@ -42,7 +42,7 @@ automating headset VR validation does not exempt non-VR changes from CI.
    (entries 39–40). The hardware runtime harness still
    needs migration from its legacy probe to these players. Complete stereo
    content and MSAA/depth composition,
-   camera/frame/XR-pass submission attribution, measured managed-allocation
+   hosted confirmation of camera/frame/XR-pass submission attribution, measured managed-allocation
    acceptance and headset per-eye/one-pass acceptance remain required.
 4. Local editor changes to the sample's OpenXR and Package Manager settings, plus
    the unrelated Godot review handoff, remain untouched and outside the validated
@@ -1507,3 +1507,19 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     standalone/Godot checks remain passing. This supersedes entry 39's pending
     hosted build status. Actual OpenXR execution and the remaining stereo,
     attribution, allocation and headset acceptance criteria are still open.
+41. **Attributed native scene submissions (local, 2026-10-09):** packet ABI v3
+    appends the recorded frame, accepted XR pass and acknowledged native scene-event
+    count without moving existing matrices or completion fields. The optional
+    `ImmRenderingDiagnostics.SubmissionCompleted` event reports camera identity,
+    sequence, view count and result after native completion; Vulkan preparation
+    events are excluded. The URP pass accepts only one two-view XR camera pass.
+    Mono smoke checks submit two distinct cameras in the same frames, require
+    one successful native scene event per included camera, then disable one
+    camera and require no submission and black output. The D3D12 synthetic stereo
+    probe requires one attributed native event for each two-view request. Windows,
+    macOS, iOS simulator and Android CI now require these additional markers.
+    Isolated managed compilation, Windows native object compilation, Android NDK
+    syntax, four validation-enabled Vulkan tests and workflow contracts pass locally.
+    Full hosted validation is pending; the last confirmed green checkpoint remains
+    entry 40. This does not establish measured zero allocations, GPU draw-count
+    equality, complete stereo composition or actual headset acceptance.

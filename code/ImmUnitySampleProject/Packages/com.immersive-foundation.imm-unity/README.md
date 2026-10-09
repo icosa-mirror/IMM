@@ -34,6 +34,23 @@ loading cannot establish enabled multiview capability, so two-view packets are
 rejected in that case. Native GPU adapter tests establish two-slice submission;
 they do not establish Quest headset correctness.
 
+## Submission diagnostics
+
+`ImmRenderingDiagnostics.SubmissionCompleted` reports a native scene event after
+its completion is acknowledged on the main thread. Each record includes the
+source camera, recorded frame, request sequence, XR pass, view count, native
+scene-event count and result. Mono uses XR pass `-1`; the supported single
+two-view XR pass uses `0`. Direct transport probes can have a null camera.
+Callbacks run during completion polling: do not queue or dispose sessions from
+a callback. Avoid allocating in listeners during performance measurements.
+With no subscribers, the transport skips diagnostic record construction.
+
+This requires packet ABI version 3 (496 bytes). Ship matching managed and native
+plugin revisions; older packet layouts are rejected. Automated mono checks cover
+two distinct cameras and camera opt-out; synthetic stereo checks cover one native
+scene event for a two-view request. These counters do not prove GPU draw counts
+or actual headset single-pass execution.
+
 ## OpenXR sample builds
 
 The repository sample has dedicated OpenXR builds:

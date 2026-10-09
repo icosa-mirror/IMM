@@ -21,6 +21,15 @@ namespace ImmPlayer
                 msaaSamples = 1
             });
             var commands = new CommandBuffer { name = "IMM stereo packet readback" };
+            ImmSceneSubmission stereoSubmission = default;
+            int completedStereo = 0;
+            Action<ImmSceneSubmission> onSubmission = submission =>
+            {
+                if (submission.NativeCameraId != 250 || submission.ViewCount != 2) return;
+                stereoSubmission = submission;
+                ++completedStereo;
+            };
+            ImmRenderingDiagnostics.SubmissionCompleted += onSubmission;
             try
             {
                 Require(target.Create(), "Could not create stereo target.");
@@ -50,15 +59,22 @@ namespace ImmPlayer
                         cullingProjection.m02 *= 0.5f;
                     }
                     var transport = ImmRenderGraphSession.Current.Transport;
+                    int previousCompleted = completedStereo;
+                    int submittedFrame = Time.frameCount;
                     transport.QueueRender(commands, 250, target.colorBuffer.GetNativeRenderBufferPtr(),
                         target.depthBuffer.GetNativeRenderBufferPtr(), 28, 40, new RectInt(0, 0, 128, 128),
-                        view, cullingProjection, left, eyeProjection, right, eyeProjection);
+                        view, cullingProjection, left, eyeProjection, right, eyeProjection,
+                        frameIndex: submittedFrame);
                     Graphics.ExecuteCommandBuffer(commands);
                     var readback = AsyncGPUReadback.Request(target, 0, TextureFormat.RGBA32);
                     while (!readback.done) yield return null;
                     Require(!readback.hasError, "Stereo texture-array readback failed.");
                     transport.Poll();
                     Require(transport.IsReady, "Stereo transport faulted.");
+                    Require(completedStereo == previousCompleted + 1 && stereoSubmission.NativeSceneEvents == 1 &&
+                        stereoSubmission.Result == 0 && stereoSubmission.FrameIndex == submittedFrame &&
+                        stereoSubmission.XrPassIndex == 0,
+                        "Stereo packet did not acknowledge exactly one native scene event with its recorded frame/pass.");
                     var leftPixels = readback.GetData<Color32>(0);
                     var rightPixels = readback.GetData<Color32>(1);
                     int leftVisible = 0, rightVisible = 0, different = 0;
@@ -81,9 +97,11 @@ namespace ImmPlayer
 
                 }
                 Debug.Log("[IMM_URP_READBACK] PASS managed stereo packet renders distinct eye slices and retains peripheral content.");
+                Debug.Log("[IMM_URP_READBACK] PASS attributed stereo native event.");
             }
             finally
             {
+                ImmRenderingDiagnostics.SubmissionCompleted -= onSubmission;
                 commands.Dispose();
                 target.Release();
                 UnityEngine.Object.Destroy(target);
