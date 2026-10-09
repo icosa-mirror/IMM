@@ -181,6 +181,49 @@ static void DrawPaintProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& 
 }
 
 
+static void VerifyPaintMsaaCoverage(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log)
+{
+    using namespace ImmCore;
+    constexpr int size = 64;
+    for (int samples : {4, 8}) {
+        const piRenderer::TextureInfo colorInfo = { piRenderer::TextureType::T2D,
+            piRenderer::Format::C3_11_11_10_FLOAT, size, size, 1, samples, 1, 0 };
+        const piRenderer::TextureInfo depthInfo = { piRenderer::TextureType::T2D,
+            piRenderer::Format::D1_32_FLOAT, size, size, 1, samples, 1, 0 };
+        auto color = renderer.CreateTexture(L"paint-coverage-color", &colorInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1, nullptr);
+        auto depth = renderer.CreateTexture(L"paint-coverage-depth", &depthInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1, nullptr);
+        if (!color || !depth) throw std::runtime_error("Create paint coverage attachments");
+        auto target = renderer.CreateRenderTarget(color, nullptr, nullptr, nullptr, depth);
+        if (!target) throw std::runtime_error("Create paint coverage target");
+        int mismatches = 0;
+        for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
+        for (bool staticPaint : {false, true}) {
+            std::vector<unsigned char> opaque(size * size * 4), half(size * size * 4);
+            const float black[4] = {0, 0, 0, 1};
+            for (int pass = 0; pass < 2; ++pass) {
+                renderer.SetRenderTarget(target); renderer.Clear(black, nullptr, nullptr, nullptr, true);
+                auto& pixels = pass == 0 ? opaque : half;
+                const float opacity = pass == 0 ? 1.0f : 0.5f;
+                if (staticPaint) DrawPaintProbe<ImmImporter::LayerPaintStatic, ImmImporter::DrawingStatic, ImmPlayer::LayerRendererPaintStatic>(renderer, log, colorSpace, opacity, size, color, pixels.data());
+                else DrawPaintProbe<ImmImporter::LayerPaintPretessellated, ImmImporter::DrawingPretessellated, ImmPlayer::LayerRendererPaintPretessellated>(renderer, log, colorSpace, opacity, size, color, pixels.data());
+            }
+            int opaqueMismatches = 0, coverageMismatches = 0;
+            for (int y = 20; y < 44; ++y) for (int x = 20; x < 44; ++x) {
+                const int pixel = 4 * (y * size + x);
+                if (std::abs(int(opaque[pixel]) - (colorSpace == 0 ? 64 : int(std::pow(0.25f, 1.0f / 2.2f) * 255))) > 3) ++opaqueMismatches;
+                if (std::abs(2 * int(half[pixel]) - int(opaque[pixel])) > 3) ++coverageMismatches;
+            }
+            std::printf("IMM_VULKAN_PAINT_MSAA samples=%d colorSpace=%d static=%d opaqueMismatches=%d coverageMismatches=%d\n",
+                samples, colorSpace, staticPaint, opaqueMismatches, coverageMismatches);
+            mismatches += opaqueMismatches + coverageMismatches;
+        }
+        renderer.SetRenderTarget(nullptr); renderer.DestroyRenderTarget(target);
+        renderer.DestroyTexture(color); renderer.DestroyTexture(depth);
+        if (mismatches) throw std::runtime_error("Paint half opacity does not cover half the attachment samples");
+    }
+    std::puts("IMM_VULKAN_PAINT_MSAA PASS both storage paths 4x 8x half opacity in both color spaces");
+}
+
 static void DrawPictureProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, int colorSpace, float offset, int viewportSize, ImmCore::piTexture color, unsigned char* output, bool fallback, int pictureFormat = 4, int cubeFace = 4)
 {
     using namespace ImmCore;
@@ -438,8 +481,12 @@ int main()
             for (int x = 0; x < size; ++x)
                 if (directionalPixels[(y * size + x) * 4] > 8)
                 {
-                    if (x < size / 2) ++left;
-                    else ++right;
+                    // Vertex opacity interpolates across this whole quad. Using
+                    // both complete halves has an expected 3:1 ratio, exactly the
+                    // rejection boundary. Exclude the transition so stochastic
+                    // coverage has margin while reversed facing still fails.
+                    if (x < 3 * size / 8) ++left;
+                    else if (x >= 5 * size / 8) ++right;
                 }
         std::fprintf(stderr, "IMM_VULKAN_PRETESSELLATED direction=%d left=%d right=%d\n", direction, left, right);
         if ((direction > 0 && (right < 50 || right < 3 * left)) ||
@@ -450,6 +497,7 @@ int main()
         renderer.DestroyRenderTarget(target);
         renderer.DestroyTexture(color); renderer.DestroyTexture(depth);
         VerifyModelMsaaCoverage(renderer, log);
+        VerifyPaintMsaaCoverage(renderer, log);
         renderer.Deinitialize();
         RunVulkanMultiviewProbe(reporter, log);
         log.End();

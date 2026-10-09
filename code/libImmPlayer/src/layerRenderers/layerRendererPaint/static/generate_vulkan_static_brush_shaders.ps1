@@ -3,6 +3,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "../../vulkan_sample_coverage.ps1")
 
 function Resolve-Tool([string]$Name) {
     $cmd = Get-Command $Name -ErrorAction SilentlyContinue
@@ -72,6 +73,7 @@ function Convert-FragmentGlslForVulkan([string]$Source) {
     $source = $source.Replace(
         "#ifdef GL_OES_sample_variables`n    gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.xy), frame.mFrame, vf.mask );`n    #endif",
         "gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.xy), uint(frame.mFrame), vf.mask );")
+    $source = Convert-VulkanSampleCoverage $source
     return "#version 460`n$source"
 }
 

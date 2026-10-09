@@ -1843,3 +1843,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Existing `vulkaninfo` collection already tolerates its absence; the mandatory
     native rendering probe and validation-layer checks remain in place. The pinned
     Mesa/LLVM runtime correction therefore still needs hosted execution evidence.
+64. **Vulkan paint attachment coverage (local, 2026-10-09):** a dedicated test
+    reproduced 411 half-opacity mismatches among 576 interior pixels for each
+    paint technique and colour space at 4x MSAA, with passing opaque controls.
+    Both Vulkan paint generators now use the attachment-count coverage helper.
+    Static and pretessellated paint pass opaque/half-opacity controls at 4x and
+    8x MSAA in both colour spaces on the hardware GPU and CI-matched lavapipe,
+    with zero Vulkan validation errors. Existing multiview content/facing/effect
+    checks also pass. The mono directional fixture previously compared complete
+    halves of an interpolated opacity gradient whose expected ratio was exactly
+    its 3:1 rejection boundary. It now excludes the central transition while
+    retaining the 3:1 threshold and minimum visible count; both directions pass.
+    The hosted Vulkan gate requires the paint MSAA marker. These native results
+    do not replace Unity composition, edge-quality or actual headset acceptance.

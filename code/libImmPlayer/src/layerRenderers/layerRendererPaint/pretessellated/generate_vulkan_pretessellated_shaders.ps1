@@ -1,5 +1,6 @@
 param([string]$OutputDir = (Join-Path $PSScriptRoot "tmp"))
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "../../vulkan_sample_coverage.ps1")
 
 function Resolve-Tool([string]$Name) {
     $cmd = Get-Command $Name -ErrorAction SilentlyContinue
@@ -77,6 +78,7 @@ $fs = $fs.Replace('in vec4 mpos;', '').Replace('in V2CData', 'layout(location=0)
 $fs = $fs.Replace('ivec3(p,frameID)&63', 'ivec3(p, int(frameID) & 63)')
 $fs = $fs.Replace('frame.mFrame, vf.mask', 'uint(frame.mFrame), vf.mask')
 $fs = $fs.Replace("#ifdef GL_OES_sample_variables`n`t", "#if 1`n`t")
+$fs = Convert-VulkanSampleCoverage $fs
 $vsPath = Join-Path $work "pretessellated.vert"
 $fsPath = Join-Path $work "pretessellated.frag"
 Set-Content $vsPath "#version 450`n$vs" -Encoding ASCII
