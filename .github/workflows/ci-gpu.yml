@@ -247,6 +247,7 @@ jobs:
         timeout-minutes: 2
         shell: pwsh
         run: |
+          $env:VK_LOADER_DEBUG = 'error,warn,layer'
           $env:VK_LAYER_PATH = (Resolve-Path artifacts/vulkan-model-probe).Path
           # Elevated Vulkan applications ignore VK_LAYER_PATH. Register only the
           # packaged explicit layer on this ephemeral 64-bit runner as well.

@@ -8190,7 +8190,9 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     VkResult result = state->vkCreateInstance(&instanceInfo, nullptr, &state->instance);
     if (result != VK_SUCCESS)
     {
-        iError(reporter, "Vulkan renderer failed to create VkInstance");
+        char message[128];
+        std::snprintf(message, sizeof(message), "Vulkan renderer failed to create VkInstance (VkResult=%d)", int(result));
+        iError(reporter, message);
         return false;
     }
     state->ownsInstance = true;
