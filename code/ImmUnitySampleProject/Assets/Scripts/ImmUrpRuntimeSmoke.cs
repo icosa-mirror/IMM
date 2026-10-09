@@ -371,11 +371,15 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         quad.transform.localScale = Vector3.one * radius * 4;
         try
         {
-            for (int phase = 0; phase < 4; ++phase)
+            long unblendedBrightness = 0;
+            for (int phase = 0; phase < 6; ++phase)
             {
-                bool transparent = phase >= 2;
-                bool near = phase == 0 || phase == 3;
-                material.renderQueue = (int)(transparent ? RenderQueue.Transparent : RenderQueue.Geometry);
+                bool transparent = phase == 2 || phase == 3;
+                bool alphaTest = phase >= 4;
+                bool near = phase == 0 || phase >= 3;
+                material.renderQueue = (int)(transparent ? RenderQueue.Transparent : alphaTest ? RenderQueue.AlphaTest : RenderQueue.Geometry);
+                material.SetFloat("_Opacity", transparent ? 0.5f : 1);
+                material.SetFloat("_AlphaCutoff", phase == 4 ? 2 : alphaTest ? 0.5f : 0);
                 material.SetFloat("_ZWrite", transparent ? 0 : 1);
                 quad.transform.position = bounds.center + (near ? Vector3.back : Vector3.forward) * radius * 2;
                 for (int frame = 0; frame < 3; ++frame)
@@ -384,9 +388,23 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     RenderPipeline.SubmitRenderRequest(documentCamera, request);
                 }
                 Require(renderError == null, $"Unity reported: {renderError}");
-                int visible = ReadVisiblePixels(true, samples, $"depth-{fixture}-{phase}");
-                Require(near ? visible == 0 : visible > 100,
-                    $"Depth composition failed: samples={samples} transparent={transparent} near={near} visible={visible}.");
+                int visible = 0;
+                long brightness = 0;
+                foreach (var pixel in ReadTargetPixels(target, $"depth-{fixture}-{phase}-{samples}x"))
+                {
+                    if (pixel.r > 5 || pixel.g > 5 || pixel.b > 5) ++visible;
+                    brightness += pixel.r + pixel.g + pixel.b;
+                }
+                bool occluded = phase == 0 || phase == 5;
+                Require(occluded ? visible == 0 : visible > 100,
+                    $"Depth composition failed: samples={samples} phase={phase} transparent={transparent} alphaTest={alphaTest} near={near} visible={visible}.");
+                if (phase == 1) unblendedBrightness = brightness;
+                if (phase == 2)
+                    Require(Math.Abs(brightness - unblendedBrightness) <= unblendedBrightness / 100 + 1,
+                        $"Transparent geometry behind IMM changed its colour: fixture={fixture} samples={samples} baseline={unblendedBrightness} actual={brightness}.");
+                if (phase == 3)
+                    Require(brightness > unblendedBrightness / 3 && brightness < unblendedBrightness * 9 / 10,
+                        $"Transparent blending failed: fixture={fixture} samples={samples} baseline={unblendedBrightness} blended={brightness}.");
             }
             Debug.Log($"[IMM_URP_SMOKE] PASS bidirectional depth composition at {samples} samples.");
         }

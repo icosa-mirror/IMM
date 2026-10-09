@@ -1,6 +1,11 @@
 Shader "IMM/URPDepthProbe"
 {
-    Properties { _ZWrite ("Depth write", Float) = 1 }
+    Properties
+    {
+        _ZWrite ("Depth write", Float) = 1
+        _Opacity ("Opacity", Float) = 1
+        _AlphaCutoff ("Alpha cutoff", Float) = 0
+    }
     SubShader
     {
         Tags { "RenderPipeline"="UniversalPipeline" "RenderType"="Opaque" "Queue"="Geometry" }
@@ -24,7 +29,12 @@ Shader "IMM/URPDepthProbe"
             output.positionCS = TransformObjectToHClip(input.positionOS);
             return output;
         }
-        half4 Frag() : SV_Target { return half4(0, 0, 0, 1); }
+        float _Opacity, _AlphaCutoff;
+        half4 Frag() : SV_Target
+        {
+            clip(_Opacity - _AlphaCutoff);
+            return half4(0, 0, 0, _Opacity);
+        }
         ENDHLSL
         Pass
         {
@@ -32,7 +42,7 @@ Shader "IMM/URPDepthProbe"
             Cull Off
             ZWrite [_ZWrite]
             ZTest LEqual
-            Blend One Zero
+            Blend SrcAlpha OneMinusSrcAlpha
             HLSLPROGRAM
             #pragma target 3.5
             #pragma multi_compile_instancing

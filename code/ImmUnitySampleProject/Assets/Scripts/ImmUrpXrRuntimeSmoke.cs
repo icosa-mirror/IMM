@@ -191,23 +191,40 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         Directory.CreateDirectory(captureDirectory);
         try
         {
-            for (int phase = 0; phase < 5; ++phase)
+            long[] unblendedBrightness = new long[2];
+            for (int phase = 0; phase < 7; ++phase)
             {
-                bool transparent = phase >= 3;
-                bool near = phase == 1 || phase == 4;
+                bool transparent = phase == 3 || phase == 4;
+                bool alphaTest = phase >= 5;
+                bool near = phase == 1 || phase >= 4;
                 quad.SetActive(phase != 0);
-                material.renderQueue = (int)(transparent ? RenderQueue.Transparent : RenderQueue.Geometry);
+                material.renderQueue = (int)(transparent ? RenderQueue.Transparent : alphaTest ? RenderQueue.AlphaTest : RenderQueue.Geometry);
+                material.SetFloat("_Opacity", transparent ? 0.5f : 1);
+                material.SetFloat("_AlphaCutoff", phase == 5 ? 2 : alphaTest ? 0.5f : 0);
                 material.SetFloat("_ZWrite", transparent ? 0 : 1);
                 quad.transform.SetPositionAndRotation(bounds.center + sample.DocumentCamera.transform.forward *
                     (near ? -2 : 2) * radius, sample.DocumentCamera.transform.rotation);
                 for (int frame = 0; frame < 3; ++frame) yield return null;
                 var visible = new int[2];
-                var capture = CaptureStereoEyes(display, captureDirectory, phase, visible);
+                var brightness = new long[2];
+                var capture = CaptureStereoEyes(display, captureDirectory, phase, visible, brightness);
                 try { while (capture.MoveNext()) yield return capture.Current; }
                 finally { (capture as IDisposable)?.Dispose(); }
                 for (int eye = 0; eye < 2; ++eye)
-                    Require(near ? visible[eye] == 0 : visible[eye] > 100,
-                        $"Stereo depth composition failed: phase={phase} transparent={transparent} near={near} eye={eye} visible={visible[eye]}.");
+                {
+                    bool occluded = phase == 1 || phase == 6;
+                    Require(occluded ? visible[eye] == 0 : visible[eye] > 100,
+                        $"Stereo depth composition failed: phase={phase} transparent={transparent} alphaTest={alphaTest} near={near} eye={eye} visible={visible[eye]}.");
+                    if (phase == 2) unblendedBrightness[eye] = brightness[eye];
+                    // Headset pose can move between readbacks; reject the much larger
+                    // darkening caused by an incorrectly blended half-opacity quad.
+                    if (phase == 3)
+                        Require(Math.Abs(brightness[eye] - unblendedBrightness[eye]) <= unblendedBrightness[eye] / 10 + 1,
+                            $"Stereo transparent geometry behind IMM changed colour: eye={eye}.");
+                    if (phase == 4)
+                        Require(brightness[eye] > unblendedBrightness[eye] / 3 && brightness[eye] < unblendedBrightness[eye] * 9 / 10,
+                            $"Stereo transparent blending failed: eye={eye} baseline={unblendedBrightness[eye]} blended={brightness[eye]}.");
+                }
                 Debug.Log($"[IMM_URP_XR_SMOKE] depth phase={phase} transparent={transparent} near={near} visible={visible[0]},{visible[1]} run={runId}");
             }
             Debug.Log($"[IMM_URP_XR_SMOKE] PASS stereo Unity opaque and transparent depth composition. run={runId}");
@@ -219,7 +236,7 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         }
     }
 
-    private IEnumerator CaptureStereoEyes(XRDisplaySubsystem display, string directory, int phase, int[] visible)
+    private IEnumerator CaptureStereoEyes(XRDisplaySubsystem display, string directory, int phase, int[] visible, long[] brightness)
     {
         yield return new WaitForEndOfFrame();
         Require(display.running && display.GetRenderPassCount() == 1, "XR display changed during stereo capture.");
@@ -251,7 +268,11 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
                 var pixels = readback.GetData<Color32>(eye);
                 Require(pixels.Length == snapshot.width * snapshot.height, "Unexpected XR eye readback dimensions.");
                 for (int pixel = 0; pixel < pixels.Length; ++pixel)
-                    if (pixels[pixel].r + pixels[pixel].g + pixels[pixel].b > 12) ++visible[eye];
+                {
+                    int sum = pixels[pixel].r + pixels[pixel].g + pixels[pixel].b;
+                    if (sum > 12) ++visible[eye];
+                    brightness[eye] += sum;
+                }
                 var image = new Texture2D(snapshot.width, snapshot.height, TextureFormat.RGBA32, false, true);
                 try
                 {
