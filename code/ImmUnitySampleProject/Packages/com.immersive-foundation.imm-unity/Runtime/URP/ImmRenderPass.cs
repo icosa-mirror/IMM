@@ -33,7 +33,9 @@ namespace ImmPlayer
         internal ImmRenderPass(ImmRenderGraphTransport transport)
         {
             this.transport = transport ?? throw new ArgumentNullException(nameof(transport));
-            renderPassEvent = RenderPassEvent.AfterRenderingOpaques;
+            // Backdrops must survive Unity's skybox while sharing opaque depth;
+            // later transparent geometry must still compose over IMM surfaces.
+            renderPassEvent = RenderPassEvent.AfterRenderingSkybox;
             // Request addressable attachments explicitly. Do not infer that URP always
             // renders to a RenderTexture, or reinterpret a native texture as a render buffer.
             requiresIntermediateTexture = true;

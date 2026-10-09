@@ -1856,3 +1856,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     retaining the 3:1 threshold and minimum visible count; both directions pass.
     The hosted Vulkan gate requires the paint MSAA marker. These native results
     do not replace Unity composition, edge-quality or actual headset acceptance.
+65. **Prepared skybox composition gate (local, 2026-10-09):** the Unity content
+    fixture now renders a deterministic blue skybox with IMM opted out before
+    enabling each of the four panorama documents and requiring visible red
+    content. It retains both control and content captures and restores the global
+    skybox and camera settings. The renderer pass moves from after opaques to
+    after the skybox, retaining shared opaque depth and preceding transparents.
+    Sample and Android-conditional C# compilation pass locally. Shader compilation,
+    actual skybox controls and platform composition remain unverified until CI;
+    no local Unity Editor refresh or launch was performed.

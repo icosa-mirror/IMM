@@ -203,8 +203,13 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         var pipeline = (UniversalRenderPipelineAsset)QualitySettings.renderPipeline;
         int originalSamples = pipeline.msaaSampleCount;
         int originalTargetSamples = target.antiAliasing;
+        var originalSkybox = RenderSettings.skybox;
+        Material skybox = null;
         try
         {
+            var skyboxShader = Resources.Load<Shader>("ImmUrpSkyboxProbe");
+            Require(skyboxShader != null && skyboxShader.isSupported, "URP skybox probe shader is unavailable.");
+            skybox = new Material(skyboxShader);
             documentCamera.enabled = false;
             optIn.enabled = true;
             documentCamera.orthographic = false;
@@ -246,6 +251,8 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     Require(document.GetStateInfo().Loading == ImmDocument.LoadingState.Loaded,
                         $"Content fixture loading timed out: {name}.");
                     bool surface = name.StartsWith("paint-", StringComparison.Ordinal) || name == "picture-flat";
+                    documentCamera.clearFlags = surface ? CameraClearFlags.SolidColor : CameraClearFlags.Skybox;
+                    RenderSettings.skybox = skybox;
                     var bounds = surface ? document.GetBoundingBox() : new Bounds(Vector3.zero, Vector3.one * 2);
                     float radius = Mathf.Max(bounds.extents.magnitude, 0.1f);
                     Require(!float.IsNaN(radius) && !float.IsInfinity(radius), $"Content fixture bounds are invalid: {name}.");
@@ -255,6 +262,18 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     documentCamera.farClipPlane = Mathf.Max(radius * 8, 100);
                     document.SetTime(0, 0);
                     document.Show();
+                    if (!surface)
+                    {
+                        optIn.enabled = false;
+                        yield return null;
+                        RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                        int bluePixels = 0;
+                        foreach (var pixel in ReadTargetPixels(target, $"skybox-control-{name}"))
+                            if (pixel.b > pixel.r + 10 && pixel.b > pixel.g + 10) ++bluePixels;
+                        Require(bluePixels > target.width * target.height * 9 / 10,
+                            $"Skybox control did not render for {name}: pixels={bluePixels}.");
+                        optIn.enabled = true;
+                    }
                     for (int frame = 0; frame < 3; ++frame)
                     {
                         yield return null;
@@ -264,6 +283,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     foreach (var pixel in ReadTargetPixels(target, $"content-{name}"))
                         if (pixel.r > pixel.g + 10 && pixel.r > pixel.b + 10) ++redPixels;
                     Require(redPixels > 100, $"Content fixture has no expected red geometry: {name}, pixels={redPixels}.");
+                    if (!surface) Debug.Log($"[IMM_URP_CONTENT] PASS {name} survives Unity skybox with opt-out control.");
                     if (surface)
                     {
                         var depth = VerifyDepthComposition(1, bounds);
@@ -283,6 +303,8 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         }
         finally
         {
+            RenderSettings.skybox = originalSkybox;
+            if (skybox != null) Destroy(skybox);
             documentCamera.transform.SetPositionAndRotation(originalPosition, originalRotation);
             documentCamera.enabled = originalEnabled;
             optIn.enabled = originalOptIn;
