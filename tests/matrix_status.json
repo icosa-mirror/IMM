@@ -10,13 +10,13 @@
       "foundation_run_conclusion": "success",
       "verified_scope": "Push pipeline platform builds, core and web checks, plus nine D3D12/WARP submission readbacks. Does not establish full engine/GPU matrix, IMM D3D12 scene rendering, URP or headset correctness.",
       "current_checkpoint": {
-        "revision": "2ed9b329b91588afa423ba4fbfa7a6ebba4c8340",
-        "runtime_binary_revision": "3f7f9422",
-        "run": "https://github.com/icosa-mirror/IMM/actions/runs/37954438364",
+        "revision": "265fe1324d654e5e3cc4f979eb0a90fa286d1430",
+        "runtime_binary_revision": "b0396331",
+        "run": "https://github.com/icosa-mirror/IMM/actions/runs/37962975340",
         "conclusion": "success",
-        "verified_scope": "Full non-headset platform CI, including Windows D3D12 URP composition and synthetic layered stereo, Windows Vulkan mono and borrowed two-view model/Unity packet adapter GPU readbacks with validation enabled and zero validation errors, macOS Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation. Evidence is retained in GPUMatrixEvidence. This does not establish actual OpenXR headset acceptance."
+        "verified_scope": "Full non-headset platform CI, including Windows D3D12 URP composition and synthetic layered stereo, Windows Vulkan mono and borrowed two-view model/Unity packet adapter GPU readbacks with validation enabled and zero validation errors, macOS Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation. Hosted builds also produce tracked URP/OpenXR single-pass players for Windows D3D12 and Quest Vulkan. This does not establish actual OpenXR execution or headset acceptance."
       },
-      "remaining": "Actual Unity/OpenXR Windows D3D12 and Quest Vulkan single-pass integration and sample/build-harness migration, complete stereo layer and MSAA/depth composition evidence, camera/frame/XR-pass submission attribution, measured managed-allocation acceptance and headset pose/per-eye/one-pass acceptance. The existing Quest legacy MultiPass scene does not validate the URP multiview path.",
+      "remaining": "Actual Unity/OpenXR Windows D3D12 and Quest Vulkan single-pass execution and hardware runtime-harness migration, complete stereo layer and MSAA/depth composition evidence, camera/frame/XR-pass submission attribution, measured managed-allocation acceptance and headset pose/per-eye/one-pass acceptance. Successful tracked XR player builds do not establish runtime acceptance.",
       "unity_integration_baseline": {
         "editor": "6000.6.0f1",
         "urp": "17.6.0",

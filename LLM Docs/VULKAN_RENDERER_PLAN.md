@@ -1,16 +1,18 @@
 # Vulkan renderer plan
 
-## Status reference — 2026-10-04
+## Status reference — 2026-10-09
 
 1. For current Unity URP scope, implementation status and acceptance requirements,
    follow [the URP single-pass plan](IMM-URP-single-pass-feature-request.md).
-2. Full [CI run 37196388177](https://github.com/icosa-mirror/IMM/actions/runs/37196388177)
-   passed at source `dabce216`; runtime binaries were synchronized at `50278257`.
-   Windows D3D12 composition, Windows Vulkan GPU validation, macOS/iOS Metal and
+2. Full [CI run 37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
+   passed at source `265fe132`; runtime binaries were synchronized at `b0396331`.
+   Windows D3D12 composition, strict Vulkan GPU validation, macOS/iOS Metal and
    Android Vulkan device validation passed. These results do not prove headset acceptance.
-3. Unity D3D12 mono and synthetic layered stereo are implemented. Unity Vulkan mono
-   is implemented; actual Vulkan multiview remains disabled. Windows OpenXR headset
-   execution, Quest multiview and complete Unity/Android all-layer acceptance remain open.
+3. D3D12 mono/synthetic stereo and the Vulkan two-view packet adapter are implemented.
+   Native multiview GPU readbacks pass with validation enabled and no validation errors.
+   CI builds tracked URP/OpenXR single-pass players for Windows D3D12 and Quest Vulkan.
+   Actual OpenXR execution, complete stereo composition/content coverage, attributed
+   submission evidence, allocation measurement and headset acceptance remain open.
 4. Windows native-player and Godot work retains Vulkan as its primary backend.
    Standalone OpenXR work is separate from Unity's OpenXR integration. Preserve all
    existing platform CI coverage and fix regressions before further feature work.

@@ -42,7 +42,7 @@ The repository sample has dedicated OpenXR builds:
 They build `SampleSceneURP`, require one configured OpenXR loader, select
 Single Pass Instanced and add a tracked head camera under a separate viewing
 origin. Use `-immUrpXrPlayerPath` or `-immQuestPlayerPath` for the output path.
-Build-time settings are restored afterwards. CI is configured to build both variants; actual
+Build-time settings are restored afterwards. CI builds both variants; actual
 OpenXR rendering/headset acceptance is a separate outstanding check.
 
 ## Android Vulkan rendering contract

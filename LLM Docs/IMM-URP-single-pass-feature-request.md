@@ -24,8 +24,8 @@ automating headset VR validation does not exempt non-VR changes from CI.
 
 ## Current status — 2026-10-09
 
-1. Last confirmed full-CI source: `2ed9b329`; synchronized runtime binaries: `3f7f9422`.
-   Full [CI validation run 37954438364](https://github.com/icosa-mirror/IMM/actions/runs/37954438364)
+1. Last confirmed full-CI source: `265fe132`; synchronized runtime binaries: `b0396331`.
+   Full [CI validation run 37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
    passed, including Windows DX12 composition, Windows Vulkan GPU readback, macOS
    Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation.
    The strict Windows Vulkan probe reports validation enabled and zero validation errors.
@@ -37,9 +37,9 @@ automating headset VR validation does not exempt non-VR changes from CI.
    implemented and hosted GPU readbacks pass, including the loaded-scene Unity
    packet adapter (entries 34–38). Layer discovery, destroyed buffer bindings
    and owned-device viewport capability fixes are confirmed by full CI.
-   Dedicated URP/OpenXR build helpers now request single-pass and configure a
-   tracked sample origin for Windows and Quest; hosted build verification of
-   this increment is pending (entry 39). The hardware runtime harness still
+   Dedicated URP/OpenXR build helpers request single-pass and configure a
+   tracked sample origin for Windows and Quest; both hosted builds pass
+   (entries 39–40). The hardware runtime harness still
    needs migration from its legacy probe to these players. Complete stereo
    content and MSAA/depth composition,
    camera/frame/XR-pass submission attribution, measured managed-allocation
@@ -1498,3 +1498,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     pass. Hosted build verification is pending. The existing Windows hardware
     runtime harness has not yet migrated to the new player, and these builds do
     not prove actual OpenXR rendering, headset pose or single-pass acceptance.
+40. **URP/OpenXR builds and full CI (confirmed, 2026-10-09):** full validation
+    run [37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
+    passes at source `265fe132`, with runtime binaries synchronized at `b0396331`.
+    Windows and Android build logs identify `SampleSceneURP`, Single Pass
+    Instanced and the processed centre-eye rig with separate viewing origin;
+    both player builds succeed. Flat platform composition/device checks and
+    standalone/Godot checks remain passing. This supersedes entry 39's pending
+    hosted build status. Actual OpenXR execution and the remaining stereo,
+    attribution, allocation and headset acceptance criteria are still open.
