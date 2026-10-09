@@ -1,3 +1,8 @@
+#include "libImmCore/src/libBasics/piStreamArrayO.h"
+#include "libImmCore/src/libMesh/piMeshSerialized.h"
+#include "libImmExporter/src/document/layerModel3d.h"
+#include "libImmExporter/src/toImmersive/toImmersiveLayerModel.h"
+#include "libImmImporter/src/fromImmersive/fromImmersiveLayerModel.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -125,6 +130,113 @@ void VerifyImport(const std::filesystem::path& path, const Fixture& fixture, piL
 }
 }
 
+void VerifyModelSerialization(piLog& log)
+{
+    for (int layout = 0; layout < 5; ++layout) {
+        ImmImporter::LayerModel model;
+        Require(model.Init(false, ImmImporter::LayerModel::ShadingModel::Unlit), "Initialize source model");
+    auto* mesh = model.GetMesh();
+    piMesh::VertexFormat formats[2] = {};
+    formats[0].mStride = (layout == 1 ? 11 : layout == 4 ? 10 : 7) * sizeof(float);
+    formats[0].mNumElems = layout == 4 ? 3 : 2;
+    formats[0].mElems[0] = {3, piMesh::VertexElemDataType::Float, false, 0};
+    formats[0].mElems[1] = {4, piMesh::VertexElemDataType::Float, false, 3 * sizeof(float)};
+    if (layout == 2) {
+        formats[0].mStride = 3 * sizeof(float); formats[0].mNumElems = 1;
+        formats[1].mStride = 4 * sizeof(float); formats[1].mNumElems = 1;
+        formats[1].mElems[0] = {4, piMesh::VertexElemDataType::Float, false, 0};
+    }
+    if (layout == 3) {
+        formats[0].mStride = 16;
+        formats[0].mElems[1] = {4, piMesh::VertexElemDataType::UByte, true, 12};
+    }
+    if (layout == 4) formats[0].mElems[2] = {3, piMesh::VertexElemDataType::Float, false, 7 * sizeof(float)};
+    if (!mesh->Init(layout == 2 ? 2 : 1, 4, formats, piMesh::Type::Polys, 1, 2))
+        throw std::runtime_error("Allocate model input fixture");
+    float vertices[4][11] = {
+        {-.6f,-.5f,.5f, .5f,.5f,.5f,1, 0,0,1,99}, {.6f,-.5f,.5f, .5f,.5f,.5f,1, 0,0,1,99},
+        {.6f,.5f,.5f, .5f,.5f,.5f,1, 0,0,1,99}, {-.6f,.5f,.5f, .5f,.5f,.5f,1, 0,0,1,99}};
+    for (uint32_t vertex = 0; vertex < 4; ++vertex) {
+        if (layout == 3) {
+            unsigned char packed[16] = {};
+            std::memcpy(packed, vertices[vertex], 12);
+            packed[12] = packed[13] = packed[14] = 128; packed[15] = 255;
+            mesh->SetVertex(0, vertex, packed);
+        }
+        else {
+            mesh->SetVertex(0, vertex, vertices[vertex]);
+            if (layout == 2) mesh->SetVertex(1, vertex, vertices[vertex] + 3);
+        }
+    }
+    mesh->SetTriangle(0, 0, 0, 1, 2); mesh->SetTriangle(0, 1, 0, 2, 3); mesh->CalcBBox(0, 0);
+
+        for (int shading = 0; shading < 2; ++shading)
+        for (bool wireframe : {false, true}) {
+            ImmExporter::LayerModel exported;
+            Require(exported.Init() && exported.AssignAsset(mesh, false), "Clone exported model");
+            exported.SetShadingModel(static_cast<ImmExporter::LayerModel::ShadingModel>(shading));
+            exported.SetRenderWireframe(wireframe);
+            piTArray<uint8_t> metadata, asset;
+            Require(metadata.Init(0, false) && asset.Init(0, false), "Allocate model serialization buffers");
+            piOStreamArray metadataOut(&metadata), assetOut(&asset);
+            Require(ImmExporter::tiLayerModel::ExportData(&metadataOut, &exported) &&
+                ImmExporter::tiLayerModel::ExportAsset(&assetOut, &exported), "Serialize model layer");
+            const uint32_t unsupportedVersion = 2, supportedVersion = 1;
+            std::memcpy(metadata.GetAddress(0), &unsupportedVersion, 4);
+            metadata.SetLength(0);
+            piIStreamArray rejectedMetadata(&metadata);
+            Require(!ImmImporter::fiLayerModel::ReadData(&rejectedMetadata, &log), "Reject unsupported model metadata");
+            std::memcpy(metadata.GetAddress(0), &supportedVersion, 4);
+            const uint64_t assetBytes = asset.GetLength();
+            Require(assetBytes > 8 && piMeshValidateSerialized(asset.GetAddress(8), assetBytes - 8), "Validate exported mesh");
+            Require(!piMeshValidateSerialized(asset.GetAddress(8), assetBytes - 9), "Reject truncated mesh");
+            const uint32_t invalidStreams = piMesh_MAXVERTEXARRAYS + 1;
+            uint32_t savedStreams;
+            std::memcpy(&savedStreams, asset.GetAddress(8 + 28), 4);
+            std::memcpy(asset.GetAddress(8 + 28), &invalidStreams, 4);
+            Require(!piMeshValidateSerialized(asset.GetAddress(8), assetBytes - 8), "Reject excessive mesh streams");
+            std::memcpy(asset.GetAddress(8 + 28), &savedStreams, 4);
+            metadata.SetLength(0); asset.SetLength(0);
+            piIStreamArray metadataIn(&metadata), assetIn(&asset);
+            auto* decoded = static_cast<ImmImporter::LayerModel*>(ImmImporter::fiLayerModel::ReadData(&metadataIn, &log));
+            Require(decoded && ImmImporter::fiLayerModel::ReadAsset(decoded, &assetIn, &log), "Deserialize model layer");
+            const uint64_t excessiveSize = 256ull * 1024 * 1024 + 1, originalSize = assetBytes - 8;
+            std::memcpy(asset.GetAddress(0), &excessiveSize, 8);
+            asset.SetLength(0);
+            piIStreamArray rejectedAsset(&asset);
+            Require(!ImmImporter::fiLayerModel::ReadAsset(decoded, &rejectedAsset, &log), "Reject excessive model asset size");
+            std::memcpy(asset.GetAddress(0), &originalSize, 8);
+            Require(int(decoded->GetShadingModel()) == shading && decoded->GetRenderWireframe() == wireframe, "Roundtrip model flags");
+            auto* result = decoded->GetMesh();
+            Require(std::memcmp(&result->mBBox, &mesh->mBBox, sizeof(mesh->mBBox)) == 0, "Roundtrip model bounds");
+            std::printf("IMM_MODEL_LAYER_IO layout=%d streams=%d expectedStreams=%d indexArrays=%d faces=%u\n",
+                layout, result->mVertexData.mNumVertexArrays, mesh->mVertexData.mNumVertexArrays,
+                result->mFaceData.mNumIndexArrays, result->mFaceData.mIndexArray[0].mNum);
+            Require(result->mVertexData.mNumVertexArrays == mesh->mVertexData.mNumVertexArrays &&
+                result->mFaceData.mNumIndexArrays == 1 && result->mFaceData.mIndexArray[0].mNum == 2,
+                "Roundtrip mesh stream and triangle counts");
+            for (int stream = 0; stream < mesh->mVertexData.mNumVertexArrays; ++stream) {
+                const auto& expected = mesh->mVertexData.mVertexArray[stream];
+                const auto& actual = result->mVertexData.mVertexArray[stream];
+                Require(actual.mNum == expected.mNum && actual.mFormat.mStride == expected.mFormat.mStride &&
+                    actual.mFormat.mNumElems == expected.mFormat.mNumElems &&
+                    std::memcmp(actual.mBuffer, expected.mBuffer, expected.mNum * expected.mFormat.mStride) == 0,
+                    "Roundtrip mesh vertex bytes");
+                for (int element = 0; element < expected.mFormat.mNumElems; ++element) {
+                    const auto& a = actual.mFormat.mElems[element]; const auto& e = expected.mFormat.mElems[element];
+                    Require(a.mType == e.mType && a.mNumComponents == e.mNumComponents &&
+                        a.mNormalize == e.mNormalize && a.mOffset == e.mOffset, "Roundtrip vertex attributes");
+                }
+            }
+            Require(std::memcmp(result->mFaceData.mIndexArray[0].mBuffer, mesh->mFaceData.mIndexArray[0].mBuffer,
+                2 * sizeof(piMesh::Face32)) == 0, "Roundtrip mesh triangle bytes");
+            decoded->Deinit(); decoded->Deinit(); delete decoded;
+            exported.Deinit(); metadata.End(); asset.End();
+        }
+        model.Deinit();
+    }
+    std::puts("IMM_MODEL_LAYER_IO PASS five mesh layouts and shading/wireframe flags with bounded decoding");
+}
 int main(int argc, char** argv)
 {
     if (argc != 2 && argc != 3) {
@@ -135,6 +247,7 @@ int main(int argc, char** argv)
         std::filesystem::create_directories(directory);
         piLog log;
         Require(log.Init((directory / "generation.log").wstring().c_str(), 0), "Initialize fixture log");
+        VerifyModelSerialization(log);
         std::ofstream manifest(directory / "manifest.json", std::ios::binary);
         manifest << "{\"schema\":\"imm-urp-content-fixtures-v1\",\"fixtures\":[\n";
         bool first = true;

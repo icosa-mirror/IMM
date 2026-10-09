@@ -73,7 +73,7 @@ static void DrawModelProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& 
     modelRenderer.UnloadInGPU(&renderer, nullptr, &log, &layer);
     modelRenderer.UnloadInCPU(&log, &layer);
     renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer); renderer.DestroyBuffer(layerBuffer);
-    mesh->DeInit(); model.Deinit();
+    model.Deinit();
     layer.SetLoaded(false); layer.Deinit(&log);
 }
 

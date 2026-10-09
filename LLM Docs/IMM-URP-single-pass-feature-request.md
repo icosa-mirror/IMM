@@ -1879,3 +1879,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     geometry, and requires red content over 90 percent of the target. The existing
     small visible-pixel threshold is retained for bounded surfaces only. This
     prevents a partial backdrop from satisfying the skybox composition check.
+66. **Prepared model-layer persistence (local, 2026-10-09):** importer/exporter
+    stubs are replaced with version-1 metadata and the existing version-0 mesh
+    payload, checked before allocating decode. The format and constraints are
+    documented in `docs/imm-model-layer-format.md`. Exporter model assignment
+    preserves split streams and bounds without changing the shared mesh clone.
+    Model cleanup releases owned mesh memory and tolerates repeated cleanup.
+    A CPU gate roundtrips five layouts with both shading and wireframe flags,
+    compares vertex/index bytes and bounds, and rejects truncated payloads,
+    excessive stream counts, unsupported metadata versions and oversized assets.
+    All five Vulkan/fixture CTests and both D3D12 CTests pass locally; existing
+    nine fixture files remain byte-identical. This is layer metadata/asset
+    evidence only: a complete model IMM fixture and Unity rendering are still
+    required. The increment remains local while recovery run `37999162355`
+    validates pushed source `47af21b8`.

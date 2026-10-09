@@ -89,7 +89,7 @@ static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& lo
     modelRenderer.UnloadInCPU(&log, &layer);
     modelRenderer.Deinit(&renderer, &log);
     renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer); renderer.DestroyBuffer(layerBuffer);
-    mesh->DeInit(); model.Deinit();
+    model.Deinit();
 }
 
 static void DrawPictureProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& log, int colorSpace, int pictureFormat, int cubeFace, float opacity, bool layered = false, int viewportSize = 256)

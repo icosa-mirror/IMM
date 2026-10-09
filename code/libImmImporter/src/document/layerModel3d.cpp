@@ -14,9 +14,7 @@ namespace ImmImporter
 
 	bool LayerModel::Init(bool renderWireFrame, const LayerModel::ShadingModel shadingModel)
 	{
-#if !defined(IMM_WEB_DECODER)
 		mMesh.Init();
-#endif
 
 		/*
 		if (!piMeshObj_Read(&mMesh, file, true))
@@ -38,7 +36,8 @@ namespace ImmImporter
 
 	void LayerModel::Deinit(void)
 	{
-		//mMesh.DeInit();
+		mMesh.DeInit();
+        mMesh.Init();
 	}
     
 	const LayerModel::ShadingModel LayerModel::GetShadingModel(void) const

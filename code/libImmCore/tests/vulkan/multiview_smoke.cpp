@@ -627,7 +627,7 @@ static void RunModelMultiviewProbe(Host& host, ImmCore::piRendererVulkan& render
     RunLayerMultiviewReadback(host, renderer, log, models, layer, trans3d::identity(),
         "IMM_VULKAN_MULTIVIEW_MODEL", layout, colorSpace, opacity, false, true, colorSpace == 0 ? 55 : 128);
     models.UnloadInGPU(&renderer, nullptr, &log, &layer); models.UnloadInCPU(&log, &layer);
-    models.Deinit(&renderer, &log); mesh->DeInit(); model.Deinit();
+    models.Deinit(&renderer, &log); model.Deinit();
     layer.SetLoaded(false); layer.Deinit(&log);
 }
 
@@ -719,7 +719,7 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
     std::printf("IMM_VULKAN_MULTIVIEW layers=2 draws=1 instances=1 coverage=%d,%d centroids=%.2f,%.2f\n", coverage[0], coverage[1], centroids[0], centroids[1]);
     if (coverage[0] < 400 || coverage[1] < 400 || centroids[0] < 15 || centroids[0] > 23 || centroids[1] < 40 || centroids[1] > 48) throw std::runtime_error("Multiview eye matrices or layer broadcast failed");
     models.UnloadInGPU(&renderer, nullptr, &log, &layer); models.UnloadInCPU(&log, &layer);
-    models.Deinit(&renderer, &log); mesh->DeInit(); model.Deinit();
+    models.Deinit(&renderer, &log); model.Deinit();
     renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer); renderer.DestroyBuffer(layerBuffer);
     for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
         for (int pictureFormat = 0; pictureFormat < 5; ++pictureFormat)
