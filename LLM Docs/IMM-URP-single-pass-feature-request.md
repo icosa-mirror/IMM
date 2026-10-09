@@ -103,6 +103,12 @@ automating headset VR validation does not exempt non-VR changes from CI.
    `47af21b8`. Unity rendering of the expanded corpus remains outstanding; native
    in-memory model probes do not establish Unity model document support.
 
+7. Paint-mode selection is now implemented locally (entry 71), with both techniques
+   required by the prepared Unity corpus gate. Full recovery run `38000728358`
+   has a confirmed Windows Unity Vulkan artifact-summary failure caused by the
+   staged fixture manifest filename; correction and local replay are in entry 72.
+   Remaining jobs and subsequent full validation are still required.
+
 ## Motivation
 
 URP applications need to place native IMM documents alongside Unity geometry in flat and
@@ -1938,3 +1944,29 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     techniques while retaining existing platform defaults. This remains required
     implementation work; no initialization ABI change is included in the pending
     recovery or prepared model checkpoints.
+
+71. **Paint-mode selection implemented locally (2026-10-09):** the managed manager
+    now selects static or pretessellated paint before initialization. Packet ABI v4
+    uses the former four-byte padding at offset 492; packet size remains 496 bytes.
+    All three URP native adapters validate the choice. Legacy bridge callers retain
+    their platform default. The mono Unity corpus gate shuts down and recreates the
+    manager, then loads all ten documents independently under each technique. CI
+    requires both completion markers, and depth captures identify fixture, technique,
+    phase and sample count. All seven Vulkan/fixture CTests, both D3D12 CTests and
+    all 42 CI core verifiers pass locally. The pretessellated document probe also
+    passes on CI-matched lavapipe. Runtime, sample, isolated URP and Android
+    conditional C# compilation pass. A separate native CI probe now requires
+    pretessellated document rendering with validation enabled. Actual Unity rendering
+    under both techniques remains unverified; these changes are not yet published.
+72. **Recovery artifact-manifest collision (2026-10-09):** full run `38000728358`
+    confirms standalone iOS Metal, Windows standalone Vulkan and Windows Godot Vulkan
+    recovery. Unity Windows Vulkan player compilation passes, but artifact collection
+    fails because the newly staged fixture corpus includes its own `manifest.json`
+    inside StreamingAssets. The collector correctly applies the CI manifest contract
+    to that reserved filename. Build staging now names the fixture metadata
+    `content-fixtures.json`, retaining its source filename and leaving CI validation
+    strict. A local collector replay rejects the original nested filename and
+    passes with the distinct fixture name. Editor automation compilation passes
+    locally. Other jobs are still
+    running; neither this correction nor the held model/paint changes have hosted
+    confirmation, and no new full-green checkpoint is claimed.
