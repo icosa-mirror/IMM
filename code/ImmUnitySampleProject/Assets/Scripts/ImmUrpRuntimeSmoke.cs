@@ -146,14 +146,17 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         Require(sample.Document != null, "Sample document is missing.");
         if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12)
         {
-            var stereoProbe = ImmRenderGraphValidation.VerifyStereoPacket(documentCamera,
-                Mathf.Max(sample.Document.GetBoundingBox().extents.magnitude, 0.1f));
-            // Advance explicitly so the outer runner catches validation failures.
-            try
+            foreach (int stereoSamples in new[] { 1, 2, 4, 8 })
             {
-                while (stereoProbe.MoveNext()) yield return stereoProbe.Current;
+                var stereoProbe = ImmRenderGraphValidation.VerifyStereoPacket(documentCamera,
+                    Mathf.Max(sample.Document.GetBoundingBox().extents.magnitude, 0.1f), stereoSamples);
+                // Advance explicitly so the outer runner catches validation failures.
+                try
+                {
+                    while (stereoProbe.MoveNext()) yield return stereoProbe.Current;
+                }
+                finally { (stereoProbe as IDisposable)?.Dispose(); }
             }
-            finally { (stereoProbe as IDisposable)?.Dispose(); }
             Debug.Log("[IMM_URP_SMOKE] PASS managed stereo packet renders distinct eye slices.");
         }
         int documentId = sample.Document.DocumentId;

@@ -1562,3 +1562,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     No old-packet compatibility path was added. Other jobs in that full run remain
     in progress; hosted confirmation and the next two local feature increments
     remain pending. The last confirmed full-green checkpoint is still entry 40.
+45. **Layered Unity packet MSAA coverage (local, 2026-10-09):** the synthetic
+    D3D12 stereo fixture now runs its distinct-eye, peripheral-culling and attributed
+    native-event checks at 1/2/4/8 samples. It requires the requested sample count
+    without downgrade. Multisampled arrays use an explicit single-sample layered
+    resolve target and one Unity ResolveAntiAliasedSurface command for the surface;
+    both resolved slices are read back and checked. Windows CI requires a separate
+    success marker for every sample count. Runtime/sample compilation and workflow
+    checks pass locally; actual Unity execution of this addition is pending. This
+    extends attachment/resolve coverage, not complete per-format stereo rendering,
+    Unity stereo depth composition, edge-quality or headset acceptance. No shared
+    renderer behavior or other platform path changes in this increment.

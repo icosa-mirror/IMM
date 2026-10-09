@@ -10,16 +10,24 @@ namespace ImmPlayer
     // This tests native stereo submission, not an OpenXR session.
     public static class ImmRenderGraphValidation
     {
-        public static IEnumerator VerifyStereoPacket(Camera camera, float radius)
+        public static IEnumerator VerifyStereoPacket(Camera camera, float radius, int samples = 1)
         {
-            var target = new RenderTexture(new RenderTextureDescriptor(128, 128)
+            var descriptor = new RenderTextureDescriptor(128, 128)
             {
                 graphicsFormat = GraphicsFormat.R8G8B8A8_UNorm,
                 depthStencilFormat = GraphicsFormat.D32_SFloat,
                 dimension = TextureDimension.Tex2DArray,
                 volumeDepth = 2,
-                msaaSamples = 1
-            });
+                msaaSamples = samples,
+                bindMS = samples > 1
+            };
+            Require(SystemInfo.GetRenderTextureSupportedMSAASampleCount(descriptor) == samples,
+                $"Stereo fixture requires the requested {samples} samples without downgrade.");
+            var target = new RenderTexture(descriptor);
+            descriptor.msaaSamples = 1;
+            descriptor.bindMS = false;
+            descriptor.depthStencilFormat = GraphicsFormat.None;
+            var resolved = samples > 1 ? new RenderTexture(descriptor) : null;
             var commands = new CommandBuffer { name = "IMM stereo packet readback" };
             ImmSceneSubmission stereoSubmission = default;
             int completedStereo = 0;
@@ -33,6 +41,8 @@ namespace ImmPlayer
             try
             {
                 Require(target.Create(), "Could not create stereo target.");
+                Require(target.antiAliasing == samples, "Stereo target silently downgraded MSAA.");
+                Require(resolved == null || resolved.Create(), "Could not create stereo resolve target.");
                 for (int scenario = 0; scenario < 3; ++scenario)
                 {
                     commands.Clear();
@@ -65,8 +75,10 @@ namespace ImmPlayer
                         target.depthBuffer.GetNativeRenderBufferPtr(), 28, 40, new RectInt(0, 0, 128, 128),
                         view, cullingProjection, left, eyeProjection, right, eyeProjection,
                         frameIndex: submittedFrame);
+                    // Resolve the complete layered surface with one Unity command.
+                    if (resolved != null) commands.ResolveAntiAliasedSurface(target, resolved);
                     Graphics.ExecuteCommandBuffer(commands);
-                    var readback = AsyncGPUReadback.Request(target, 0, TextureFormat.RGBA32);
+                    var readback = AsyncGPUReadback.Request(resolved != null ? resolved : target, 0, TextureFormat.RGBA32);
                     while (!readback.done) yield return null;
                     Require(!readback.hasError, "Stereo texture-array readback failed.");
                     transport.Poll();
@@ -98,6 +110,7 @@ namespace ImmPlayer
                 }
                 Debug.Log("[IMM_URP_READBACK] PASS managed stereo packet renders distinct eye slices and retains peripheral content.");
                 Debug.Log("[IMM_URP_READBACK] PASS attributed stereo native event.");
+                Debug.Log($"[IMM_URP_READBACK] PASS stereo packet and layered resolve at {samples} samples.");
             }
             finally
             {
@@ -105,6 +118,11 @@ namespace ImmPlayer
                 commands.Dispose();
                 target.Release();
                 UnityEngine.Object.Destroy(target);
+                if (resolved != null)
+                {
+                    resolved.Release();
+                    UnityEngine.Object.Destroy(resolved);
+                }
             }
         }
 
