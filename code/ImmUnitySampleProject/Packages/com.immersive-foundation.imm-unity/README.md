@@ -53,15 +53,17 @@ two distinct cameras and camera opt-out; synthetic stereo checks cover one nativ
 scene event for a two-view request. These counters do not prove GPU draw counts
 or actual headset single-pass execution.
 
-`ManagedAllocationMeasured` optionally measures thread-local managed bytes inside
+`ManagedAllocationMeasured` optionally detects managed allocations on the current thread inside
 `AddRenderPasses`, `RecordRenderGraph` and `ExecuteNative`, including transport work
-and any submission listeners they invoke. No allocation-counter reads occur without
-a measurement subscriber. Measurement listeners run after the byte count is read
+and any submission listeners they invoke. No profiler recorders are created without
+a measurement subscriber. Measurement listeners run after recording stops
 and must not allocate or change rendering state. Native/GPU allocations and surrounding
-Unity frame work are outside these scopes. CI calibrates the counter, warms the mono
-pass for 16 frames, then requires zero bytes over at least 32 calls to each callback.
+Unity frame work are outside these scopes. CI calibrates Unity's `GC.Alloc` recorder,
+warms the mono pass for 16 frames, then requires no allocation samples over at least
+32 calls to each callback. A one-sample recorder detects any allocation; it does not
+report total allocated bytes. The CLR thread-allocation counter is unimplemented in IL2CPP.
 The hardware XR probe warms for 32 acknowledged stereo frames, then requires
-zero bytes over at least 64 calls to each callback. Hosted mono and hardware
+no allocation samples over at least 64 calls to each callback. Hosted mono and hardware
 stereo execution of these allocation checks remain outstanding.
 
 ## OpenXR sample builds

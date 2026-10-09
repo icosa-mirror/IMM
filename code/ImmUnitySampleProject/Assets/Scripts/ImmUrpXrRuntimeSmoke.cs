@@ -14,7 +14,7 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
     // Completion listeners run inside measured callbacks; avoid fixture growth there.
     private readonly HashSet<int> submittedFrames = new HashSet<int>(256);
     private readonly int[] allocationSamples = new int[3];
-    private readonly long[] allocatedBytes = new long[3];
+    private readonly int[] allocatingCallbacks = new int[3];
     private ImmUrpSample sample;
     private int firstFrame;
     private bool observing;
@@ -25,13 +25,9 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         var arguments = Environment.GetCommandLineArgs();
         if (Array.IndexOf(arguments, "-immUrpXrSmoke") < 0) yield break;
         Application.runInBackground = true;
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        var calibration = new byte[256];
-        long calibrationBytes = GC.GetAllocatedBytesForCurrentThread() - before;
-        GC.KeepAlive(calibration);
-        if (calibrationBytes < 256)
+        if (!ImmRenderingDiagnostics.CalibrateManagedAllocationMeasurement())
         {
-            Fail("Thread-local allocation counter failed calibration.");
+            Fail("Unity GC.Alloc recorder failed calibration.");
             yield break;
         }
         sample = GetComponent<ImmUrpSample>();
@@ -104,9 +100,9 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         }
         for (int callback = 0; callback < allocationSamples.Length; ++callback)
         {
-            if (allocationSamples[callback] < 64 || allocatedBytes[callback] != 0)
+            if (allocationSamples[callback] < 64 || allocatingCallbacks[callback] != 0)
             {
-                Fail($"Managed allocation check failed: callback={(ImmRenderCallback)callback} samples={allocationSamples[callback]} bytes={allocatedBytes[callback]}.");
+                Fail($"Managed allocation check failed: callback={(ImmRenderCallback)callback} samples={allocationSamples[callback]} allocatingCallbacks={allocatingCallbacks[callback]}.");
                 yield break;
             }
         }
@@ -136,7 +132,7 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
     {
         int index = (int)measurement.Callback;
         ++allocationSamples[index];
-        allocatedBytes[index] += measurement.Bytes;
+        if (measurement.AllocationDetected) ++allocatingCallbacks[index];
     }
 
     private void OnDestroy()

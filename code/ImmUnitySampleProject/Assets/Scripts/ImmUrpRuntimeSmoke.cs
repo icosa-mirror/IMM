@@ -19,7 +19,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
     private Camera attributionCamera;
     private bool captureSubmissions, submissionOverflow;
     private readonly int[] allocationSamples = new int[3];
-    private readonly long[] allocatedBytes = new long[3];
+    private readonly int[] allocatingCallbacks = new int[3];
     private UniversalRenderPipeline.SingleCameraRequest request;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -239,12 +239,8 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
 
     private IEnumerator VerifyManagedAllocations()
     {
-        // Verify this runtime implements the counter before trusting zero readings.
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        var calibration = new byte[256];
-        long calibrationBytes = GC.GetAllocatedBytesForCurrentThread() - before;
-        GC.KeepAlive(calibration);
-        Require(calibrationBytes >= 256, "Thread-local allocation counter failed calibration.");
+        Require(ImmRenderingDiagnostics.CalibrateManagedAllocationMeasurement(),
+            "Unity GC.Alloc recorder failed calibration.");
         // Warm the RenderGraph pools and bounded in-flight transport slots first.
         for (int frame = 0; frame < 16; ++frame)
         {
@@ -252,7 +248,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             RenderPipeline.SubmitRenderRequest(documentCamera, request);
         }
         Array.Clear(allocationSamples, 0, allocationSamples.Length);
-        Array.Clear(allocatedBytes, 0, allocatedBytes.Length);
+        Array.Clear(allocatingCallbacks, 0, allocatingCallbacks.Length);
         ImmRenderingDiagnostics.ManagedAllocationMeasured += OnManagedAllocation;
         try
         {
@@ -264,8 +260,8 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         }
         finally { ImmRenderingDiagnostics.ManagedAllocationMeasured -= OnManagedAllocation; }
         for (int callback = 0; callback < allocationSamples.Length; ++callback)
-            Require(allocationSamples[callback] >= 32 && allocatedBytes[callback] == 0,
-                $"Managed allocation check failed: callback={(ImmRenderCallback)callback} samples={allocationSamples[callback]} bytes={allocatedBytes[callback]}.");
+            Require(allocationSamples[callback] >= 32 && allocatingCallbacks[callback] == 0,
+                $"Managed allocation check failed: callback={(ImmRenderCallback)callback} samples={allocationSamples[callback]} allocatingCallbacks={allocatingCallbacks[callback]}.");
         Debug.Log("[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames).");
     }
 
@@ -273,7 +269,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
     {
         int index = (int)measurement.Callback;
         ++allocationSamples[index];
-        allocatedBytes[index] += measurement.Bytes;
+        if (measurement.AllocationDetected) ++allocatingCallbacks[index];
     }
 
     private IEnumerator VerifySubmissionAttribution()

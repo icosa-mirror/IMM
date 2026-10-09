@@ -1,4 +1,5 @@
 using System;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace ImmPlayer
@@ -31,15 +32,15 @@ namespace ImmPlayer
 
     public enum ImmRenderCallback { AddRenderPasses, RecordRenderGraph, ExecuteNative }
 
-    /// <summary>Thread-local managed bytes allocated inside one IMM pass callback.</summary>
+    /// <summary>Whether any managed allocation occurred inside one IMM pass callback.</summary>
     public readonly struct ImmManagedAllocation
     {
         public ImmRenderCallback Callback { get; }
-        public long Bytes { get; }
-        internal ImmManagedAllocation(ImmRenderCallback callback, long bytes)
+        public bool AllocationDetected { get; }
+        internal ImmManagedAllocation(ImmRenderCallback callback, bool allocationDetected)
         {
             Callback = callback;
-            Bytes = bytes;
+            AllocationDetected = allocationDetected;
         }
     }
 
@@ -67,30 +68,56 @@ namespace ImmPlayer
         /// <summary>
         /// Opt-in measurement of each IMM pass callback, including transport work and
         /// any submission listeners it invokes. Measurement listeners run after the
-        /// byte count is read; they must not allocate or change rendering state.
+        /// recorder is stopped; they must not allocate or change rendering state.
         /// These scopes exclude surrounding Unity frame work and GPU/native allocations.
         /// </summary>
         public static event Action<ImmManagedAllocation> ManagedAllocationMeasured;
 
-        internal readonly struct AllocationScope : IDisposable
+        internal struct AllocationScope : IDisposable
         {
             private readonly Action<ImmManagedAllocation> listener;
             private readonly ImmRenderCallback callback;
-            private readonly long start;
+            private ProfilerRecorder recorder;
             internal AllocationScope(ImmRenderCallback callback)
             {
                 this.callback = callback;
                 listener = ManagedAllocationMeasured;
-                start = listener != null ? GC.GetAllocatedBytesForCurrentThread() : 0;
+                recorder = listener != null ? CreateAllocationRecorder() : default;
+                if (listener != null && !recorder.Valid)
+                    throw new NotSupportedException("Unity GC.Alloc recording is unavailable.");
             }
             public void Dispose()
             {
-                if (listener != null)
-                    listener(new ImmManagedAllocation(callback, GC.GetAllocatedBytesForCurrentThread() - start));
+                if (listener == null) return;
+                recorder.Stop();
+                bool allocated = recorder.Count != 0;
+                recorder.Dispose();
+                listener(new ImmManagedAllocation(callback, allocated));
             }
         }
 
         internal static AllocationScope Measure(ImmRenderCallback callback) => new AllocationScope(callback);
+
+        // One sample is sufficient: any allocation fails the zero-allocation gate.
+        private static ProfilerRecorder CreateAllocationRecorder() => ProfilerRecorder.StartNew(
+            ProfilerCategory.Internal, "GC.Alloc", 1, ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+
+        /// <summary>Verify an empty scope is clean and a known allocation is detected.</summary>
+        public static bool CalibrateManagedAllocationMeasurement()
+        {
+            using (var empty = CreateAllocationRecorder())
+            {
+                if (!empty.Valid) return false;
+                empty.Stop();
+                if (empty.Count != 0) return false;
+            }
+            using var recorder = CreateAllocationRecorder();
+            if (!recorder.Valid) return false;
+            var calibration = new byte[256];
+            recorder.Stop();
+            GC.KeepAlive(calibration);
+            return recorder.Count != 0;
+        }
 
         internal static bool HasSubscribers => SubmissionCompleted != null;
         internal static void Publish(ImmSceneSubmission submission) => SubmissionCompleted?.Invoke(submission);

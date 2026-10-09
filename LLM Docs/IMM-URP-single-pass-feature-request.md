@@ -1588,3 +1588,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     successful native results and camera opt-out assertions remain mandatory. Failure
     messages include actual counts. Isolated runtime/sample compilation passes;
     hosted iOS confirmation remains pending. The original run is still finishing.
+47. **IL2CPP-compatible allocation recorder (local, 2026-10-09):** inspection
+    of Unity 6000.6's installed libil2cpp source found the CLR thread-allocation
+    counter unimplemented. Before pushing the allocation gate, it was replaced
+    with Unity's documented GC.Alloc ProfilerRecorder scoped to the current thread.
+    An empty-scope control must record nothing and a retained 256-byte allocation
+    must produce a sample. Each callback uses a capacity-one recorder: any allocation
+    fails the zero-allocation criterion; this reports detection rather than byte totals.
+    Recording stops before measurement listeners run, and no recorder is created
+    without a subscriber. Mono and XR probes use the same calibration and detection
+    API. Runtime, URP and sample compilation pass locally. Hosted Mono/IL2CPP and
+    hardware confirmation remain pending; this supersedes entry 43's CLR-counter
+    implementation. Source: Unity's CollectOnlyOnCurrentThread scripting example
+    (https://docs.unity.com/en-us/engine/6000.5/script-reference/unity/profiling/profilerrecorderoptions/collectonlyoncurrentthread).
