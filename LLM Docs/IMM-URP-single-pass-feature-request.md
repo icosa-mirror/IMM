@@ -1970,3 +1970,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     locally. Other jobs are still
     running; neither this correction nor the held model/paint changes have hosted
     confirmation, and no new full-green checkpoint is claimed.
+
+73. **Expanded Unity corpus MSAA gate (local, 2026-10-09):** each of the ten
+    loaded documents is now rendered at 1x/2x/4x/8x under both paint techniques.
+    Metal/Vulkan report unsupported counts explicitly, while the required DX12
+    counts fail if unavailable. Supported counts must survive target creation
+    without downgrade. Every surface repeats bidirectional opaque/transparent
+    depth composition, and panoramas repeat the opt-out skybox control at each
+    count. Captures retain fixture, technique and sample count. Sample and
+    Android-conditional compilation pass locally. Hosted execution, quantitative
+    stroke-edge quality and stereo content acceptance remain outstanding.
