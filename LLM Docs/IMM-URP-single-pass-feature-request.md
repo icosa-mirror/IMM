@@ -1989,3 +1989,20 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     native-plugin staging job now executes this probe before publishing its artifact;
     previously it inspected exports only. The local build's copied sample binary was
     restored to the tracked CI binary afterwards. Hosted confirmation remains required.
+
+75. **Actual blend and alpha-test controls (local, 2026-10-09):** review found
+    the previous transparent-queue probe still used opaque replacement blending.
+    The depth probe now supports half opacity with source-alpha blending and a
+    fragment alpha cutoff in both forward and depth-only passes. Mono checks
+    require behind-transparent brightness to match the opaque-far reference within
+    one percent, while front-transparent content remains visible and darkens to
+    between one third and nine tenths of the reference. These broad front limits
+    accept linear/sRGB encodings but reject opaque replacement and no blending.
+    Two alpha-test phases require a discarded foreground quad to leave content
+    visible and a covered foreground quad to occlude it. The XR harness applies
+    the same controls separately to both eyes, with ten percent behind-reference
+    tolerance for pose movement between readbacks, and retains seven phase pairs.
+    Mono and Android-conditional C# compilation and VR probe contract checks pass.
+    Shader compilation, rendered mono checks and hardware per-eye results remain
+    unverified. Older opaque transparent-queue results establish depth ordering
+    only, not transparent blending acceptance.
