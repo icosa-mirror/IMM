@@ -2032,7 +2032,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
-          key: UnityAndroidOpenXRQuestShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+          key: UnityAndroidOpenXRQuestShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
 
       - name: Restore Unity Android OpenXR Quest Library cache
         id: cache_unity_android_quest_library
@@ -2156,7 +2156,7 @@ jobs:
           path: |
             .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
             .ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk
-          key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+          key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
 
       - name: Restore Unity Android Library cache
         id: cache_unity_android_library
