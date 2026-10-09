@@ -62,6 +62,8 @@ Unity frame work are outside these scopes. CI calibrates Unity's `GC.Alloc` reco
 warms the mono pass for 16 frames, then requires no allocation samples over at least
 32 calls to each callback. A one-sample recorder detects any allocation; it does not
 report total allocated bytes. The CLR thread-allocation counter is unimplemented in IL2CPP.
+Allocation probes require a working `GC.Alloc` marker (CI uses Development players);
+failed calibration must not be interpreted as zero allocations.
 The hardware XR probe warms for 32 acknowledged stereo frames, then requires
 no allocation samples over at least 64 calls to each callback. Hosted mono and hardware
 stereo execution of these allocation checks remain outstanding.

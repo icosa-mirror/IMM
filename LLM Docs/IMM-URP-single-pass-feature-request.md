@@ -29,9 +29,10 @@ automating headset VR validation does not exempt non-VR changes from CI.
    passed, including Windows DX12 composition, Windows Vulkan GPU readback, macOS
    Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation.
    The strict Windows Vulkan probe reports validation enabled and zero validation errors.
-   Newer attribution run `37974039216` reports Windows native-test and Unity iOS
-   attribution-fixture failures. Local corrections are recorded in entries 44 and 46;
-   hosted confirmation is pending, so this remains the last confirmed full-green source.
+   Newer attribution run `37974039216` completed with Windows native-test and Unity iOS
+   attribution-fixture failures; skipped downstream jobs left validation evidence incomplete.
+   Local corrections are recorded in entries 44 and 46. Hosted confirmation is pending,
+   so this remains the last confirmed full-green source.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
@@ -1601,3 +1602,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     hardware confirmation remain pending; this supersedes entry 43's CLR-counter
     implementation. Source: Unity's CollectOnlyOnCurrentThread scripting example
     (https://docs.unity.com/en-us/engine/6000.5/script-reference/unity/profiling/profilerrecorderoptions/collectonlyoncurrentthread).
+48. **Attribution run completed (2026-10-09):** full run 37974039216 is terminal
+    at source 2365ffb1. Windows native player smoke and Unity iOS attribution smoke
+    fail as described in entries 44 and 46; those corrections are committed locally.
+    Validation Evidence also fails because failed/skipped lanes leave required
+    evidence failed or missing. There are 14 successful, 10 skipped and 3 failed
+    jobs; this is not a full-green checkpoint. The Windows runtime-harness migration,
+    allocation gates with IL2CPP-compatible recording, stereo MSAA checks and the
+    two corrections are ready for the next full run. The goal remains incomplete,
+    including hosted software acceptance, complete stereo content/depth composition,
+    Quest Unity runtime-harness coverage and actual headset/per-eye/GPU draw evidence.
