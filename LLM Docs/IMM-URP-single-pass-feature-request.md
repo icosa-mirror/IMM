@@ -1679,3 +1679,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     CI requires a separate directional completion marker. This extends entry 52
     to 80 paint cases; wiggle/draw-in, Unity stereo composition and hosted/device
     confirmation remain outstanding.
+54. **Animated Vulkan paint shader parity (local, 2026-10-09):** 48 further
+    readbacks select wiggle, draw-in and their combination for every authorable
+    brush, storage path and colour space. Authored point times, a draw-in key,
+    nonzero wiggle amplitude and frame time exercise the variant selection.
+    The fixtures now initialize the complete Layer state before setting their
+    stack-owned implementations and release the wrapper separately afterwards,
+    avoiding uninitialized animation parameters. All 128 paint cases and the
+    existing picture/model/adapter probes pass; the complete four-test suite
+    takes approximately four seconds with Vulkan validation enabled and no
+    errors. CI requires the animated-variant marker. This proves mono/stereo
+    parity of the existing variants, not new animation semantics: the shared
+    pretessellated GLSL draw-in body remains inactive. Hosted confirmation,
+    model-input expansion, Unity stereo composition and headset evidence remain
+    outstanding.

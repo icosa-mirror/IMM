@@ -356,7 +356,7 @@ static double RunLayerMultiviewReadback(Host& host, ImmCore::piRendererVulkan& r
     float opacity = 1, bool differentRightSource = false, bool samplePeak = false)
 {
     using namespace ImmCore;
-    float frame[4] = {}, display[36] = {};
+    float frame[4] = {.5f, 0, 0, 0}, display[36] = {};
     for (int eye = 0; eye < 2; ++eye) for (int axis = 0; axis < 4; ++axis) display[eye * 16 + axis * 5] = 1;
     display[3] = -.2f; display[19] = .2f; display[32] = display[33] = Size;
     const int passData[4] = {};
@@ -497,6 +497,9 @@ static void RunPictureMultiviewProbe(Host& host, ImmCore::piRendererVulkan& rend
         throw std::runtime_error("Load multiview picture asset");
     encoded.End(); image.Free();
     ImmImporter::Layer layer(nullptr, nullptr, 0);
+    if (!layer.Init(ImmImporter::Layer::Type::Picture, L"multiview picture", true,
+        trans3d::identity(), trans3d::identity(), 1, false, piTick(1), 1, 0, &log, false))
+        throw std::runtime_error("Initialize multiview picture layer state");
     layer.SetImplementation(&picture); layer.SetLoaded(true);
     ImmPlayer::LayerRendererPicture pictures;
     if (!pictures.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true) ||
@@ -507,11 +510,12 @@ static void RunPictureMultiviewProbe(Host& host, ImmCore::piRendererVulkan& rend
         "IMM_VULKAN_MULTIVIEW_PICTURE", pictureFormat, colorSpace, 1, pictureFormat == 1);
     pictures.UnloadInGPU(&renderer, nullptr, &log, &layer); pictures.UnloadInCPU(&log, &layer);
     pictures.Deinit(&renderer, &log); picture.Deinit();
+    layer.SetLoaded(false); layer.Deinit(&log);
 }
 
 template<class LayerType, class DrawingType, class RendererType>
 static double RunPaintMultiviewProbe(Host& host, ImmCore::piRendererVulkan& renderer,
-    ImmCore::piLog& log, int storage, int brush, int colorSpace, float opacity, int direction = 0)
+    ImmCore::piLog& log, int storage, int brush, int colorSpace, float opacity, int direction = 0, int effects = 0)
 {
     using namespace ImmCore;
     LayerType paint;
@@ -525,6 +529,7 @@ static double RunPaintMultiviewProbe(Host& host, ImmCore::piRendererVulkan& rend
         points[i].mPos = vec3(i ? .6f : -.6f, 0, .5f);
         points[i].mNor = vec3(0, 0, 1); points[i].mDir = vec3(direction < 0 ? -1.0f : 1.0f, 0, 0);
         points[i].mCol = vec3(.25f); points[i].mAlpha = 1; points[i].mWidth = .5f;
+        points[i].mTime = static_cast<float>(i);
     }
     if (!element->Set(points, 2, static_cast<ImmImporter::Element::BrushSectionType>(brush),
         direction ? ImmImporter::Element::VisibilityType::FadePow2 : ImmImporter::Element::VisibilityType::Always, 1) ||
@@ -532,16 +537,35 @@ static double RunPaintMultiviewProbe(Host& host, ImmCore::piRendererVulkan& rend
         throw std::runtime_error("Generate multiview paint geometry");
     drawing->StopAdding(); drawing->SetLoaded(true);
     ImmImporter::Layer layer(nullptr, nullptr, 0);
+    if (!layer.Init(ImmImporter::Layer::Type::Paint, L"multiview paint", true,
+        trans3d::identity(), trans3d::identity(), 1, false, piTick(1), 1, 0, &log, false))
+        throw std::runtime_error("Initialize multiview paint layer state");
     layer.SetImplementation(&paint); layer.SetLoaded(true);
+    if (effects & 1) {
+        auto* keepAlive = layer.GetKeepAlive();
+        if (!keepAlive->Init(ImmImporter::KeepAlive::KeepAliveType::Wiggle))
+            throw std::runtime_error("Initialize paint wiggle fixture");
+        // The importer exposes authored effect data through a const accessor.
+        // This fixture owns the object and supplies the decoded asset values.
+        *const_cast<ImmImporter::KeepAlive::Wiggle*>(keepAlive->GetDataWiggle()) = {2, .5f, .03f};
+    }
+    if (effects & 2) {
+        ImmImporter::Layer::AnimValue value; value.init(); value.mDouble = .75;
+        if (!layer.AddKey(piTick(0), ImmImporter::Layer::AnimProperty::DrawInTime,
+            value, ImmImporter::Layer::InterpolationType::Linear))
+            throw std::runtime_error("Initialize paint draw-in fixture");
+        layer.SetDrawInTime(.75);
+    }
     RendererType paintRenderer;
     if (!paintRenderer.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true) ||
         !paintRenderer.LoadInCPU(&log, &layer) || !paintRenderer.LoadInGPU(&renderer, nullptr, &log, &layer))
         throw std::runtime_error("Load production multiview paint renderer");
-    std::printf("IMM_VULKAN_MULTIVIEW_PAINT visibility direction=%d storage=%d brush=%d\n", direction, storage, brush);
+    std::printf("IMM_VULKAN_MULTIVIEW_PAINT visibility direction=%d effects=%d storage=%d brush=%d\n", direction, effects, storage, brush);
     const double centroid = RunLayerMultiviewReadback(host, renderer, log, paintRenderer, layer, trans3d::identity(),
         "IMM_VULKAN_MULTIVIEW_PAINT", storage * 5 + brush, colorSpace, opacity, false, true);
     paintRenderer.UnloadInGPU(&renderer, nullptr, &log, &layer);
     paintRenderer.UnloadInCPU(&log, &layer); paintRenderer.Deinit(&renderer, &log); paint.Deinit();
+    layer.SetLoaded(false); layer.Deinit(&log);
     return centroid;
 }
 
@@ -663,11 +687,21 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
             if (pretessForward - pretessReverse < 10 || staticForward - staticReverse < 10)
                 throw std::runtime_error("Multiview paint ignored reversed authored facing");
         }
+    for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
+        for (int brush = static_cast<int>(ImmImporter::Element::BrushSectionType::Segment);
+            brush < static_cast<int>(ImmImporter::Element::BrushSectionType::Count); ++brush)
+            for (int effects = 1; effects < 4; ++effects) {
+                RunPaintMultiviewProbe<ImmImporter::LayerPaintPretessellated, ImmImporter::DrawingPretessellated,
+                    ImmPlayer::LayerRendererPaintPretessellated>(host, renderer, log, 0, brush, colorSpace, 1, 0, effects);
+                RunPaintMultiviewProbe<ImmImporter::LayerPaintStatic, ImmImporter::DrawingStatic,
+                    ImmPlayer::LayerRendererPaintStatic>(host, renderer, log, 1, brush, colorSpace, 1, 0, effects);
+            }
     renderer.Deinitialize();
     if (host.validationErrors.load() != 0) throw std::runtime_error("Borrowed multiview Vulkan validation errors");
     std::puts("IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback");
     std::puts("IMM_VULKAN_MULTIVIEW_PICTURE PASS five formats in two color spaces with matched mono draws");
     std::puts("IMM_VULKAN_MULTIVIEW_PAINT PASS both storage paths and four authorable brushes in two color spaces at three opacities");
     std::puts("IMM_VULKAN_MULTIVIEW_PAINT PASS directional facing in both storage paths and color spaces");
+    std::puts("IMM_VULKAN_MULTIVIEW_PAINT PASS wiggle and draw-in shader variants with mono parity");
     RunUnityAdapterProbe(host);
 }
