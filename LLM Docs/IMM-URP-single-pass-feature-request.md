@@ -35,8 +35,11 @@ automating headset VR validation does not exempt non-VR changes from CI.
    not establish complete all-layer composition through Unity or Android.
 3. The borrowed-device multiview boundary and Unity Vulkan two-view adapter are
    implemented, with local validation-layer GPU readbacks (entries 34–35). The
-   hosted GPU probe rendered both slices, but its strict validation-layer gate
-   failed layer discovery. A runner registration fix awaits hosted verification.
+   first hosted GPU probe rendered both slices but failed layer discovery. The
+   next run stopped in the earlier mono paint checks; local validation of its
+   executable exposed descriptors referencing deleted buffer wrappers. Clearing
+   destroyed buffers from binding arrays fixes those validation errors locally
+   (entry 36). Full hosted confirmation remains required.
    Next: establish full CI validation, then verify actual Unity/Quest integration.
    Windows OpenXR execution, all-content multiview, MSAA/depth composition and
    headset per-eye/one-pass acceptance remain required.
@@ -1447,3 +1450,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     from the generator and regenerated SPIR-V. CI now requires the adapter proof
     marker as well as the model multiview and validation-enabled markers. This
     is native adapter evidence, not actual Unity/OpenXR or Quest acceptance.
+36. **Destroyed Vulkan buffer bindings (local, 2026-10-09):** the hosted probe
+    stopped during mono packed-paint checks before the multiview tests. Forcing
+    validation for the downloaded executable reproduced invalid buffer descriptor
+    references locally: deleted wrappers remained in constant/storage binding
+    arrays. `DestroyBuffer` now clears matching bindings before deleting the CPU
+    wrapper, independently of deferred GPU allocation retirement. All four local
+    tests pass with validation forced for the entire probe, with no validation
+    errors. CI likewise forces the layer for mono and multiview checks, rejects
+    validation errors and records the native exit code on failure. Hosted
+    confirmation and the remaining acceptance criteria are still outstanding.

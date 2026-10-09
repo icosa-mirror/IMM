@@ -10824,6 +10824,15 @@ void piRendererVulkan::CreateBufferMapped_End(piBuffer vme)
 void piRendererVulkan::DestroyBuffer(piBuffer obj)
 {
     if (!obj) return;
+    if (mState)
+    {
+        // GPU retirement may retain the allocation, but subsequent draws must
+        // never dereference this CPU wrapper after it has been deleted.
+        for (auto& buffer : mState->constantBuffers)
+            if (buffer == obj) buffer = nullptr;
+        for (auto& buffer : mState->shaderBuffers)
+            if (buffer == obj) buffer = nullptr;
+    }
     if (mState && mState->device != VK_NULL_DEVICE)
     {
         piVulkanHostRetiredResource resource;
