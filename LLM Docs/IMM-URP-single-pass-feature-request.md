@@ -1553,3 +1553,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     This is
     a managed pass-callback check, not a whole-Unity-frame or native/GPU allocation
     claim. Attribution validation run 37974039216 remains the preceding CI gate.
+44. **Attribution CI regression correction (local, 2026-10-09):** run
+    37974039216 reports a Windows native player smoke failure at graph-session
+    initialization. After its invalid-version check, the fixture reset the packet
+    to literal ABI v2, so the new v3 guard correctly rejected it. The reset now
+    uses ImmRenderGraphPacketVersion. A fresh isolated D3D12 build and both local
+    readback tests pass, including the failed player/RenderGraph path (2/2 tests).
+    No old-packet compatibility path was added. Other jobs in that full run remain
+    in progress; hosted confirmation and the next two local feature increments
+    remain pending. The last confirmed full-green checkpoint is still entry 40.

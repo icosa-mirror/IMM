@@ -676,7 +676,7 @@ int main()
         packet.version = 99;
         if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG || graph.ready)
             throw std::runtime_error("Graph accepted unknown packet ABI");
-        packet.version = 2;
+        packet.version = ImmRenderGraphPacketVersion;
         packet.viewCount = 3;
         if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG || graph.ready)
             throw std::runtime_error("Graph accepted unsupported view count");
