@@ -247,8 +247,14 @@ jobs:
         timeout-minutes: 2
         shell: pwsh
         run: |
+          $env:VK_LAYER_PATH = (Resolve-Path artifacts/vulkan-model-probe).Path
           & .\artifacts\vulkan-model-probe\imm_vulkan_model_smoke.exe *> artifacts\windows-standalone-vulkan\model-readback.log
           if ($LASTEXITCODE -ne 0) { throw "Vulkan model readback failed; see model-readback.log" }
+          foreach ($marker in @('IMM_VULKAN_MULTIVIEW validation=enabled', 'IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback')) {
+            if (-not (Select-String -LiteralPath artifacts/windows-standalone-vulkan/model-readback.log -SimpleMatch $marker -Quiet)) {
+              throw "Vulkan multiview probe missing required marker: $marker"
+            }
+          }
 
       - name: Capture DirectX baseline
         shell: pwsh

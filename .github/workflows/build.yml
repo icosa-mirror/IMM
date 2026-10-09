@@ -82,6 +82,9 @@ jobs:
         if ($LASTEXITCODE -ne 0) { throw "Configure Vulkan model probe failed" }
         cmake --build artifacts/vulkan-model-tests --config Release --target imm_vulkan_model_smoke
         if ($LASTEXITCODE -ne 0) { throw "Build Vulkan model probe failed" }
+        foreach ($validationFile in @('VkLayer_khronos_validation.dll', 'VkLayer_khronos_validation.json')) {
+          Copy-Item -LiteralPath (Join-Path $env:VULKAN_SDK "Bin/$validationFile") -Destination artifacts/vulkan-model-tests/Release
+        }
 
     - name: Upload Vulkan model readback probe
       uses: actions/upload-artifact@v4
@@ -90,6 +93,7 @@ jobs:
         path: |
           artifacts/vulkan-model-tests/Release/imm_vulkan_model_smoke.exe
           artifacts/vulkan-model-tests/Release/*.dll
+          artifacts/vulkan-model-tests/Release/VkLayer_khronos_validation.json
         if-no-files-found: error
 
     - name: Validate D3D12 submission and GPU readback
