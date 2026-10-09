@@ -54,6 +54,17 @@ namespace ImmPlayer
         public static event Action<ImmSceneSubmission> SubmissionCompleted;
 
         /// <summary>
+        /// Poll native acknowledgements on the main thread. Rendering normally polls
+        /// automatically; an idle diagnostic fixture must poll explicitly after its
+        /// GPU readback completes. This does not wait for GPU work or submit a scene.
+        /// </summary>
+        public static void PollCompletions()
+        {
+            var transport = ImmRenderGraphSession.Current?.Transport;
+            if (transport != null && !transport.IsDisposed) transport.Poll();
+        }
+
+        /// <summary>
         /// Opt-in measurement of each IMM pass callback, including transport work and
         /// any submission listeners it invokes. Measurement listeners run after the
         /// byte count is read; they must not allocate or change rendering state.

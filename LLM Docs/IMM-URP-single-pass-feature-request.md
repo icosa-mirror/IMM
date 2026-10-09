@@ -29,6 +29,9 @@ automating headset VR validation does not exempt non-VR changes from CI.
    passed, including Windows DX12 composition, Windows Vulkan GPU readback, macOS
    Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation.
    The strict Windows Vulkan probe reports validation enabled and zero validation errors.
+   Newer attribution run `37974039216` reports Windows native-test and Unity iOS
+   attribution-fixture failures. Local corrections are recorded in entries 44 and 46;
+   hosted confirmation is pending, so this remains the last confirmed full-green source.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
@@ -1573,3 +1576,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     extends attachment/resolve coverage, not complete per-format stereo rendering,
     Unity stereo depth composition, edge-quality or headset acceptance. No shared
     renderer behavior or other platform path changes in this increment.
+46. **iOS attribution polling correction (local, 2026-10-09):** run
+    37974039216 passes the iOS mono scene/MSAA/depth checks but fails the new
+    attributed-event assertion. The fixture read back both rendered camera images,
+    then assumed idle frames would poll completed packets. Camera-free maintenance
+    is only issued for pending unload work, so that assumption was invalid. An
+    explicit main-thread PollCompletions diagnostic entry point now polls native
+    acknowledgements after readback without rendering or waiting; the fixture also
+    drains older acknowledgements before each capture phase. Arbitrary three-frame
+    waiting was removed. Exact per-camera/per-frame counts, distinct rendered views,
+    successful native results and camera opt-out assertions remain mandatory. Failure
+    messages include actual counts. Isolated runtime/sample compilation passes;
+    hosted iOS confirmation remains pending. The original run is still finishing.

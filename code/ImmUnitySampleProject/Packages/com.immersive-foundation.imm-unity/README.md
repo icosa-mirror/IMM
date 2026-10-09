@@ -44,6 +44,8 @@ two-view XR pass uses `0`. Direct transport probes can have a null camera.
 Callbacks run during completion polling: do not queue or dispose sessions from
 a callback. Avoid allocating in listeners during performance measurements.
 With no subscribers, the transport skips diagnostic record construction.
+Idle diagnostic fixtures should call `PollCompletions()` on the main thread after
+their GPU readback completes; it polls acknowledgements without waiting or rendering.
 
 This requires packet ABI version 3 (496 bytes). Ship matching managed and native
 plugin revisions; older packet layouts are rejected. Automated mono checks cover

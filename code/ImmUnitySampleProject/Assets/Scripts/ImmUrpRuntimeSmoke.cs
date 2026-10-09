@@ -298,6 +298,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             for (int phase = 0; phase < 2; ++phase)
             {
                 optIn.enabled = phase == 0;
+                ImmRenderingDiagnostics.PollCompletions();
                 sceneSubmissions.Clear();
                 submissionOverflow = false;
                 captureSubmissions = true;
@@ -310,11 +311,11 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     RenderPipeline.SubmitRenderRequest(documentCamera, request);
                     RenderPipeline.SubmitRenderRequest(attributionCamera, otherRequest);
                 }
-                // Readback drains the submitted GPU work; camera-free maintenance
-                // then polls acknowledgements without introducing extra scene events.
+                // Readback drains submitted GPU work. Idle cameras need not invoke
+                // another pass, so explicitly poll acknowledgements afterwards.
                 var mainPixels = ReadTargetPixels(target, $"attributed-main-{phase}");
                 var otherPixels = ReadTargetPixels(otherTarget, $"attributed-other-{phase}");
-                for (int frame = 0; frame < 3; ++frame) yield return null;
+                ImmRenderingDiagnostics.PollCompletions();
                 captureSubmissions = false;
                 Require(!submissionOverflow, "Submission attribution fixture overflowed.");
                 int mainVisible = 0, otherVisible = 0, changed = 0;
@@ -329,10 +330,12 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     $"Attributed main camera visibility differs: optIn={phase == 0} visible={mainVisible}.");
                 for (int frame = firstFrame; frame <= lastFrame; ++frame)
                 {
-                    Require(CountSceneEvents(documentCamera, frame) == (phase == 0 ? 1 : 0),
-                        $"Main camera submission count differs at frame {frame}, optIn={phase == 0}.");
-                    Require(CountSceneEvents(attributionCamera, frame) == 1,
-                        $"Second camera submission count differs at frame {frame}.");
+                    int mainEvents = CountSceneEvents(documentCamera, frame);
+                    int otherEvents = CountSceneEvents(attributionCamera, frame);
+                    Require(mainEvents == (phase == 0 ? 1 : 0),
+                        $"Main camera submission count differs at frame {frame}, optIn={phase == 0}, actual={mainEvents}, observations={sceneSubmissions.Count}.");
+                    Require(otherEvents == 1,
+                        $"Second camera submission count differs at frame {frame}, actual={otherEvents}, observations={sceneSubmissions.Count}.");
                 }
             }
             Debug.Log("[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out.");
