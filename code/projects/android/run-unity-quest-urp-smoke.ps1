@@ -74,10 +74,21 @@ try {
     if (!(Test-Path -LiteralPath $capturePath) -or (Get-Item -LiteralPath $capturePath).Length -eq 0) {
         throw 'Unity Quest URP mirror capture is missing'
     }
+    $eyeDirectoryName = "imm-urp-xr-$runId"
+    $eyeDirectory = Join-Path $evidenceDir $eyeDirectoryName
+    Invoke-ProbeAdb -AdbArguments @('pull', "/sdcard/Android/data/$PackageName/files/$eyeDirectoryName", $eyeDirectory) | Out-Null
+    foreach ($phase in 0..4) {
+        foreach ($eye in 0..1) {
+            $eyePath = Join-Path $eyeDirectory "depth-$phase-eye-$eye.png"
+            if (!(Test-Path -LiteralPath $eyePath) -or (Get-Item -LiteralPath $eyePath).Length -eq 0) {
+                throw "Unity Quest URP per-eye capture is missing: depth-$phase-eye-$eye.png"
+            }
+        }
+    }
     [ordered]@{ result = 'success'; run_id = $runId; renderer = 'Vulkan';
-        capture = 'quest-mirror.png'; log = 'logcat.txt' } |
+        capture = 'quest-mirror.png'; per_eye_directory = $eyeDirectoryName; log = 'logcat.txt' } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidenceDir 'probe-result.json')
-    Write-Output "Unity Quest URP submission/allocation probe passed: $evidenceDir"
+    Write-Output "Unity Quest URP submission/allocation/stereo-depth probe passed: $evidenceDir"
 } finally {
     # Only stop the package instance launched above, never an unrelated app or device.
     if ($ownedLaunch) {

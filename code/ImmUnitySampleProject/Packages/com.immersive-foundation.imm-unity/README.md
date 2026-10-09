@@ -83,16 +83,21 @@ On a Windows runner with an active OpenXR headset session, launch
 `ImmUnityOpenXR.exe -force-d3d12 -immUrpXrSmoke -immUrpXrCapturePath "<absolute PNG path>"`.
 The opt-in hardware probe waits for a loaded document and running stereo display,
 requires one display pass with two views and 120 distinct camera-attributed stereo
-frames with one successful native scene event each, writes a mirror capture and
-exits. Failure or timeout exits with an error. The Windows hardware CI lane runs
-this same-commit player instead of the legacy Editor scene. Mirror/submission
-evidence still requires separate per-eye visual and GPU draw-count acceptance.
+frames with one successful native scene event each, then reads both layers of
+the actual XR colour target. It checks visible baseline content and Unity opaque
+and transparent geometry in front of/behind IMM in both eyes. Ten per-eye PNGs
+are written under `imm-urp-xr-<run ID>` beside the mirror capture before exit.
+Failure or timeout exits with an error. The Windows hardware CI lane runs this
+same-commit player instead of the legacy Editor scene. This prepared probe still
+needs hardware execution; its depth checks do not replace visual/MSAA edge
+acceptance or GPU draw-count evidence.
 
 For Quest, run `code/projects/android/run-unity-quest-urp-smoke.ps1 -Apk <Quest APK>`
 from the repository root, optionally adding `-Serial <ADB serial>`. It requires an
 authorized, awake headset and an inactive Unity sample. The harness installs the
 specified APK, launches the same probe through Unity's Android intent arguments,
-uses a unique run ID to reject stale logs, pulls a mirror PNG and stops its own
+uses a unique run ID to reject stale logs, pulls a mirror PNG and all ten per-eye
+depth PNGs, and stops its own
 sample instance afterwards. It preserves shared logcat buffers. The gated
 `Unity Quest URP OpenXR VR` CI lane downloads the same-commit APK and retains
 correlated logs, capture and manifest. Both XR matrix rows remain deferred pending

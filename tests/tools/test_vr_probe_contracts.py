@@ -30,6 +30,10 @@ def main() -> int:
             "[IMM_URP_XR_SMOKE] FAIL",
             "-immUrpXrRunId",
             "run={runId}",
+            "VerifyStereoDepthComposition",
+            "display.GetRenderTextureForRenderPass(0)",
+            "readback.GetData<Color32>(eye)",
+            "PASS stereo Unity opaque and transparent depth composition.",
         ],
         ROOT / "code/projects/android/run-unity-quest-urp-smoke.ps1": [
             "com.ImmersiveFoundation.IMMUnityTest",
@@ -40,7 +44,15 @@ def main() -> int:
             "PASS api=Vulkan",
             "probe.log",
             "quest-mirror.png",
+            "per_eye_directory = $eyeDirectoryName",
             "if ($ownedLaunch)",
+        ],
+        ROOT / "code/ImmUnitySampleProject/Assets/Resources/ImmUrpDepthProbe.shader": [
+            "#pragma multi_compile_instancing",
+            "UNITY_VERTEX_INPUT_INSTANCE_ID",
+            "UNITY_VERTEX_OUTPUT_STEREO",
+            "UNITY_SETUP_INSTANCE_ID(input)",
+            "UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output)",
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Editor/ImmUrpXrBuild.cs": [
             "BuildAndroidOpenXRQuestPlayer",

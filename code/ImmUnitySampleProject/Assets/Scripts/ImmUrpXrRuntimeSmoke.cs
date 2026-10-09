@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using ImmPlayer;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.XR;
 
@@ -118,6 +119,25 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
             }
         }
         Debug.Log($"[IMM_URP_XR_SMOKE] PASS zero managed allocations in warmed stereo IMM pass callbacks (64 samples minimum). run={runId}");
+        var depthProbe = VerifyStereoDepthComposition(display, Path.GetDirectoryName(capturePath));
+        try
+        {
+            while (true)
+            {
+                bool next = false;
+                Exception probeError = null;
+                try { next = depthProbe.MoveNext(); }
+                catch (Exception error) { probeError = error; }
+                if (probeError != null)
+                {
+                    Fail($"Stereo depth probe failed: {probeError.Message}");
+                    yield break;
+                }
+                if (!next) break;
+                yield return depthProbe.Current;
+            }
+        }
+        finally { (depthProbe as IDisposable)?.Dispose(); }
         // Capture after allocation measurement; write synchronously so Android's
         // asynchronous screenshot writer cannot race the probe's successful exit.
         yield return new WaitForEndOfFrame();
@@ -144,6 +164,115 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         Debug.Log($"[IMM_URP_XR_SMOKE] PASS api={expectedApi} attributedStereoFrames={submittedFrames.Count} nativeSceneEventsPerFrame=1 displayPasses=1 views=2 capture={capturePath} run={runId}");
         // This proves submission/layout, not per-eye visual correctness or GPU draw counts.
         Application.Quit(0);
+    }
+
+    private IEnumerator VerifyStereoDepthComposition(XRDisplaySubsystem display, string captureRoot)
+    {
+        var shader = Resources.Load<Shader>("ImmUrpDepthProbe");
+        Require(shader != null && shader.isSupported, "Stereo depth probe shader is unavailable.");
+        var material = new Material(shader);
+        var mesh = new Mesh
+        {
+            vertices = new[]
+            {
+                new Vector3(-.5f, -.5f, 0), new Vector3(.5f, -.5f, 0),
+                new Vector3(-.5f, .5f, 0), new Vector3(.5f, .5f, 0)
+            },
+            triangles = new[] { 0, 2, 1, 2, 3, 1 }
+        };
+        mesh.RecalculateBounds();
+        var quad = new GameObject("IMM XR stereo depth probe", typeof(MeshFilter), typeof(MeshRenderer));
+        quad.GetComponent<MeshFilter>().sharedMesh = mesh;
+        quad.GetComponent<MeshRenderer>().sharedMaterial = material;
+        var bounds = sample.Document.GetBoundingBox();
+        float radius = Mathf.Max(bounds.extents.magnitude, .1f);
+        quad.transform.localScale = Vector3.one * radius * 4;
+        string captureDirectory = Path.Combine(captureRoot, $"imm-urp-xr-{runId}");
+        Directory.CreateDirectory(captureDirectory);
+        try
+        {
+            for (int phase = 0; phase < 5; ++phase)
+            {
+                bool transparent = phase >= 3;
+                bool near = phase == 1 || phase == 4;
+                quad.SetActive(phase != 0);
+                material.renderQueue = (int)(transparent ? RenderQueue.Transparent : RenderQueue.Geometry);
+                material.SetFloat("_ZWrite", transparent ? 0 : 1);
+                quad.transform.SetPositionAndRotation(bounds.center + sample.DocumentCamera.transform.forward *
+                    (near ? -2 : 2) * radius, sample.DocumentCamera.transform.rotation);
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                var visible = new int[2];
+                var capture = CaptureStereoEyes(display, captureDirectory, phase, visible);
+                try { while (capture.MoveNext()) yield return capture.Current; }
+                finally { (capture as IDisposable)?.Dispose(); }
+                for (int eye = 0; eye < 2; ++eye)
+                    Require(near ? visible[eye] == 0 : visible[eye] > 100,
+                        $"Stereo depth composition failed: phase={phase} transparent={transparent} near={near} eye={eye} visible={visible[eye]}.");
+                Debug.Log($"[IMM_URP_XR_SMOKE] depth phase={phase} transparent={transparent} near={near} visible={visible[0]},{visible[1]} run={runId}");
+            }
+            Debug.Log($"[IMM_URP_XR_SMOKE] PASS stereo Unity opaque and transparent depth composition. run={runId}");
+        }
+        finally
+        {
+            quad.SetActive(false);
+            Destroy(quad); Destroy(mesh); Destroy(material);
+        }
+    }
+
+    private IEnumerator CaptureStereoEyes(XRDisplaySubsystem display, string directory, int phase, int[] visible)
+    {
+        yield return new WaitForEndOfFrame();
+        Require(display.running && display.GetRenderPassCount() == 1, "XR display changed during stereo capture.");
+        var source = display.GetRenderTextureForRenderPass(0);
+        Require(source != null && source.dimension == TextureDimension.Tex2DArray && source.volumeDepth == 2,
+            "XR pass does not expose its two-layer colour target for readback.");
+        var descriptor = source.descriptor;
+        descriptor.depthStencilFormat = GraphicsFormat.None;
+        descriptor.msaaSamples = 1;
+        descriptor.bindMS = false;
+        descriptor.memoryless = RenderTextureMemoryless.None;
+        descriptor.useDynamicScale = false;
+        descriptor.vrUsage = VRTextureUsage.None;
+        var snapshot = new RenderTexture(descriptor);
+        var commands = new CommandBuffer { name = "IMM XR per-eye depth evidence" };
+        try
+        {
+            Require(snapshot.Create(), "Could not create the XR readback snapshot.");
+            if (source.antiAliasing > 1) commands.ResolveAntiAliasedSurface(source, snapshot);
+            else commands.CopyTexture(source, snapshot);
+            Graphics.ExecuteCommandBuffer(commands);
+            var readback = AsyncGPUReadback.Request(snapshot, 0, TextureFormat.RGBA32);
+            float deadline = Time.realtimeSinceStartup + 15;
+            while (!readback.done && Time.realtimeSinceStartup < deadline) yield return null;
+            Require(readback.done, "XR stereo target readback timed out.");
+            Require(!readback.hasError, "XR stereo target readback failed.");
+            for (int eye = 0; eye < 2; ++eye)
+            {
+                var pixels = readback.GetData<Color32>(eye);
+                Require(pixels.Length == snapshot.width * snapshot.height, "Unexpected XR eye readback dimensions.");
+                for (int pixel = 0; pixel < pixels.Length; ++pixel)
+                    if (pixels[pixel].r + pixels[pixel].g + pixels[pixel].b > 12) ++visible[eye];
+                var image = new Texture2D(snapshot.width, snapshot.height, TextureFormat.RGBA32, false, true);
+                try
+                {
+                    image.SetPixelData(pixels, 0);
+                    image.Apply(false, false);
+                    byte[] encoded = image.EncodeToPNG();
+                    Require(encoded != null && encoded.Length > 0, "Could not encode XR eye evidence.");
+                    File.WriteAllBytes(Path.Combine(directory, $"depth-{phase}-eye-{eye}.png"), encoded);
+                }
+                finally { Destroy(image); }
+            }
+        }
+        finally
+        {
+            commands.Dispose(); snapshot.Release(); Destroy(snapshot);
+        }
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
     }
 
     private void OnSubmission(ImmSceneSubmission submission)

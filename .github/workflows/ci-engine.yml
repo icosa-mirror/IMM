@@ -2698,6 +2698,7 @@ jobs:
           --log artifacts/unity-quest-urp/probe.log
           --label unity-quest-urp
           --require "[IMM_URP_XR_SMOKE] PASS api=Vulkan"
+          --require "[IMM_URP_XR_SMOKE] PASS stereo Unity opaque and transparent depth composition."
           --require "nativeSceneEventsPerFrame=1 displayPasses=1 views=2"
           --require "[IMM_URP_XR_SMOKE] PASS zero managed allocations in warmed stereo IMM pass callbacks (64 samples minimum)."
           --forbid "[IMM_URP_XR_SMOKE] FAIL"
@@ -2788,6 +2789,7 @@ jobs:
           --log artifacts\unity-windows-openxr-vr\unity-player.log
           --label unity-windows-openxr-vr
           --require "[IMM_URP_XR_SMOKE] PASS api=Direct3D12"
+          --require "[IMM_URP_XR_SMOKE] PASS stereo Unity opaque and transparent depth composition."
           --require "[IMM_URP_XR_SMOKE] PASS zero managed allocations in warmed stereo IMM pass callbacks (64 samples minimum)."
           --require "nativeSceneEventsPerFrame=1 displayPasses=1 views=2"
           --forbid "[IMM_URP_XR_SMOKE] FAIL"

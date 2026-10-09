@@ -34,7 +34,10 @@ automating headset VR validation does not exempt non-VR changes from CI.
    Local corrections are recorded in entries 44 and 46. Hosted confirmation is pending,
    so this remains the last confirmed full-green source.
    Corrections and the prepared acceptance checks are pushed at `963193e5`;
-   full validation run `37979446772` is in progress.
+   full validation run `37979446772` completed with 38 successful, 13 skipped
+   and four failed jobs: Unity iOS simulator, Unity Android Vulkan and the two
+   evidence aggregators. Android device logs are being investigated; this is
+   not a new full-green checkpoint.
    Its Unity iOS simulator lane fails the attribution fixture with two main-camera
    submissions: that camera was also eligible for automatic rendering. The local
    correction disables automatic rendering for both explicitly driven test cameras
@@ -1706,3 +1709,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     the new model-input marker. Hosted confirmation and Unity all-content stereo
     depth/transparency/MSAA composition remain outstanding, alongside actual
     OpenXR/Quest acceptance and GPU capture evidence.
+56. **Actual XR target depth probe (prepared, 2026-10-09):** the opt-in
+    Windows/Quest runtime probe now reads both layers of the active XR display's
+    colour target after the warmed allocation check. It requires visible content
+    in each eye, then tests Unity opaque-near/opaque-far and transparent-far/
+    transparent-near geometry through the real URP camera. The depth-probe shader
+    now uses Unity's stereo instance/output macros in both colour and depth passes.
+    A snapshot copies or resolves the complete array before asynchronous readback;
+    ten per-eye PNGs are written in a directory keyed by the run GUID. Quest's
+    script pulls and verifies all ten files, and both gated hardware lanes require
+    the depth completion marker. Isolated managed compilation, PowerShell parsing,
+    VR/workflow contracts pass locally. Shader compilation and actual headset
+    execution are unverified; no device was contacted. These prepared checks do
+    not establish all-content/MSAA edge quality, visual stereo acceptance or GPU
+    draw counts, and both VR matrix rows remain deferred.
