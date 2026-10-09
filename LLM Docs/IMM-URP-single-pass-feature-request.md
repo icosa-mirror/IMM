@@ -1836,3 +1836,10 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Applying the conversion to paint changed a directional-visibility test result;
     those paint shader changes were removed pending investigation. Paint coverage
     remains open, and this model probe does not establish Unity/stereo composition.
+63. **Windows Vulkan setup regression (2026-10-09):** recovery run `37994572862`
+    fails both Windows Vulkan lanes before driver installation because the newly
+    requested `mingw-w64-x86_64-vulkan-tools` package is unavailable in the runner's
+    package repository. Remove that optional diagnostic package from both lanes.
+    Existing `vulkaninfo` collection already tolerates its absence; the mandatory
+    native rendering probe and validation-layer checks remain in place. The pinned
+    Mesa/LLVM runtime correction therefore still needs hosted execution evidence.
