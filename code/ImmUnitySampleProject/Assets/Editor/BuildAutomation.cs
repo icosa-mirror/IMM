@@ -412,8 +412,21 @@ namespace ImmPlayer.Editor
             var previousLoaders = xrManager != null ? xrManager.activeLoaders.ToList() : null;
             bool previousXrBuild = BuildingUrpXrSample;
             bool previousXrSceneProcessed = UrpXrSceneProcessed;
+            string contentAssets = Path.Combine(Application.dataPath, "StreamingAssets", "urp-content");
+            bool ownsContentAssets = false;
             try
             {
+                string contentSource = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../exampleImmFiles/urp-content"));
+                if (!Directory.Exists(contentSource))
+                    throw new DirectoryNotFoundException($"URP content fixtures are missing: {contentSource}");
+                if (Directory.Exists(contentAssets) || File.Exists($"{contentAssets}.meta"))
+                    throw new InvalidOperationException($"Refusing to replace existing URP build inputs: {contentAssets}");
+                Directory.CreateDirectory(contentAssets);
+                ownsContentAssets = true;
+                foreach (string source in Directory.GetFiles(contentSource, "*.imm"))
+                    File.Copy(source, Path.Combine(contentAssets, Path.GetFileName(source)));
+                File.Copy(Path.Combine(contentSource, "manifest.json"), Path.Combine(contentAssets, "manifest.json"));
+                AssetDatabase.Refresh();
                 BuildingUrpXrSample = useXr;
                 UrpXrSceneProcessed = false;
                 var pipeline = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>(ImmUrpSampleSetup.PipelinePath);
@@ -463,6 +476,12 @@ namespace ImmPlayer.Editor
                     xrSettings.InitManagerOnStart = previousXrStartup;
                     EditorUtility.SetDirty(xrSettings);
                     AssetDatabase.SaveAssets();
+                }
+                if (ownsContentAssets)
+                {
+                    FileUtil.DeleteFileOrDirectory(contentAssets);
+                    FileUtil.DeleteFileOrDirectory($"{contentAssets}.meta");
+                    AssetDatabase.Refresh();
                 }
             }
         }

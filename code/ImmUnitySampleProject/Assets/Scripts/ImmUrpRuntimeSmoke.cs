@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Networking;
 
 /// <summary>Opt-in CI probe for the configured URP scene.</summary>
 public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
@@ -179,10 +180,119 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             yield return null;
         Require(!ImmNativePlugin.IsDocumentActive(documentId), "Deferred unload stalled without a camera.");
         Debug.Log("[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.");
+        var content = VerifyContentFixtures(manager, optIn);
+        try { while (content.MoveNext()) yield return content.Current; }
+        finally { (content as IDisposable)?.Dispose(); }
         Destroy(sample.gameObject);
         for (int frame = 0; frame < 3; ++frame) yield return null;
         Require(manager == null, "The sample left its persistent manager alive after destruction.");
         Require(renderError == null, $"Unity reported: {renderError}");
+    }
+
+    private IEnumerator VerifyContentFixtures(ImmPlayerManager manager, ImmCamera optIn)
+    {
+        var originalPosition = documentCamera.transform.position;
+        var originalRotation = documentCamera.transform.rotation;
+        bool originalEnabled = documentCamera.enabled;
+        bool originalOptIn = optIn.enabled;
+        bool originalOrthographic = documentCamera.orthographic;
+        float originalFov = documentCamera.fieldOfView;
+        float originalNear = documentCamera.nearClipPlane, originalFar = documentCamera.farClipPlane;
+        var originalClear = documentCamera.clearFlags;
+        var originalBackground = documentCamera.backgroundColor;
+        var pipeline = (UniversalRenderPipelineAsset)QualitySettings.renderPipeline;
+        int originalSamples = pipeline.msaaSampleCount;
+        int originalTargetSamples = target.antiAliasing;
+        try
+        {
+            documentCamera.enabled = false;
+            optIn.enabled = true;
+            documentCamera.orthographic = false;
+            documentCamera.fieldOfView = 60;
+            documentCamera.clearFlags = CameraClearFlags.SolidColor;
+            documentCamera.backgroundColor = Color.black;
+            pipeline.msaaSampleCount = 1;
+            target.Release(); target.antiAliasing = 1;
+            Require(target.Create(), "Could not create the content fixture target.");
+            foreach (string name in new[] { "paint-segment", "paint-circle", "paint-ellipse", "paint-square",
+                "picture-flat", "picture-equirect-mono", "picture-equirect-stereo", "picture-cube-cross", "picture-cube-strip" })
+            {
+                string path = Path.Combine(Application.streamingAssetsPath, "urp-content", $"{name}.imm");
+#if UNITY_ANDROID && !UNITY_EDITOR
+                using (var download = UnityWebRequest.Get(path))
+                {
+                    yield return download.SendWebRequest();
+                    Require(download.result == UnityWebRequest.Result.Success,
+                        $"Could not extract content fixture {name}: {download.error}");
+                    string directory = Path.Combine(Application.persistentDataPath, "urp-content");
+                    Directory.CreateDirectory(directory);
+                    path = Path.Combine(directory, $"{name}.imm");
+                    File.WriteAllBytes(path, download.downloadHandler.data);
+                }
+#endif
+                Require(File.Exists(path), $"Content fixture is missing: {name}.");
+                var document = manager.LoadDocument(path);
+                Require(document != null, $"Could not queue content fixture {name}.");
+                int id = document.DocumentId;
+                try
+                {
+                    float deadline = Time.realtimeSinceStartup + 30;
+                    while (document.GetStateInfo().Loading != ImmDocument.LoadingState.Loaded &&
+                           Time.realtimeSinceStartup < deadline)
+                    {
+                        yield return null;
+                        RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                    }
+                    Require(document.GetStateInfo().Loading == ImmDocument.LoadingState.Loaded,
+                        $"Content fixture loading timed out: {name}.");
+                    bool surface = name.StartsWith("paint-", StringComparison.Ordinal) || name == "picture-flat";
+                    var bounds = surface ? document.GetBoundingBox() : new Bounds(Vector3.zero, Vector3.one * 2);
+                    float radius = Mathf.Max(bounds.extents.magnitude, 0.1f);
+                    Require(!float.IsNaN(radius) && !float.IsInfinity(radius), $"Content fixture bounds are invalid: {name}.");
+                    documentCamera.transform.position = surface ? bounds.center + Vector3.back * radius * 3 : Vector3.back * 3;
+                    documentCamera.transform.LookAt(surface ? bounds.center : Vector3.zero);
+                    documentCamera.nearClipPlane = 0.01f;
+                    documentCamera.farClipPlane = Mathf.Max(radius * 8, 100);
+                    document.SetTime(0, 0);
+                    document.Show();
+                    for (int frame = 0; frame < 3; ++frame)
+                    {
+                        yield return null;
+                        RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                    }
+                    int redPixels = 0;
+                    foreach (var pixel in ReadTargetPixels(target, $"content-{name}"))
+                        if (pixel.r > pixel.g + 10 && pixel.r > pixel.b + 10) ++redPixels;
+                    Require(redPixels > 100, $"Content fixture has no expected red geometry: {name}, pixels={redPixels}.");
+                    if (surface)
+                    {
+                        var depth = VerifyDepthComposition(1, bounds);
+                        try { while (depth.MoveNext()) yield return depth.Current; }
+                        finally { (depth as IDisposable)?.Dispose(); }
+                    }
+                    Require(renderError == null, $"Unity reported for {name}: {renderError}");
+                    Debug.Log($"[IMM_URP_CONTENT] PASS {name} loaded document, mono colour and {(surface ? "bidirectional depth" : "backdrop")}.");
+                }
+                finally { manager.UnloadDocument(document); }
+                float unloadDeadline = Time.realtimeSinceStartup + 30;
+                while (ImmNativePlugin.IsDocumentActive(id) && Time.realtimeSinceStartup < unloadDeadline)
+                    yield return null;
+                Require(!ImmNativePlugin.IsDocumentActive(id), $"Content fixture unload stalled: {name}.");
+            }
+            Debug.Log("[IMM_URP_CONTENT] PASS nine paint and picture documents through Unity RenderGraph.");
+        }
+        finally
+        {
+            documentCamera.transform.SetPositionAndRotation(originalPosition, originalRotation);
+            documentCamera.enabled = originalEnabled;
+            optIn.enabled = originalOptIn;
+            documentCamera.orthographic = originalOrthographic;
+            documentCamera.fieldOfView = originalFov;
+            documentCamera.nearClipPlane = originalNear; documentCamera.farClipPlane = originalFar;
+            documentCamera.clearFlags = originalClear; documentCamera.backgroundColor = originalBackground;
+            pipeline.msaaSampleCount = originalSamples;
+            target.Release(); target.antiAliasing = originalTargetSamples; target.Create();
+        }
     }
 
     private IEnumerator VerifyDepthComposition(int samples, Bounds bounds)

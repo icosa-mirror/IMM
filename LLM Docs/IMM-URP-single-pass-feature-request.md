@@ -54,6 +54,9 @@ automating headset VR validation does not exempt non-VR changes from CI.
    capture after the actual capture step was skipped. Its hash matches the tracked
    file exactly; the workflow now clears those outputs before validation. No visual
    threshold has been relaxed, and fresh hosted capture confirmation remains required.
+   Recovery changes are pushed at `623a5b1e`; full validation run `37994572862`
+   is in progress. The new Unity content-fixture gate is held separately while
+   this recovery checkpoint is validated.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
@@ -1796,3 +1799,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Model export and mesh import are unfinished stubs, so no model fixture or
     document-level model support is claimed. Existing in-memory model probes remain
     renderer evidence only; the complete model requirement stays open.
+60. **Prepared Unity document fixture gate (local, 2026-10-09):** the URP build
+    helper temporarily stages the nine fixtures in StreamingAssets, refuses to
+    replace an existing input directory, and removes its staged assets after the
+    build. The mono runtime probe loads each document using the public manager API,
+    verifies expected red pixels, retains a capture, checks bidirectional opaque
+    and transparent depth for the five surfaces, and unloads before the next file.
+    Windows D3D12, macOS/iOS Metal and Android Vulkan CI now require its aggregate
+    marker. Sample, editor and Android-conditional C# compilation pass locally;
+    actual Unity rendering of this new gate is unverified. It uses the Unity
+    plugin's configured import technique; native fixture roundtrips separately
+    cover both paint techniques. Panorama skybox ordering, all-content stereo,
+    additional MSAA/opacity cases and model document support remain open. This
+    increment is held separately from the preceding CI recovery commits.
