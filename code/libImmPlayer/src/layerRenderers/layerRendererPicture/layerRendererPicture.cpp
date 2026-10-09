@@ -438,6 +438,20 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                         return false;
                     }
 
+                    // Stereo image storage also needs a shader in mono viewing mode.
+                    const piShaderOptions opts360Stereo = { 4,{
+                        { "COLOR_SPACE", static_cast<int>(colorSpace) },
+                        { "STEREOMODE", i },
+                        { "FORMAT_IS_STEREO", 1 },
+                        { "DEBUG_RENDER_MODE", j },
+                    } };
+                    mShaders[idx][LayerPicture::Image360EquirectStereo] = renderer->CreateShader(&opts360Stereo, nullptr, nullptr, nullptr, nullptr, nullptr, error);
+                    if (!mShaders[idx][LayerPicture::Image360EquirectStereo])
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Metal stereo-format equirect image layer shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+
                     const piShaderOptions optsCube = { 3,{
                         { "COLOR_SPACE", static_cast<int>(colorSpace) },
                         { "STEREOMODE", i },
