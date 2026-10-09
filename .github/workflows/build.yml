@@ -80,8 +80,10 @@ jobs:
       run: |
         cmake -S code/libImmCore/tests/vulkan -B artifacts/vulkan-model-tests -DIMM_VULKAN_MODEL_SMOKE=ON
         if ($LASTEXITCODE -ne 0) { throw "Configure Vulkan model probe failed" }
-        cmake --build artifacts/vulkan-model-tests --config Release --target imm_vulkan_model_smoke
+        cmake --build artifacts/vulkan-model-tests --config Release --target imm_urp_content_fixtures
         if ($LASTEXITCODE -ne 0) { throw "Build Vulkan model probe failed" }
+        ctest --test-dir artifacts/vulkan-model-tests -C Release -R urp_content_fixture_roundtrip --output-on-failure
+        if ($LASTEXITCODE -ne 0) { throw "URP content fixture roundtrip or committed-byte verification failed" }
         foreach ($validationFile in @('VkLayer_khronos_validation.dll', 'VkLayer_khronos_validation.json')) {
           Copy-Item -LiteralPath (Join-Path $env:VULKAN_SDK "Bin/$validationFile") -Destination artifacts/vulkan-model-tests/Release
         }

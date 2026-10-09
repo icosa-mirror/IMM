@@ -59,4 +59,22 @@ if(IMM_VULKAN_MODEL_SMOKE)
     endforeach()
     add_test(NAME vulkan_model_readback COMMAND imm_vulkan_model_smoke)
     set_tests_properties(vulkan_model_readback PROPERTIES TIMEOUT 60)
+    # Offline IMM authoring utility. Reuse the native probe's library/toolchain
+    # configuration and DLL output directory; generation never initializes a GPU.
+    add_executable(imm_urp_content_fixtures content_fixtures.cpp)
+    foreach(property IN ITEMS COMPILE_FEATURES COMPILE_DEFINITIONS INCLUDE_DIRECTORIES MSVC_RUNTIME_LIBRARY LINK_LIBRARIES LINK_OPTIONS)
+        get_target_property(fixture_property imm_vulkan_model_smoke ${property})
+        set_property(TARGET imm_urp_content_fixtures PROPERTY ${property} "${fixture_property}")
+    endforeach()
+    add_dependencies(imm_urp_content_fixtures imm_vulkan_model_smoke)
+    add_test(NAME urp_content_fixture_roundtrip COMMAND imm_urp_content_fixtures
+        "${CMAKE_CURRENT_BINARY_DIR}/generated-content-fixtures" "${IMM_ROOT}/exampleImmFiles/urp-content")
+    set_tests_properties(urp_content_fixture_roundtrip PROPERTIES TIMEOUT 30)
+    foreach(pair IN ITEMS "opus/opus" "libopusenc/opusenc")
+        string(REPLACE "/" ";" parts "${pair}")
+        list(GET parts 0 directory)
+        list(GET parts 1 library)
+        add_custom_command(TARGET imm_urp_content_fixtures POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${IMM_ROOT}/thirdparty/${directory}/bin/${library}.dll" "$<TARGET_FILE_DIR:imm_urp_content_fixtures>")
+    endforeach()
 endif()

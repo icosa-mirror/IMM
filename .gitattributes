@@ -1,3 +1,5 @@
 # Generated release packages use deterministic text bytes; Wasm remains binary.
 /code/projects/web/app/dist-library/** text eol=lf
 /code/projects/web/app/dist-library/**/*.wasm -text
+/exampleImmFiles/urp-content/*.imm -text
+/exampleImmFiles/urp-content/manifest.json text eol=lf

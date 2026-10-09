@@ -1,0 +1,11 @@
+{"schema":"imm-urp-content-fixtures-v1","fixtures":[
+{"file":"paint-segment.imm","kind":"paint","variant":1,"depthRole":"surface"},
+{"file":"paint-circle.imm","kind":"paint","variant":2,"depthRole":"surface"},
+{"file":"paint-ellipse.imm","kind":"paint","variant":3,"depthRole":"surface"},
+{"file":"paint-square.imm","kind":"paint","variant":4,"depthRole":"surface"},
+{"file":"picture-flat.imm","kind":"picture","variant":0,"depthRole":"surface"},
+{"file":"picture-equirect-mono.imm","kind":"picture","variant":1,"depthRole":"backdrop"},
+{"file":"picture-equirect-stereo.imm","kind":"picture","variant":2,"depthRole":"backdrop"},
+{"file":"picture-cube-cross.imm","kind":"picture","variant":3,"depthRole":"backdrop"},
+{"file":"picture-cube-strip.imm","kind":"picture","variant":4,"depthRole":"backdrop"}
+]}
