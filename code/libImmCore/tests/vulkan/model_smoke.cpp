@@ -45,7 +45,10 @@ static void DrawModelProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& 
     mesh->SetTriangle(0, 0, 0, 1, 2); mesh->SetTriangle(0, 1, 0, 2, 3);
     mesh->CalcBBox(0, 0);
     ImmImporter::Layer layer(nullptr, nullptr, 0);
-    layer.SetImplementation(&model);
+    if (!layer.Init(ImmImporter::Layer::Type::Model, L"mono model", true,
+        trans3d::identity(), trans3d::identity(), 1, false, piTick(1), 1, 0, &log, false))
+        throw std::runtime_error("Initialize mono model wrapper");
+    layer.SetImplementation(&model); layer.SetLoaded(true);
     if (!modelRenderer.LoadInCPU(&log, &layer) || !modelRenderer.LoadInGPU(&renderer, nullptr, &log, &layer))
         throw std::runtime_error("Load model renderer probe");
     float frame[4] = {};
@@ -71,6 +74,50 @@ static void DrawModelProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& 
     modelRenderer.UnloadInCPU(&log, &layer);
     renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer); renderer.DestroyBuffer(layerBuffer);
     mesh->DeInit(); model.Deinit();
+    layer.SetLoaded(false); layer.Deinit(&log);
+}
+
+static void VerifyModelMsaaCoverage(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log)
+{
+    using namespace ImmCore;
+    constexpr int size = 64;
+    for (int samples : {4, 8}) {
+    const piRenderer::TextureInfo colorInfo = { piRenderer::TextureType::T2D,
+        piRenderer::Format::C3_11_11_10_FLOAT, size, size, 1, samples, 1, 0 };
+    const piRenderer::TextureInfo depthInfo = { piRenderer::TextureType::T2D,
+        piRenderer::Format::D1_32_FLOAT, size, size, 1, samples, 1, 0 };
+    auto color = renderer.CreateTexture(L"coverage-color", &colorInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1, nullptr);
+    auto depth = renderer.CreateTexture(L"coverage-depth", &depthInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1, nullptr);
+    if (!color || !depth) throw std::runtime_error("Create multisample coverage attachments");
+    auto target = renderer.CreateRenderTarget(color, nullptr, nullptr, nullptr, depth);
+    if (!target) throw std::runtime_error("Create multisample coverage target");
+    int totalMismatches = 0;
+    for (int colorSpace = 0; colorSpace < 2; ++colorSpace) {
+        ImmPlayer::LayerRendererModel models;
+        if (!models.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true))
+            throw std::runtime_error("Initialize coverage model renderer");
+        std::vector<unsigned char> opaque(size * size * 4), half(size * size * 4);
+        const float black[4] = {0, 0, 0, 1};
+        renderer.SetRenderTarget(target); renderer.Clear(black, nullptr, nullptr, nullptr, true);
+        DrawModelProbe(renderer, log, models, false, 1, size, color, opaque.data());
+        renderer.SetRenderTarget(target); renderer.Clear(black, nullptr, nullptr, nullptr, true);
+        DrawModelProbe(renderer, log, models, false, 0.5f, size, color, half.data());
+        int opaqueMismatches = 0, coverageMismatches = 0;
+        for (int y = 16; y < size - 16; ++y) for (int x = 16; x < size - 16; ++x) {
+            const int pixel = 4 * (y * size + x);
+            if (std::abs(int(opaque[pixel]) - (colorSpace == 0 ? 55 : 128)) > 3) ++opaqueMismatches;
+            if (std::abs(2 * int(half[pixel]) - int(opaque[pixel])) > 3) ++coverageMismatches;
+        }
+        std::printf("IMM_VULKAN_MSAA_COVERAGE samples=%d colorSpace=%d opaqueMismatches=%d coverageMismatches=%d\n",
+            samples, colorSpace, opaqueMismatches, coverageMismatches);
+        totalMismatches += opaqueMismatches + coverageMismatches;
+        models.Deinit(&renderer, &log);
+    }
+    renderer.SetRenderTarget(nullptr); renderer.DestroyRenderTarget(target);
+    renderer.DestroyTexture(color); renderer.DestroyTexture(depth);
+    if (totalMismatches) throw std::runtime_error("Half opacity does not cover exactly half the attachment samples");
+    }
+    std::puts("IMM_VULKAN_MSAA_COVERAGE PASS 4x 8x half opacity in both color spaces");
 }
 
 template<typename LayerType, typename DrawingType, typename RendererType>
@@ -402,6 +449,7 @@ int main()
         renderer.SetRenderTarget(nullptr);
         renderer.DestroyRenderTarget(target);
         renderer.DestroyTexture(color); renderer.DestroyTexture(depth);
+        VerifyModelMsaaCoverage(renderer, log);
         renderer.Deinitialize();
         RunVulkanMultiviewProbe(reporter, log);
         log.End();

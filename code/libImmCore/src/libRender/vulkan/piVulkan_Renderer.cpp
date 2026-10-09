@@ -4450,6 +4450,10 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     const VkSampleCountFlagBits sampleCount = target->renderSampleCount != VK_SAMPLE_COUNT_1_BIT
                                                   ? target->renderSampleCount
                                                   : (target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT);
+    const uint32_t coverageSampleCount = static_cast<uint32_t>(sampleCount);
+    const VkSpecializationMapEntry coverageEntry = { 1u, 0u, sizeof(coverageSampleCount) };
+    const VkSpecializationInfo coverageSpecialization = { 1u, &coverageEntry, sizeof(coverageSampleCount), &coverageSampleCount };
+    stages[1].pSpecializationInfo = &coverageSpecialization;
     const bool wireframe = rasterState && rasterState->wireframe;
     const bool depthClamp = rasterState && rasterState->depthClamp;
     const bool mayUseDepth = target->hasDepth &&
@@ -6026,12 +6030,13 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
         const int n = atoi(v);
         return n > 0 ? (uint32_t)n : 0u;
     }();
-    const VkSpecializationMapEntry pictureDebugEntry = { 0u, 0u, sizeof(uint32_t) };
-    const VkSpecializationInfo pictureDebugSpecialization = { 1u, &pictureDebugEntry, sizeof(uint32_t), &sPictureDebugValue };
-    if (sPictureDebugValue != 0u)
-    {
-        stages[1].pSpecializationInfo = &pictureDebugSpecialization;
-    }
+    const uint32_t fragmentValues[] = { sPictureDebugValue, static_cast<uint32_t>(sampleCount) };
+    const VkSpecializationMapEntry fragmentEntries[] = {
+        { 0u, 0u, sizeof(uint32_t) },
+        { 1u, sizeof(uint32_t), sizeof(uint32_t) }
+    };
+    const VkSpecializationInfo fragmentSpecialization = { 2u, fragmentEntries, sizeof(fragmentValues), fragmentValues };
+    stages[1].pSpecializationInfo = &fragmentSpecialization;
 
     VkVertexInputBindingDescription binding = {};
     binding.binding = 0;

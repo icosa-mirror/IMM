@@ -274,6 +274,7 @@ jobs:
             'IMM_VULKAN_MULTIVIEW_PAINT PASS directional facing in both storage paths and color spaces',
             'IMM_VULKAN_MULTIVIEW_PAINT PASS wiggle and draw-in shader variants with mono parity',
             'IMM_VULKAN_MULTIVIEW_MODEL PASS five vertex layouts and both shading flags with mono parity',
+            'IMM_VULKAN_MSAA_COVERAGE PASS 4x 8x half opacity in both color spaces',
             'IMM_VULKAN_UNITY_ADAPTER PASS prepared two-view packet and scene GPU readback'
           )) {
             if (-not (Select-String -LiteralPath artifacts/windows-standalone-vulkan/model-readback.log -SimpleMatch $marker -Quiet)) {

@@ -1,5 +1,6 @@
 param([string]$OutputDir = (Join-Path $PSScriptRoot "tmp"))
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "../vulkan_sample_coverage.ps1")
 
 function Resolve-Tool([string]$Name) {
     $cmd = Get-Command $Name -ErrorAction SilentlyContinue
@@ -80,6 +81,7 @@ $fs = $fs.Replace('ivec3(p,frameID)&63', 'ivec3(p, int(frameID) & 63)')
 $fs = $fs.Replace('frame.mFrame, 0);', 'uint(frame.mFrame), 0);')
 # Vulkan GLSL exposes sample-mask outputs directly, without the GLES extension.
 $fs = $fs.Replace("#ifdef GL_OES_sample_variables`n`tgl_SampleMask", "#if 1`n`tgl_SampleMask")
+$fs = Convert-VulkanSampleCoverage $fs
 $vsPath = Join-Path $work "model.vert"
 $fsPath = Join-Path $work "model.frag"
 Set-Content $vsPath "#version 450`n$vs" -Encoding ASCII

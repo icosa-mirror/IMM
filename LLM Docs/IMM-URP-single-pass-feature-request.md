@@ -1824,3 +1824,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     but reports 732 half-opacity coverage mismatches in each colour space. Cleanup
     completes without Vulkan validation errors. The Vulkan shaders' fixed eight-sample
     coverage mask requires correction; the failing test remains local and uncommitted.
+62. **Vulkan model attachment coverage (local, 2026-10-09):** Vulkan pipeline
+    specialization now supplies the actual attachment sample count. The model
+    shader generator converts its legacy eight-sample mask using a Vulkan-only
+    helper; shared GLSL, Metal and HLSL sources are unchanged. At 4x and 8x MSAA,
+    opaque controls and exact half-opacity resolves pass in both colour spaces
+    on the local GPU and the CI-matched Mesa 26.1.8/LLVM 22 lavapipe runtime,
+    without Vulkan validation errors. The hosted native probe requires the new
+    marker. A local 2x experiment also passes on the hardware GPU, but lavapipe's
+    tested attachment formats do not support 2x, so that is not a hosted gate.
+    Applying the conversion to paint changed a directional-visibility test result;
+    those paint shader changes were removed pending investigation. Paint coverage
+    remains open, and this model probe does not establish Unity/stereo composition.
