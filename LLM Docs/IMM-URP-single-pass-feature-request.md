@@ -67,6 +67,14 @@ automating headset VR validation does not exempt non-VR changes from CI.
    CI-matched lavapipe runtime (`035d9fe8`, `bf1a22d6`). Unity content and skybox
    composition gates are prepared (`20f7bc64`, `5dc9cdc0`, `11054235`) for that
    checkpoint; their actual rendering remains unverified. This is not a new green checkpoint.
+   Ordinary-push run `37999162355` at `47af21b8` completed with 18 successful
+   and 15 skipped jobs. It omitted GPU, device, engine and iOS visual validation:
+   the final pushed commit lacked the `[CI VALIDATION]` trigger. Its green result
+   is build/core/web evidence only. Full-mode validation is explicitly dispatched
+   as `38000728358` on synchronized binary commit `ab8c2376` (source `47af21b8`).
+   That run remains the required recovery gate. Future checkpoints must either
+   use the full-validation commit trigger or explicitly dispatch `mode=full`,
+   and inspect which platform gates actually ran before recording recovery.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
@@ -1913,3 +1921,10 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     enabled validation and the existing stereo image checks. This establishes
     native document-to-renderer integration, not actual Unity RenderGraph,
     headset pose/depth correctness or one GPU draw-sequence acceptance.
+69. **Full validation trigger corrected (2026-10-09):** run `37999162355`
+    finished green but skipped the rendering and device gates. A plain main-branch
+    push is not full validation in this repository. Full-mode run `38000728358`
+    is dispatched explicitly against the pushed recovery checkpoint; its watcher
+    polls at fifteen-minute intervals. CI binary updates merged locally without
+    changing any of the three unrelated dirty files. Prepared model commits remain
+    unpublished, and no new full-green source is claimed.
