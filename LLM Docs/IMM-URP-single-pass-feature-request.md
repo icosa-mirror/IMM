@@ -45,6 +45,12 @@ automating headset VR validation does not exempt non-VR changes from CI.
    The shared camera correction, expanded native content probes and prepared XR
    per-eye depth harness are now pushed at `209f6d41`. Full validation run
    `37986974593` is in progress; it must pass before promoting the checkpoint.
+   It has failed Matrix Status, Core Evidence Report, Windows Standalone Vulkan,
+   Windows Godot Vulkan and GPU Evidence Report while other lanes continue.
+   Local corrections update the Quest-row audit expectations and supply the
+   LLVM 22 DLL required by the pinned Mesa driver; hosted confirmation is pending.
+   The standalone Vulkan surface-detail comparison also failed and remains open;
+   its threshold has not been relaxed.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
@@ -67,6 +73,10 @@ automating headset VR validation does not exempt non-VR changes from CI.
 5. Progress entries below are chronological evidence. A pending statement in an older
    entry describes that entry's checkpoint; this section and the latest entry govern
    the current status. Fix any CI regression before continuing feature work.
+6. Nine deterministic paint/picture IMM fixtures now have a local export/import and
+   committed-byte verification gate. Unity rendering of those fixtures remains
+   outstanding. Model file export and mesh import are stubs: native in-memory model
+   probes do not prove model document support, which remains an explicit requirement.
 
 ## Motivation
 
@@ -1740,3 +1750,27 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     success with stale-log rejection, missing-eye evidence failure with owned
     cleanup, and refusal to replace an already-running sample; these are script
     control-flow checks, not hardware or rendering evidence.
+58. **Hosted validation recovery (local, 2026-10-09):** run 37986974593
+    exposed a stale matrix audit test after adding the deferred Quest URP row:
+    the matrix has 31 rows, 21 supported and nine release blockers. The corrected
+    test also requires the Quest Unity row among those blockers and passes locally.
+    Windows standalone's native Vulkan probe fails during instance creation;
+    Godot reports missing VK_KHR_surface and falls back to D3D12 before IMM loads.
+    The pinned Mesa 26.1.8 binary imports libLLVM-22.dll, verified from the
+    hash-checked package, but this runner installs LLVM 23. The installer now
+    extracts a hash-pinned LLVM 22 DLL alongside the current toolchain, without
+    downgrading its packages. Vulkan tools and loader/result diagnostics are
+    retained for confirmation. The separate standalone surface-detail mismatch
+    remains unresolved; no visual threshold or required lane was removed.
+59. **Deterministic document inputs (local, 2026-10-09):**
+    exampleImmFiles/urp-content contains nine authored documents: four paint brush
+    sections and five picture formats, plus a machine-readable manifest. The native
+    utility exports each file and imports it using both paint techniques, checking
+    loaded geometry, picture format/dimensions and initial spawn. Explicit spawn
+    volume/tracking initialization removes an uninitialized translation flag found
+    by rebuilding and comparing bytes. The CTest roundtrip/reference check passes;
+    the Windows build workflow now requires it. These inputs still need Unity
+    mono/stereo composition tests, including skybox ordering for backdrops.
+    Model export and mesh import are unfinished stubs, so no model fixture or
+    document-level model support is claimed. Existing in-memory model probes remain
+    renderer evidence only; the complete model requirement stays open.
