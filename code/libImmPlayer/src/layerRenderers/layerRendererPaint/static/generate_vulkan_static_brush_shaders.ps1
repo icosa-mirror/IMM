@@ -65,7 +65,9 @@ function Convert-FragmentGlslForVulkan([string]$Source) {
     $source = $source.Replace(
         'float ran = texelFetch(globalBlueNoise, ivec3(p, int(frameID) & 63), 0).x;',
         'vec2 q = vec2(p) + vec2(0.0, float(frameID & 7u) * 11.0); float ran = fract(52.9829189 * fract(dot(q, vec2(0.06711056, 0.00583715))));')
-    $source = $source.Replace('in vec4 mpos;', 'layout(location = 2) in vec4 mpos;')
+    # Unused legacy varying has no vertex-stage producer. Keeping it makes the
+    # Vulkan pipeline interface invalid even though the fragment code ignores it.
+    $source = $source.Replace('in vec4 mpos;', '')
     $source = $source.Replace('in V2CData', 'layout(location = 0) in V2CData')
     $source = $source.Replace(
         "#ifdef GL_OES_sample_variables`n    gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.xy), frame.mFrame, vf.mask );`n    #endif",
