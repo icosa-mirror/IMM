@@ -36,10 +36,11 @@ automating headset VR validation does not exempt non-VR changes from CI.
 3. The borrowed-device multiview boundary and Unity Vulkan two-view adapter are
    implemented, with local validation-layer GPU readbacks (entries 34–35). The
    first hosted GPU probe rendered both slices but failed layer discovery. The
-   next run stopped in the earlier mono paint checks; local validation of its
-   executable exposed descriptors referencing deleted buffer wrappers. Clearing
-   destroyed buffers from binding arrays fixes those validation errors locally
-   (entry 36). Full hosted confirmation remains required.
+   next run exposed deleted buffer bindings in the earlier mono checks. Clearing
+   those bindings allows hosted mono and both multiview readbacks to complete.
+   The strict gate still reports negative viewport heights without enabled
+   maintenance1 on the owned Vulkan 1.0 device; an explicit extension request
+   passes locally (entries 36–37). Full hosted confirmation remains required.
    Next: establish full CI validation, then verify actual Unity/Quest integration.
    Windows OpenXR execution, all-content multiview, MSAA/depth composition and
    headset per-eye/one-pass acceptance remain required.
@@ -1460,3 +1461,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     errors. CI likewise forces the layer for mono and multiview checks, rejects
     validation errors and records the native exit code on failure. Hosted
     confirmation and the remaining acceptance criteria are still outstanding.
+37. **Owned Vulkan viewport capability (local, 2026-10-09):** run 37950242603
+    completes mono paint/model/picture checks and both multiview readbacks after
+    the buffer-binding fix, including the loaded-scene adapter proof. Its strict
+    gate reports `VUID-VkViewport-apiVersion-07917`: the owned Vulkan 1.0 device
+    uses negative viewport heights without enabling maintenance1. Owned device
+    creation now explicitly requests `VK_KHR_maintenance1`, which permits the
+    existing Y flip; borrowed Unity device creation is unchanged. All four local
+    tests pass with validation forced throughout and no validation errors.
+    Full hosted verification remains outstanding.

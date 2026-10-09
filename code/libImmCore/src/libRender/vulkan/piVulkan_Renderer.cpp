@@ -8283,12 +8283,11 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceInfo.queueCreateInfoCount = 1;
     deviceInfo.pQueueCreateInfos = &queueInfo;
-    const char *deviceExtensions[] = { "VK_KHR_swapchain" };
-    if (state->surface != VK_NULL_SURFACE_KHR)
-    {
-        deviceInfo.enabledExtensionCount = 1;
-        deviceInfo.ppEnabledExtensionNames = deviceExtensions;
-    }
+    // Owned instances request Vulkan 1.0. Our viewport Y flip uses negative
+    // heights, so explicitly enable the extension that permits them.
+    const char *deviceExtensions[] = { "VK_KHR_maintenance1", "VK_KHR_swapchain" };
+    deviceInfo.enabledExtensionCount = state->surface != VK_NULL_SURFACE_KHR ? 2 : 1;
+    deviceInfo.ppEnabledExtensionNames = deviceExtensions;
     result = state->vkCreateDevice(state->physicalDevice, &deviceInfo, nullptr, &state->device);
     if (result != VK_SUCCESS)
     {
