@@ -125,6 +125,10 @@ jobs:
             }
           }
 
+      - name: Verify RenderGraph packet ABI against same-commit plugin
+        shell: pwsh
+        run: python tests/tools/verify_render_graph_packet_abi.py code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll
+
       - name: Upload same-commit Unity native plugin
         uses: actions/upload-artifact@v4
         with:
