@@ -253,6 +253,7 @@ jobs:
           $validationManifest = (Resolve-Path artifacts/vulkan-model-probe/VkLayer_khronos_validation.json).Path
           reg add 'HKLM\SOFTWARE\Khronos\Vulkan\ExplicitLayers' /v $validationManifest /t REG_DWORD /d 0 /f /reg:64
           if ($LASTEXITCODE -ne 0) { throw 'Register packaged Vulkan validation layer failed' }
+          $env:IMM_VULKAN_SAMPLE_FILE = (Resolve-Path exampleImmFiles/sample1.imm).Path
           & .\artifacts\vulkan-model-probe\imm_vulkan_model_smoke.exe *> artifacts\windows-standalone-vulkan\model-readback.log
           if ($LASTEXITCODE -ne 0) { throw "Vulkan model readback failed; see model-readback.log" }
           foreach ($marker in @('IMM_VULKAN_MULTIVIEW validation=enabled', 'IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback', 'IMM_VULKAN_UNITY_ADAPTER PASS prepared two-view packet and scene GPU readback')) {

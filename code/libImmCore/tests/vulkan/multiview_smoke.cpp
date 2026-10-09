@@ -1,5 +1,6 @@
 #include <vulkan/vulkan.h>
 #include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
 #include <vector>
 #include <cstring>
@@ -249,7 +250,8 @@ void RunUnityAdapterProbe(Host& host)
     if (ProcessImmVulkanRenderGraph(state, bridge, init, ImmRenderGraphPreparationEventId, acknowledge) != 0 ||
         !state.ready || !state.device.multiviewEnabled || !acknowledge) throw std::runtime_error("Initialize Unity Vulkan adapter");
     auto* player = bridge.GetPlayer();
-    const int document = player->Load(IMM_VULKAN_SAMPLE_FILE);
+    const wchar_t* sample = _wgetenv(L"IMM_VULKAN_SAMPLE_FILE");
+    const int document = player->Load(sample && *sample ? sample : IMM_VULKAN_SAMPLE_FILE);
     if (document < 0) throw std::runtime_error("Queue adapter sample load");
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
     for (;;) {
