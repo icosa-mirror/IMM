@@ -220,7 +220,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             target.Release(); target.antiAliasing = 1;
             Require(target.Create(), "Could not create the content fixture target.");
             foreach (string name in new[] { "paint-segment", "paint-circle", "paint-ellipse", "paint-square",
-                "picture-flat", "picture-equirect-mono", "picture-equirect-stereo", "picture-cube-cross", "picture-cube-strip" })
+                "picture-flat", "picture-equirect-mono", "picture-equirect-stereo", "picture-cube-cross", "picture-cube-strip", "model-unlit" })
             {
                 string path = Path.Combine(Application.streamingAssetsPath, "urp-content", $"{name}.imm");
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -250,7 +250,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     }
                     Require(document.GetStateInfo().Loading == ImmDocument.LoadingState.Loaded,
                         $"Content fixture loading timed out: {name}.");
-                    bool surface = name.StartsWith("paint-", StringComparison.Ordinal) || name == "picture-flat";
+                    bool surface = name.StartsWith("paint-", StringComparison.Ordinal) || name == "picture-flat" || name == "model-unlit";
                     documentCamera.clearFlags = surface ? CameraClearFlags.SolidColor : CameraClearFlags.Skybox;
                     RenderSettings.skybox = skybox;
                     var bounds = surface ? document.GetBoundingBox() : new Bounds(Vector3.zero, Vector3.one * 2);
@@ -302,7 +302,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     yield return null;
                 Require(!ImmNativePlugin.IsDocumentActive(id), $"Content fixture unload stalled: {name}.");
             }
-            Debug.Log("[IMM_URP_CONTENT] PASS nine paint and picture documents through Unity RenderGraph.");
+            Debug.Log("[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph.");
         }
         finally
         {

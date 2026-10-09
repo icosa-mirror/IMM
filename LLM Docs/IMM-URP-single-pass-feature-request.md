@@ -89,10 +89,11 @@ automating headset VR validation does not exempt non-VR changes from CI.
 5. Progress entries below are chronological evidence. A pending statement in an older
    entry describes that entry's checkpoint; this section and the latest entry govern
    the current status. Fix any CI regression before continuing feature work.
-6. Nine deterministic paint/picture IMM fixtures now have a local export/import and
-   committed-byte verification gate. Unity rendering of those fixtures remains
-   outstanding. Model file export and mesh import are stubs: native in-memory model
-   probes do not prove model document support, which remains an explicit requirement.
+6. Ten deterministic paint/picture/model IMM fixtures have a local export/import and
+   reference-byte verification gate. Model persistence and its full document fixture
+   are prepared locally in entries 66–67, separately from pushed recovery source
+   `47af21b8`. Unity rendering of the expanded corpus remains outstanding; native
+   in-memory model probes do not establish Unity model document support.
 
 ## Motivation
 
@@ -1893,3 +1894,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     evidence only: a complete model IMM fixture and Unity rendering are still
     required. The increment remains local while recovery run `37999162355`
     validates pushed source `47af21b8`.
+67. **Complete model IMM fixture (local, 2026-10-09):** a deterministic unlit
+    model document now contains four coloured vertices and two triangles. Full
+    document export and asynchronous import pass under both paint storage
+    configurations. Two independent generations produce identical ten-document
+    corpora and manifests; all nine previous IMM files remain byte-identical.
+    The reference roundtrip CTest passes with the model included. The prepared
+    Unity gate loads it through `ImmPlayerManager` and requires visible colour
+    plus bidirectional opaque/transparent depth, with all four mono platform
+    lanes requiring the ten-document completion marker. Actual model rendering
+    through Unity remains unverified, and this increment is held locally.

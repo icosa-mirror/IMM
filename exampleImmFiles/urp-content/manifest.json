@@ -7,5 +7,6 @@
 {"file":"picture-equirect-mono.imm","kind":"picture","variant":1,"depthRole":"backdrop"},
 {"file":"picture-equirect-stereo.imm","kind":"picture","variant":2,"depthRole":"backdrop"},
 {"file":"picture-cube-cross.imm","kind":"picture","variant":3,"depthRole":"backdrop"},
-{"file":"picture-cube-strip.imm","kind":"picture","variant":4,"depthRole":"backdrop"}
+{"file":"picture-cube-strip.imm","kind":"picture","variant":4,"depthRole":"backdrop"},
+{"file":"model-unlit.imm","kind":"model","variant":0,"depthRole":"surface"}
 ]}

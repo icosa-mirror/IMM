@@ -30,7 +30,8 @@ constexpr Fixture Fixtures[] = {
     {"paint-ellipse", L"Paint Ellipse", 0, 3}, {"paint-square", L"Paint Square", 0, 4},
     {"picture-flat", L"Flat Picture", 1, 0}, {"picture-equirect-mono", L"Mono Panorama", 1, 1},
     {"picture-equirect-stereo", L"Stereo Panorama", 1, 2}, {"picture-cube-cross", L"Cube Cross", 1, 3},
-    {"picture-cube-strip", L"Cube Strip", 1, 4}
+    {"picture-cube-strip", L"Cube Strip", 1, 4},
+    {"model-unlit", L"Unlit Model", 2, 0}
 };
 void Require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
 ImmExporter::Layer* AddLayer(ImmExporter::Sequence& sequence, ImmExporter::Layer::Type type,
@@ -88,6 +89,27 @@ void AddPicture(ImmExporter::Layer* layer, int variant)
     }
     Require(picture->AssignAsset(&image, false), "Assign fixture picture pixels"); image.Free();
 }
+void AddModel(ImmExporter::Layer* layer)
+{
+    piMesh mesh;
+    piMesh::VertexFormat format = {};
+    format.mStride = 7 * sizeof(float); format.mNumElems = 2;
+    format.mElems[0] = {3, piMesh::VertexElemDataType::Float, false, 0};
+    format.mElems[1] = {4, piMesh::VertexElemDataType::Float, false, 3 * sizeof(float)};
+    Require(mesh.Init(1, 4, &format, piMesh::Type::Polys, 1, 2), "Allocate authored model mesh");
+    float vertices[4][7] = {
+        {-.6f,-.5f,0, .8f,.2f,.1f,1}, {.6f,-.5f,0, .8f,.2f,.1f,1},
+        {.6f,.5f,0, .8f,.2f,.1f,1}, {-.6f,.5f,0, .8f,.2f,.1f,1}};
+    for (uint32_t vertex = 0; vertex < 4; ++vertex) mesh.SetVertex(0, vertex, vertices[vertex]);
+    mesh.SetTriangle(0, 0, 0, 1, 2); mesh.SetTriangle(0, 1, 0, 2, 3);
+    // The fourth slot is not used by a triangle but is present in the mesh format.
+    for (int triangle = 0; triangle < 2; ++triangle) mesh.GetFaceData(0, triangle)->mIndex[3] = 0;
+    mesh.CalcBBox(0, 0);
+    auto* model = new ImmExporter::LayerModel();
+    Require(model->Init() && model->AssignAsset(&mesh, false), "Initialize authored model layer");
+    layer->SetImplementation(model);
+    mesh.DeInit();
+}
 void VerifyImport(const std::filesystem::path& path, const Fixture& fixture, piLog& log)
 {
     for (auto technique : {ImmImporter::Drawing::Static, ImmImporter::Drawing::Pretessellated}) {
@@ -112,6 +134,16 @@ void VerifyImport(const std::filesystem::path& path, const Fixture& fixture, piL
                 Require(paint->GetNumDrawings() == 1 && paint->GetDrawing(0)->GetLoaded(), "Missing fixture drawing");
                 Require(paint->GetDrawing(0)->GetNumStrokes() == 1 &&
                     paint->GetDrawing(0)->GetNumGeometryChunks(fixture.variant) > 0, "Missing fixture brush geometry");
+            }
+            else if (fixture.kind == 2) {
+                Require(layer->GetType() == ImmImporter::Layer::Type::Model, "Wrong imported model type");
+                auto* model = static_cast<ImmImporter::LayerModel*>(layer->GetImplementation());
+                Require(model->GetShadingModel() == ImmImporter::LayerModel::ShadingModel::Unlit &&
+                    !model->GetRenderWireframe(), "Wrong imported model flags");
+                const auto* mesh = model->GetMesh();
+                Require(mesh->mVertexData.mNumVertexArrays == 1 && mesh->mVertexData.mVertexArray[0].mNum == 4 &&
+                    mesh->mFaceData.mNumIndexArrays == 1 && mesh->mFaceData.mIndexArray[0].mNum == 2,
+                    "Missing model document geometry");
             }
             else {
                 Require(layer->GetType() == ImmImporter::Layer::Type::Picture, "Wrong imported picture type");
@@ -265,10 +297,12 @@ int main(int argc, char** argv)
             spawn->SetVolume(volume);
             spawn->SetTracking(ImmExporter::LayerSpawnArea::TrackingLevel::Floor);
             sequence.SetInitialSpawnArea(spawnLayer);
-            const auto type = fixture.kind == 0 ? ImmExporter::Layer::Type::Paint : ImmExporter::Layer::Type::Picture;
+            const auto type = fixture.kind == 0 ? ImmExporter::Layer::Type::Paint :
+                fixture.kind == 1 ? ImmExporter::Layer::Type::Picture : ImmExporter::Layer::Type::Model;
             auto* layer = AddLayer(sequence, type, fixture.label);
             if (fixture.kind == 0) AddPaint(layer, fixture.variant);
-            else AddPicture(layer, fixture.variant);
+            else if (fixture.kind == 1) AddPicture(layer, fixture.variant);
+            else AddModel(layer);
             const std::string filename = std::string(fixture.name) + ".imm";
             const auto path = directory / filename;
             Require(ImmExporter::ExportToFile(path.string().c_str(), &sequence, 128000, ImmExporter::tiLayerSound::AudioType::OPUS), "Export fixture");
@@ -276,7 +310,7 @@ int main(int argc, char** argv)
             if (!first) manifest << ",\n";
             first = false;
             manifest << "{\"file\":\"" << filename << "\",\"kind\":\"" <<
-                (fixture.kind == 0 ? "paint" : "picture") <<
+                (fixture.kind == 0 ? "paint" : fixture.kind == 1 ? "picture" : "model") <<
                 "\",\"variant\":" << fixture.variant << ",\"depthRole\":\"" <<
                 (fixture.kind == 1 && fixture.variant != 0 ? "backdrop" : "surface") << "\"}";
             std::printf("IMM_URP_CONTENT_FIXTURES PASS %s both paint storage imports\n", filename.c_str());
