@@ -248,6 +248,10 @@ jobs:
         timeout-minutes: 2
         shell: pwsh
         run: |
+          # Checkout contains historical generated captures. An early probe failure
+          # must not let always() reporting treat them as this run's GPU evidence.
+          Remove-Item -LiteralPath code/appImmViewer/exe/vulkan_sample1_smoke.ppm,
+            code/appImmViewer/exe/vulkan_sample1_smoke.png -Force -ErrorAction SilentlyContinue
           $env:VK_LOADER_DEBUG = 'error,warn,layer'
           $env:VK_LAYER_PATH = (Resolve-Path artifacts/vulkan-model-probe).Path
           # Elevated Vulkan applications ignore VK_LAYER_PATH. Register only the

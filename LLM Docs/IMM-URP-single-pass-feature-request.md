@@ -49,8 +49,10 @@ automating headset VR validation does not exempt non-VR changes from CI.
    Windows Godot Vulkan and GPU Evidence Report while other lanes continue.
    Local corrections update the Quest-row audit expectations and supply the
    LLVM 22 DLL required by the pinned Mesa driver; hosted confirmation is pending.
-   The standalone Vulkan surface-detail comparison also failed and remains open;
-   its threshold has not been relaxed.
+   The standalone Vulkan surface-detail comparison consumed a historical tracked
+   capture after the actual capture step was skipped. Its hash matches the tracked
+   file exactly; the workflow now clears those outputs before validation. No visual
+   threshold has been relaxed, and fresh hosted capture confirmation remains required.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
@@ -1761,7 +1763,11 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     extracts a hash-pinned LLVM 22 DLL alongside the current toolchain, without
     downgrading its packages. Vulkan tools and loader/result diagnostics are
     retained for confirmation. The separate standalone surface-detail mismatch
-    remains unresolved; no visual threshold or required lane was removed.
+    used the historical tracked output after the actual capture step was skipped:
+    the CI candidate hash matches that file exactly. The workflow now clears those
+    outputs before running the probe, preventing stale success or failure evidence.
+    Fresh rendering confirmation remains required; no visual threshold or required
+    lane was removed.
 59. **Deterministic document inputs (local, 2026-10-09):**
     exampleImmFiles/urp-content contains nine authored documents: four paint brush
     sections and five picture formats, plus a machine-readable manifest. The native
