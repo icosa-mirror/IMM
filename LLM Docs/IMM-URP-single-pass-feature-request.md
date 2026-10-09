@@ -22,92 +22,44 @@ The CI validation workflow is critical to delivery. Every implementation stage m
 or update its automated validation and fix CI regressions as they arise. The difficulty of
 automating headset VR validation does not exempt non-VR changes from CI.
 
-## Current status — 2026-10-09
+## Current status � 2026-10-10
 
-1. Last confirmed full-CI source: `265fe132`; synchronized runtime binaries: `b0396331`.
-   Full [CI validation run 37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
-   passed, including Windows DX12 composition, Windows Vulkan GPU readback, macOS
-   Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation.
-   The strict Windows Vulkan probe reports validation enabled and zero validation errors.
-   Newer attribution run `37974039216` completed with Windows native-test and Unity iOS
-   attribution-fixture failures; skipped downstream jobs left validation evidence incomplete.
-   Local corrections are recorded in entries 44 and 46. Hosted confirmation is pending,
-   so this remains the last confirmed full-green source.
-   The correction run at `963193e5`, `37979446772`, completed with 38 successful, 13 skipped
-   and four failed jobs: Unity iOS simulator, Unity Android Vulkan and the two
-   evidence aggregators. Android device logs confirm the same duplicate
-   automatic/explicit camera fixture failure as iOS; the local correction is
-   committed at `be2760f2`. This is not a new full-green checkpoint.
-   That run's iOS fixture submitted the main camera twice because automatic rendering
-   remained enabled. The correction disables automatic rendering for both explicitly
-   driven test cameras and restores the main camera afterwards. Source `209f6d41`
-   confirms the strict attribution and allocation checks on both iOS and Android.
-   The shared camera correction, expanded native content probes and prepared XR
-   per-eye depth harness are now pushed at `209f6d41`. Full validation run
-   `37986974593` completed with 36 successful, 14 skipped and six failed jobs:
-   Matrix Status, Core Evidence Report, Windows Standalone Vulkan, Windows Godot
-   Vulkan, GPU Evidence Report and Validation Evidence. Unity iOS and Android pass.
-   This failed run is not a promoted checkpoint.
-   Local corrections update the Quest-row audit expectations and supply the
-   LLVM 22 DLL required by the pinned Mesa driver; hosted confirmation is pending.
-   The standalone Vulkan surface-detail comparison consumed a historical tracked
-   capture after the actual capture step was skipped. Its hash matches the tracked
-   file exactly; the workflow now clears those outputs before validation. No visual
-   threshold has been relaxed, and fresh hosted capture confirmation remains required.
-   Recovery source `623a5b1e`, full validation run `37994572862`, completed with
-   37 successful, 14 skipped and five failed jobs. Unity iOS Metal, Android Vulkan,
-   macOS Metal, Windows DirectX composition, Windows Vulkan synthetic stereo and
-   Godot iOS pass. Standalone iOS and both Windows Vulkan lanes fail, along with
-   GPU Evidence Report and Validation Evidence as downstream failures.
-   The iOS runtime subsequently reports successful rendering after the capture
-   wait expired; `85fc7730` increases bounded startup time. Windows setup requests
-   an unavailable optional package; `c55f372a` removes it. Both corrections are
-   prepared for the next hosted checkpoint. Native model and both paint techniques
-   now pass exact half-opacity coverage at 4x/8x MSAA locally on hardware and the
-   CI-matched lavapipe runtime (`035d9fe8`, `bf1a22d6`). Unity content and skybox
-   composition gates are prepared (`20f7bc64`, `5dc9cdc0`, `11054235`) for that
-   checkpoint; their actual rendering remains unverified. This is not a new green checkpoint.
-   Ordinary-push run `37999162355` at `47af21b8` completed with 18 successful
-   and 15 skipped jobs. It omitted GPU, device, engine and iOS visual validation:
-   the final pushed commit lacked the `[CI VALIDATION]` trigger. Its green result
-   is build/core/web evidence only. Full-mode validation is explicitly dispatched
-   as `38000728358` on synchronized binary commit `ab8c2376` (source `47af21b8`).
-   That run remains the required recovery gate. Future checkpoints must either
-   use the full-validation commit trigger or explicitly dispatch `mode=full`,
-   and inspect which platform gates actually ran before recording recovery.
-2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
-   model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
-   logical-device feature observer are committed. Native all-content GPU readbacks do
-   not establish complete all-layer composition through Unity or Android.
-3. The borrowed-device multiview boundary and Unity Vulkan two-view adapter are
-   implemented and hosted GPU readbacks pass, including the loaded-scene Unity
-   packet adapter (entries 34–38). Layer discovery, destroyed buffer bindings
-   and owned-device viewport capability fixes are confirmed by full CI.
-   Dedicated URP/OpenXR build helpers request single-pass and configure a
-   tracked sample origin for Windows and Quest; both hosted builds pass
-   (entries 39–40). Windows hardware-harness migration, allocation gates and
-   expanded stereo MSAA checks are pushed but await hosted confirmation. The
-   Quest Unity hardware lane is prepared locally (entry 49). Complete stereo
-   content and MSAA/depth composition,
-   hosted confirmation of camera/frame/XR-pass submission attribution, measured managed-allocation
-   acceptance and headset per-eye/one-pass acceptance remain required.
-4. Local editor changes to the sample's OpenXR and Package Manager settings, plus
-   the unrelated Godot review handoff, remain untouched and outside the validated
-   checkpoint.
-5. Progress entries below are chronological evidence. A pending statement in an older
-   entry describes that entry's checkpoint; this section and the latest entry govern
-   the current status. Fix any CI regression before continuing feature work.
-6. Ten deterministic paint/picture/model IMM fixtures have a local export/import and
-   reference-byte verification gate. Model persistence and its full document fixture
-   are prepared locally in entries 66–67, separately from pushed recovery source
-   `47af21b8`. Unity rendering of the expanded corpus remains outstanding; native
-   in-memory model probes do not establish Unity model document support.
-
-7. Paint-mode selection is now implemented locally (entry 71), with both techniques
-   required by the prepared Unity corpus gate. Full recovery run `38000728358`
-   has a confirmed Windows Unity Vulkan artifact-summary failure caused by the
-   staged fixture manifest filename; correction and local replay are in entry 72.
-   Remaining jobs and subsequent full validation are still required.
+1. Last confirmed full-green source: `265fe132`; synchronized runtime binaries:
+   `b0396331`. Full [run 37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
+   passed the required non-VR platform gates. Later checkpoints have not replaced it.
+2. Current full recovery [run 38000728358](https://github.com/icosa-mirror/IMM/actions/runs/38000728358)
+   tests binary commit `ab8c2376`, source `47af21b8`. At the latest scheduled refresh,
+   Android Unity and downstream jobs remain pending. Standalone iOS Metal and Windows
+   standalone/Godot Vulkan pass, confirming their earlier recovery fixes. Windows
+   Unity DX12/Vulkan player build steps pass but artifact collection fails on a nested
+   fixture-manifest filename. Unity iOS/macOS Metal reach the corpus and fail on the
+   stereo-format panorama. Both causes have local corrections (entries 72 and 76).
+   This is not a new full-green checkpoint. Ordinary-push run `37999162355` was
+   build/core/web-only and cannot establish rendering or device recovery.
+3. D3D12 mono and synthetic two-slice stereo, Vulkan mono and the borrowed-device
+   two-view adapter are implemented. Native paint/picture/model GPU readbacks pass;
+   these do not prove complete all-content rendering through Unity or headset
+   correctness. Windows OpenXR and Quest single-pass build/hardware harnesses exist.
+4. Unpublished increments include model persistence and a ten-document corpus,
+   explicit static/pretessellated paint selection with packet ABI v4, both-technique
+   Unity corpus MSAA checks, real transparent blending/alpha-test controls, the
+   same-commit plugin ABI gate and the two recovery corrections above. Their local
+   evidence and limits are recorded in entries 66�76. Actual hosted execution of
+   these increments remains required before promoting a checkpoint.
+5. Remaining acceptance includes full non-VR CI recovery, Unity corpus/depth/skybox/
+   blending/MSAA confirmation across the required matrix, complete stereo content
+   composition and stroke-edge quality. Real headset pose/per-eye checks and GPU
+   captures proving one scene draw sequence remain outstanding. Native probes and
+   managed event counts cannot substitute for those results. Measure any selected
+   offscreen route's allocation/synchronization/resolve/composite costs as required.
+6. The unrelated dirty sample OpenXR settings, Package Manager settings and Godot
+   review handoff remain untouched and outside the validated checkpoint.
+7. Progress entries are chronological evidence. Pending statements in older entries
+   describe those checkpoints; this section and the latest entry govern current
+   status. Fix CI regressions before continuing feature implementation. Use the
+   `[CI VALIDATION]` trigger or explicitly dispatch `mode=full`, then inspect which
+   platform gates actually ran before claiming recovery. CI monitoring remains on
+   a fifteen-minute cadence for the current run.
 
 ## Motivation
 
@@ -139,7 +91,8 @@ on Open Brush's project settings, custom renderer features or checkout.
 4. Implement one rendering route per backend: direct rendering or one layered offscreen
    render plus stereo composite. Do not expose a route selector or require both routes on
    each backend. The existing dedicated-queue design is not a compatibility requirement.
-5. Use the fixed insertion point `AfterRenderingOpaques`. Verify general URP composition
+5. Use the fixed insertion point `AfterRenderingSkybox`, sharing opaque depth and
+   preceding transparents. Verify general URP composition
    with opaque/alpha-tested geometry, transparent geometry, a skybox and later renderer
    features. Do not expose an arbitrary `RenderPassEvent` setting or require application-
    specific renderer hooks. Consumer integration checks may supplement the package sample.
@@ -203,7 +156,8 @@ against `main` (`fc859f51`) during this review, including the Windows renderer d
 Ship an `ImmRendererFeature : ScriptableRendererFeature` in a package that may depend
 directly on `com.unity.render-pipelines.universal`, with an internal integration API, that:
 
-1. Enqueues an `ImmRenderPass` at `AfterRenderingOpaques`.
+1. Enqueues an `ImmRenderPass` at `AfterRenderingSkybox` so IMM backdrops survive
+   the Unity skybox and later transparent geometry composes over IMM.
    IMM tests against Unity opaque depth and writes visible opaque IMM depth so
    subsequent Unity transparents are occluded correctly.
 2. Implements the URP integration exclusively through RenderGraph (`RecordRenderGraph`).
@@ -2019,3 +1973,11 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     The Windows DX12 build also confirms the same nested fixture-manifest collision
     as Windows Vulkan. Android and downstream jobs remain pending, and the Metal
     shader correction requires hosted compilation and rendering confirmation.
+
+77. **Current requirements and status reconciled (2026-10-10):** the scope and
+    renderer-feature requirements now specify `AfterRenderingSkybox`, matching the
+    implementation and successful mono-panorama skybox controls on iOS/macOS Metal.
+    The earlier fixed insertion point contradicted backdrop acceptance. The current
+    status section now separates the last full-green source, active recovery failures,
+    unpublished increments and outstanding acceptance; chronological entries retain
+    their checkpoint-specific evidence and limitations.
