@@ -1859,6 +1859,7 @@ struct piVulkanState
     uint32_t pictureTraceCounter = 0; // sampled compose-trace (per-draw logging is real CPU)
     bool ownsDedicatedQueue = false;
     bool externalDepthReverseZ = false;
+    bool multiviewEnabled = false;
     int paintProbeLogCount = 0;
     int handleProbeLogCount = 0;
     // Serializes every record->submit->wait sequence: they share commandBuffer,
@@ -8369,6 +8370,7 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
         mState->hostQueue = mState->graphicsQueue;
         mState->graphicsQueueFamilyIndex = externalDevice->graphicsQueueFamilyIndex;
         mState->externalDepthReverseZ = externalDevice->externalDepthReverseZ;
+        mState->multiviewEnabled = externalDevice->multiviewEnabled;
         if (!iLoadVulkanInstanceEntryPoints(mState, mReporter) ||
             !iLoadVulkanSwapchainEntryPoints(mState, mReporter) ||
             !iCreateVulkanFrameResources(mState, mReporter))
@@ -8721,8 +8723,7 @@ void piRendererVulkan::Deinitialize(void)
 
 bool piRendererVulkan::SupportsFeature(RendererFeature feature)
 {
-    (void)feature;
-    return false;
+    return feature == RendererFeature::MULTIVIEW && mState && mState->multiviewEnabled;
 }
 
 piRenderer::API piRendererVulkan::GetAPI(void) { return API::Vulkan; }
@@ -9647,14 +9648,15 @@ bool piRendererVulkan::UsesDedicatedQueue(void) const
     return mState != nullptr && mState->ownsDedicatedQueue;
 }
 
-bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber, bool unityProjectionAdjusted)
+bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber, bool unityProjectionAdjusted, uint32_t viewCount)
 {
-    EndExternalImageFrame();
     if (!mState || commandBuffer == nullptr || renderPass == nullptr ||
-        (framebuffer == nullptr && !unityProjectionAdjusted) || colorVkFormat == 0 || width <= 0 || height <= 0)
+        (framebuffer == nullptr && !unityProjectionAdjusted) || colorVkFormat == 0 || width <= 0 || height <= 0 ||
+        (viewCount != 1 && viewCount != 2) || (viewCount == 2 && !mState->multiviewEnabled))
     {
         return false;
     }
+    EndExternalImageFrame();
 
     bool newFrame = false;
     if (!mState->hostFrameSlots.Acquire(currentFrameNumber, safeFrameNumber, mState->activeHostFrame, newFrame))
@@ -9684,7 +9686,7 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     mState->hostResourceOwner = this;
 
     piTextureS *colorTexture = new piTextureS();
-    colorTexture->info = { TextureType::T2D, Format::C4_8_UNORM, width, height, 1, static_cast<int>(colorVkSamples != 0 ? colorVkSamples : VK_SAMPLE_COUNT_1_BIT), 1, 0 };
+    colorTexture->info = { viewCount == 2 ? TextureType::T2D_ARRAY : TextureType::T2D, Format::C4_8_UNORM, width, height, static_cast<int>(viewCount), static_cast<int>(colorVkSamples != 0 ? colorVkSamples : VK_SAMPLE_COUNT_1_BIT), 1, 0 };
     colorTexture->filter = TextureFilter::NONE;
     colorTexture->wrap = TextureWrap::CLAMP;
     colorTexture->vkFormat = static_cast<VkFormat>(colorVkFormat);

@@ -25,6 +25,8 @@ struct ProbeReporter : ImmCore::piRenderer::piReporter
     void End() override {}
 };
 
+void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore::piLog& log);
+
 static void DrawModelProbe(ImmCore::piRendererVulkan& renderer, ImmCore::piLog& log, ImmPlayer::LayerRendererModel& modelRenderer, bool padded, float opacity, int viewportSize, ImmCore::piTexture color, unsigned char* pixels)
 {
     using namespace ImmCore;
@@ -400,7 +402,9 @@ int main()
         renderer.SetRenderTarget(nullptr);
         renderer.DestroyRenderTarget(target);
         renderer.DestroyTexture(color); renderer.DestroyTexture(depth);
-        renderer.Deinitialize(); log.End();
+        renderer.Deinitialize();
+        RunVulkanMultiviewProbe(reporter, log);
+        log.End();
         std::puts("IMM_VULKAN_MODEL PASS production model layouts and packed paint, linear/gamma colour and opacity readback");
         DestroyWindow(window);
         return 0;

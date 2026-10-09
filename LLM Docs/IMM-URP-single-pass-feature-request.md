@@ -22,9 +22,9 @@ The CI validation workflow is critical to delivery. Every implementation stage m
 or update its automated validation and fix CI regressions as they arise. The difficulty of
 automating headset VR validation does not exempt non-VR changes from CI.
 
-## Current checkpoint — 2026-10-04
+## Current status — 2026-10-09
 
-1. Validated source: `dabce216`; synchronized runtime-binary checkpoint: `50278257`.
+1. Last confirmed full-CI source: `dabce216`; synchronized runtime-binary checkpoint: `50278257`.
    Full [CI validation run 37196388177](https://github.com/icosa-mirror/IMM/actions/runs/37196388177)
    passed, including Windows DX12 composition, Windows Vulkan GPU readback, macOS
    Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation.
@@ -32,12 +32,14 @@ automating headset VR validation does not exempt non-VR changes from CI.
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
    not establish complete all-layer composition through Unity or Android.
-3. Vulkan multiview remains disabled. Resume with the native multiview frame boundary
-   and borrowed-device GPU proof, then Unity/Quest integration. Windows OpenXR execution,
+3. The native borrowed-device multiview boundary and production model GPU readback
+   are implemented locally (entry 34); hosted validation is pending. Unity Vulkan
+   multiview remains disabled. Next: validate this increment in CI, then implement
+   the Unity two-view adapter and Quest integration. Windows OpenXR execution,
    headset composition and per-eye/one-pass acceptance remain required.
-4. No partially edited implementation is pending. Local editor changes to the sample's
-   OpenXR and Package Manager settings, plus the unrelated Godot review handoff, were
-   left untouched and are outside this validated checkpoint.
+4. Local editor changes to the sample's OpenXR and Package Manager settings, plus
+   the unrelated Godot review handoff, remain untouched and outside the validated
+   checkpoint.
 5. Progress entries below are chronological evidence. A pending statement in an older
    entry describes that entry's checkpoint; this section and the latest entry govern
    the current status. Fix any CI regression before continuing feature work.
@@ -1412,3 +1414,20 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     No native multiview frame-boundary implementation has started;
     Vulkan multiview remains disabled. Resume with that boundary and GPU proof,
     then Unity/Quest integration. Windows OpenXR headset acceptance remains open.
+
+34. **Native borrowed Vulkan multiview boundary (local, 2026-10-09):** hosts can
+    explicitly attest logical-device multiview enablement and borrow a two-view
+    render pass with view mask 3 and two-layer attachments. Existing callers
+    default to mono. Unsupported/invalid view counts are rejected before changing
+    an active host frame. The Windows production GPU probe now creates a real
+    multiview-enabled device, primes mesh uploads before the host render pass and
+    renders one production model submission into both slices. GPU readback finds
+    512 pixels per slice and distinct eye centroids (18.5/44.5). The four Vulkan
+    tests pass with the installed validation layer enabled, and Android NDK
+    syntax checks pass. Validation also exposed unsupported depth clamp and an
+    unused mandatory normal input: Vulkan now uses ordinary depth clipping, and
+    generated unlit model shaders require only position/colour. These corrections
+    are committed separately from the multiview boundary. The existing mandatory
+    Windows Vulkan GPU CI probe executes the new two-view check; hosted confirmation
+    is pending. Unity/Quest integration, all-content multiview, MSAA/depth composition
+    and headset acceptance remain unfinished.
