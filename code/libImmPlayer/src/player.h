@@ -39,6 +39,7 @@ namespace ImmPlayer {
 
         bool Init(ImmCore::piRenderer* renderer, ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmCore::piTimer *timer, const Configuration * configuration);
         void Deinit(void);
+        ImmImporter::Drawing::PaintRenderingTechnique GetPaintRenderingTechnique() const { return mPaintRenderingTechnique; }
 
         // call this only once per frame
         void GlobalWork( bool enabled, uint32_t microsecondsBudget);

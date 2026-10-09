@@ -562,7 +562,8 @@ jobs:
                       "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",
                       "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.",
                       "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out.",
-                      "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph.",
+                      "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique=Static.",
+                      "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique=Pretessellated.",
                       "[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames)."]
           for samples in (1, 2, 4, 8):
               marker = f"[IMM_URP_SMOKE] PASS rendered at {samples} samples."
@@ -954,7 +955,8 @@ jobs:
               "[IMM_URP_READBACK] PASS stereo packet and layered resolve at 4 samples.",
               "[IMM_URP_READBACK] PASS stereo packet and layered resolve at 8 samples.",
               "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out.",
-              "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph.",
+              "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique=Static.",
+                      "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique=Pretessellated.",
               "[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames).",
               "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
               "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",
@@ -2449,7 +2451,8 @@ jobs:
           --required-marker "[IMM_URP_SMOKE] PASS bidirectional depth composition at 4 samples."
           --required-marker "[IMM_URP_SMOKE] PASS queued camera isolation."
           --required-marker "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out."
-          --required-marker "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph."
+          --required-marker "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique=Static."
+          --required-marker "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique=Pretessellated."
           --required-marker "[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames)."
           --required-marker "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down."
           --client-label "IMM Unity Android Vulkan URP"

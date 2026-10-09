@@ -32,12 +32,14 @@ inline HRESULT ProcessImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmE
     if (packet.operation == 0)
     {
         if (state.ready || bridge.IsInitialized() || packet.colorSpace < 0 || packet.colorSpace > 1 ||
+            packet.paintRenderingTechnique < 0 || packet.paintRenderingTechnique > 1 ||
             packet.samples != 8 || packet.enableSound < 0 || packet.enableSound > 1) return E_INVALIDARG;
         if (!ConfigureImmRenderGraph(state, state.unity) || !state.host.InitializeInRenderEvent()) return E_FAIL;
         ImmShared::ImmEngineBridge::InitConfig config = {};
         config.externalRenderer = &state.host.RendererInRenderEvent();
         config.rendererApi = ImmCore::piRenderer::API::DX12;
         config.colorSpace = packet.colorSpace; config.antialiasing = packet.samples;
+        config.paintRenderingTechnique = packet.paintRenderingTechnique;
         config.enableSound = packet.enableSound != 0;
         config.logFileName = "imm-render-graph.log";
         if (!bridge.Init(config)) { bridge.Shutdown(); ShutdownImmRenderGraph(state, bridge); return E_FAIL; }

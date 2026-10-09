@@ -14,7 +14,12 @@ camera has `ImmCamera`. `ImmUrpSample` selects the configured URP asset for the
 scene's lifetime and restores the previous quality pipeline when destroyed. For
 an application, assign the URP asset in its graphics/quality settings, add the
 renderer feature, add `ImmCamera` to each participating camera, and initialize
-an `ImmPlayerManager`. Rendering uses RenderGraph at `AfterRenderingOpaques`.
+an `ImmPlayerManager`. Rendering uses RenderGraph at `AfterRenderingSkybox`.
+
+Select `ImmPlayerManager.UrpPaintRenderingTechnique` before initialization: `Static`
+is the default; `Pretessellated` selects the other native paint import/render path.
+Changing the technique requires shutting down the manager and initializing it again.
+The mono CI content gate loads the fixture corpus independently under both techniques.
 
 The implementation accepts perspective or orthographic base cameras, a full
 viewport, matching colour/depth attachments with 1, 2, 4 or 8 samples and no
@@ -47,7 +52,7 @@ With no subscribers, the transport skips diagnostic record construction.
 Idle diagnostic fixtures should call `PollCompletions()` on the main thread after
 their GPU readback completes; it polls acknowledgements without waiting or rendering.
 
-This requires packet ABI version 3 (496 bytes). Ship matching managed and native
+This requires packet ABI version 4 (496 bytes). Ship matching managed and native
 plugin revisions; older packet layouts are rejected. Automated mono checks cover
 two distinct cameras and camera opt-out; synthetic stereo checks cover one native
 scene event for a two-view request. These counters do not prove GPU draw counts

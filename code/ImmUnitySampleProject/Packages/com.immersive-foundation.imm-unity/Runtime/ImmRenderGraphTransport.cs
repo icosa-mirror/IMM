@@ -94,8 +94,11 @@ namespace ImmPlayer
             }
         }
 
-        internal void QueueInitialize(CommandBuffer commands, bool linearColor, bool enableSound)
+        internal void QueueInitialize(CommandBuffer commands, bool linearColor, bool enableSound, ImmPaintRenderingTechnique paintTechnique)
         {
+            if (paintTechnique != ImmPaintRenderingTechnique.Static &&
+                paintTechnique != ImmPaintRenderingTechnique.Pretessellated)
+                throw new ArgumentOutOfRangeException(nameof(paintTechnique));
             Poll();
             if ((phase != Phase.Created && phase != Phase.Stopped) || HasPending())
                 throw new InvalidOperationException("IMM RenderGraph session is already active.");
@@ -107,6 +110,7 @@ namespace ImmPlayer
             Marshal.WriteInt32(slot.Memory, 28, linearColor ? 0 : 1);
             Marshal.WriteInt32(slot.Memory, 32, 8); // Initial renderer configuration; borrowed attachments determine draw sample counts.
             Marshal.WriteInt32(slot.Memory, 36, enableSound ? 1 : 0);
+            Marshal.WriteInt32(slot.Memory, 492, (int)paintTechnique);
             Enqueue(commands, slot);
             LastError = 0;
             phase = Phase.Initializing;
@@ -193,7 +197,7 @@ namespace ImmPlayer
             }
             // Clear stale results and unused fields before publishing another request.
             for (int offset = 0; offset < PacketSize; offset += 8) Marshal.WriteInt64(available.Memory, offset, 0);
-            Marshal.WriteInt32(available.Memory, 0, 3);
+            Marshal.WriteInt32(available.Memory, 0, 4);
             Marshal.WriteInt32(available.Memory, 12, 1);
             Marshal.WriteInt32(available.Memory, 4, PacketSize);
             Marshal.WriteInt32(available.Memory, 8, operation);

@@ -4,6 +4,9 @@ using UnityEngine.Rendering;
 
 namespace ImmPlayer
 {
+    /// <summary>Native paint import/render path selected when a URP session starts.</summary>
+    public enum ImmPaintRenderingTechnique { Static = 0, Pretessellated = 1 }
+
     // One process-wide native bridge is shared by all opted-in cameras and renderer assets.
     // Start/Dispose run on Unity's main thread, outside RenderGraph execution. They may stall;
     // frame submissions only use Transport and its asynchronous packet acknowledgements.
@@ -34,7 +37,7 @@ namespace ImmPlayer
             }
         }
 
-        internal static ImmRenderGraphSession Start(bool linearColor, bool enableSound)
+        internal static ImmRenderGraphSession Start(bool linearColor, bool enableSound, ImmPaintRenderingTechnique paintTechnique)
         {
             if (Current != null)
                 throw new InvalidOperationException("Dispose the current IMM RenderGraph session before starting another.");
@@ -48,7 +51,7 @@ namespace ImmPlayer
 #endif
             try
             {
-                session.Transport.QueueInitialize(session.lifecycleCommands, linearColor, enableSound);
+                session.Transport.QueueInitialize(session.lifecycleCommands, linearColor, enableSound, paintTechnique);
                 session.ExecuteLifecycle();
                 if (!session.Transport.IsReady)
                     throw new InvalidOperationException($"IMM initialization was not acknowledged successfully (0x{session.Transport.LastError:X8}).");
@@ -96,8 +99,8 @@ namespace ImmPlayer
             int exitCode = 1;
             try
             {
-                using (Start(true, false)) { }
-                using (Start(false, false)) { }
+                using (Start(true, false, ImmPaintRenderingTechnique.Static)) { }
+                using (Start(false, false, ImmPaintRenderingTechnique.Pretessellated)) { }
                 Debug.Log("[IMM_RENDER_GRAPH_LIFECYCLE] PASS initialized, shut down and recreated on D3D12.");
                 exitCode = 0;
             }

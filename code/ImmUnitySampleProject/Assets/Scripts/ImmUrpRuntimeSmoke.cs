@@ -180,9 +180,18 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             yield return null;
         Require(!ImmNativePlugin.IsDocumentActive(documentId), "Deferred unload stalled without a camera.");
         Debug.Log("[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.");
-        var content = VerifyContentFixtures(manager, optIn);
-        try { while (content.MoveNext()) yield return content.Current; }
-        finally { (content as IDisposable)?.Dispose(); }
+        foreach (var technique in new[] { ImmPaintRenderingTechnique.Static, ImmPaintRenderingTechnique.Pretessellated })
+        {
+            if (manager.UrpPaintRenderingTechnique != technique)
+            {
+                manager.Shutdown();
+                manager.UrpPaintRenderingTechnique = technique;
+                Require(manager.Initialize(), $"Could not initialize URP paint technique {technique}.");
+            }
+            var content = VerifyContentFixtures(manager, optIn);
+            try { while (content.MoveNext()) yield return content.Current; }
+            finally { (content as IDisposable)?.Dispose(); }
+        }
         Destroy(sample.gameObject);
         for (int frame = 0; frame < 3; ++frame) yield return null;
         Require(manager == null, "The sample left its persistent manager alive after destruction.");
@@ -269,7 +278,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                         yield return null;
                         RenderPipeline.SubmitRenderRequest(documentCamera, request);
                         int bluePixels = 0;
-                        foreach (var pixel in ReadTargetPixels(target, $"skybox-control-{name}"))
+                        foreach (var pixel in ReadTargetPixels(target, $"skybox-control-{name}-{manager.UrpPaintRenderingTechnique}"))
                             if (pixel.b > pixel.r + 10 && pixel.b > pixel.g + 10) ++bluePixels;
                         Require(bluePixels > target.width * target.height * 9 / 10,
                             $"Skybox control did not render for {name}: pixels={bluePixels}.");
@@ -281,7 +290,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                         RenderPipeline.SubmitRenderRequest(documentCamera, request);
                     }
                     int redPixels = 0;
-                    foreach (var pixel in ReadTargetPixels(target, $"content-{name}"))
+                    foreach (var pixel in ReadTargetPixels(target, $"content-{name}-{manager.UrpPaintRenderingTechnique}"))
                         if (pixel.r > pixel.g + 10 && pixel.r > pixel.b + 10) ++redPixels;
                     Require(redPixels > 100, $"Content fixture has no expected red geometry: {name}, pixels={redPixels}.");
                     if (!surface) Require(redPixels > target.width * target.height * 9 / 10,
@@ -289,7 +298,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     if (!surface) Debug.Log($"[IMM_URP_CONTENT] PASS {name} survives Unity skybox with opt-out control.");
                     if (surface)
                     {
-                        var depth = VerifyDepthComposition(1, bounds);
+                        var depth = VerifyDepthComposition(1, bounds, $"{name}-{manager.UrpPaintRenderingTechnique}");
                         try { while (depth.MoveNext()) yield return depth.Current; }
                         finally { (depth as IDisposable)?.Dispose(); }
                     }
@@ -302,7 +311,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     yield return null;
                 Require(!ImmNativePlugin.IsDocumentActive(id), $"Content fixture unload stalled: {name}.");
             }
-            Debug.Log("[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph.");
+            Debug.Log($"[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique={manager.UrpPaintRenderingTechnique}.");
         }
         finally
         {
@@ -320,7 +329,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         }
     }
 
-    private IEnumerator VerifyDepthComposition(int samples, Bounds bounds)
+    private IEnumerator VerifyDepthComposition(int samples, Bounds bounds, string fixture = "sample")
     {
         var shader = Resources.Load<Shader>("ImmUrpDepthProbe");
         Require(shader != null && shader.isSupported, "URP depth probe shader is unavailable.");
@@ -357,7 +366,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     RenderPipeline.SubmitRenderRequest(documentCamera, request);
                 }
                 Require(renderError == null, $"Unity reported: {renderError}");
-                int visible = ReadVisiblePixels(false);
+                int visible = ReadVisiblePixels(true, samples, $"depth-{fixture}-{phase}");
                 Require(near ? visible == 0 : visible > 100,
                     $"Depth composition failed: samples={samples} transparent={transparent} near={near} visible={visible}.");
             }
@@ -581,7 +590,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         }
     }
 
-    private int ReadVisiblePixels(bool capture, int samples = 0)
+    private int ReadVisiblePixels(bool capture, int samples = 0, string label = null)
     {
         var previous = RenderTexture.active;
         var resolved = RenderTexture.GetTemporary(target.width, target.height, 0, RenderTextureFormat.ARGB32);
@@ -595,6 +604,8 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             if (capture)
             {
                 string path = Environment.GetEnvironmentVariable("IMM_UNITY_URP_CAPTURE");
+                if (!string.IsNullOrEmpty(label) && !string.IsNullOrEmpty(path))
+                    path = Path.Combine(Path.GetDirectoryName(path), $"{Path.GetFileNameWithoutExtension(path)}-{label}{Path.GetExtension(path)}");
                 if (samples > 0 && !string.IsNullOrEmpty(path))
                     path = Path.Combine(Path.GetDirectoryName(path), $"{Path.GetFileNameWithoutExtension(path)}-{samples}x{Path.GetExtension(path)}");
                 Require(!string.IsNullOrEmpty(path), "CI capture path is missing.");

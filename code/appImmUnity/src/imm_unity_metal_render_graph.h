@@ -65,11 +65,13 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
     if (packet.operation == 0)
     {
         if (state.ready || bridge.IsInitialized() || packet.colorSpace < 0 || packet.colorSpace > 1 ||
+            packet.paintRenderingTechnique < 0 || packet.paintRenderingTechnique > 1 ||
             packet.samples != 8 || packet.enableSound < 0 || packet.enableSound > 1) return invalid;
         ImmShared::ImmEngineBridge::InitConfig config = {};
         config.rendererApi = ImmCore::piRenderer::API::Metal;
         config.graphicsDevice = unity->MetalDevice();
         config.colorSpace = packet.colorSpace; config.antialiasing = packet.samples;
+        config.paintRenderingTechnique = packet.paintRenderingTechnique;
         config.enableSound = packet.enableSound != 0;
         config.metalUnityProjectionAdjusted = true;
         config.reverseDepthBuffer = true;

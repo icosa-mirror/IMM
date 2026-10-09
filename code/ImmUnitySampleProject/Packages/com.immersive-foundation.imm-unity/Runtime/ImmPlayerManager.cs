@@ -146,6 +146,21 @@ namespace ImmPlayer
         [Header("Player Settings")]
         [SerializeField] private bool useLinearColorSpace = true;
         [SerializeField] private int antialiasingLevel = 8;
+        [SerializeField] private ImmPaintRenderingTechnique urpPaintRenderingTechnique = ImmPaintRenderingTechnique.Static;
+
+        /// <summary>Select the URP paint importer before initializing the manager.</summary>
+        public ImmPaintRenderingTechnique UrpPaintRenderingTechnique
+        {
+            get => urpPaintRenderingTechnique;
+            set
+            {
+                if (_isInitialized) throw new InvalidOperationException("Select the URP paint technique before initialization.");
+                if (value != ImmPaintRenderingTechnique.Static && value != ImmPaintRenderingTechnique.Pretessellated)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                urpPaintRenderingTechnique = value;
+            }
+        }
+
         [SerializeField] private string logFileName = "imm_player_log.txt";
         [SerializeField] private Camera renderCamera = null;
 
@@ -403,7 +418,7 @@ namespace ImmPlayer
 #if UNITY_IOS && !UNITY_EDITOR
                     ImmNativePlugin.ImmUnityRegisterRenderingPlugin();
 #endif
-                    _renderGraphSession = ImmRenderGraphSession.Start(QualitySettings.activeColorSpace == ColorSpace.Linear, true);
+                    _renderGraphSession = ImmRenderGraphSession.Start(QualitySettings.activeColorSpace == ColorSpace.Linear, true, urpPaintRenderingTechnique);
                     _isInitialized = true;
                     return true;
                 }

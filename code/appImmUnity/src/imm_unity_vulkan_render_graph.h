@@ -111,7 +111,8 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
     if (packet.operation == 0)
     {
         if (eventId != ImmRenderGraphPreparationEventId || state.ready || bridge.IsInitialized() ||
-            packet.colorSpace < 0 || packet.colorSpace > 1 || packet.samples != 8 ||
+            packet.colorSpace < 0 || packet.colorSpace > 1 ||
+            packet.paintRenderingTechnique < 0 || packet.paintRenderingTechnique > 1 || packet.samples != 8 ||
             packet.enableSound < 0 || packet.enableSound > 1 ||
             state.logFileName.empty() || state.tmpFolderName.empty()) return invalid;
         const auto instance = unity->Instance();
@@ -128,6 +129,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         config.graphicsDevice = &state.device;
         config.colorSpace = packet.colorSpace;
         config.antialiasing = packet.samples;
+        config.paintRenderingTechnique = packet.paintRenderingTechnique;
         config.enableSound = packet.enableSound != 0;
         config.reverseDepthBuffer = true;
         config.overrideFrontIsCCW = true;

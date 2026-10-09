@@ -13,6 +13,8 @@ namespace ImmShared
         {
             int colorSpace = 0;
             int antialiasing = 0;
+            // -1 retains platform defaults; 0 static, 1 pretessellated.
+            int paintRenderingTechnique = -1;
             const char *logFileName = nullptr;
             const char *tmpFolderName = nullptr;
             ImmCore::piRenderer::API rendererApi = ImmCore::piRenderer::API::GL;

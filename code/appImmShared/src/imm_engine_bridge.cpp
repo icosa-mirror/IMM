@@ -643,6 +643,11 @@ namespace ImmShared
         }
 #endif
 
+        if (mConfig.paintRenderingTechnique < -1 || mConfig.paintRenderingTechnique > 1)
+            return false;
+        if (mConfig.paintRenderingTechnique >= 0)
+            conf.paintRenderingTechnique = static_cast<Drawing::PaintRenderingTechnique>(mConfig.paintRenderingTechnique);
+
         if (!mPlayer.Init(mRenderer, mSoundBackend ? mSoundBackend->GetEngine() : nullptr, &mLog, &mTimer, &conf))
         {
             mLog.Printf(LT_ERROR, L"Failed to initialize ImmPlayer.");

@@ -257,10 +257,15 @@ void RunUnityAdapterProbe(Host& host)
     ImmShared::ImmEngineBridge bridge;
     std::fprintf(stderr, "IMM_VULKAN_UNITY_ADAPTER initialize\n");
     ImmRenderGraphPacket init; init.enableSound = 0;
+    const char* paintTechnique = std::getenv("IMM_VULKAN_PAINT_TECHNIQUE");
+    init.paintRenderingTechnique = paintTechnique ? std::atoi(paintTechnique) : 0;
     bool acknowledge = false;
     if (ProcessImmVulkanRenderGraph(state, bridge, init, ImmRenderGraphPreparationEventId, acknowledge) != 0 ||
         !state.ready || !state.device.multiviewEnabled || !acknowledge) throw std::runtime_error("Initialize Unity Vulkan adapter");
     auto* player = bridge.GetPlayer();
+    if (int(player->GetPaintRenderingTechnique()) != init.paintRenderingTechnique)
+        throw std::runtime_error("Unity packet selected the wrong native paint technique");
+    std::printf("IMM_VULKAN_UNITY_ADAPTER paintTechnique=%d\n", init.paintRenderingTechnique);
     const wchar_t* sample = _wgetenv(L"IMM_VULKAN_SAMPLE_FILE");
     const wchar_t* source = sample && *sample ? sample : IMM_VULKAN_SAMPLE_FILE;
     std::printf("IMM_VULKAN_UNITY_ADAPTER source=%ls\n", source);

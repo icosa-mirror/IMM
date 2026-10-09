@@ -4,9 +4,9 @@
 #include <cstdint>
 #include <type_traits>
 
-constexpr uint32_t ImmRenderGraphPacketVersion = 3;
+constexpr uint32_t ImmRenderGraphPacketVersion = 4;
 
-// ABI v3, 64-bit targets. Caller owns this immutable request until completed becomes
+// ABI v4, 64-bit targets. Caller owns this immutable request until completed becomes
 // 1 (read with acquire semantics). Native writes gpuCompletion/result/nativeSceneEvents/completed.
 // Targets must be bound before the event; viewCount selects mono or two-slice stereo.
 // Matrices use the native row-major array convention. GPU completion is a renderer
@@ -31,8 +31,11 @@ struct alignas(8) ImmRenderGraphPacket
     int32_t frameIndex = -1, xrPassIndex = -1;
     // Render-thread output, published by completed's release store.
     uint32_t nativeSceneEvents = 0;
+    // Initialization-only request; 0 static, 1 pretessellated. Occupies v3 padding.
+    int32_t paintRenderingTechnique = 0;
 };
 static_assert(sizeof(ImmRenderGraphPacket) == 496, "RenderGraph packet ABI size");
+static_assert(offsetof(ImmRenderGraphPacket, paintRenderingTechnique) == 492, "RenderGraph paint mode ABI offset");
 static_assert(offsetof(ImmRenderGraphPacket, frameIndex) == 480, "RenderGraph frame ABI offset");
 static_assert(offsetof(ImmRenderGraphPacket, xrPassIndex) == 484, "RenderGraph XR pass ABI offset");
 static_assert(offsetof(ImmRenderGraphPacket, nativeSceneEvents) == 488, "RenderGraph scene event ABI offset");
