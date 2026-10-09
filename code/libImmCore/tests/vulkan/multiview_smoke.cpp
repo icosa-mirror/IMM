@@ -12,6 +12,10 @@
 #include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmPlayer/src/layerRenderers/layerRendererModel/layerRendererModel.h"
+#include "libImmPlayer/src/layerRenderers/layerRendererPicture/layerRendererPicture.h"
+#include "libImmImporter/src/document/layerPicture.h"
+#include "libImmCore/src/libBasics/piImage.h"
+#include "libImmCore/src/libBasics/piTArray.h"
 #include "appImmUnity/src/imm_unity_render_graph_packet.h"
 #include "appImmUnity/src/imm_unity_vulkan_render_graph.h"
 
@@ -339,6 +343,128 @@ void RunUnityAdapterProbe(Host& host)
 }
 }
 
+static void RunPictureMultiviewProbe(Host& host, ImmCore::piRendererVulkan& renderer,
+    ImmCore::piLog& log, int pictureFormat, int colorSpace)
+{
+    using namespace ImmCore;
+    ImmImporter::LayerPicture picture;
+    const auto type = pictureFormat == 1 ? ImmImporter::LayerPicture::Image360EquirectStereo :
+        pictureFormat == 2 ? ImmImporter::LayerPicture::Image360CubemapCrossMono :
+        pictureFormat == 3 ? ImmImporter::LayerPicture::Image360CubemapVstripMono :
+        pictureFormat == 4 ? ImmImporter::LayerPicture::Image2D : ImmImporter::LayerPicture::Image360EquirectMono;
+    picture.Init(type, false, &log);
+    const int width = pictureFormat == 3 ? 16 : 64;
+    const int height = pictureFormat == 2 ? 48 : pictureFormat == 3 ? 96 : 64;
+    piImage image;
+    const piImage::Format imageFormat = piImage::FORMAT_I_RGBA;
+    if (!image.Init(piImage::TYPE_2D, width, height, 1, 1, &imageFormat))
+        throw std::runtime_error("Allocate multiview picture image");
+    auto* source = static_cast<unsigned char*>(image.GetData(0));
+    for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x) {
+        const int pixel = 4 * (y * width + x);
+        const bool rightSourceEye = pictureFormat == 1 && y >= height / 2;
+        source[pixel] = rightSourceEye ? 0 : 128;
+        source[pixel + 1] = rightSourceEye ? 255 : 0;
+        source[pixel + 2] = 0; source[pixel + 3] = 255;
+    }
+    piTArray<uint8_t> encoded;
+    if (!encoded.Init(0, false) || !image.WriteToMemory(&encoded, 0, L"png") ||
+        !picture.LoadAssetMemory(encoded, &log, L"png"))
+        throw std::runtime_error("Load multiview picture asset");
+    encoded.End(); image.Free();
+    ImmImporter::Layer layer(nullptr, nullptr, 0);
+    layer.SetImplementation(&picture); layer.SetLoaded(true);
+    ImmPlayer::LayerRendererPicture pictures;
+    if (!pictures.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true) ||
+        !pictures.LoadInCPU(&log, &layer) || !pictures.LoadInGPU(&renderer, nullptr, &log, &layer))
+        throw std::runtime_error("Load production multiview picture renderer");
+    float frame[4] = {}, display[36] = {};
+    for (int eye = 0; eye < 2; ++eye) for (int axis = 0; axis < 4; ++axis) display[eye * 16 + axis * 5] = 1;
+    display[3] = -.2f; display[19] = .2f; display[32] = display[33] = Size;
+    const int passData[4] = {};
+    auto frameBuffer = renderer.CreateBuffer(frame, sizeof(frame), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    auto displayBuffer = renderer.CreateBuffer(display, sizeof(display), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    auto layerBuffer = renderer.CreateBuffer(nullptr, sizeof(ImmPlayer::LayersState), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    auto passBuffer = renderer.CreateBuffer(passData, sizeof(passData), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    if (!frameBuffer || !displayBuffer || !layerBuffer || !passBuffer)
+        throw std::runtime_error("Create multiview picture constants");
+    auto bindConstants = [&]() {
+        renderer.AttachShaderConstants(frameBuffer, 0); renderer.AttachShaderConstants(layerBuffer, 3);
+        renderer.AttachShaderConstants(displayBuffer, 4); renderer.AttachShaderConstants(passBuffer, 5);
+    };
+    const int viewport[] = {0, 0, Size, Size};
+    const auto transform = pictureFormat == 4 ? trans3d::translate(0, 0, .5) * trans3d::scale(.5) : trans3d::identity();
+    // A matched mono reference also primes lazy geometry uploads outside the foreign pass.
+    piRenderer::TextureInfo warmInfo = {piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, Size, Size, 1, 1, 1, 0};
+    auto warmColor = renderer.CreateTexture(nullptr, &warmInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1, nullptr);
+    auto warmTarget = renderer.CreateRenderTarget(warmColor, nullptr, nullptr, nullptr, nullptr);
+    if (!warmColor || !warmTarget) throw std::runtime_error("Create picture mono reference target");
+    renderer.SetRenderTarget(warmTarget); bindConstants(); renderer.SetViewport(0, viewport);
+    const float black[4] = {0, 0, 0, 1}; renderer.Clear(black, nullptr, nullptr, nullptr, false);
+    pictures.PrepareForDisplay(ImmPlayer::StereoMode::None);
+    pictures.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()), transform, 1);
+    pictures.DisplayRender(&renderer, &log, layerBuffer, 0);
+    const auto mono = pictures.GetDrawCallInfo();
+    std::vector<unsigned char> monoPixels(Size * Size * 4);
+    renderer.GetTextureContent(warmColor, monoPixels.data(), piRenderer::Format::C4_8_UNORM);
+    const int monoRed = monoPixels[(Size / 2 * Size + Size / 2) * 4];
+    if (mono.numDrawCalls != 1 || monoRed < 20) throw std::runtime_error("Missing picture mono reference");
+    renderer.SetRenderTarget(nullptr); renderer.DestroyRenderTarget(warmTarget); renderer.DestroyTexture(warmColor);
+
+    Check(vkResetCommandBuffer(host.commands, 0), "Reset picture host commands");
+    VkCommandBufferBeginInfo begin = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    Check(vkBeginCommandBuffer(host.commands, &begin), "Begin picture host commands");
+    VkClearValue clear[2] = {}; clear[1].depthStencil.depth = 1;
+    VkRenderPassBeginInfo pass = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    pass.renderPass = host.pass; pass.framebuffer = host.framebuffer;
+    pass.renderArea.extent = {Size, Size}; pass.clearValueCount = 2; pass.pClearValues = clear;
+    vkCmdBeginRenderPass(host.commands, &pass, VK_SUBPASS_CONTENTS_INLINE);
+    if (!renderer.BeginHostRenderPassFrame(host.commands, reinterpret_cast<void*>(host.pass),
+        reinterpret_cast<void*>(host.framebuffer), VK_FORMAT_R8G8B8A8_UNORM, 1, true, true, 0, Size, Size, 1, 0, false, 2))
+        throw std::runtime_error("Begin picture multiview host frame");
+    bindConstants(); renderer.SetViewport(0, viewport);
+    pictures.PrepareForDisplay(ImmPlayer::StereoMode::Preferred);
+    pictures.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()), transform, 1);
+    pictures.DisplayRender(&renderer, &log, layerBuffer, 0);
+    const auto stereo = pictures.GetDrawCallInfo();
+    if (stereo.numDrawCalls != mono.numDrawCalls || stereo.numTriangles != mono.numTriangles)
+        throw std::runtime_error("Multiview picture repeated the mono draw sequence");
+    renderer.EndExternalImageFrame(); vkCmdEndRenderPass(host.commands);
+    VkBufferImageCopy copy = {}; copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 2};
+    copy.imageExtent = {Size, Size, 1};
+    vkCmdCopyImageToBuffer(host.commands, host.color, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, host.readback, 1, &copy);
+    Check(vkEndCommandBuffer(host.commands), "End picture host commands");
+    VkSubmitInfo submit = {VK_STRUCTURE_TYPE_SUBMIT_INFO}; submit.commandBufferCount = 1; submit.pCommandBuffers = &host.commands;
+    Check(vkQueueSubmit(host.queue, 1, &submit, VK_NULL_HANDLE), "Submit picture multiview");
+    Check(vkQueueWaitIdle(host.queue), "Wait for picture multiview");
+    void* mapped = nullptr;
+    Check(vkMapMemory(host.device, host.readbackMemory, 0, VK_WHOLE_SIZE, 0, &mapped), "Map picture multiview");
+    const auto* pixels = static_cast<const unsigned char*>(mapped);
+    int coverage[2] = {}, centerRed[2] = {}, centerGreen[2] = {};
+    for (int eye = 0; eye < 2; ++eye) {
+        for (uint32_t pixel = 0; pixel < Size * Size; ++pixel) {
+            const auto* rgba = pixels + 4 * (eye * Size * Size + pixel);
+            if (rgba[0] > 20 || rgba[1] > 20) ++coverage[eye];
+        }
+        const auto* center = pixels + 4 * (eye * Size * Size + Size / 2 * Size + Size / 2);
+        centerRed[eye] = center[0]; centerGreen[eye] = center[1];
+    }
+    vkUnmapMemory(host.device, host.readbackMemory);
+    std::printf("IMM_VULKAN_MULTIVIEW_PICTURE format=%d colorSpace=%d draws=%d monoDraws=%d coverage=%d,%d red=%d,%d green=%d,%d monoRed=%d\n",
+        pictureFormat, colorSpace, stereo.numDrawCalls, mono.numDrawCalls, coverage[0], coverage[1],
+        centerRed[0], centerRed[1], centerGreen[0], centerGreen[1], monoRed);
+    for (int eye = 0; eye < 2; ++eye) {
+        const bool rightSourceEye = pictureFormat == 1 && eye == 1;
+        if (coverage[eye] < 100 || std::abs(centerRed[eye] - (rightSourceEye ? 0 : monoRed)) > 3 ||
+            std::abs(centerGreen[eye] - (rightSourceEye ? 255 : 0)) > 3)
+            throw std::runtime_error("Multiview picture layer or source-eye/color-space parity failed");
+    }
+    pictures.UnloadInGPU(&renderer, nullptr, &log, &layer); pictures.UnloadInCPU(&log, &layer);
+    pictures.Deinit(&renderer, &log); picture.Deinit();
+    renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer);
+    renderer.DestroyBuffer(layerBuffer); renderer.DestroyBuffer(passBuffer);
+}
+
 void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore::piLog& log)
 {
     using namespace ImmCore;
@@ -429,8 +555,12 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
     models.UnloadInGPU(&renderer, nullptr, &log, &layer); models.UnloadInCPU(&log, &layer);
     models.Deinit(&renderer, &log); mesh->DeInit(); model.Deinit();
     renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer); renderer.DestroyBuffer(layerBuffer);
+    for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
+        for (int pictureFormat = 0; pictureFormat < 5; ++pictureFormat)
+            RunPictureMultiviewProbe(host, renderer, log, pictureFormat, colorSpace);
     renderer.Deinitialize();
     if (host.validationErrors.load() != 0) throw std::runtime_error("Borrowed multiview Vulkan validation errors");
     std::puts("IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback");
+    std::puts("IMM_VULKAN_MULTIVIEW_PICTURE PASS five formats in two color spaces with matched mono draws");
     RunUnityAdapterProbe(host);
 }
