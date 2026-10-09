@@ -1535,3 +1535,21 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     and updated workflow contracts pass locally. Hosted build verification is pending while
     attribution validation run 37974039216 is in progress. Actual execution needs
     the hardware lane and does not replace per-eye or GPU draw-count acceptance.
+43. **Managed allocation acceptance gate (local, 2026-10-09):** optional
+    thread-local measurement scopes now cover the complete IMM AddRenderPasses,
+    RecordRenderGraph and ExecuteNative callbacks, including their transport work.
+    Without a subscriber they perform no allocation-counter reads. The mono smoke
+    calibrates the runtime counter against a retained 256-byte allocation, warms
+    rendering for 16 frames, then measures 32 rendered frames. Every callback must
+    have at least 32 observations and zero allocated bytes. Measurement listeners
+    only update preallocated counters; readback and reporting are outside the scopes.
+    Windows DX12, macOS Metal, iOS Metal Simulator and Android Vulkan smoke gates
+    require the new marker. Runtime, URP and sample assemblies compile in isolated
+    outputs; workflow contracts and engine/iOS YAML checks pass. Hosted execution
+    remains pending. The hardware XR probe also calibrates the counter, warms for
+    32 acknowledged stereo frames, then requires zero bytes across at least 64
+    calls to each callback; its completion-frame set is preallocated so the probe
+    listener does not contaminate those measurements. Hardware execution is pending.
+    This is
+    a managed pass-callback check, not a whole-Unity-frame or native/GPU allocation
+    claim. Attribution validation run 37974039216 remains the preceding CI gate.

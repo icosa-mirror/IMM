@@ -561,7 +561,8 @@ jobs:
                       "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
                       "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",
                       "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.",
-                      "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out."]
+                      "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out.",
+                      "[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames)."]
           for samples in (1, 2, 4, 8):
               marker = f"[IMM_URP_SMOKE] PASS rendered at {samples} samples."
               if samples == 8 and "[IMM_URP_SMOKE] UNSUPPORTED samples=8 " in text:
@@ -948,6 +949,7 @@ jobs:
               "[IMM_URP_SMOKE] PASS managed stereo packet renders distinct eye slices.",
               "[IMM_URP_READBACK] PASS attributed stereo native event.",
               "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out.",
+              "[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames).",
               "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
               "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",
               "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.")) {
@@ -2441,6 +2443,7 @@ jobs:
           --required-marker "[IMM_URP_SMOKE] PASS bidirectional depth composition at 4 samples."
           --required-marker "[IMM_URP_SMOKE] PASS queued camera isolation."
           --required-marker "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out."
+          --required-marker "[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames)."
           --required-marker "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down."
           --client-label "IMM Unity Android Vulkan URP"
 
@@ -2726,6 +2729,7 @@ jobs:
           --log artifacts\unity-windows-openxr-vr\unity-player.log
           --label unity-windows-openxr-vr
           --require "[IMM_URP_XR_SMOKE] PASS api=Direct3D12"
+          --require "[IMM_URP_XR_SMOKE] PASS zero managed allocations in warmed stereo IMM pass callbacks (64 samples minimum)."
           --require "nativeSceneEventsPerFrame=1 displayPasses=1 views=2"
           --forbid "[IMM_URP_XR_SMOKE] FAIL"
           --output artifacts\unity-windows-openxr-vr\unity-openxr-vr-log-contract.json

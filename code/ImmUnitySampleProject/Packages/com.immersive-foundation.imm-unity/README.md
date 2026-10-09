@@ -51,6 +51,17 @@ two distinct cameras and camera opt-out; synthetic stereo checks cover one nativ
 scene event for a two-view request. These counters do not prove GPU draw counts
 or actual headset single-pass execution.
 
+`ManagedAllocationMeasured` optionally measures thread-local managed bytes inside
+`AddRenderPasses`, `RecordRenderGraph` and `ExecuteNative`, including transport work
+and any submission listeners they invoke. No allocation-counter reads occur without
+a measurement subscriber. Measurement listeners run after the byte count is read
+and must not allocate or change rendering state. Native/GPU allocations and surrounding
+Unity frame work are outside these scopes. CI calibrates the counter, warms the mono
+pass for 16 frames, then requires zero bytes over at least 32 calls to each callback.
+The hardware XR probe warms for 32 acknowledged stereo frames, then requires
+zero bytes over at least 64 calls to each callback. Hosted mono and hardware
+stereo execution of these allocation checks remain outstanding.
+
 ## OpenXR sample builds
 
 The repository sample has dedicated OpenXR builds:

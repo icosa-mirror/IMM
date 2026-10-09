@@ -41,6 +41,7 @@ namespace ImmPlayer
 
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer frameData)
         {
+            using var allocation = ImmRenderingDiagnostics.Measure(ImmRenderCallback.RecordRenderGraph);
             if (transport.IsDisposed) return;
             transport.Poll();
             if (!transport.IsReady) return;
@@ -126,6 +127,7 @@ namespace ImmPlayer
 
         private static void ExecuteNative(PassData data, CommandBuffer commands, RasterCommandBuffer rasterCommands = null)
         {
+            using var allocation = ImmRenderingDiagnostics.Measure(ImmRenderCallback.ExecuteNative);
             if (data.Transport.IsDisposed) return;
             // Resolve handles only while the graph's resource registry is active.
             RTHandle color = data.Color;

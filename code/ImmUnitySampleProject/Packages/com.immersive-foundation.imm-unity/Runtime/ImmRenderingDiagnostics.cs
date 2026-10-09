@@ -29,6 +29,20 @@ namespace ImmPlayer
         }
     }
 
+    public enum ImmRenderCallback { AddRenderPasses, RecordRenderGraph, ExecuteNative }
+
+    /// <summary>Thread-local managed bytes allocated inside one IMM pass callback.</summary>
+    public readonly struct ImmManagedAllocation
+    {
+        public ImmRenderCallback Callback { get; }
+        public long Bytes { get; }
+        internal ImmManagedAllocation(ImmRenderCallback callback, long bytes)
+        {
+            Callback = callback;
+            Bytes = bytes;
+        }
+    }
+
     public static class ImmRenderingDiagnostics
     {
         /// <summary>
@@ -38,6 +52,34 @@ namespace ImmPlayer
         /// Callbacks run during polling; do not queue or dispose sessions from a callback.
         /// </summary>
         public static event Action<ImmSceneSubmission> SubmissionCompleted;
+
+        /// <summary>
+        /// Opt-in measurement of each IMM pass callback, including transport work and
+        /// any submission listeners it invokes. Measurement listeners run after the
+        /// byte count is read; they must not allocate or change rendering state.
+        /// These scopes exclude surrounding Unity frame work and GPU/native allocations.
+        /// </summary>
+        public static event Action<ImmManagedAllocation> ManagedAllocationMeasured;
+
+        internal readonly struct AllocationScope : IDisposable
+        {
+            private readonly Action<ImmManagedAllocation> listener;
+            private readonly ImmRenderCallback callback;
+            private readonly long start;
+            internal AllocationScope(ImmRenderCallback callback)
+            {
+                this.callback = callback;
+                listener = ManagedAllocationMeasured;
+                start = listener != null ? GC.GetAllocatedBytesForCurrentThread() : 0;
+            }
+            public void Dispose()
+            {
+                if (listener != null)
+                    listener(new ImmManagedAllocation(callback, GC.GetAllocatedBytesForCurrentThread() - start));
+            }
+        }
+
+        internal static AllocationScope Measure(ImmRenderCallback callback) => new AllocationScope(callback);
 
         internal static bool HasSubscribers => SubmissionCompleted != null;
         internal static void Publish(ImmSceneSubmission submission) => SubmissionCompleted?.Invoke(submission);

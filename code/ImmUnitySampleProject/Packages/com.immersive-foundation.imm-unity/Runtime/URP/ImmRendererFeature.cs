@@ -21,6 +21,7 @@ namespace ImmPlayer
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
+            using var allocation = ImmRenderingDiagnostics.Measure(ImmRenderCallback.AddRenderPasses);
             var camera = renderingData.cameraData.camera;
             if (camera == null || camera.cameraType != CameraType.Game ||
                 !camera.TryGetComponent<ImmCamera>(out var optIn) || !optIn.isActiveAndEnabled) return;

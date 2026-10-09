@@ -665,6 +665,7 @@ jobs:
               raise SystemExit(f"iOS URP launcher exited {exit_before_cleanup} before cleanup")
           required = ["[IMM_URP_SMOKE] graphicsDevice=Metal", passed,
                       "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out.",
+                      "[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames).",
                       "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
                       "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading."]
           for samples in (1, 2, 4, 8):
