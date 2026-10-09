@@ -34,6 +34,17 @@ loading cannot establish enabled multiview capability, so two-view packets are
 rejected in that case. Native GPU adapter tests establish two-slice submission;
 they do not establish Quest headset correctness.
 
+## OpenXR sample builds
+
+The repository sample has dedicated OpenXR builds:
+`ImmPlayer.Editor.ImmUrpXrBuild.BuildWindowsOpenXRPlayer` (D3D12) and
+`ImmPlayer.Editor.ImmUrpXrBuild.BuildAndroidOpenXRQuestPlayer` (Vulkan/ARM64).
+They build `SampleSceneURP`, require one configured OpenXR loader, select
+Single Pass Instanced and add a tracked head camera under a separate viewing
+origin. Use `-immUrpXrPlayerPath` or `-immQuestPlayerPath` for the output path.
+Build-time settings are restored afterwards. CI is configured to build both variants; actual
+OpenXR rendering/headset acceptance is a separate outstanding check.
+
 ## Android Vulkan rendering contract
 
 On Android Vulkan, IMM does not access Unity's display render buffer or

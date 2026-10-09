@@ -37,8 +37,11 @@ automating headset VR validation does not exempt non-VR changes from CI.
    implemented and hosted GPU readbacks pass, including the loaded-scene Unity
    packet adapter (entries 34–38). Layer discovery, destroyed buffer bindings
    and owned-device viewport capability fixes are confirmed by full CI.
-   Next: migrate the VR sample/build harness from legacy MultiPass to actual
-   URP/OpenXR integration. Complete stereo content and MSAA/depth composition,
+   Dedicated URP/OpenXR build helpers now request single-pass and configure a
+   tracked sample origin for Windows and Quest; hosted build verification of
+   this increment is pending (entry 39). The hardware runtime harness still
+   needs migration from its legacy probe to these players. Complete stereo
+   content and MSAA/depth composition,
    camera/frame/XR-pass submission attribution, measured managed-allocation
    acceptance and headset per-eye/one-pass acceptance remain required.
 4. Local editor changes to the sample's OpenXR and Package Manager settings, plus
@@ -1481,3 +1484,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Actual URP/OpenXR integration, complete stereo layer/composition coverage,
     attributed submission evidence, allocation measurement and headset acceptance
     remain unfinished. No CI failure is unresolved at this checkpoint.
+39. **URP/OpenXR sample build migration (local, 2026-10-09):** Quest's hosted
+    APK build now uses `SampleSceneURP` instead of the legacy VR scene. The
+    Windows hosted DX12 build also produces an OpenXR URP player alongside its
+    existing mono players. `ImmUrpXrBuild` requires a single configured OpenXR
+    loader, selects Single Pass Instanced, enables the Quest feature for Android
+    and restores build-time settings afterwards. Its scene processor adds a
+    centre-eye tracked camera under a separate origin and scene-owned XR startup;
+    sample document framing moves the origin rather than the tracked head.
+    The build fails if that scene processor did not execute. Flat project copies
+    exclude the OpenXR-only helper and retain their existing package dependencies
+    and mono checks. Local runtime/editor compilation and VR contract checks
+    pass. Hosted build verification is pending. The existing Windows hardware
+    runtime harness has not yet migrated to the new player, and these builds do
+    not prove actual OpenXR rendering, headset pose or single-pass acceptance.

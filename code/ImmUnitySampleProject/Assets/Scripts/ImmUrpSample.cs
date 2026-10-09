@@ -11,11 +11,14 @@ public sealed class ImmUrpSample : MonoBehaviour
 {
     [SerializeField] private UniversalRenderPipelineAsset pipeline;
     [SerializeField] private Camera documentCamera;
+    [SerializeField] private Transform viewingOrigin;
     private RenderPipelineAsset previousPipeline;
     private ImmPlayerManager manager;
     private bool pipelineAssigned;
     public ImmDocument Document { get; private set; }
     public string DocumentPath { get; private set; }
+    public Camera DocumentCamera => documentCamera;
+    public void SetViewingOrigin(Transform origin) => viewingOrigin = origin;
 
     private IEnumerator Start()
     {
@@ -70,8 +73,9 @@ public sealed class ImmUrpSample : MonoBehaviour
         float radius = Mathf.Max(bounds.extents.magnitude, 0.1f);
         documentCamera.nearClipPlane = radius * 0.01f;
         documentCamera.farClipPlane = radius * 8;
-        documentCamera.transform.position = bounds.center + Vector3.back * radius * 3;
-        documentCamera.transform.LookAt(bounds.center);
+        var origin = viewingOrigin != null ? viewingOrigin : documentCamera.transform;
+        origin.position = bounds.center + Vector3.back * radius * 3;
+        origin.LookAt(bounds.center);
         document.SetTime(3 * 12600, 0);
         document.Show();
         Debug.Log("[IMM_URP_SAMPLE] Document ready on the configured RenderGraph camera.");

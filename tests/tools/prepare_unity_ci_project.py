@@ -37,6 +37,8 @@ MINIMAL_DEPENDENCIES = {
 
 
 EXCLUDED_ASSET_PATHS = [
+    "Assets/Editor/ImmUrpXrBuild.cs",
+    "Assets/Editor/ImmUrpXrBuild.cs.meta",
     "Assets/XR",
     "Assets/Scenes/SampleSceneVR.unity",
     "Assets/Scenes/SampleSceneVR.unity.meta",

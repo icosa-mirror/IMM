@@ -36,7 +36,6 @@ namespace ImmPlayer.Editor
         private const string EditorSmokeStartTicksKey = "IMM_EDITOR_SMOKE_START_TICKS";
         private const string EditorSmokeCapturePathArg = "-immSmokeCapturePath";
         private const string EditorSmokePlayerPathArg = "-immSmokePlayerPath";
-        private const string QuestPlayerPathArg = "-immQuestPlayerPath";
         private const string IosPlayerPathArg = "-immIosPlayerPath";
         private const int EditorSmokeReadyPumpCount = 3;
         private static readonly TimeSpan EditorSmokePumpInterval = TimeSpan.FromMilliseconds(100.0);
@@ -134,61 +133,6 @@ namespace ImmPlayer.Editor
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
                 PlayerSettings.Android.optimizedFramePacing = previousOptimizedFramePacing;
-                if (androidXrSettings != null)
-                {
-                    androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
-                }
-            }
-        }
-
-        public static void BuildAndroidOpenXRQuestPlayer()
-        {
-            EnsureBuildTargetSupported(BuildTargetGroup.Android, BuildTarget.Android, "Android");
-
-            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
-            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
-
-            string outputPath = GetCommandLineValue(QuestPlayerPathArg);
-            if (string.IsNullOrEmpty(outputPath))
-            {
-                outputPath = Path.Combine("..", "build", "unity-smoke", "android-openxr-quest-player", "ImmUnityQuestVulkan.apk");
-            }
-            outputPath = Path.GetFullPath(outputPath);
-
-            string outputDir = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(outputDir))
-            {
-                Directory.CreateDirectory(outputDir);
-            }
-
-            AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
-            XRGeneralSettings androidXrSettings =
-                XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
-            bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
-            try
-            {
-                PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-                if (androidXrSettings == null)
-                {
-                    throw new InvalidOperationException("Android XR general settings are missing.");
-                }
-
-                // SampleSceneVR owns XR startup through XrSceneBootstrap. Keeping
-                // project-wide automatic startup disabled also keeps the 2D scene
-                // usable without entering XR.
-                androidXrSettings.InitManagerOnStart = false;
-                Debug.Log("[IMM_UNITY_QUEST_BUILD_20260811] renderer=Vulkan architecture=ARM64 scene=SampleSceneVR xrStartup=scene stereoPath=MultiPass");
-
-                BuildPlayer(
-                    BuildTarget.Android,
-                    outputPath,
-                    BuildOptions.Development,
-                    "Android OpenXR Quest Vulkan player",
-                    scenes: new[] { VrSmokeScene });
-            }
-            finally
-            {
-                PlayerSettings.Android.targetArchitectures = previousArchitectures;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
@@ -453,7 +397,10 @@ namespace ImmPlayer.Editor
             BuildUrpPlayer(BuildTarget.StandaloneWindows64, GraphicsDeviceType.Direct3D12, outputPath);
         }
 
-        private static void BuildUrpPlayer(BuildTarget target, GraphicsDeviceType api, string outputPath)
+        internal static bool BuildingUrpXrSample { get; private set; }
+        internal static bool UrpXrSceneProcessed { get; set; }
+
+        internal static void BuildUrpPlayer(BuildTarget target, GraphicsDeviceType api, string outputPath, bool useXr = false)
         {
             var previousPipeline = GraphicsSettings.defaultRenderPipeline;
             var previousQualityPipeline = QualitySettings.renderPipeline;
@@ -463,15 +410,19 @@ namespace ImmPlayer.Editor
             bool previousXrStartup = xrSettings != null && xrSettings.InitManagerOnStart;
             var xrManager = xrSettings != null ? xrSettings.AssignedSettings : null;
             var previousLoaders = xrManager != null ? xrManager.activeLoaders.ToList() : null;
+            bool previousXrBuild = BuildingUrpXrSample;
+            bool previousXrSceneProcessed = UrpXrSceneProcessed;
             try
             {
+                BuildingUrpXrSample = useXr;
+                UrpXrSceneProcessed = false;
                 var pipeline = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>(ImmUrpSampleSetup.PipelinePath);
                 if (pipeline == null) throw new InvalidOperationException("Configured IMM URP asset is missing.");
                 GraphicsSettings.defaultRenderPipeline = pipeline;
                 QualitySettings.renderPipeline = pipeline;
                 // XR Management adds a native pre-init library even when managed
                 // auto-start is disabled. This dedicated flat player needs no loaders.
-                if (xrManager != null)
+                if (!useXr && xrManager != null)
                 {
                     if (!xrManager.TrySetLoaders(new System.Collections.Generic.List<XRLoader>()))
                         throw new InvalidOperationException("Could not disable XR loaders for the flat URP build.");
@@ -487,12 +438,16 @@ namespace ImmPlayer.Editor
                 PlayerSettings.SetGraphicsAPIs(target, new[] { api });
                 Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
                 BuildPlayer(target, outputPath, BuildOptions.Development,
-                    $"{target} {api} URP smoke player",
-                    extraScriptingDefines: target == BuildTarget.Android ? new[] { "IMM_UNITY_ANDROID_URP_CI" } : null,
+                    $"{target} {api} URP {(useXr ? "OpenXR single-pass" : "mono")} smoke player",
+                    extraScriptingDefines: target == BuildTarget.Android && !useXr ? new[] { "IMM_UNITY_ANDROID_URP_CI" } : null,
                     scenes: new[] { ImmUrpSampleSetup.ScenePath });
+                if (useXr && !UrpXrSceneProcessed)
+                    throw new InvalidOperationException("The URP OpenXR build did not process its tracked sample scene.");
             }
             finally
             {
+                BuildingUrpXrSample = previousXrBuild;
+                UrpXrSceneProcessed = previousXrSceneProcessed;
                 GraphicsSettings.defaultRenderPipeline = previousPipeline;
                 QualitySettings.renderPipeline = previousQualityPipeline;
                 PlayerSettings.SetGraphicsAPIs(target, previousApis);

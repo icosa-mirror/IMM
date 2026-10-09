@@ -794,8 +794,8 @@ jobs:
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneWindows64
           versioning: None
-          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
-          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
+          buildMethod: ImmPlayer.Editor.ImmUrpXrBuild.BuildWindowsDirectXAndOpenXRPlayers
+          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe -immUrpXrPlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/openxr/ImmUnityOpenXR.exe
 
       - name: Collect Unity DirectX runner memory diagnostics
         if: always()
@@ -2042,7 +2042,7 @@ jobs:
           unityVersion: ${{ env.UNITY_ANDROID_VULKAN_VERSION }}
           targetPlatform: Android
           versioning: None
-          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidOpenXRQuestPlayer
+          buildMethod: ImmPlayer.Editor.ImmUrpXrBuild.BuildAndroidOpenXRQuestPlayer
           customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-quest-editor.log -immQuestPlayerPath /github/workspace/.ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
 
       - name: Collect Unity Android Quest runner memory diagnostics
