@@ -350,7 +350,7 @@ void RunUnityAdapterProbe(Host& host)
 }
 
 template<class RendererType>
-static void RunLayerMultiviewReadback(Host& host, ImmCore::piRendererVulkan& renderer,
+static double RunLayerMultiviewReadback(Host& host, ImmCore::piRendererVulkan& renderer,
     ImmCore::piLog& log, RendererType& layerRenderer, ImmImporter::Layer& layer,
     const ImmCore::trans3d& transform, const char* label, int variant, int colorSpace,
     float opacity = 1, bool differentRightSource = false, bool samplePeak = false)
@@ -464,6 +464,7 @@ static void RunLayerMultiviewReadback(Host& host, ImmCore::piRendererVulkan& ren
         throw std::runtime_error("Multiview paint did not apply distinct eye matrices");
     renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer);
     renderer.DestroyBuffer(layerBuffer); renderer.DestroyBuffer(passBuffer);
+    return centroids[0];
 }
 
 static void RunPictureMultiviewProbe(Host& host, ImmCore::piRendererVulkan& renderer,
@@ -509,8 +510,8 @@ static void RunPictureMultiviewProbe(Host& host, ImmCore::piRendererVulkan& rend
 }
 
 template<class LayerType, class DrawingType, class RendererType>
-static void RunPaintMultiviewProbe(Host& host, ImmCore::piRendererVulkan& renderer,
-    ImmCore::piLog& log, int storage, int brush, int colorSpace, float opacity)
+static double RunPaintMultiviewProbe(Host& host, ImmCore::piRendererVulkan& renderer,
+    ImmCore::piLog& log, int storage, int brush, int colorSpace, float opacity, int direction = 0)
 {
     using namespace ImmCore;
     LayerType paint;
@@ -522,11 +523,11 @@ static void RunPaintMultiviewProbe(Host& host, ImmCore::piRendererVulkan& render
     ImmImporter::Element::PointSource points[2] = {};
     for (int i = 0; i < 2; ++i) {
         points[i].mPos = vec3(i ? .6f : -.6f, 0, .5f);
-        points[i].mNor = vec3(0, 0, 1); points[i].mDir = vec3(1, 0, 0);
+        points[i].mNor = vec3(0, 0, 1); points[i].mDir = vec3(direction < 0 ? -1.0f : 1.0f, 0, 0);
         points[i].mCol = vec3(.25f); points[i].mAlpha = 1; points[i].mWidth = .5f;
     }
     if (!element->Set(points, 2, static_cast<ImmImporter::Element::BrushSectionType>(brush),
-        ImmImporter::Element::VisibilityType::Always, 1) ||
+        direction ? ImmImporter::Element::VisibilityType::FadePow2 : ImmImporter::Element::VisibilityType::Always, 1) ||
         !drawing->Add(element.get(), static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), false))
         throw std::runtime_error("Generate multiview paint geometry");
     drawing->StopAdding(); drawing->SetLoaded(true);
@@ -536,10 +537,12 @@ static void RunPaintMultiviewProbe(Host& host, ImmCore::piRendererVulkan& render
     if (!paintRenderer.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true) ||
         !paintRenderer.LoadInCPU(&log, &layer) || !paintRenderer.LoadInGPU(&renderer, nullptr, &log, &layer))
         throw std::runtime_error("Load production multiview paint renderer");
-    RunLayerMultiviewReadback(host, renderer, log, paintRenderer, layer, trans3d::identity(),
+    std::printf("IMM_VULKAN_MULTIVIEW_PAINT visibility direction=%d storage=%d brush=%d\n", direction, storage, brush);
+    const double centroid = RunLayerMultiviewReadback(host, renderer, log, paintRenderer, layer, trans3d::identity(),
         "IMM_VULKAN_MULTIVIEW_PAINT", storage * 5 + brush, colorSpace, opacity, false, true);
     paintRenderer.UnloadInGPU(&renderer, nullptr, &log, &layer);
     paintRenderer.UnloadInCPU(&log, &layer); paintRenderer.Deinit(&renderer, &log); paint.Deinit();
+    return centroid;
 }
 
 void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore::piLog& log)
@@ -646,10 +649,25 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
                 RunPaintMultiviewProbe<ImmImporter::LayerPaintStatic, ImmImporter::DrawingStatic,
                     ImmPlayer::LayerRendererPaintStatic>(host, renderer, log, 1, brush, colorSpace, opacity);
             }
+    for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
+        for (int brush = static_cast<int>(ImmImporter::Element::BrushSectionType::Segment);
+            brush < static_cast<int>(ImmImporter::Element::BrushSectionType::Count); ++brush) {
+            const double pretessForward = RunPaintMultiviewProbe<ImmImporter::LayerPaintPretessellated,
+                ImmImporter::DrawingPretessellated, ImmPlayer::LayerRendererPaintPretessellated>(host, renderer, log, 0, brush, colorSpace, 1, 1);
+            const double pretessReverse = RunPaintMultiviewProbe<ImmImporter::LayerPaintPretessellated,
+                ImmImporter::DrawingPretessellated, ImmPlayer::LayerRendererPaintPretessellated>(host, renderer, log, 0, brush, colorSpace, 1, -1);
+            const double staticForward = RunPaintMultiviewProbe<ImmImporter::LayerPaintStatic,
+                ImmImporter::DrawingStatic, ImmPlayer::LayerRendererPaintStatic>(host, renderer, log, 1, brush, colorSpace, 1, 1);
+            const double staticReverse = RunPaintMultiviewProbe<ImmImporter::LayerPaintStatic,
+                ImmImporter::DrawingStatic, ImmPlayer::LayerRendererPaintStatic>(host, renderer, log, 1, brush, colorSpace, 1, -1);
+            if (pretessForward - pretessReverse < 10 || staticForward - staticReverse < 10)
+                throw std::runtime_error("Multiview paint ignored reversed authored facing");
+        }
     renderer.Deinitialize();
     if (host.validationErrors.load() != 0) throw std::runtime_error("Borrowed multiview Vulkan validation errors");
     std::puts("IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback");
     std::puts("IMM_VULKAN_MULTIVIEW_PICTURE PASS five formats in two color spaces with matched mono draws");
     std::puts("IMM_VULKAN_MULTIVIEW_PAINT PASS both storage paths and four authorable brushes in two color spaces at three opacities");
+    std::puts("IMM_VULKAN_MULTIVIEW_PAINT PASS directional facing in both storage paths and color spaces");
     RunUnityAdapterProbe(host);
 }

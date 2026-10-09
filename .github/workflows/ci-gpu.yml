@@ -260,7 +260,7 @@ jobs:
           if (Select-String -LiteralPath artifacts/windows-standalone-vulkan/model-readback.log -SimpleMatch 'Validation Error:' -Quiet) {
             throw 'Vulkan model readback reported a validation error; see model-readback.log'
           }
-          foreach ($marker in @('IMM_VULKAN_MULTIVIEW validation=enabled', 'IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback', 'IMM_VULKAN_MULTIVIEW_PICTURE PASS five formats in two color spaces with matched mono draws', 'IMM_VULKAN_MULTIVIEW_PAINT PASS both storage paths and four authorable brushes in two color spaces at three opacities', 'IMM_VULKAN_UNITY_ADAPTER PASS prepared two-view packet and scene GPU readback')) {
+          foreach ($marker in @('IMM_VULKAN_MULTIVIEW validation=enabled', 'IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback', 'IMM_VULKAN_MULTIVIEW_PICTURE PASS five formats in two color spaces with matched mono draws', 'IMM_VULKAN_MULTIVIEW_PAINT PASS both storage paths and four authorable brushes in two color spaces at three opacities', 'IMM_VULKAN_MULTIVIEW_PAINT PASS directional facing in both storage paths and color spaces', 'IMM_VULKAN_UNITY_ADAPTER PASS prepared two-view packet and scene GPU readback')) {
             if (-not (Select-String -LiteralPath artifacts/windows-standalone-vulkan/model-readback.log -SimpleMatch $marker -Quiet)) {
               throw "Vulkan multiview probe missing required marker: $marker"
             }

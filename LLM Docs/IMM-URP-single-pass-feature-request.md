@@ -1670,3 +1670,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     semantics or format constraint is introduced by this fixture. Unity stereo
     integration, directional/wiggle/draw-in variants and headset evidence remain
     separate acceptance work.
+53. **Directional Vulkan paint multiview (local, 2026-10-09):** 32 additional
+    readbacks exercise forward/reversed authored facing for every authorable
+    brush in both storage paths and colour spaces. They retain mono/multiview
+    colour, coverage, draw/triangle and eye-matrix checks and require reversing
+    the direction to move the visible centroid to the other side of the stroke.
+    All four native tests pass with Vulkan validation enabled and zero errors.
+    CI requires a separate directional completion marker. This extends entry 52
+    to 80 paint cases; wiggle/draw-in, Unity stereo composition and hosted/device
+    confirmation remain outstanding.
