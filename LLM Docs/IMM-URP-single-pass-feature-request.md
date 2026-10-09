@@ -24,19 +24,22 @@ automating headset VR validation does not exempt non-VR changes from CI.
 
 ## Current status — 2026-10-09
 
-1. Last confirmed full-CI source: `dabce216`; synchronized runtime-binary checkpoint: `50278257`.
-   Full [CI validation run 37196388177](https://github.com/icosa-mirror/IMM/actions/runs/37196388177)
+1. Last confirmed full-CI source: `a80f73d4`.
+   Full [CI validation run 37909414981](https://github.com/icosa-mirror/IMM/actions/runs/37909414981)
    passed, including Windows DX12 composition, Windows Vulkan GPU readback, macOS
    Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation.
+   The iOS licensing failure passed on retry without a source change.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
    not establish complete all-layer composition through Unity or Android.
-3. The native borrowed-device multiview boundary and production model GPU readback
-   are implemented locally (entry 34); hosted validation is pending. Unity Vulkan
-   multiview remains disabled. Next: validate this increment in CI, then implement
-   the Unity two-view adapter and Quest integration. Windows OpenXR execution,
-   headset composition and per-eye/one-pass acceptance remain required.
+3. The borrowed-device multiview boundary and Unity Vulkan two-view adapter are
+   implemented, with local validation-layer GPU readbacks (entries 34–35). The
+   hosted GPU probe rendered both slices, but its strict validation-layer gate
+   failed layer discovery. A runner registration fix awaits hosted verification.
+   Next: establish full CI validation, then verify actual Unity/Quest integration.
+   Windows OpenXR execution, all-content multiview, MSAA/depth composition and
+   headset per-eye/one-pass acceptance remain required.
 4. Local editor changes to the sample's OpenXR and Package Manager settings, plus
    the unrelated Godot review handoff, remain untouched and outside the validated
    checkpoint.
@@ -1431,3 +1434,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Windows Vulkan GPU CI probe executes the new two-view check; hosted confirmation
     is pending. Unity/Quest integration, all-content multiview, MSAA/depth composition
     and headset acceptance remain unfinished.
+35. **Unity Vulkan two-view adapter (local, 2026-10-09):** the RenderGraph path
+    accepts exactly two matching array slices only when startup observation
+    confirms logical-device multiview enablement. Preparation validates both eye
+    matrices and attachment layers, selects preferred stereo and uses the layered
+    viewport width. A real Vulkan host fixture exercises the production Unity
+    packet adapter and loaded sample scene: both slices contain pixels, with
+    different images and ordered eye centroids (32.64/36.45). Four Vulkan tests
+    pass with validation enabled; Windows native object compilation, Android NDK
+    syntax checks and managed URP compilation pass. The fixture also exposed an
+    unused static-paint fragment input with no vertex producer; it was removed
+    from the generator and regenerated SPIR-V. CI now requires the adapter proof
+    marker as well as the model multiview and validation-enabled markers. This
+    is native adapter evidence, not actual Unity/OpenXR or Quest acceptance.

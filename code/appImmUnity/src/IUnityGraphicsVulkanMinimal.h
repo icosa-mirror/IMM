@@ -8,6 +8,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// SDK-backed native integration probes can use the real Vulkan types. The
+// production plugin continues to build without a Vulkan SDK dependency.
+#ifndef VK_VERSION_1_0
 typedef uint32_t VkMemoryPropertyFlags;
 typedef uint32_t VkPipelineStageFlags;
 typedef uint32_t VkAccessFlags;
@@ -36,6 +39,7 @@ typedef struct VkCommandBuffer_T *VkCommandBuffer;
 
 typedef void (*PFN_vkVoidFunction)(void);
 typedef PFN_vkVoidFunction (*PFN_vkGetInstanceProcAddr)(VkInstance instance, const char *name);
+#endif
 
 struct UnityVulkanInstance
 {

@@ -19,7 +19,10 @@ an `ImmPlayerManager`. Rendering uses RenderGraph at `AfterRenderingOpaques`.
 The implementation accepts perspective or orthographic base cameras, a full
 viewport, matching colour/depth attachments with 1, 2, 4 or 8 samples and no
 dynamic resolution. D3D12 has mono and two-slice single-pass packet paths;
-Metal and Vulkan currently accept mono cameras. Unsupported MSAA levels must
+Metal currently accepts mono cameras. Vulkan also has an experimental two-view
+single-pass path requiring matching two-layer attachments and observed logical-device
+multiview enablement. Actual Unity/OpenXR headset acceptance remains outstanding.
+Unsupported MSAA levels must
 be skipped explicitly rather than reported as validated at a downgraded level.
 See `LLM Docs/IMM-URP-single-pass-feature-request.md` in the repository for scoped
 CI evidence and remaining layer/platform/headset acceptance work.
@@ -27,8 +30,9 @@ CI evidence and remaining layer/platform/headset acceptance work.
 The Vulkan native plugin must load at startup to observe the features enabled
 on Unity's logical device. The shipped Windows and Android plugin metadata
 sets `Load on startup`. Device creation is forwarded unchanged. Late plugin
-loading cannot establish enabled multiview capability; this observation does
-not itself enable the still-pending Vulkan multiview rendering path.
+loading cannot establish enabled multiview capability, so two-view packets are
+rejected in that case. Native GPU adapter tests establish two-slice submission;
+they do not establish Quest headset correctness.
 
 ## Android Vulkan rendering contract
 

@@ -97,7 +97,8 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
     if (preparation) { state.prepared = &packet; state.preparationResult = failed; }
     auto finishPreparation = [&](int32_t result) { state.preparationResult = result; return result; };
     if (packet.version != 2 || packet.size != sizeof(packet) || packet.completed ||
-        packet.operation > 3 || packet.viewCount != 1) return preparation ? finishPreparation(reject("packet header", invalid)) : reject("packet header", invalid);
+        packet.operation > 3 || (packet.viewCount != 1 &&
+        (packet.operation != 1 || packet.viewCount != 2))) return preparation ? finishPreparation(reject("packet header", invalid)) : reject("packet header", invalid);
     if (packet.operation == 2)
     {
         if (eventId != ImmRenderGraphShutdownEventId) return invalid;
@@ -121,6 +122,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         state.device.graphicsQueueFamilyIndex = instance.queueFamilyIndex;
         state.device.allowDedicatedQueue = false;
         state.device.externalDepthReverseZ = true;
+        state.device.multiviewEnabled = ImmUnityVulkanFeatures::State().IsEnabled(instance.device);
         ImmShared::ImmEngineBridge::InitConfig config = {};
         config.rendererApi = ImmCore::piRenderer::API::Vulkan;
         config.graphicsDevice = &state.device;
@@ -153,19 +155,31 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         !packet.colorBuffer || !packet.depthBuffer) return preparation ? finishPreparation(reject("camera or viewport", invalid)) : reject("camera or viewport", invalid);
     if (preparation)
     {
+        if (packet.viewCount == 2 && !state.device.multiviewEnabled)
+            return finishPreparation(reject("logical-device multiview not enabled", invalid));
         for (int i = 0; i < 16; ++i)
             if (!std::isfinite(packet.worldToView[i]) || !std::isfinite(packet.projection[i])) return finishPreparation(invalid);
         const ImmCore::mat4x4 view(packet.worldToView), projection(packet.projection);
-        bridge.SetCameraMatrices(packet.camera, 0, &view, &projection, nullptr, nullptr, nullptr, nullptr);
+        if (packet.viewCount == 2)
+        {
+            for (int i = 0; i < 16; ++i)
+                if (!std::isfinite(packet.leftView[i]) || !std::isfinite(packet.leftProjection[i]) ||
+                    !std::isfinite(packet.rightView[i]) || !std::isfinite(packet.rightProjection[i])) return finishPreparation(invalid);
+            const ImmCore::mat4x4 leftView(packet.leftView), leftProjection(packet.leftProjection);
+            const ImmCore::mat4x4 rightView(packet.rightView), rightProjection(packet.rightProjection);
+            bridge.SetCameraMatrices(packet.camera, 2, &view, &projection,
+                &leftView, &leftProjection, &rightView, &rightProjection);
+        }
+        else bridge.SetCameraMatrices(packet.camera, 0, &view, &projection, nullptr, nullptr, nullptr, nullptr);
         return finishPreparation(bridge.PrepareCamera(packet.camera) ? 0 : reject("camera preparation", failed));
     }
     if (eventId != ImmRenderGraphEventId || !prepared) return reject("unmatched preparation", invalid);
     if (preparationResult < 0) return preparationResult;
     UnityVulkanImage color = {}, depth = {};
     if (!unity->AccessRenderBufferTexture(reinterpret_cast<UnityRenderBuffer>(packet.colorBuffer), nullptr,
-            0, 0, 0, kUnityVulkanResourceAccess_ObserveOnly, &color) ||
+            static_cast<VkImageLayout>(0), 0, 0, kUnityVulkanResourceAccess_ObserveOnly, &color) ||
         !unity->AccessRenderBufferTexture(reinterpret_cast<UnityRenderBuffer>(packet.depthBuffer), nullptr,
-            0, 0, 0, kUnityVulkanResourceAccess_ObserveOnly, &depth)) return reject("attachment access", failed);
+            static_cast<VkImageLayout>(0), 0, 0, kUnityVulkanResourceAccess_ObserveOnly, &depth)) return reject("attachment access", failed);
     // The packet's samples field configures initialization only. Draw sample
     // counts come from the exact borrowed attachments, as on Metal and D3D12.
     const uint32_t colorFormat = ImmVulkanPacketFormat(packet.colorFormat);
@@ -174,7 +188,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         !ImmVulkanColorFormatCompatible(color.format, colorFormat) || depth.format != depthFormat ||
         color.extent.width != depth.extent.width || color.extent.height != depth.extent.height ||
         color.extent.width < static_cast<uint32_t>(packet.width) || color.extent.height < static_cast<uint32_t>(packet.height) ||
-        color.layers != 1 || depth.layers != 1 || color.samples != depth.samples ||
+        color.layers != static_cast<int>(packet.viewCount) || depth.layers != static_cast<int>(packet.viewCount) || color.samples != depth.samples ||
         (color.samples != 1 && color.samples != 2 && color.samples != 4 && color.samples != 8))
     {
         ImmVulkanRenderGraphDiagnostic("Invalid attachments: colour=%ux%u format=%u samples=%u layers=%d depth=%ux%u format=%u samples=%u layers=%d request=%dx%d formats=%u/%u",
@@ -194,7 +208,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         reinterpret_cast<void*>(recording.renderPass), reinterpret_cast<void*>(recording.framebuffer),
         colorFormat, color.samples, true, true,
         static_cast<uint32_t>(recording.subPassIndex), packet.width, packet.height,
-        recording.currentFrameNumber, recording.safeFrameNumber, true))
+        recording.currentFrameNumber, recording.safeFrameNumber, true, packet.viewCount))
     {
         ImmVulkanRenderGraphDiagnostic("Host recording: commandBuffer=%d renderPass=%d framebuffer=%d subpass=%d",
             recording.commandBuffer != nullptr, recording.renderPass != 0,

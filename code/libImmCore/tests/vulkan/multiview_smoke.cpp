@@ -4,9 +4,15 @@
 #include <vector>
 #include <cstring>
 #include <atomic>
+#include <chrono>
+#include <thread>
+#include <algorithm>
+#include <limits>
 #include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmPlayer/src/layerRenderers/layerRendererModel/layerRendererModel.h"
+#include "appImmUnity/src/imm_unity_render_graph_packet.h"
+#include "appImmUnity/src/imm_unity_vulkan_render_graph.h"
 
 namespace {
 constexpr uint32_t Size = 64;
@@ -144,6 +150,7 @@ struct Host
         Check(vkCreateDevice(physical, &di, nullptr, &device), "Create enabled multiview device");
         vkGetDeviceQueue(device, family, 0, &queue);
         VkCommandPoolCreateInfo pi = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO}; pi.queueFamilyIndex = family;
+        pi.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         Check(vkCreateCommandPool(device, &pi, nullptr, &pool), "Create host command pool");
         VkCommandBufferAllocateInfo ai = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         ai.commandPool = pool; ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY; ai.commandBufferCount = 1;
@@ -186,11 +193,154 @@ struct Host
         Check(vkBindBufferMemory(device, readback, readbackMemory, 0), "Bind multiview readback");
     }
 };
+
+Host* adapterHost = nullptr;
+bool adapterInside = false;
+int adapterLayers = 2;
+UnityVulkanInstance UNITY_INTERFACE_API AdapterInstance()
+{
+    UnityVulkanInstance instance = {};
+    instance.instance = adapterHost->instance; instance.physicalDevice = adapterHost->physical;
+    instance.device = adapterHost->device; instance.graphicsQueue = adapterHost->queue;
+    instance.queueFamilyIndex = adapterHost->family; instance.getInstanceProcAddr = vkGetInstanceProcAddr;
+    return instance;
+}
+bool UNITY_INTERFACE_API AdapterRecording(UnityVulkanRecordingState* recording, UnityVulkanGraphicsQueueAccess access)
+{
+    if (!adapterInside || access != kUnityVulkanGraphicsQueueAccess_DontCare) return false;
+    *recording = {};
+    recording->commandBuffer = adapterHost->commands; recording->commandBufferLevel = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    recording->renderPass = adapterHost->pass; recording->framebuffer = adapterHost->framebuffer;
+    recording->currentFrameNumber = 1; recording->safeFrameNumber = 0;
+    return true;
+}
+bool UNITY_INTERFACE_API AdapterAttachment(UnityRenderBuffer buffer, const VkImageSubresource* subresource,
+    VkImageLayout, VkPipelineStageFlags stages, VkAccessFlags access, UnityVulkanResourceAccessMode mode, UnityVulkanImage* image)
+{
+    if (subresource || stages || access || mode != kUnityVulkanResourceAccess_ObserveOnly) return false;
+    const bool color = reinterpret_cast<uintptr_t>(buffer) == 1;
+    if (!color && reinterpret_cast<uintptr_t>(buffer) != 2) return false;
+    *image = {};
+    image->image = color ? adapterHost->color : adapterHost->depth;
+    image->format = color ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_D32_SFLOAT;
+    image->extent = {Size, Size, 1}; image->layers = adapterLayers; image->mipCount = 1;
+    image->samples = VK_SAMPLE_COUNT_1_BIT; image->type = VK_IMAGE_TYPE_2D;
+    image->layout = color ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    return true;
+}
+void RunUnityAdapterProbe(Host& host)
+{
+    using namespace ImmCore;
+    std::fprintf(stderr, "IMM_VULKAN_UNITY_ADAPTER begin\n");
+    adapterHost = &host;
+    IUnityGraphicsVulkan unity = {};
+    unity.Instance = AdapterInstance; unity.CommandRecordingState = AdapterRecording;
+    unity.AccessRenderBufferTexture = AdapterAttachment;
+    ImmVulkanRenderGraphState state; state.unity = &unity;
+    state.logFileName = "vulkan-unity-adapter-smoke.log"; state.tmpFolderName = ".";
+    // The fixture really enabled multiview. Supply the observer's captured result;
+    // its device-creation interception is covered separately by the CPU contract.
+    auto& capture = ImmUnityVulkanFeatures::State();
+    capture.multiview.store(true); capture.device.store(host.device);
+    ImmShared::ImmEngineBridge bridge;
+    std::fprintf(stderr, "IMM_VULKAN_UNITY_ADAPTER initialize\n");
+    ImmRenderGraphPacket init; init.enableSound = 0;
+    bool acknowledge = false;
+    if (ProcessImmVulkanRenderGraph(state, bridge, init, ImmRenderGraphPreparationEventId, acknowledge) != 0 ||
+        !state.ready || !state.device.multiviewEnabled || !acknowledge) throw std::runtime_error("Initialize Unity Vulkan adapter");
+    auto* player = bridge.GetPlayer();
+    const int document = player->Load(IMM_VULKAN_SAMPLE_FILE);
+    if (document < 0) throw std::runtime_error("Queue adapter sample load");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+    for (;;) {
+        bridge.GlobalWork(true, 10000);
+        ImmRenderGraphPacket maintenance; maintenance.operation = 3;
+        if (ProcessImmVulkanRenderGraph(state, bridge, maintenance, ImmRenderGraphPreparationEventId, acknowledge) != 0)
+            throw std::runtime_error("Adapter GPU maintenance failed");
+        ImmPlayer::Player::DocumentState loading;
+        player->GetDocumentState(loading, document);
+        if (loading.mLoadingState == ImmPlayer::Player::LoadingState::Loaded) break;
+        if (loading.mLoadingState == ImmPlayer::Player::LoadingState::Failed || std::chrono::steady_clock::now() >= deadline)
+            throw std::runtime_error("Adapter sample failed or timed out");
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    player->SetTime(document, piTick::FromSeconds(3), piTick(0)); bridge.GlobalWork(true, 10000);
+    const auto bounds = player->GetDocumentBBox(document);
+    const double radius = std::max({bounds.mMaxX - bounds.mMinX, bounds.mMaxY - bounds.mMinY, bounds.mMaxZ - bounds.mMinZ, 1.0}) * .6;
+    const auto view = trans3d::translate(-(bounds.mMinX + bounds.mMaxX) * .5,
+        -(bounds.mMinY + bounds.mMaxY) * .5, -(bounds.mMinZ + bounds.mMaxZ) * .5 - radius * 2);
+    const float nearPlane = float(radius) * .01f, farPlane = float(radius) * 4;
+    const mat4x4 projection(1,0,0,0, 0,1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);
+    const auto head = d2f(toMatrix(view)); auto left = head, right = head;
+    left[3] -= float(radius) * .1f; right[3] += float(radius) * .1f;
+    ImmRenderGraphPacket packet; packet.operation = 1; packet.viewCount = 2;
+    packet.width = packet.height = Size; packet.colorBuffer = 1; packet.depthBuffer = 2;
+    packet.colorFormat = 28; packet.depthFormat = 40;
+    for (int i = 0; i < 16; ++i) {
+        packet.worldToView[i] = head[i]; packet.leftView[i] = left[i]; packet.rightView[i] = right[i];
+        packet.projection[i] = packet.leftProjection[i] = packet.rightProjection[i] = projection[i];
+    }
+    auto prepare = [&]() {
+        return ProcessImmVulkanRenderGraph(state, bridge, packet, ImmRenderGraphPreparationEventId, acknowledge);
+    };
+    const float saved = packet.rightProjection[0]; packet.rightProjection[0] = std::numeric_limits<float>::quiet_NaN();
+    if (prepare() >= 0) throw std::runtime_error("Adapter accepted invalid right-eye projection");
+    packet.rightProjection[0] = saved;
+    if (prepare() != 0 || acknowledge || bridge.GetCameraState(0)->stereoType != 2)
+        throw std::runtime_error("Adapter did not prepare preferred stereo");
+    // Array mismatch must reject before requesting recording access.
+    adapterLayers = 1;
+    if (ProcessImmVulkanRenderGraph(state, bridge, packet, ImmRenderGraphEventId, acknowledge) >= 0 || !acknowledge)
+        throw std::runtime_error("Adapter accepted mono attachments for stereo packet");
+    adapterLayers = 2;
+    if (prepare() != 0) throw std::runtime_error("Prepare valid adapter packet");
+    Check(vkResetCommandBuffer(host.commands, 0), "Reset adapter host commands");
+    VkCommandBufferBeginInfo begin = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    Check(vkBeginCommandBuffer(host.commands, &begin), "Begin adapter host commands");
+    VkClearValue clear[2] = {}; // Unity's reversed-Z depth clear is zero.
+    VkRenderPassBeginInfo pass = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    pass.renderPass = host.pass; pass.framebuffer = host.framebuffer; pass.renderArea.extent = {Size, Size};
+    pass.clearValueCount = 2; pass.pClearValues = clear;
+    vkCmdBeginRenderPass(host.commands, &pass, VK_SUBPASS_CONTENTS_INLINE); adapterInside = true;
+    if (ProcessImmVulkanRenderGraph(state, bridge, packet, ImmRenderGraphEventId, acknowledge) != 0 || !acknowledge)
+        throw std::runtime_error("Draw preferred stereo through Unity Vulkan adapter");
+    adapterInside = false; vkCmdEndRenderPass(host.commands);
+    VkBufferImageCopy copy = {}; copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 2}; copy.imageExtent = {Size, Size, 1};
+    vkCmdCopyImageToBuffer(host.commands, host.color, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, host.readback, 1, &copy);
+    Check(vkEndCommandBuffer(host.commands), "End adapter host commands");
+    VkSubmitInfo submit = {VK_STRUCTURE_TYPE_SUBMIT_INFO}; submit.commandBufferCount = 1; submit.pCommandBuffers = &host.commands;
+    Check(vkQueueSubmit(host.queue, 1, &submit, VK_NULL_HANDLE), "Submit adapter host commands");
+    Check(vkQueueWaitIdle(host.queue), "Complete adapter GPU readback");
+    void* mapped = nullptr;
+    Check(vkMapMemory(host.device, host.readbackMemory, 0, VK_WHOLE_SIZE, 0, &mapped), "Map adapter readback");
+    const auto* pixels = static_cast<const unsigned char*>(mapped);
+    int coverage[2] = {}, different = 0;
+    double centroids[2] = {};
+    for (uint32_t i = 0; i < Size * Size; ++i) {
+        for (int eye = 0; eye < 2; ++eye) {
+            const auto* pixel = pixels + (eye * Size * Size + i) * 4;
+            if (std::max({pixel[0], pixel[1], pixel[2]}) > 8) { ++coverage[eye]; centroids[eye] += i % Size; }
+        }
+        for (int c = 0; c < 3; ++c) if (pixels[i * 4 + c] != pixels[(Size * Size + i) * 4 + c]) { ++different; break; }
+    }
+    vkUnmapMemory(host.device, host.readbackMemory);
+    for (int eye = 0; eye < 2; ++eye) if (coverage[eye]) centroids[eye] /= coverage[eye];
+    ImmRenderGraphPacket shutdown; shutdown.operation = 2;
+    if (ProcessImmVulkanRenderGraph(state, bridge, shutdown, ImmRenderGraphShutdownEventId, acknowledge) != 0 || state.ready)
+        throw std::runtime_error("Shutdown Unity Vulkan adapter");
+    capture.device.store(nullptr); capture.multiview.store(false); adapterHost = nullptr;
+    std::printf("IMM_VULKAN_UNITY_ADAPTER stereo=preferred coverage=%d,%d different=%d centroids=%.2f,%.2f\n", coverage[0], coverage[1], different, centroids[0], centroids[1]);
+    if (coverage[0] < 20 || coverage[1] < 20 || different < 50 || centroids[1] - centroids[0] < 1 ||
+        centroids[0] < 16 || centroids[1] > 48 || host.validationErrors.load() != 0)
+        throw std::runtime_error("Unity adapter stereo readback or Vulkan validation failed");
+    std::puts("IMM_VULKAN_UNITY_ADAPTER PASS prepared two-view packet and scene GPU readback");
+}
 }
 
 void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore::piLog& log)
 {
     using namespace ImmCore;
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
     Host host; host.Init();
     piRendererVulkan renderer;
     piVulkanExternalDevice external = {host.instance, host.physical, host.device, host.queue, host.family, false, false};
@@ -280,4 +430,5 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
     renderer.Deinitialize();
     if (host.validationErrors.load() != 0) throw std::runtime_error("Borrowed multiview Vulkan validation errors");
     std::puts("IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback");
+    RunUnityAdapterProbe(host);
 }

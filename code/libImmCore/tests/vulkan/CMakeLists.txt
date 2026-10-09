@@ -25,12 +25,14 @@ if(IMM_VULKAN_MODEL_SMOKE)
     get_filename_component(IMM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
     find_package(Vulkan REQUIRED)
     add_executable(imm_vulkan_model_smoke model_smoke.cpp multiview_smoke.cpp
+        ../../../appImmShared/src/imm_engine_bridge.cpp
         ../../src/libRender/vulkan/piVulkan_Renderer.cpp
         ../../src/libRender/directx12/piDX12_ShaderBindings.cpp
         ../../src/libRender/directx12/piDX12_Renderer.cpp
         ../../src/libRender/directx12/piDX12_CommandContext.cpp)
     target_compile_features(imm_vulkan_model_smoke PRIVATE cxx_std_17)
     target_compile_definitions(imm_vulkan_model_smoke PRIVATE WINDOWS NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_definitions(imm_vulkan_model_smoke PRIVATE IMM_VULKAN_SAMPLE_FILE=L"${IMM_ROOT}/exampleImmFiles/sample1.imm")
     target_include_directories(imm_vulkan_model_smoke PRIVATE "${IMM_ROOT}/code")
     set_property(TARGET imm_vulkan_model_smoke PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     target_link_libraries(imm_vulkan_model_smoke PRIVATE Vulkan::Vulkan d3d12 dxgi d3dcompiler d3d11 ws2_32 winmm opengl32 delayimp

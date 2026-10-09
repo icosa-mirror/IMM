@@ -255,7 +255,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Register packaged Vulkan validation layer failed' }
           & .\artifacts\vulkan-model-probe\imm_vulkan_model_smoke.exe *> artifacts\windows-standalone-vulkan\model-readback.log
           if ($LASTEXITCODE -ne 0) { throw "Vulkan model readback failed; see model-readback.log" }
-          foreach ($marker in @('IMM_VULKAN_MULTIVIEW validation=enabled', 'IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback')) {
+          foreach ($marker in @('IMM_VULKAN_MULTIVIEW validation=enabled', 'IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback', 'IMM_VULKAN_UNITY_ADAPTER PASS prepared two-view packet and scene GPU readback')) {
             if (-not (Select-String -LiteralPath artifacts/windows-standalone-vulkan/model-readback.log -SimpleMatch $marker -Quiet)) {
               throw "Vulkan multiview probe missing required marker: $marker"
             }

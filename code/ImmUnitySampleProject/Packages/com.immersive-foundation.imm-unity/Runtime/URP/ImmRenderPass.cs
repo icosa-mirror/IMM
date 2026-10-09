@@ -45,8 +45,7 @@ namespace ImmPlayer
             var camera = frameData.Get<UniversalCameraData>();
             if (!ImmCamera.TryAcquire(camera.camera, out int cameraId)) return;
             bool stereo = camera.xr.enabled;
-            if (stereo && (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal ||
-                SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan))
+            if (stereo && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal)
             {
                 Report($"IMM {SystemInfo.graphicsDeviceType} RenderGraph currently supports mono cameras only.");
                 return;
@@ -55,7 +54,7 @@ namespace ImmPlayer
                 camera.xr.GetTextureArraySlice(0) != 0 || camera.xr.GetTextureArraySlice(1) != 1 ||
                 camera.xr.GetViewport(0) != camera.xr.GetViewport(1)))
             {
-                Report("IMM D3D12 XR requires two single-pass views in slices 0 and 1 with matching viewports.");
+                Report("IMM XR requires two single-pass views in slices 0 and 1 with matching viewports.");
                 return;
             }
             if (camera.renderType != CameraRenderType.Base || camera.camera.rect != new Rect(0, 0, 1, 1))
