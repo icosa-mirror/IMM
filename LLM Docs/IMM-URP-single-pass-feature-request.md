@@ -1812,3 +1812,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     cover both paint techniques. Panorama skybox ordering, all-content stereo,
     additional MSAA/opacity cases and model document support remain open. This
     increment is held separately from the preceding CI recovery commits.
+61. **Hosted simulator startup delay and Vulkan coverage counterexample (2026-10-09):**
+    recovery run `37994572862` reports a standalone iOS Metal capture failure.
+    Its retained runtime log subsequently records startup at 21:44:14 UTC and
+    successful presented/offscreen validation at 21:44:18 UTC, after the workflow
+    stopped waiting at 21:43:56 UTC. The simulator's successful `bootstatus` did
+    not guarantee prompt application startup. The local correction allows five
+    minutes per launch and twelve minutes for both cases; capture, lifecycle and
+    visual acceptance requirements remain unchanged. Hosted confirmation is required.
+    Separately, a new native Vulkan four-sample model test passes its opaque control
+    but reports 732 half-opacity coverage mismatches in each colour space. Cleanup
+    completes without Vulkan validation errors. The Vulkan shaders' fixed eight-sample
+    coverage mask requires correction; the failing test remains local and uncommitted.

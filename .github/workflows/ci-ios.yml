@@ -128,7 +128,7 @@ jobs:
       - name: Run standalone iOS Metal visual and lifecycle validation
         id: standalone_ios_runtime
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           : "${STANDALONE_IOS_APP:?missing standalone iOS app}"
@@ -143,8 +143,11 @@ jobs:
             --imm-ios-validation --imm-ios-lifecycle-smoke \
             > "$artifact_dir/runtime-launch.log" 2>&1 &
           launch_pid=$!
+          # A freshly booted hosted simulator can delay process startup beyond two
+          # minutes even after bootstatus succeeds. Keep the render gates strict,
+          # but allow bounded startup time for each independently launched case.
           result_file=''
-          for _second in $(seq 1 120); do
+          for _second in $(seq 1 300); do
             result_file="$(find "$container" -type f -name standalone-ios-result.log -print -quit 2>/dev/null || true)"
             if [ -n "$result_file" ] && [ -s "$result_file" ]; then
               break
@@ -185,7 +188,7 @@ jobs:
             > "$artifact_dir/face-orientation-runtime-launch.log" 2>&1 &
           face_launch_pid=$!
           face_result=''
-          for _second in $(seq 1 120); do
+          for _second in $(seq 1 300); do
             face_result="$(find "$container" -type f -name standalone-ios-face-orientation-result.log -print -quit 2>/dev/null || true)"
             if [ -n "$face_result" ] && [ -s "$face_result" ]; then
               break
