@@ -135,7 +135,7 @@ int main(int argc, char** argv)
         std::filesystem::create_directories(directory);
         piLog log;
         Require(log.Init((directory / "generation.log").wstring().c_str(), 0), "Initialize fixture log");
-        std::ofstream manifest(directory / "manifest.json");
+        std::ofstream manifest(directory / "manifest.json", std::ios::binary);
         manifest << "{\"schema\":\"imm-urp-content-fixtures-v1\",\"fixtures\":[\n";
         bool first = true;
         for (const auto& fixture : Fixtures) {
