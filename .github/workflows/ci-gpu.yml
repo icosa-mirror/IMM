@@ -142,6 +142,7 @@ jobs:
             mingw-w64-x86_64-glslang
             mingw-w64-x86_64-mesa
             mingw-w64-x86_64-spirv-tools
+            mingw-w64-x86_64-vulkan-tools
 
       - name: Install pinned Mesa lavapipe
         shell: msys2 {0}
@@ -700,6 +701,7 @@ jobs:
             mingw-w64-x86_64-glslang
             mingw-w64-x86_64-mesa
             mingw-w64-x86_64-spirv-tools
+            mingw-w64-x86_64-vulkan-tools
 
       - name: Install pinned Mesa lavapipe
         shell: msys2 {0}
