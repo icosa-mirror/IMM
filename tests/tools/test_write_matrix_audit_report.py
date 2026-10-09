@@ -36,14 +36,15 @@ def main() -> int:
         assert completed.returncode == 0, completed.stderr
         audit = json.loads(json_output.read_text(encoding="utf-8"))
         assert audit["schema"] == "imm-testing-matrix-audit-v1"
-        assert audit["summary"]["row_count"] == 30
+        assert audit["summary"]["row_count"] == 31
         assert audit["summary"]["supported_count"] == 21
-        assert audit["summary"]["release_blocker_count"] == 8
+        assert audit["summary"]["release_blocker_count"] == 9
         assert audit["summary"]["audio_pipeline_count"] == 12
         assert audit["summary"]["actual_audio_pipeline_count"] == 11
         assert audit["summary"]["unsupported_audio_pipeline_count"] == 1
         assert "standalone/android/vr/openxr" in audit["summary"]["release_blockers"]
         assert "unity/windows/synthetic-stereo/vulkan" in audit["summary"]["release_blockers"]
+        assert "unity/android/vr/openxr" in audit["summary"]["release_blockers"]
         godot_ios = next(row for row in audit["rows"] if row["key"] == "godot/ios/non-vr/metal")
         assert godot_ios["status"] == "supported"
         assert godot_ios["hosted_gate"] == "CI iOS Iteration / Godot iOS Package and Metal Validation"
