@@ -1,5 +1,6 @@
 #include <vulkan/vulkan.h>
 #include <memory>
+#include <cmath>
 #include "libImmCore/src/libBasics/piTArray.h"
 #include "libImmImporter/src/document/layerPaintStatic.h"
 #include "libImmImporter/src/document/layerPaintPretessellated.h"
@@ -353,7 +354,7 @@ template<class RendererType>
 static double RunLayerMultiviewReadback(Host& host, ImmCore::piRendererVulkan& renderer,
     ImmCore::piLog& log, RendererType& layerRenderer, ImmImporter::Layer& layer,
     const ImmCore::trans3d& transform, const char* label, int variant, int colorSpace,
-    float opacity = 1, bool differentRightSource = false, bool samplePeak = false)
+    float opacity = 1, bool differentRightSource = false, bool samplePeak = false, int expectedMonoRed = -1)
 {
     using namespace ImmCore;
     float frame[4] = {.5f, 0, 0, 0}, display[36] = {};
@@ -400,6 +401,8 @@ static double RunLayerMultiviewReadback(Host& host, ImmCore::piRendererVulkan& r
             label, variant, colorSpace, opacity, mono.numDrawCalls, monoRed);
         throw std::runtime_error("Missing layer mono reference");
     }
+    if (expectedMonoRed >= 0 && std::abs(monoRed - (opacity > 0 ? expectedMonoRed : 0)) > 3)
+        throw std::runtime_error("Mono reference differs from authored colour expectation");
     renderer.SetRenderTarget(nullptr); renderer.DestroyRenderTarget(warmTarget); renderer.DestroyTexture(warmColor);
 
     Check(vkResetCommandBuffer(host.commands, 0), "Reset picture host commands");
@@ -458,10 +461,10 @@ static double RunLayerMultiviewReadback(Host& host, ImmCore::piRendererVulkan& r
             std::abs(centerGreen[eye] - (rightSourceEye ? 255 : monoGreen)) > 3)
             throw std::runtime_error("Multiview layer or source-eye/color-space parity failed");
         if (samplePeak && std::abs(coverage[eye] - monoCoverage) > monoCoverage / 20 + 8)
-            throw std::runtime_error("Multiview paint coverage differs from mono reference");
+            throw std::runtime_error("Multiview mesh coverage differs from mono reference");
     }
     if (samplePeak && opacity > 0 && centroids[1] - centroids[0] < 10)
-        throw std::runtime_error("Multiview paint did not apply distinct eye matrices");
+        throw std::runtime_error("Multiview mesh did not apply distinct eye matrices");
     renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer);
     renderer.DestroyBuffer(layerBuffer); renderer.DestroyBuffer(passBuffer);
     return centroids[0];
@@ -562,11 +565,70 @@ static double RunPaintMultiviewProbe(Host& host, ImmCore::piRendererVulkan& rend
         throw std::runtime_error("Load production multiview paint renderer");
     std::printf("IMM_VULKAN_MULTIVIEW_PAINT visibility direction=%d effects=%d storage=%d brush=%d\n", direction, effects, storage, brush);
     const double centroid = RunLayerMultiviewReadback(host, renderer, log, paintRenderer, layer, trans3d::identity(),
-        "IMM_VULKAN_MULTIVIEW_PAINT", storage * 5 + brush, colorSpace, opacity, false, true);
+        "IMM_VULKAN_MULTIVIEW_PAINT", storage * 5 + brush, colorSpace, opacity, false, true,
+        colorSpace == 0 ? 64 : static_cast<int>(std::pow(.25f, 1.0f / 2.2f) * 255));
     paintRenderer.UnloadInGPU(&renderer, nullptr, &log, &layer);
     paintRenderer.UnloadInCPU(&log, &layer); paintRenderer.Deinit(&renderer, &log); paint.Deinit();
     layer.SetLoaded(false); layer.Deinit(&log);
     return centroid;
+}
+
+static void RunModelMultiviewProbe(Host& host, ImmCore::piRendererVulkan& renderer,
+    ImmCore::piLog& log, int layout, int colorSpace, float opacity, int shading)
+{
+    using namespace ImmCore;
+    ImmImporter::LayerModel model;
+    if (!model.Init(false, static_cast<ImmImporter::LayerModel::ShadingModel>(shading)))
+        throw std::runtime_error("Initialize model input fixture");
+    auto* mesh = model.GetMesh();
+    piMesh::VertexFormat formats[2] = {};
+    formats[0].mStride = (layout == 1 ? 11 : layout == 4 ? 10 : 7) * sizeof(float);
+    formats[0].mNumElems = layout == 4 ? 3 : 2;
+    formats[0].mElems[0] = {3, piMesh::VertexElemDataType::Float, false, 0};
+    formats[0].mElems[1] = {4, piMesh::VertexElemDataType::Float, false, 3 * sizeof(float)};
+    if (layout == 2) {
+        formats[0].mStride = 3 * sizeof(float); formats[0].mNumElems = 1;
+        formats[1].mStride = 4 * sizeof(float); formats[1].mNumElems = 1;
+        formats[1].mElems[0] = {4, piMesh::VertexElemDataType::Float, false, 0};
+    }
+    if (layout == 3) {
+        formats[0].mStride = 16;
+        formats[0].mElems[1] = {4, piMesh::VertexElemDataType::UByte, true, 12};
+    }
+    if (layout == 4) formats[0].mElems[2] = {3, piMesh::VertexElemDataType::Float, false, 7 * sizeof(float)};
+    if (!mesh->Init(layout == 2 ? 2 : 1, 4, formats, piMesh::Type::Polys, 1, 2))
+        throw std::runtime_error("Allocate model input fixture");
+    float vertices[4][11] = {
+        {-.6f,-.5f,.5f, .5f,.5f,.5f,1, 0,0,1,99}, {.6f,-.5f,.5f, .5f,.5f,.5f,1, 0,0,1,99},
+        {.6f,.5f,.5f, .5f,.5f,.5f,1, 0,0,1,99}, {-.6f,.5f,.5f, .5f,.5f,.5f,1, 0,0,1,99}};
+    for (uint32_t vertex = 0; vertex < 4; ++vertex) {
+        if (layout == 3) {
+            unsigned char packed[16] = {};
+            std::memcpy(packed, vertices[vertex], 12);
+            packed[12] = packed[13] = packed[14] = 128; packed[15] = 255;
+            mesh->SetVertex(0, vertex, packed);
+        }
+        else {
+            mesh->SetVertex(0, vertex, vertices[vertex]);
+            if (layout == 2) mesh->SetVertex(1, vertex, vertices[vertex] + 3);
+        }
+    }
+    mesh->SetTriangle(0, 0, 0, 1, 2); mesh->SetTriangle(0, 1, 0, 2, 3); mesh->CalcBBox(0, 0);
+    ImmImporter::Layer layer(nullptr, nullptr, 0);
+    if (!layer.Init(ImmImporter::Layer::Type::Model, L"multiview model", true,
+        trans3d::identity(), trans3d::identity(), 1, false, piTick(1), 1, 0, &log, false))
+        throw std::runtime_error("Initialize model wrapper fixture");
+    layer.SetImplementation(&model); layer.SetLoaded(true);
+    ImmPlayer::LayerRendererModel models;
+    if (!models.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true) ||
+        !models.LoadInCPU(&log, &layer) || !models.LoadInGPU(&renderer, nullptr, &log, &layer))
+        throw std::runtime_error("Load model input fixture");
+    std::printf("IMM_VULKAN_MULTIVIEW_MODEL input layout=%d shading=%d\n", layout, shading);
+    RunLayerMultiviewReadback(host, renderer, log, models, layer, trans3d::identity(),
+        "IMM_VULKAN_MULTIVIEW_MODEL", layout, colorSpace, opacity, false, true, colorSpace == 0 ? 55 : 128);
+    models.UnloadInGPU(&renderer, nullptr, &log, &layer); models.UnloadInCPU(&log, &layer);
+    models.Deinit(&renderer, &log); mesh->DeInit(); model.Deinit();
+    layer.SetLoaded(false); layer.Deinit(&log);
 }
 
 void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore::piLog& log)
@@ -696,6 +758,11 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
                 RunPaintMultiviewProbe<ImmImporter::LayerPaintStatic, ImmImporter::DrawingStatic,
                     ImmPlayer::LayerRendererPaintStatic>(host, renderer, log, 1, brush, colorSpace, 1, 0, effects);
             }
+    for (int colorSpace = 0; colorSpace < 2; ++colorSpace)
+        for (int layout = 0; layout < 5; ++layout)
+            for (float opacity : {1.0f, .5f, 0.0f})
+                for (int shading = 0; shading < 2; ++shading)
+                    RunModelMultiviewProbe(host, renderer, log, layout, colorSpace, opacity, shading);
     renderer.Deinitialize();
     if (host.validationErrors.load() != 0) throw std::runtime_error("Borrowed multiview Vulkan validation errors");
     std::puts("IMM_VULKAN_MULTIVIEW PASS borrowed two-layer production model GPU readback");
@@ -703,5 +770,6 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
     std::puts("IMM_VULKAN_MULTIVIEW_PAINT PASS both storage paths and four authorable brushes in two color spaces at three opacities");
     std::puts("IMM_VULKAN_MULTIVIEW_PAINT PASS directional facing in both storage paths and color spaces");
     std::puts("IMM_VULKAN_MULTIVIEW_PAINT PASS wiggle and draw-in shader variants with mono parity");
+    std::puts("IMM_VULKAN_MULTIVIEW_MODEL PASS five vertex layouts and both shading flags with mono parity");
     RunUnityAdapterProbe(host);
 }

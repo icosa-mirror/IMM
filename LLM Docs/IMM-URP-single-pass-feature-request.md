@@ -1693,3 +1693,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     pretessellated GLSL draw-in body remains inactive. Hosted confirmation,
     model-input expansion, Unity stereo composition and headset evidence remain
     outstanding.
+55. **Vulkan model input multiview coverage (local, 2026-10-09):** 60
+    borrowed-pass readbacks cover packed/padded float vertices, separate position
+    and colour streams, normalized byte colours and optional normals. They cross
+    both colour spaces, opaque/half/zero opacity and both stored shading flags.
+    Every case compares colour, coverage and draw/triangle counts against mono
+    and requires distinct eye centroids for visible geometry. Model and paint
+    samples also check authored colour expectations independently of mono parity.
+    Both shading flags retain the shared player's existing unlit rendering;
+    this does not introduce a new lighting requirement. All four native Vulkan
+    tests pass with validation enabled and no errors. Windows Vulkan CI requires
+    the new model-input marker. Hosted confirmation and Unity all-content stereo
+    depth/transparency/MSAA composition remain outstanding, alongside actual
+    OpenXR/Quest acceptance and GPU capture evidence.
