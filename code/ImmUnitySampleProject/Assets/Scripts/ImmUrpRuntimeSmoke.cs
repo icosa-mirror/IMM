@@ -288,6 +288,11 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         var otherRequest = new UniversalRenderPipeline.SingleCameraRequest { destination = otherTarget };
         var optIn = documentCamera.GetComponent<ImmCamera>();
         bool previousOptIn = optIn.enabled;
+        bool previousCameraEnabled = documentCamera.enabled;
+        // Both cameras are driven by explicit requests in this fixture. Leaving
+        // the main camera enabled also schedules an automatic URP render on
+        // players with an active display, producing two valid submissions.
+        documentCamera.enabled = false;
         try
         {
             Require(otherTarget.Create(), "Could not create attributed camera target.");
@@ -340,6 +345,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         {
             captureSubmissions = false;
             optIn.enabled = previousOptIn;
+            documentCamera.enabled = previousCameraEnabled;
             attributionCamera.targetTexture = null;
             otherTarget.Release();
             Destroy(otherTarget);
