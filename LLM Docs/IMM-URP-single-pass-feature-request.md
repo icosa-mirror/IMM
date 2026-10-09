@@ -2006,3 +2006,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Shader compilation, rendered mono checks and hardware per-eye results remain
     unverified. Older opaque transparent-queue results establish depth ordering
     only, not transparent blending acceptance.
+
+76. **Metal stereo-format panorama correction (local, 2026-10-09):** full run
+    `38000728358` reaches the same corpus failure on macOS and iOS Metal. Paint,
+    flat pictures and the mono panorama pass; stereo-format equirectangular content
+    leaves exactly the blue skybox in all 65,536 captured pixels. Metal picture
+    initialization never populated the stereo-format shader slot, although its
+    existing native shader implements top/bottom eye selection. Initialization now
+    creates that shader with `FORMAT_IS_STEREO=1`, including mono viewing mode, and
+    fails initialization if creation fails. This supports stereo-format source
+    images in scoped Metal mono rendering; it does not add Metal XR support.
+    The Windows DX12 build also confirms the same nested fixture-manifest collision
+    as Windows Vulkan. Android and downstream jobs remain pending, and the Metal
+    shader correction requires hosted compilation and rendering confirmation.
