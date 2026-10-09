@@ -425,7 +425,8 @@ namespace ImmPlayer.Editor
                 ownsContentAssets = true;
                 foreach (string source in Directory.GetFiles(contentSource, "*.imm"))
                     File.Copy(source, Path.Combine(contentAssets, Path.GetFileName(source)));
-                File.Copy(Path.Combine(contentSource, "manifest.json"), Path.Combine(contentAssets, "manifest.json"));
+                // CI reserves manifest.json for evidence manifests, including nested player files.
+                File.Copy(Path.Combine(contentSource, "manifest.json"), Path.Combine(contentAssets, "content-fixtures.json"));
                 AssetDatabase.Refresh();
                 BuildingUrpXrSample = useXr;
                 UrpXrSceneProcessed = false;
