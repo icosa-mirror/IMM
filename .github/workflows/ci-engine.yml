@@ -2664,7 +2664,7 @@ jobs:
     name: Unity Windows OpenXR VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
     if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
-    needs: unity-windows-native-plugin-build
+    needs: unity-windows-directx-player-build
     runs-on: [self-hosted, windows, unity, vr]
     timeout-minutes: 45
     steps:
@@ -2672,26 +2672,35 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download same-commit Windows native plugin
+      - name: Download same-commit URP OpenXR player
         uses: actions/download-artifact@v4
         with:
-          name: UnityWindowsNativePluginSourceBuild
-          path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64
+          name: UnityWindowsDirectXPlayer
+          path: artifacts/unity-windows-openxr-vr/player
 
       - name: Preflight Unity OpenXR VR runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile unity-windows-openxr-vr --output artifacts\unity-windows-openxr-vr\preflight.json --require-env UNITY_EXE
+        run: python tests\tools\preflight_runner.py --profile unity-windows-openxr-vr --output artifacts\unity-windows-openxr-vr\preflight.json
 
       - name: Run Unity OpenXR VR smoke
         timeout-minutes: 25
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts\unity-windows-openxr-vr | Out-Null
-          $env:IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH = (Resolve-Path artifacts\unity-windows-openxr-vr).Path + "\unity-windows-openxr-vr.png"
-          & $env:UNITY_EXE -batchmode -projectPath code\ImmUnitySampleProject -executeMethod ImmPlayer.Editor.BuildAutomation.RunWindowsOpenXREditorPlayModeSmoke -logFile artifacts\unity-windows-openxr-vr\unity-editor.log
-          if ($LASTEXITCODE -ne 0) {
-            throw "Unity OpenXR VR smoke failed with exit code $LASTEXITCODE"
+          $evidenceDir = (Resolve-Path artifacts\unity-windows-openxr-vr).Path
+          $playerPath = Join-Path $evidenceDir "player\openxr\ImmUnityOpenXR.exe"
+          if (!(Test-Path -LiteralPath $playerPath)) { throw "URP OpenXR player is missing: $playerPath" }
+          # OpenXR requires graphics and the live headset session; do not use batchmode/nographics.
+          $playerArguments = @('-force-d3d12', '-immUrpXrSmoke', '-immUrpXrCapturePath',
+            ('"' + (Join-Path $evidenceDir 'unity-windows-openxr-vr.png') + '"'),
+            '-logFile', ('"' + (Join-Path $evidenceDir 'unity-player.log') + '"'))
+          $playerProcess = Start-Process -FilePath $playerPath -ArgumentList $playerArguments -WindowStyle Hidden -PassThru
+          if (!$playerProcess.WaitForExit(180000)) {
+            # This process was started by this step, so only this owned instance is stopped.
+            Stop-Process -Id $playerProcess.Id -Force -ErrorAction SilentlyContinue
+            throw "URP OpenXR hardware probe timed out"
           }
+          if ($playerProcess.ExitCode -ne 0) { throw "URP OpenXR hardware probe failed: $($playerProcess.ExitCode)" }
 
       - name: Record Unity OpenXR VR metrics
         shell: pwsh
@@ -2714,11 +2723,11 @@ jobs:
         shell: pwsh
         run: >
           python tests\tools\verify_log_markers.py
-          --log artifacts\unity-windows-openxr-vr\unity-editor.log
+          --log artifacts\unity-windows-openxr-vr\unity-player.log
           --label unity-windows-openxr-vr
-          --require "[IMM_UNITY_SMOKE] xr probe passed"
-          --require "[IMM_EDITOR_SMOKE] passed:"
-          --forbid "[IMM_UNITY_SMOKE] xr probe failed"
+          --require "[IMM_URP_XR_SMOKE] PASS api=Direct3D12"
+          --require "nativeSceneEventsPerFrame=1 displayPasses=1 views=2"
+          --forbid "[IMM_URP_XR_SMOKE] FAIL"
           --output artifacts\unity-windows-openxr-vr\unity-openxr-vr-log-contract.json
 
       - name: Write CI manifest

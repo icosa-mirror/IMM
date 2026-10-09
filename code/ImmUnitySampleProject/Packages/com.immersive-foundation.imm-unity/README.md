@@ -62,6 +62,15 @@ origin. Use `-immUrpXrPlayerPath` or `-immQuestPlayerPath` for the output path.
 Build-time settings are restored afterwards. CI builds both variants; actual
 OpenXR rendering/headset acceptance is a separate outstanding check.
 
+On a Windows runner with an active OpenXR headset session, launch
+`ImmUnityOpenXR.exe -force-d3d12 -immUrpXrSmoke -immUrpXrCapturePath "<absolute PNG path>"`.
+The opt-in hardware probe waits for a loaded document and running stereo display,
+requires one display pass with two views and 120 distinct camera-attributed stereo
+frames with one successful native scene event each, writes a mirror capture and
+exits. Failure or timeout exits with an error. The Windows hardware CI lane runs
+this same-commit player instead of the legacy Editor scene. Mirror/submission
+evidence still requires separate per-eye visual and GPU draw-count acceptance.
+
 ## Android Vulkan rendering contract
 
 On Android Vulkan, IMM does not access Unity's display render buffer or

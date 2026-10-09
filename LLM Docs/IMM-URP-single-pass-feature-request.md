@@ -1523,3 +1523,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     Full hosted validation is pending; the last confirmed green checkpoint remains
     entry 40. This does not establish measured zero allocations, GPU draw-count
     equality, complete stereo composition or actual headset acceptance.
+42. **Windows XR runtime harness migration (local, 2026-10-09):** the gated
+    hardware lane now downloads the same-commit Windows URP/OpenXR player and
+    launches it with DX12 instead of opening the legacy Built-in Editor scene.
+    An opt-in player probe waits for a loaded document and running stereo display,
+    requires one display pass with two render parameters, and checks 120 distinct
+    camera-attributed stereo frames for exactly one successful native scene event.
+    It retains a mirror capture and player log, exits on failure, and is bounded
+    by an owned-process timeout. The build scene processor attaches the probe;
+    normal sample launches leave it inactive. Managed runtime/editor compilation
+    and updated workflow contracts pass locally. Hosted build verification is pending while
+    attribution validation run 37974039216 is in progress. Actual execution needs
+    the hardware lane and does not replace per-eye or GPU draw-count acceptance.

@@ -88,6 +88,7 @@ namespace ImmPlayer.Editor
             tracker.UseRelativeTransform = false;
             sample.SetViewingOrigin(origin.transform);
             origin.AddComponent<XrSceneBootstrap>();
+            sample.gameObject.AddComponent<ImmUrpXrRuntimeSmoke>();
             BuildAutomation.UrpXrSceneProcessed = true;
             Debug.Log("[IMM_URP_XR_BUILD] trackedRig=CenterEye viewingOrigin=separate startup=scene");
         }

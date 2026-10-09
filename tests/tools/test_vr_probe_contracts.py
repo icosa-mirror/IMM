@@ -17,18 +17,17 @@ def require_tokens(path: Path, tokens: list[str]) -> list[str]:
 
 def main() -> int:
     checks = {
-        ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs": [
-            "IMM_UNITY_SMOKE_XR_PROBE",
+        ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUrpXrRuntimeSmoke.cs": [
+            "-immUrpXrSmoke",
             "XRSettings.isDeviceActive",
             "XRDisplaySubsystem",
-            "xr probe passed",
-            "xr probe failed",
-        ],
-        ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs": [
-            "RunWindowsOpenXREditorPlayModeSmoke",
-            "SampleSceneVR.unity",
-            "Windows OpenXR VR",
-            "IMM_UNITY_SMOKE_XR_PROBE",
+            "display.GetRenderPassCount() != 1",
+            "pass.GetRenderParameterCount() != 2",
+            "ImmRenderingDiagnostics.SubmissionCompleted += OnSubmission",
+            "submission.NativeSceneEvents != 1",
+            "!submittedFrames.Add(submission.FrameIndex)",
+            "[IMM_URP_XR_SMOKE] PASS",
+            "[IMM_URP_XR_SMOKE] FAIL",
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Editor/ImmUrpXrBuild.cs": [
             "BuildAndroidOpenXRQuestPlayer",
@@ -42,6 +41,7 @@ def main() -> int:
             "TrackedPoseDriver.TrackedPose.Center",
             "sample.SetViewingOrigin(origin.transform)",
             "origin.AddComponent<XrSceneBootstrap>()",
+            "sample.gameObject.AddComponent<ImmUrpXrRuntimeSmoke>()",
         ],
         ROOT / "tests/tools/prepare_unity_ci_project.py": [
             "--preserve-xr",
@@ -52,7 +52,10 @@ def main() -> int:
             "unity-windows-openxr-vr",
             "Preflight Unity OpenXR VR runner",
             "Run Unity OpenXR VR smoke",
-            "[IMM_UNITY_SMOKE] xr probe passed",
+            "player\\openxr\\ImmUnityOpenXR.exe",
+            "-immUrpXrSmoke",
+            "[IMM_URP_XR_SMOKE] PASS api=Direct3D12",
+            "nativeSceneEventsPerFrame=1 displayPasses=1 views=2",
             "unity-openxr-vr-log-contract.json",
             "Build Unity Android OpenXR Quest Vulkan player",
             "ImmPlayer.Editor.ImmUrpXrBuild.BuildAndroidOpenXRQuestPlayer",

@@ -53,7 +53,7 @@ REQUIRED_JOBS = {
         "unity-windows-vulkan-ordered-overlay": ["Preflight Unity Vulkan runner", "Run Unity Vulkan ordered overlay smoke", "Classify Unity Vulkan ordered overlay status", "Record Unity Vulkan ordered overlay metrics", "Classify Unity Vulkan ordered overlay visual evidence", "Write Unity Vulkan ordered overlay report", "Stage Unity Vulkan ordered overlay capture evidence", "Verify Unity Vulkan ordered overlay log contract", "Verify Unity Vulkan ordered overlay native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-full-depth": ["Preflight Unity Vulkan runner", "Run Unity Vulkan full depth smoke", "Classify Unity Vulkan full depth status", "Record Unity Vulkan full depth metrics", "Classify Unity Vulkan full depth visual evidence", "Write Unity Vulkan full depth report", "Stage Unity Vulkan full depth capture evidence", "Verify Unity Vulkan full depth log contract", "Verify Unity Vulkan full depth native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-android-vulkan": ["Download same-commit Android Unity native plugin", "Stage same-commit Android Unity native plugin", "Prepare Unity Android OpenXR Quest project", "Build Unity Android OpenXR Quest Vulkan player", "Inject same-commit plugin into Unity Android OpenXR Quest shell APK", "Verify Unity Android OpenXR Quest APK contract", "Prepare clean non-XR Unity Android project", "Preflight Unity Android Vulkan runner", "Build Unity Android Vulkan smoke player", "Verify Unity Android APK is non-XR", "Check Firebase Test Lab configuration", "Verify Firebase Adreno device target", "Run Unity Android Vulkan smoke in Firebase Test Lab", "Record Unity Android Vulkan visual metrics", "Write Unity Android Vulkan screenshot report", "Classify Unity Android Vulkan result", "Write CI manifest", "Collect artifact summary", "Upload Unity Android Vulkan artifacts"],
-        "unity-windows-openxr-vr": ["Download same-commit Windows native plugin", "Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "unity-windows-openxr-vr": ["Download same-commit URP OpenXR player", "Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
         "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
     },
@@ -680,6 +680,7 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
     text = path.read_text(encoding="utf-8")
     job_names = [
         "unity-windows-native-plugin-build",
+        "unity-windows-openxr-vr",
         "unity-macos-metal-composition",
         "unity-windows-directx-player-build",
         "unity-windows-vulkan-player-build",
@@ -716,6 +717,18 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
         ]:
             if token not in body:
                 errors.append(f"{workflow_rel} {job_name} missing same-commit native plugin token: {token}")
+
+    xr_body = job_bodies.get("unity-windows-openxr-vr", "")
+    for token in [
+        "needs: unity-windows-directx-player-build",
+        "name: UnityWindowsDirectXPlayer",
+        "player\\openxr\\ImmUnityOpenXR.exe",
+        "-force-d3d12",
+        "-immUrpXrSmoke",
+        "[IMM_URP_XR_SMOKE] PASS api=Direct3D12",
+    ]:
+        if token not in xr_body:
+            errors.append(f"{workflow_rel} unity-windows-openxr-vr missing URP player contract token: {token}")
 
     macos_body = job_bodies.get("unity-macos-metal-composition", "")
     for token in [
