@@ -36,8 +36,9 @@ automating headset VR validation does not exempt non-VR changes from CI.
    Corrections and the prepared acceptance checks are pushed at `963193e5`;
    full validation run `37979446772` completed with 38 successful, 13 skipped
    and four failed jobs: Unity iOS simulator, Unity Android Vulkan and the two
-   evidence aggregators. Android device logs are being investigated; this is
-   not a new full-green checkpoint.
+   evidence aggregators. Android device logs confirm the same duplicate
+   automatic/explicit camera fixture failure as iOS; the local correction is
+   committed at `be2760f2`. This is not a new full-green checkpoint.
    Its Unity iOS simulator lane fails the attribution fixture with two main-camera
    submissions: that camera was also eligible for automatic rendering. The local
    correction disables automatic rendering for both explicitly driven test cameras
@@ -1723,3 +1724,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     execution are unverified; no device was contacted. These prepared checks do
     not establish all-content/MSAA edge quality, visual stereo acceptance or GPU
     draw counts, and both VR matrix rows remain deferred.
+57. **Completed correction run diagnosis (2026-10-09):** full run 37979446772
+    is terminal: 38 successful, 13 skipped and four failed jobs. Android's actual
+    device log passes Vulkan scene and bidirectional depth checks at 1/2/4 samples,
+    then reports two main-camera events at frames 60 and 62 on separate launches,
+    with 12 observations across four frames. iOS reports the same fixture defect
+    at frame 37. Entry 50's camera-disable correction therefore addresses both
+    failures without relaxing event counts. The remaining two failures are
+    evidence aggregators reporting those failed lanes. Windows D3D12 composition,
+    Windows Vulkan synthetic stereo, macOS Metal composition and the existing
+    native/Godot/device checks pass. No full-green promotion is made until the
+    correction passes hosted validation. Quest harness mocks additionally pass
+    success with stale-log rejection, missing-eye evidence failure with owned
+    cleanup, and refusal to replace an already-running sample; these are script
+    control-flow checks, not hardware or rendering evidence.
