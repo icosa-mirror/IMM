@@ -1,6 +1,6 @@
 {
   "schema": "imm-testing-matrix-status-v1",
-  "updated": "2026-10-01",
+  "updated": "2026-10-09",
   "implementation_baselines": {
     "urp_single_pass": {
       "plan": "LLM Docs/IMM-URP-single-pass-feature-request.md",
@@ -9,15 +9,23 @@
       "foundation_run": "https://github.com/icosa-mirror/IMM/actions/runs/36443675062",
       "foundation_run_conclusion": "success",
       "verified_scope": "Push pipeline platform builds, core and web checks, plus nine D3D12/WARP submission readbacks. Does not establish full engine/GPU matrix, IMM D3D12 scene rendering, URP or headset correctness.",
-      "remaining": "IMM D3D12 renderer, RenderGraph integration on all required platforms, single-pass stereo and scene-level CI/headset evidence.",
+      "current_checkpoint": {
+        "revision": "a80f73d448aafa252b3977aa158634bfc9c114f7",
+        "run": "https://github.com/icosa-mirror/IMM/actions/runs/37909414981",
+        "conclusion": "success",
+        "verified_scope": "Full non-headset platform CI, including Windows D3D12 URP composition and synthetic layered stereo, Windows Vulkan GPU readback, macOS Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation. iOS licensing failure passed on retry without a source change. This does not establish headset acceptance.",
+        "candidate_revision": "678c240bab0bbcca28e02a0e4be11d8223b730d3",
+        "candidate_run": "https://github.com/icosa-mirror/IMM/actions/runs/37947389351",
+        "candidate_status": "Awaiting full CI validation. Local validation-enabled Vulkan tests exercise the borrowed two-view model and Unity packet adapter with scene GPU readback. The preceding hosted GPU gate failed validation-layer discovery; runner registration and fixture-path fixes require hosted confirmation."
+      },
+      "remaining": "Hosted validation of the Vulkan two-view adapter, actual Unity/OpenXR Windows D3D12 and Quest Vulkan single-pass execution, complete all-layer and MSAA/depth composition evidence, headset pose/per-eye/one-pass acceptance and remaining allocation/migration acceptance. The existing Quest legacy MultiPass scene does not validate the URP multiview path.",
       "unity_integration_baseline": {
         "editor": "6000.6.0f1",
         "urp": "17.6.0",
         "openxr": "1.18.0",
         "ci_gate": "PackageImportHarness.UrpRenderGraphAssemblyIsIncluded",
-        "status": "iOS isolated JPEG codec linked successfully and sample CPU loading completed in run 36956328324; app exited during sound-loading stage before captures, with crash diagnostics pending; visual validation remains failed",
-        "scope": "Package resolution and compilation; does not establish RenderGraph execution or visual correctness.",
-        "failing_run": "https://github.com/icosa-mirror/IMM/actions/runs/36956328324"
+        "status": "Package import and platform URP checks passed at the current_checkpoint revision. Earlier iOS codec/crash failures are superseded by that successful full CI run.",
+        "scope": "Use current_checkpoint for verified rendering scope; package import alone establishes resolution and compilation only. Actual OpenXR headset acceptance remains outstanding."
       }
     }
   },
