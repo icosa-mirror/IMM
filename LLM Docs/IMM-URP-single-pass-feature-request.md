@@ -27,15 +27,18 @@ automating headset VR validation does not exempt non-VR changes from CI.
 1. Last confirmed full-green source: `265fe132`; synchronized runtime binaries:
    `b0396331`. Full [run 37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
    passed the required non-VR platform gates. Later checkpoints have not replaced it.
-2. Current full recovery [run 38000728358](https://github.com/icosa-mirror/IMM/actions/runs/38000728358)
-   tests binary commit `ab8c2376`, source `47af21b8`. At the latest scheduled refresh,
-   Android Unity and downstream jobs remain pending. Standalone iOS Metal and Windows
-   standalone/Godot Vulkan pass, confirming their earlier recovery fixes. Windows
-   Unity DX12/Vulkan player build steps pass but artifact collection fails on a nested
-   fixture-manifest filename. Unity iOS/macOS Metal reach the corpus and fail on the
-   stereo-format panorama. Both causes have local corrections (entries 72 and 76).
-   This is not a new full-green checkpoint. Ordinary-push run `37999162355` was
-   build/core/web-only and cannot establish rendering or device recovery.
+2. Focused recovery source `657d5864` is pushed and full validation
+   [run 38005911818](https://github.com/icosa-mirror/IMM/actions/runs/38005911818)
+   is running. It contains exactly the fixture-manifest naming correction and
+   Metal stereo-format panorama shader initialization, separately from held feature
+   changes. Previous full run `38000728358` completed with 34 successful, six failed,
+   16 skipped and one neutral job. Android Unity passes its required nine-document
+   corpus, depth, attribution and allocation gate. Standalone iOS Metal and Windows
+   standalone/Godot Vulkan also pass. Its failures are Metal panorama rendering,
+   Windows Unity artifact collection and downstream evidence reports; the focused
+   checkpoint addresses the two concrete causes. Hosted confirmation is pending,
+   so there is still no new full-green checkpoint. Ordinary-push run `37999162355`
+   was build/core/web-only and cannot establish rendering or device recovery.
 3. D3D12 mono and synthetic two-slice stereo, Vulkan mono and the borrowed-device
    two-view adapter are implemented. Native paint/picture/model GPU readbacks pass;
    these do not prove complete all-content rendering through Unity or headset
@@ -43,8 +46,8 @@ automating headset VR validation does not exempt non-VR changes from CI.
 4. Unpublished increments include model persistence and a ten-document corpus,
    explicit static/pretessellated paint selection with packet ABI v4, both-technique
    Unity corpus MSAA checks, real transparent blending/alpha-test controls, the
-   same-commit plugin ABI gate and the two recovery corrections above. Their local
-   evidence and limits are recorded in entries 66–76. Actual hosted execution of
+   same-commit plugin ABI gate and Android fixture cache inputs. Their local
+   evidence and limits are recorded in entries 66–78. Actual hosted execution of
    these increments remains required before promoting a checkpoint.
 5. Remaining acceptance includes full non-VR CI recovery, Unity corpus/depth/skybox/
    blending/MSAA confirmation across the required matrix, complete stereo content
@@ -1989,3 +1992,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     native-only changes retain the existing injection workflow. YAML parsing passes.
     At the scheduled 23:28 UTC recovery refresh, Android builds and the legacy
     Firebase smoke have passed; the URP Firebase device test is still running.
+
+79. **Focused recovery checkpoint published (2026-10-10):** full run `38000728358`
+    completed: 34 successful, six failed, 16 skipped and one neutral job. Android
+    Unity passes, including the required nine-document corpus and 1x/4x depth gates.
+    The remaining failures have the two causes recorded in entries 72 and 76, plus
+    downstream reports. Recovery commits `9b65e08c` and `657d5864` were constructed
+    from the pushed baseline using an isolated temporary index. They change exactly
+    BuildAutomation's staged manifest filename and Metal panorama shader creation.
+    After pulling upstream and checking all three unrelated user-file hashes, only
+    those commits were pushed. Full run `38005911818` starts from that checkpoint;
+    its watcher uses a fifteen-minute interval. The same recovery commits merged
+    into the local feature branch without conflicts or user-file changes. Model,
+    ABI v4/paint selection, expanded MSAA/blend controls and cache-key changes remain
+    held locally. No new full-green checkpoint is claimed.
