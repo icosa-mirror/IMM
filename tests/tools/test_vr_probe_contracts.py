@@ -28,6 +28,19 @@ def main() -> int:
             "!submittedFrames.Add(submission.FrameIndex)",
             "[IMM_URP_XR_SMOKE] PASS",
             "[IMM_URP_XR_SMOKE] FAIL",
+            "-immUrpXrRunId",
+            "run={runId}",
+        ],
+        ROOT / "code/projects/android/run-unity-quest-urp-smoke.ps1": [
+            "com.ImmersiveFoundation.IMMUnityTest",
+            "The Unity sample is already running",
+            "[Guid]::NewGuid().ToString('N')",
+            "--es unity",
+            "-immUrpXrRunId $runId",
+            "PASS api=Vulkan",
+            "probe.log",
+            "quest-mirror.png",
+            "if ($ownedLaunch)",
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Editor/ImmUrpXrBuild.cs": [
             "BuildAndroidOpenXRQuestPlayer",
@@ -50,6 +63,9 @@ def main() -> int:
         ],
         ROOT / ".github/workflows/ci-engine.yml": [
             "unity-windows-openxr-vr",
+            "unity-android-openxr-quest-vr",
+            "Download same-commit Unity Quest APK",
+            "run-unity-quest-urp-smoke.ps1",
             "Preflight Unity OpenXR VR runner",
             "Run Unity OpenXR VR smoke",
             "player\\openxr\\ImmUnityOpenXR.exe",
@@ -72,6 +88,7 @@ def main() -> int:
             '"renderer": "openxr"',
             '"status": "supported"',
             '"hardware_gate": "CI Engine Matrix / Unity Windows OpenXR VR"',
+            '"hardware_gate": "CI Engine Matrix / Unity Quest URP OpenXR VR"',
         ],
     }
 

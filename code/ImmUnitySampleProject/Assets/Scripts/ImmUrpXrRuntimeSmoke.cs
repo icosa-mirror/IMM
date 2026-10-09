@@ -19,11 +19,22 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
     private int firstFrame;
     private bool observing;
     private string failure;
+    private string runId;
 
     private IEnumerator Start()
     {
         var arguments = Environment.GetCommandLineArgs();
         if (Array.IndexOf(arguments, "-immUrpXrSmoke") < 0) yield break;
+        int runIndex = Array.IndexOf(arguments, "-immUrpXrRunId");
+        var correlation = Guid.NewGuid();
+        if (runIndex >= 0 && (runIndex + 1 >= arguments.Length ||
+            !Guid.TryParse(arguments[runIndex + 1], out correlation)))
+        {
+            Fail("Invalid -immUrpXrRunId.");
+            yield break;
+        }
+        runId = correlation.ToString("N");
+        Debug.Log($"[IMM_URP_XR_SMOKE] BEGIN run={runId}");
         Application.runInBackground = true;
         if (!ImmRenderingDiagnostics.CalibrateManagedAllocationMeasurement())
         {
@@ -106,15 +117,31 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
                 yield break;
             }
         }
-        Debug.Log("[IMM_URP_XR_SMOKE] PASS zero managed allocations in warmed stereo IMM pass callbacks (64 samples minimum).");
-        ScreenCapture.CaptureScreenshot(capturePath);
-        for (int frame = 0; frame < 5; ++frame) yield return new WaitForEndOfFrame();
+        Debug.Log($"[IMM_URP_XR_SMOKE] PASS zero managed allocations in warmed stereo IMM pass callbacks (64 samples minimum). run={runId}");
+        // Capture after allocation measurement; write synchronously so Android's
+        // asynchronous screenshot writer cannot race the probe's successful exit.
+        yield return new WaitForEndOfFrame();
+        var capture = ScreenCapture.CaptureScreenshotAsTexture();
+        if (capture == null)
+        {
+            Fail("Could not read the XR mirror.");
+            yield break;
+        }
+        string captureFailure = null;
+        try { File.WriteAllBytes(capturePath, capture.EncodeToPNG()); }
+        catch (Exception error) { captureFailure = error.Message; }
+        finally { Destroy(capture); }
+        if (captureFailure != null)
+        {
+            Fail($"Could not write the XR mirror: {captureFailure}");
+            yield break;
+        }
         if (!File.Exists(capturePath) || new FileInfo(capturePath).Length == 0)
         {
             Fail("XR mirror capture was not written.");
             yield break;
         }
-        Debug.Log($"[IMM_URP_XR_SMOKE] PASS api={expectedApi} attributedStereoFrames={submittedFrames.Count} nativeSceneEventsPerFrame=1 displayPasses=1 views=2 capture={capturePath}");
+        Debug.Log($"[IMM_URP_XR_SMOKE] PASS api={expectedApi} attributedStereoFrames={submittedFrames.Count} nativeSceneEventsPerFrame=1 displayPasses=1 views=2 capture={capturePath} run={runId}");
         // This proves submission/layout, not per-eye visual correctness or GPU draw counts.
         Application.Quit(0);
     }
@@ -141,9 +168,9 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         ImmRenderingDiagnostics.ManagedAllocationMeasured -= OnManagedAllocation;
     }
 
-    private static void Fail(string message)
+    private void Fail(string message)
     {
-        Debug.LogError($"[IMM_URP_XR_SMOKE] FAIL {message}");
+        Debug.LogError($"[IMM_URP_XR_SMOKE] FAIL run={runId} {message}");
         Application.Quit(1);
     }
 }

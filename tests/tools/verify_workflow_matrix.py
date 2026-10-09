@@ -54,6 +54,7 @@ REQUIRED_JOBS = {
         "unity-windows-vulkan-full-depth": ["Preflight Unity Vulkan runner", "Run Unity Vulkan full depth smoke", "Classify Unity Vulkan full depth status", "Record Unity Vulkan full depth metrics", "Classify Unity Vulkan full depth visual evidence", "Write Unity Vulkan full depth report", "Stage Unity Vulkan full depth capture evidence", "Verify Unity Vulkan full depth log contract", "Verify Unity Vulkan full depth native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-android-vulkan": ["Download same-commit Android Unity native plugin", "Stage same-commit Android Unity native plugin", "Prepare Unity Android OpenXR Quest project", "Build Unity Android OpenXR Quest Vulkan player", "Inject same-commit plugin into Unity Android OpenXR Quest shell APK", "Verify Unity Android OpenXR Quest APK contract", "Prepare clean non-XR Unity Android project", "Preflight Unity Android Vulkan runner", "Build Unity Android Vulkan smoke player", "Verify Unity Android APK is non-XR", "Check Firebase Test Lab configuration", "Verify Firebase Adreno device target", "Run Unity Android Vulkan smoke in Firebase Test Lab", "Record Unity Android Vulkan visual metrics", "Write Unity Android Vulkan screenshot report", "Classify Unity Android Vulkan result", "Write CI manifest", "Collect artifact summary", "Upload Unity Android Vulkan artifacts"],
         "unity-windows-openxr-vr": ["Download same-commit URP OpenXR player", "Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "unity-android-openxr-quest-vr": ["Download same-commit Unity Quest APK", "Preflight Unity Quest runner", "Run Unity Quest URP hardware smoke", "Verify Unity Quest URP log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity Quest URP hardware evidence"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
         "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
     },
@@ -102,6 +103,7 @@ REQUIRED_RUNS_ON = {
         "unity-windows-vulkan-ordered-overlay": {"self-hosted", "windows"},
         "unity-windows-vulkan-full-depth": {"self-hosted", "windows"},
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
+        "unity-android-openxr-quest-vr": {"self-hosted", "quest", "openxr"},
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-directx": {"windows-latest"},
@@ -149,6 +151,7 @@ REQUIRED_JOB_TIMEOUTS = {
         "unity-windows-vulkan-ordered-overlay",
         "unity-windows-vulkan-full-depth",
         "unity-windows-openxr-vr",
+        "unity-android-openxr-quest-vr",
         "godot-package-import",
         "engine-evidence-report",
     },
@@ -184,6 +187,7 @@ REQUIRED_STEP_TIMEOUTS = {
         "unity-windows-vulkan-full-depth": {"Run Unity Vulkan full depth smoke"},
         "unity-windows-vulkan-synthetic-stereo": {"Run Unity Vulkan synthetic stereo smoke"},
         "unity-windows-openxr-vr": {"Run Unity OpenXR VR smoke"},
+        "unity-android-openxr-quest-vr": {"Run Unity Quest URP hardware smoke"},
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-directx": {"Capture DirectX sample1"},

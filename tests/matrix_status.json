@@ -354,9 +354,22 @@
       "hosted_gate": "Godot local verifier checks Unity XR scene bootstrap",
       "hardware_gate": "CI Engine Matrix / Unity Windows OpenXR VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "XR scene/static checks exist and ci-engine.yml defines a self-hosted Windows Unity OpenXR VR lane that runs the VR scene, requires active XR display evidence, captures an image, and verifies XR log contract markers.",
+      "reason": "Hosted builds produce the tracked URP/OpenXR DX12 player; the gated hardware lane launches that same-commit player and requires two-view layout, attributed native events, calibrated zero-allocation callback checks and a mirror capture. Actual headset/per-eye/GPU acceptance remains pending.",
       "owner_decision": "VR deferred until headset-capable runners are available for Unity OpenXR validation. Enable with CI_ENABLE_VR_CHECKS=true.",
       "promotion_criteria": "Reinstate as supported once Windows Unity OpenXR runner is available and this lane passes image/log contract evidence."
+    },
+    {
+      "product": "unity",
+      "platform": "android",
+      "mode": "vr",
+      "renderer": "openxr",
+      "status": "deferred",
+      "hosted_gate": "CI Engine Matrix / Unity Android Vulkan",
+      "hardware_gate": "CI Engine Matrix / Unity Quest URP OpenXR VR",
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Hosted builds produce the tracked URP/OpenXR Quest Vulkan APK. The gated Quest lane installs the same-commit APK and requires correlated two-view submission, calibrated zero-allocation callback checks and a mirror capture. Hardware execution is unverified.",
+      "owner_decision": "Quest runtime validation awaits an available headset runner; enable hardware CI with CI_ENABLE_VR_CHECKS=true.",
+      "promotion_criteria": "Promote after the Quest Unity lane passes and required per-eye, pose, content/depth composition and GPU one-sequence acceptance evidence is recorded."
     },
     {
       "product": "godot",

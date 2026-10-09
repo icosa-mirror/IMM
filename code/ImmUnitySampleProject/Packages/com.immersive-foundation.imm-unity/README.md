@@ -88,6 +88,16 @@ exits. Failure or timeout exits with an error. The Windows hardware CI lane runs
 this same-commit player instead of the legacy Editor scene. Mirror/submission
 evidence still requires separate per-eye visual and GPU draw-count acceptance.
 
+For Quest, run `code/projects/android/run-unity-quest-urp-smoke.ps1 -Apk <Quest APK>`
+from the repository root, optionally adding `-Serial <ADB serial>`. It requires an
+authorized, awake headset and an inactive Unity sample. The harness installs the
+specified APK, launches the same probe through Unity's Android intent arguments,
+uses a unique run ID to reject stale logs, pulls a mirror PNG and stops its own
+sample instance afterwards. It preserves shared logcat buffers. The gated
+`Unity Quest URP OpenXR VR` CI lane downloads the same-commit APK and retains
+correlated logs, capture and manifest. Both XR matrix rows remain deferred pending
+actual hardware evidence; the automated probe does not replace per-eye acceptance.
+
 ## Android Vulkan rendering contract
 
 On Android Vulkan, IMM does not access Unity's display render buffer or

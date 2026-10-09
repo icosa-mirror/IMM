@@ -33,6 +33,8 @@ automating headset VR validation does not exempt non-VR changes from CI.
    attribution-fixture failures; skipped downstream jobs left validation evidence incomplete.
    Local corrections are recorded in entries 44 and 46. Hosted confirmation is pending,
    so this remains the last confirmed full-green source.
+   Corrections and the prepared acceptance checks are pushed at `963193e5`;
+   full validation run `37979446772` is in progress.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
@@ -43,8 +45,9 @@ automating headset VR validation does not exempt non-VR changes from CI.
    and owned-device viewport capability fixes are confirmed by full CI.
    Dedicated URP/OpenXR build helpers request single-pass and configure a
    tracked sample origin for Windows and Quest; both hosted builds pass
-   (entries 39–40). The hardware runtime harness still
-   needs migration from its legacy probe to these players. Complete stereo
+   (entries 39–40). Windows hardware-harness migration, allocation gates and
+   expanded stereo MSAA checks are pushed but await hosted confirmation. The
+   Quest Unity hardware lane is prepared locally (entry 49). Complete stereo
    content and MSAA/depth composition,
    hosted confirmation of camera/frame/XR-pass submission attribution, measured managed-allocation
    acceptance and headset per-eye/one-pass acceptance remain required.
@@ -1612,3 +1615,19 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     two corrections are ready for the next full run. The goal remains incomplete,
     including hosted software acceptance, complete stereo content/depth composition,
     Quest Unity runtime-harness coverage and actual headset/per-eye/GPU draw evidence.
+49. **Quest Unity URP hardware harness (local, 2026-10-09):** a new gated
+    engine lane downloads the same-commit Quest APK and launches the Unity URP
+    runtime probe over ADB. The harness requires an authorized selected device,
+    refuses to replace a running sample, and uses a GUID in startup/success/failure
+    markers to reject stale logcat evidence without clearing shared buffers. It
+    retains correlated probe logs, full logcat, a mirror PNG and manifest, and stops
+    only the sample it launched. The runtime probe writes the captured mirror
+    synchronously after allocation measurement, avoiding asynchronous file-write
+    timing guesses. Windows markers remain compatible with the added correlation.
+    The evidence aggregator waits for this lane; workflow/matrix contracts include
+    it. A new Unity Android OpenXR VR row is explicitly deferred, and Windows VR
+    remains deferred: builds and counters do not prove headset correctness.
+    Managed compilation, PowerShell parsing, VR contracts, the 50-job workflow check
+    and 31-row matrix validation pass locally. No device was contacted. Hosted build
+    and actual Quest execution are pending; the preceding full run 37979446772
+    still validates the already-pushed corrections and acceptance checks.
