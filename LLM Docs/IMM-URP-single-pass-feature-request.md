@@ -33,8 +33,7 @@ automating headset VR validation does not exempt non-VR changes from CI.
    attribution-fixture failures; skipped downstream jobs left validation evidence incomplete.
    Local corrections are recorded in entries 44 and 46. Hosted confirmation is pending,
    so this remains the last confirmed full-green source.
-   Corrections and the prepared acceptance checks are pushed at `963193e5`;
-   full validation run `37979446772` completed with 38 successful, 13 skipped
+   The correction run at `963193e5`, `37979446772`, completed with 38 successful, 13 skipped
    and four failed jobs: Unity iOS simulator, Unity Android Vulkan and the two
    evidence aggregators. Android device logs confirm the same duplicate
    automatic/explicit camera fixture failure as iOS; the local correction is
@@ -43,6 +42,9 @@ automating headset VR validation does not exempt non-VR changes from CI.
    submissions: that camera was also eligible for automatic rendering. The local
    correction disables automatic rendering for both explicitly driven test cameras
    and restores the main camera afterwards; runtime confirmation remains required.
+   The shared camera correction, expanded native content probes and prepared XR
+   per-eye depth harness are now pushed at `209f6d41`. Full validation run
+   `37986974593` is in progress; it must pass before promoting the checkpoint.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
