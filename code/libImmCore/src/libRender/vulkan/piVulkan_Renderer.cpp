@@ -10417,7 +10417,10 @@ piRasterState piRendererVulkan::CreateRasterState(bool wireframe, bool frontIsCo
     state->wireframe = wireframe;
     state->frontIsCounterClockWise = frontIsCounterClockWise;
     state->cullMode = cullMode;
-    state->depthClamp = depthClamp;
+    // IMM does not request depthClamp on owned logical devices, and borrowed
+    // hosts do not attest that it is enabled. Use ordinary depth clipping.
+    (void)depthClamp;
+    state->depthClamp = false;
     state->multiSample = multiSample;
     if (mState) ++mState->liveRasterStates;
     return state;

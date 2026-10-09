@@ -67,6 +67,9 @@ $vs = $vs.Replace('GL_ARB_shader_viewport_layer_array : enable', 'GL_EXT_multivi
 $vs = $vs.Replace('out V2FData', 'layout(location=0) out V2FData')
 $vs = $vs.Replace('gl_InstanceID', 'gl_ViewIndex')
 $vs = $vs.Replace('    gl_ViewportIndex = gl_ViewIndex;', '')
+# Unlit models need only position and colour. glslang otherwise retains this
+# unused input, requiring a normal stream even for valid two-attribute meshes.
+$vs = $vs.Replace('layout (location=2) in vec3 inNormal;', '')
 $fs = Extract-GlslString (Join-Path $PSScriptRoot "shader_model_fs.glsl")
 $fs = $fs.Replace('layout (binding=0) uniform sampler2D unTex0;', '')
 $fs = $fs.Replace('in V2FData', 'layout(location=0) in V2FData')
