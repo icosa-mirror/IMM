@@ -3,3 +3,5 @@
 /code/projects/web/app/dist-library/**/*.wasm -text
 /exampleImmFiles/urp-content/*.imm -text
 /exampleImmFiles/urp-content/manifest.json text eol=lf
+# Executed directly by Bash on Windows CI runners.
+/tests/tools/install_windows_lavapipe_msys2.sh text eol=lf
