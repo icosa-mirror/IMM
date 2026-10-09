@@ -1768,6 +1768,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     outputs before running the probe, preventing stale success or failure evidence.
     Fresh rendering confirmation remains required; no visual threshold or required
     lane was removed.
+    An isolated local reproduction uses the same Mesa/loader and current MSYS2
+    dependency packages as the failed runner. Without LLVM 22, the exact hosted
+    probe exits 1, with loader error 126 and no drivers. Adding only libLLVM-22.dll
+    makes it exit 0 with validation enabled and all content/multiview/adapter
+    markers passing. All 42 core verification commands also pass locally. These
+    results support the correction but do not replace the pending full hosted run.
+    This run's Unity iOS Metal Simulator job completes successfully: its strict
+    URP check confirms camera attribution, warmed allocation, supported MSAA/depth,
+    opt-out and unload markers. Android validation is still running; the source
+    checkpoint is not promoted while that and the recovery rerun remain pending.
 59. **Deterministic document inputs (local, 2026-10-09):**
     exampleImmFiles/urp-content contains nine authored documents: four paint brush
     sections and five picture formats, plus a machine-readable manifest. The native
