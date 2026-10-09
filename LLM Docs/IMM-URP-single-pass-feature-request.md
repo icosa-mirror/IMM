@@ -24,26 +24,23 @@ automating headset VR validation does not exempt non-VR changes from CI.
 
 ## Current status — 2026-10-09
 
-1. Last confirmed full-CI source: `a80f73d4`.
-   Full [CI validation run 37909414981](https://github.com/icosa-mirror/IMM/actions/runs/37909414981)
+1. Last confirmed full-CI source: `2ed9b329`; synchronized runtime binaries: `3f7f9422`.
+   Full [CI validation run 37954438364](https://github.com/icosa-mirror/IMM/actions/runs/37954438364)
    passed, including Windows DX12 composition, Windows Vulkan GPU readback, macOS
    Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation.
-   The iOS licensing failure passed on retry without a source change.
+   The strict Windows Vulkan probe reports validation enabled and zero validation errors.
 2. D3D12 mono and synthetic two-slice stereo are implemented. Vulkan mono, production
    model/paint/picture shaders, cubemap and stereo-panorama selection, and the read-only
    logical-device feature observer are committed. Native all-content GPU readbacks do
    not establish complete all-layer composition through Unity or Android.
 3. The borrowed-device multiview boundary and Unity Vulkan two-view adapter are
-   implemented, with local validation-layer GPU readbacks (entries 34–35). The
-   first hosted GPU probe rendered both slices but failed layer discovery. The
-   next run exposed deleted buffer bindings in the earlier mono checks. Clearing
-   those bindings allows hosted mono and both multiview readbacks to complete.
-   The strict gate still reports negative viewport heights without enabled
-   maintenance1 on the owned Vulkan 1.0 device; an explicit extension request
-   passes locally (entries 36–37). Full hosted confirmation remains required.
-   Next: establish full CI validation, then verify actual Unity/Quest integration.
-   Windows OpenXR execution, all-content multiview, MSAA/depth composition and
-   headset per-eye/one-pass acceptance remain required.
+   implemented and hosted GPU readbacks pass, including the loaded-scene Unity
+   packet adapter (entries 34–38). Layer discovery, destroyed buffer bindings
+   and owned-device viewport capability fixes are confirmed by full CI.
+   Next: migrate the VR sample/build harness from legacy MultiPass to actual
+   URP/OpenXR integration. Complete stereo content and MSAA/depth composition,
+   camera/frame/XR-pass submission attribution, measured managed-allocation
+   acceptance and headset per-eye/one-pass acceptance remain required.
 4. Local editor changes to the sample's OpenXR and Package Manager settings, plus
    the unrelated Godot review handoff, remain untouched and outside the validated
    checkpoint.
@@ -1470,3 +1467,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     existing Y flip; borrowed Unity device creation is unchanged. All four local
     tests pass with validation forced throughout and no validation errors.
     Full hosted verification remains outstanding.
+38. **Full CI checkpoint (confirmed, 2026-10-09):** full validation run
+    [37954438364](https://github.com/icosa-mirror/IMM/actions/runs/37954438364)
+    passed at source `2ed9b329`; runtime binaries were synchronized at `3f7f9422`.
+    This confirms the fixes and native multiview evidence in entries 34–37.
+    The retained `GPUMatrixEvidence` artifact contains the Windows Vulkan proof
+    log: validation enabled, zero validation errors, one model draw/instance
+    covering both slices (512 pixels each; centroids 18.5/44.5), and the loaded
+    scene adapter's preferred-stereo readback success. Unity iOS Metal Simulator,
+    macOS Metal composition, Windows D3D12 composition, Windows Vulkan synthetic
+    stereo and Android Vulkan checks also pass. The existing Quest build still
+    uses the legacy MultiPass VR scene; it does not validate URP multiview.
+    Actual URP/OpenXR integration, complete stereo layer/composition coverage,
+    attributed submission evidence, allocation measurement and headset acceptance
+    remain unfinished. No CI failure is unresolved at this checkpoint.

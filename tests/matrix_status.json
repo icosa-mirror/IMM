@@ -10,15 +10,13 @@
       "foundation_run_conclusion": "success",
       "verified_scope": "Push pipeline platform builds, core and web checks, plus nine D3D12/WARP submission readbacks. Does not establish full engine/GPU matrix, IMM D3D12 scene rendering, URP or headset correctness.",
       "current_checkpoint": {
-        "revision": "a80f73d448aafa252b3977aa158634bfc9c114f7",
-        "run": "https://github.com/icosa-mirror/IMM/actions/runs/37909414981",
+        "revision": "2ed9b329b91588afa423ba4fbfa7a6ebba4c8340",
+        "runtime_binary_revision": "3f7f9422",
+        "run": "https://github.com/icosa-mirror/IMM/actions/runs/37954438364",
         "conclusion": "success",
-        "verified_scope": "Full non-headset platform CI, including Windows D3D12 URP composition and synthetic layered stereo, Windows Vulkan GPU readback, macOS Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation. iOS licensing failure passed on retry without a source change. This does not establish headset acceptance.",
-        "candidate_revision": "678c240bab0bbcca28e02a0e4be11d8223b730d3",
-        "candidate_run": "https://github.com/icosa-mirror/IMM/actions/runs/37947389351",
-        "candidate_status": "That candidate failed during mono paint checks. The buffer-binding fix in d5bd41b5 allows hosted mono and both multiview readbacks to complete in run 37950242603, but the strict validation gate reports negative viewport heights without enabled maintenance1 on the owned Vulkan 1.0 device. Explicitly enabling VK_KHR_maintenance1 passes all four local tests with validation forced throughout; full hosted confirmation remains outstanding."
+        "verified_scope": "Full non-headset platform CI, including Windows D3D12 URP composition and synthetic layered stereo, Windows Vulkan mono and borrowed two-view model/Unity packet adapter GPU readbacks with validation enabled and zero validation errors, macOS Metal, Unity iOS Metal Simulator, Godot iOS and Android Vulkan device validation. Evidence is retained in GPUMatrixEvidence. This does not establish actual OpenXR headset acceptance."
       },
-      "remaining": "Hosted validation of the Vulkan two-view adapter, actual Unity/OpenXR Windows D3D12 and Quest Vulkan single-pass execution, complete all-layer and MSAA/depth composition evidence, headset pose/per-eye/one-pass acceptance and remaining allocation/migration acceptance. The existing Quest legacy MultiPass scene does not validate the URP multiview path.",
+      "remaining": "Actual Unity/OpenXR Windows D3D12 and Quest Vulkan single-pass integration and sample/build-harness migration, complete stereo layer and MSAA/depth composition evidence, camera/frame/XR-pass submission attribution, measured managed-allocation acceptance and headset pose/per-eye/one-pass acceptance. The existing Quest legacy MultiPass scene does not validate the URP multiview path.",
       "unity_integration_baseline": {
         "editor": "6000.6.0f1",
         "urp": "17.6.0",
