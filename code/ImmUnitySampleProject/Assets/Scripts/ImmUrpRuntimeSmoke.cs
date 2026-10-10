@@ -379,8 +379,19 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         quad.GetComponent<MeshRenderer>().sharedMaterial = material;
         float radius = Mathf.Max(bounds.extents.magnitude, 0.1f);
         quad.transform.localScale = Vector3.one * radius * 4;
+        var hiddenPictures = new List<int>();
         try
         {
+            // sample1 mixes surface paint with a far-depth 360 backdrop. A rear
+            // opaque quad should hide that backdrop, so isolate surfaces here.
+            // The corpus checks all panorama formats separately.
+            if (fixture == "sample")
+                foreach (var layer in document.GetLayersManaged())
+                    if (layer.Type == ImmDocument.LayerType.Picture && layer.IsVisible)
+                    {
+                        Require(document.SetLayerVisible(layer.Id, false), "Could not hide sample backdrop for depth comparison.");
+                        hiddenPictures.Add(layer.Id);
+                    }
             long unblendedBrightness = 0;
             for (int phase = 0; phase < 6; ++phase)
             {
@@ -425,6 +436,8 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         }
         finally
         {
+            foreach (int layerId in hiddenPictures)
+                document.ClearLayerVisibilityOverride(layerId);
             quad.SetActive(false);
             Destroy(quad);
             Destroy(mesh);

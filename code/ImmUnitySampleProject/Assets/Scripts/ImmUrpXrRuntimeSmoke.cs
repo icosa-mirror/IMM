@@ -197,8 +197,15 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         quad.transform.localScale = Vector3.one * radius * 4;
         string captureDirectory = Path.Combine(captureRoot, $"imm-urp-xr-{runId}");
         Directory.CreateDirectory(captureDirectory);
+        var hiddenPictures = new List<int>();
         try
         {
+            foreach (var layer in sample.Document.GetLayersManaged())
+                if (layer.Type == ImmDocument.LayerType.Picture && layer.IsVisible)
+                {
+                    Require(sample.Document.SetLayerVisible(layer.Id, false), "Could not hide stereo sample backdrop for depth comparison.");
+                    hiddenPictures.Add(layer.Id);
+                }
             long[] unblendedBrightness = new long[2];
             for (int phase = 0; phase < 7; ++phase)
             {
@@ -242,6 +249,8 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         }
         finally
         {
+            foreach (int layerId in hiddenPictures)
+                sample.Document.ClearLayerVisibilityOverride(layerId);
             quad.SetActive(false);
             Destroy(quad); Destroy(mesh); Destroy(material);
         }
