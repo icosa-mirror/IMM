@@ -46,6 +46,15 @@ automating headset VR validation does not exempt non-VR changes from CI.
    (exit 137), then fully rerun before the targeted-retry policy was implemented.
    Existing post-exit diagnostics did not confirm OOM. The new live diagnostics
    and bounded retry require their own hosted confirmation.
+   Full [run 38046361375](https://github.com/icosa-mirror/IMM/actions/runs/38046361375)
+   passed Windows D3D12 composition/corpus, Windows Vulkan and iOS Metal gates.
+   macOS player URP/corpus validation passed, but Editor Play exited with code 198
+   after reporting "No valid Unity Editor license found". Android's 30-second
+   Robo wait expired during the expanded corpus, allowing crawling to stop and
+   restart the app before its required completion markers. The URP device test
+   now uses a dedicated 180-second wait within the existing five-minute timeout;
+   required rendering markers and thresholds remain unchanged. This correction
+   still needs hosted confirmation; the run is not a full-green checkpoint.
 3. D3D12 mono and synthetic two-slice stereo, Vulkan mono and the borrowed-device
    two-view adapter are implemented. Native paint/picture/model GPU readbacks pass;
    these do not prove complete all-content rendering through Unity or headset
