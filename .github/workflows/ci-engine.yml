@@ -3006,21 +3006,3 @@ jobs:
           path: artifacts/engine-evidence
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Hide per-lane engine artifacts
-        if: ${{ success() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: >
-          python tests/tools/delete_ci_artifacts.py
-          --name UnityPackageImport
-          --name UnityMacOSMetalComposition
-          --name UnityWindowsDirectXPlayer
-          --name UnityWindowsDirectXPlayerBuildEvidence
-          --name UnityWindowsDirectXComposition
-          --name UnityWindowsVulkanPlayer
-          --name UnityWindowsVulkanPlayerBuildEvidence
-          --name UnityWindowsVulkanOrderedOverlay
-          --name UnityWindowsVulkanFullDepth
-          --name UnityWindowsOpenXRVR
-          --name GodotPackageImport

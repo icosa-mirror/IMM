@@ -25,7 +25,7 @@ REQUIRED_JOBS = {
         "package-source-layout": ["Verify Unity stroke reader package source", "Verify Unity source import harness", "Verify Godot addon source manifest", "Verify Godot source import harness", "Collect artifact summary"],
         "matrix-status": ["Verify matrix status coverage", "Verify workflow matrix wiring", "Write matrix audit report", "Run CI tool self-tests", "Write CI manifest", "Collect artifact summary"],
         "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest", "Collect artifact summary"],
-        "core-evidence-report": ["Download core artifacts", "Verify core matrix evidence", "Upload core evidence report", "Hide per-lane core artifacts"],
+        "core-evidence-report": ["Download core artifacts", "Verify core matrix evidence", "Upload core evidence report"],
     },
     ".github/workflows/ci-ios.yml": {
         "standalone-ios-metal": ["Prepare standalone iOS artifact directory", "Configure standalone iOS Simulator application", "Compile standalone iOS application without signing", "Boot deterministic iOS Simulator for standalone viewer", "Run standalone iOS Metal visual and lifecycle validation", "Compare standalone iOS Metal render evidence", "Write standalone iOS Metal render report", "Package standalone iOS arm64 release input after visual validation", "Write standalone iOS Metal visual manifest", "Collect standalone iOS Metal evidence", "Upload standalone iOS Metal evidence", "Enforce standalone iOS Metal result"],
@@ -39,7 +39,7 @@ REQUIRED_JOBS = {
         "android-godot-vulkan": ["Check Firebase Test Lab configuration", "Build Android Godot APK", "Run Android Godot Vulkan smoke in Firebase Test Lab", "Record Android Godot Vulkan screenshot metrics", "Write Android Godot Vulkan screenshot report", "Classify Android Godot Vulkan result", "Write CI manifest", "Collect artifact summary"],
         "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR app smoke", "Verify Quest VR log contract", "Write CI manifest", "Collect artifact summary"],
         "ios-device-smoke": ["Preflight iOS device runner", "Verify iOS package target", "Write CI manifest", "Collect artifact summary"],
-        "device-evidence-report": ["Download device artifacts", "Verify device matrix evidence", "Upload device evidence report", "Hide per-lane device artifacts"],
+        "device-evidence-report": ["Download device artifacts", "Verify device matrix evidence", "Upload device evidence report"],
     },
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": ["Download same-commit Unity native plugin build artifact", "Stage same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
@@ -56,7 +56,7 @@ REQUIRED_JOBS = {
         "unity-windows-openxr-vr": ["Download same-commit URP OpenXR player", "Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-android-openxr-quest-vr": ["Download same-commit Unity Quest APK", "Preflight Unity Quest runner", "Run Unity Quest URP hardware smoke", "Verify Unity Quest URP log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity Quest URP hardware evidence"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
-        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
+        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Upload engine visual evidence"],
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-directx": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight DirectX runner", "Capture DirectX sample1", "Compare DirectX render metrics against committed DirectX baseline", "Write DirectX render report", "Write CI manifest", "Collect artifact summary"],
@@ -68,7 +68,7 @@ REQUIRED_JOBS = {
         "windows-godot-openxr-vr": ["Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Preflight Godot OpenXR VR runner", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-standalone-metal": ["Download macOS viewer build artifact", "Preflight macOS Metal runner", "Verify macOS Metal build artifact", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Download macOS Godot extension build artifact", "Stage macOS Godot extension build artifact", "Run Godot Metal visual smoke", "Verify Godot Metal audio pipeline", "Record Godot Metal render metrics", "Classify Godot Metal visual evidence", "Write Godot Metal render report", "Write Godot Metal composition report", "Write CI manifest", "Collect artifact summary"],
-        "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report", "Hide per-lane GPU artifacts"],
+        "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report"],
     },
     ".github/workflows/web-pages.yml": {
         "build": ["Build Wasm decoder", "Run playback tests", "Run browser smoke test", "Build Pages bundle", "Verify Pages bundle layout", "Upload Pages artifact"],
@@ -271,23 +271,6 @@ REQUIRED_ALWAYS_STEPS = {
     },
 }
 
-REQUIRED_SUCCESS_ONLY_CLEANUP_STEPS = {
-    ".github/workflows/ci-core.yml": {
-        "core-evidence-report": "Hide per-lane core artifacts",
-    },
-    ".github/workflows/ci-device.yml": {
-        "device-evidence-report": "Hide per-lane device artifacts",
-    },
-    ".github/workflows/ci-engine.yml": {
-        "engine-evidence-report": "Hide per-lane engine artifacts",
-    },
-    ".github/workflows/ci-gpu.yml": {
-        "gpu-evidence-report": "Hide per-lane GPU artifacts",
-    },
-    ".github/workflows/ci-validation.yml": {
-        "validation-evidence": "Hide matrix implementation artifacts",
-    },
-}
 REQUIRED_WORKFLOW_TRIGGERS = {
     ".github/workflows/ci-validation.yml": ["build.yml", "web-pages.yml", "ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
 }
@@ -1028,26 +1011,27 @@ def main() -> int:
                 if missing_labels:
                     errors.append(f"{workflow_rel} job {job_name} missing runs-on labels: {sorted(missing_labels)}")
 
-    for workflow_rel, cleanup_jobs in REQUIRED_SUCCESS_ONLY_CLEANUP_STEPS.items():
-        workflow_path = root / workflow_rel
-        if not workflow_path.exists():
-            continue
-        workflow = load_workflow(workflow_path)
-        actual_jobs = workflow.get("jobs", {})
-        for job_name, step_name in cleanup_jobs.items():
-            job = actual_jobs.get(job_name, {})
-            step = steps_by_name(job).get(step_name)
-            if step is None:
-                errors.append(
-                    f"{workflow_rel} job {job_name} missing cleanup step {step_name!r}"
-                )
-                continue
-            condition = str(step.get("if", ""))
-            if "success()" not in condition or "always()" in condition:
-                errors.append(
-                    f"{workflow_rel} job {job_name} cleanup step {step_name!r} "
-                    "must retain intermediate evidence after failure"
-                )
+    # Cleanup must wait for the entire pipeline, not a successful report inside
+    # a failed run. Otherwise an isolated job retry loses its retained inputs.
+    validation_text = (root / ".github/workflows/ci-validation.yml").read_text()
+    cleanup_match = re.search(r"(?ms)^  cleanup-evidence:\n.*?(?=^  [\w-]+:|\Z)", validation_text)
+    cleanup = cleanup_match.group() if cleanup_match else ""
+    required_cleanup_contract = [
+        "needs.validation-evidence.result == 'success'",
+        "!contains(needs.*.result, 'failure')",
+        "!contains(needs.*.result, 'cancelled')",
+        "vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true'",
+        "needs: [build, web, core, device, engine, gpu, ios, validation-evidence]",
+        "python tests/tools/delete_ci_artifacts.py",
+    ]
+    for contract in required_cleanup_contract:
+        if contract not in cleanup:
+            errors.append(f"Final evidence cleanup missing pipeline-success contract: {contract}")
+    if "delete_ci_artifacts.py" in validation_text.replace(cleanup, ""):
+        errors.append("Validation artifacts must only be deleted by final evidence cleanup")
+    for workflow_name in ["ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"]:
+        if "delete_ci_artifacts.py" in (root / ".github/workflows" / workflow_name).read_text():
+            errors.append(f"{workflow_name} must retain report inputs for isolated job retries")
 
     for workflow_rel, workflow_files in REQUIRED_WORKFLOW_TRIGGERS.items():
         workflow_path = root / workflow_rel

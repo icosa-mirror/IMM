@@ -250,12 +250,55 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Hide matrix implementation artifacts
-        if: ${{ success() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
+  cleanup-evidence:
+    name: Clean up intermediate evidence after successful validation
+    # Keep every report input while any lane is failed or cancelled: isolated
+    # job retries rerun reports and need the successful lanes' original artifacts.
+    if: >-
+      always() && needs.validation-evidence.result == 'success' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true'
+    needs: [build, web, core, device, engine, gpu, ios, validation-evidence]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete intermediate evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >
           python tests/tools/delete_ci_artifacts.py
+          --name BaselineContent-sample1
+          --name PackageSourceLayout
+          --name MatrixStatus
+          --name GodotLocalVerifier
+          --name AndroidStandaloneGLES-Device
+          --name AndroidStandaloneVulkan-Device
+          --name AndroidOpenXRProbe-Device
+          --name AndroidGodotVulkan-Device
+          --name AndroidQuestVR-Device
+          --name iOSDeviceSmoke
+          --name UnityPackageImport
+          --name UnityMacOSMetalComposition
+          --name UnityWindowsDirectXPlayer
+          --name UnityWindowsDirectXPlayerBuildEvidence
+          --name UnityWindowsDirectXComposition
+          --name UnityWindowsVulkanPlayer
+          --name UnityWindowsVulkanPlayerBuildEvidence
+          --name UnityWindowsVulkanOrderedOverlay
+          --name UnityWindowsVulkanFullDepth
+          --name UnityWindowsOpenXRVR
+          --name GodotPackageImport
+          --name WindowsStandaloneDirectX-GPU
+          --name WindowsStandaloneVulkan-GPU
+          --name WindowsStandaloneOpenGL-GPU
+          --name WindowsStandaloneOpenXRVR-GPU
+          --name WindowsStandaloneOpenGLVR-GPU
+          --name WindowsGodotVulkan-GPU
+          --name WindowsGodotOpenXRVR-GPU
+          --name macOSStandaloneMetal-GPU
+          --name macOSGodotMetal-GPU
           --name CoreMatrixEvidence
           --name DeviceMatrixEvidence
           --name EngineValidationEvidence

@@ -714,16 +714,3 @@ jobs:
           path: artifacts/device-evidence
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Hide per-lane device artifacts
-        if: ${{ success() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: >
-          python tests/tools/delete_ci_artifacts.py
-          --name AndroidStandaloneGLES-Device
-          --name AndroidStandaloneVulkan-Device
-          --name AndroidOpenXRProbe-Device
-          --name AndroidGodotVulkan-Device
-          --name AndroidQuestVR-Device
-          --name iOSDeviceSmoke
