@@ -85,7 +85,14 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         // CI player's hidden window does not receive automatic camera rendering.
         request = new UniversalRenderPipeline.SingleCameraRequest { destination = target };
         float deadline = Time.realtimeSinceStartup + 30;
-        while (!sample.IsReady && Time.realtimeSinceStartup < deadline) yield return null;
+        while (!sample.IsReady && Time.realtimeSinceStartup < deadline)
+        {
+            yield return null;
+            // Native GPU loading needs render-thread work even when the hidden
+            // CI window receives no automatic camera frames.
+            RenderPipeline.SubmitRenderRequest(documentCamera, request);
+            Require(renderError == null, $"Unity reported: {renderError}");
+        }
         Require(sample.IsReady, "The shared sample player did not finish its initial viewpoint setup.");
         // The interactive sample uses authored viewpoints. Depth fixtures deliberately
         // frame the whole document so their front/rear quads surround its surfaces.
@@ -220,7 +227,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         float originalNear = documentCamera.nearClipPlane, originalFar = documentCamera.farClipPlane;
         var originalClear = documentCamera.clearFlags;
         var originalBackground = documentCamera.backgroundColor;
-        var pipeline = (UniversalRenderPipelineAsset)QualitySettings.renderPipeline;
+        var pipeline = (UniversalRenderPipelineAsset)GraphicsSettings.currentRenderPipeline;
         int originalSamples = pipeline.msaaSampleCount;
         int originalTargetSamples = target.antiAliasing;
         var originalSkybox = RenderSettings.skybox;
