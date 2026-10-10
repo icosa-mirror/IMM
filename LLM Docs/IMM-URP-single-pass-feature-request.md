@@ -40,7 +40,14 @@ automating headset VR validation does not exempt non-VR changes from CI.
    actual headset correctness. Run `38064166660` exposed premature native SetTime
    calls and a smoke check that incorrectly rejected inherited URP settings.
    Commit `57a343ba` waits for native loading and reads the effective pipeline;
-   managed compilation passes, but hosted confirmation remains pending.
+   managed compilation passes. Run 38069515191 confirmed iOS rendering,
+   depth composition, allocation and unload checks, then exposed a second
+   quality-override lookup in content fixtures. Windows exposed a hidden-player
+   loading deadlock: no automatic camera frames advanced GPU loading while the
+   probe waited for readiness. Both smoke issues are corrected; explicit render
+   requests now advance loading before readiness, and content fixtures read the
+   effective pipeline. The run was cancelled for these source fixes. Full hosted
+   confirmation remains pending.
 4. The observed Windows performance regression is fixed locally. The RTX 4090
    Editor initially spent approximately 60-70 ms in the native rendering event.
    Commit `30775608` reuses descriptor heaps after frame completion. Commit
