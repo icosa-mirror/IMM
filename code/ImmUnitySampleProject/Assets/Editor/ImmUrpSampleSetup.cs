@@ -76,7 +76,13 @@ public static class ImmUrpSampleSetup
                 if (!EditorSceneManager.SaveScene(scene)) throw new InvalidOperationException($"Could not save {path}.");
             }
         }
-        finally { EditorSceneManager.RestoreSceneManagerSetup(setup); }
+        finally
+        {
+            if (setup.Length > 0 && Array.TrueForAll(setup, scene => !string.IsNullOrEmpty(scene.path)))
+                EditorSceneManager.RestoreSceneManagerSetup(setup);
+            else
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        }
         AssetDatabase.SaveAssets();
         Debug.Log("[IMM_SAMPLE_DEFAULTS] Saved URP, Windows D3D12, opted-in cameras and shared sample players.");
     }
