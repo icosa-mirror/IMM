@@ -27,23 +27,22 @@ automating headset VR validation does not exempt non-VR changes from CI.
 1. Last confirmed full-green source: `265fe132`; synchronized runtime binaries:
    `b0396331`. Full [run 37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
    passed the required non-VR platform gates. Later checkpoints have not replaced it.
-2. Focused recovery source `657d5864` is pushed and full validation
-   [run 38005911818](https://github.com/icosa-mirror/IMM/actions/runs/38005911818)
-   is running. It contains exactly the fixture-manifest naming correction and
-   Metal stereo-format panorama shader initialization, separately from held feature
-   changes. Previous full run `38000728358` completed with 34 successful, six failed,
-   16 skipped and one neutral job. Android Unity passes its required nine-document
-   corpus, depth, attribution and allocation gate. Standalone iOS Metal and Windows
-   standalone/Godot Vulkan also pass. Its failures are Metal panorama rendering,
-   Windows Unity artifact collection and downstream evidence reports; the focused
-   checkpoint addresses the two concrete causes. Hosted confirmation is pending,
-   so there is still no new full-green checkpoint. Ordinary-push run `37999162355`
-   was build/core/web-only and cannot establish rendering or device recovery.
+2. All held implementation changes were pushed at `216b0648`. Its full run
+   `38008497383` was cancelled after package test compilation failed because three
+   session calls omitted the new paint-technique argument. Fix `0b2f0732` compiled
+   locally. Its full [run 38010163133](https://github.com/icosa-mirror/IMM/actions/runs/38010163133)
+   was cancelled on macOS Metal and Windows D3D12 composition failures: the new
+   brightness comparisons used a sample whose playback was still advancing.
+   The correction pauses mono/XR depth fixtures and requires a fixed document time
+   across comparisons, retaining the existing brightness thresholds. Local sample
+   compilation and VR harness contract checks pass; hosted rendering confirmation
+   remains pending. Recovery-only run `38005911818` was also cancelled and is not
+   a full-green checkpoint.
 3. D3D12 mono and synthetic two-slice stereo, Vulkan mono and the borrowed-device
    two-view adapter are implemented. Native paint/picture/model GPU readbacks pass;
    these do not prove complete all-content rendering through Unity or headset
    correctness. Windows OpenXR and Quest single-pass build/hardware harnesses exist.
-4. Unpublished increments include model persistence and a ten-document corpus,
+4. Published increments include model persistence and a ten-document corpus,
    explicit static/pretessellated paint selection with packet ABI v4, both-technique
    Unity corpus MSAA checks, real transparent blending/alpha-test controls, the
    same-commit plugin ABI gate and Android fixture cache inputs. Their local
@@ -51,7 +50,7 @@ automating headset VR validation does not exempt non-VR changes from CI.
    these increments remains required before promoting a checkpoint.
 5. Remaining acceptance includes full non-VR CI recovery, Unity corpus/depth/skybox/
    blending/MSAA confirmation across the required matrix, a partly intersecting
-   geometry control, a later-renderer-feature control, complete stereo content
+   geometry control (optional additional coverage), a later-renderer-feature control, complete stereo content
    composition and stroke-edge quality. Real headset pose/per-eye checks and GPU
    captures proving one scene draw sequence remain outstanding. Native probes and
    managed event counts cannot substitute for those results. Measure any selected
@@ -62,8 +61,9 @@ automating headset VR validation does not exempt non-VR changes from CI.
    describe those checkpoints; this section and the latest entry govern current
    status. Fix CI regressions before continuing feature implementation. Use the
    `[CI VALIDATION]` trigger or explicitly dispatch `mode=full`, then inspect which
-   platform gates actually ran before claiming recovery. CI monitoring remains on
-   a fifteen-minute cadence for the current run.
+   platform gates actually ran before claiming recovery. Cancel remaining jobs as soon as a required CI job fails, fix the reported cause,
+   and start a new full run. Keep monitoring at a realistic cadence; do not wait
+   for a known-failed run to complete.
 
 ## Motivation
 
