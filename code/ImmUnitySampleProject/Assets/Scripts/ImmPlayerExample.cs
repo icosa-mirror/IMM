@@ -812,7 +812,8 @@ namespace ImmPlayer
                 yield break;
 
             while (_currentDocument != null &&
-                   (!_currentDocument.IsLoaded || !_currentDocument.IsSequenceReady()))
+                   (_currentDocument.GetStateInfo().Loading != ImmDocument.LoadingState.Loaded ||
+                    !_currentDocument.IsSequenceReady()))
             {
                 yield return null;
             }

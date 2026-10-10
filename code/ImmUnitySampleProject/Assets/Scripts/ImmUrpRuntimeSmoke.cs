@@ -105,7 +105,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             visible = ReadVisiblePixels(false);
         } while (visible <= 100 && Time.realtimeSinceStartup < deadline);
         Require(visible > 100, "No visible IMM content in the configured URP scene.");
-        var pipeline = QualitySettings.renderPipeline as UniversalRenderPipelineAsset;
+        var pipeline = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
         Require(pipeline != null, "Configured URP asset is missing.");
         foreach (int samples in new[] { 1, 2, 4, 8 })
         {
