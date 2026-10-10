@@ -47,7 +47,15 @@ automating headset VR validation does not exempt non-VR changes from CI.
    probe waited for readiness. Both smoke issues are corrected; explicit render
    requests now advance loading before readiness, and content fixtures read the
    effective pipeline. The run was cancelled for these source fixes. Full hosted
-   confirmation remains pending.
+   confirmation of these source fixes is now available: run `38071517256`
+   passed Windows D3D12 composition, macOS Metal composition, iOS Metal Simulator
+   and Android Vulkan URP device validation. Its isolated Windows Vulkan startup
+   kill passed on the one manually requested retry. The automatic controller could
+   not fetch its log; API errors now retain stderr for diagnosis. Evidence reports
+   then failed because earlier report cleanup had deleted successful lanes' inputs.
+   Cleanup is moved to one final job gated on all pipeline dependencies succeeding;
+   intermediate reports retain inputs for retries. Workflow matrix and artifact
+   checks pass locally. Full pipeline confirmation of this CI fix remains pending.
 4. The observed Windows performance regression is fixed locally. The RTX 4090
    Editor initially spent approximately 60-70 ms in the native rendering event.
    Commit `30775608` reuses descriptor heaps after frame completion. Commit
