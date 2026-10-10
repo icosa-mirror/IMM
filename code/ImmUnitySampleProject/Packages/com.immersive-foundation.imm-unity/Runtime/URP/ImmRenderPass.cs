@@ -201,13 +201,13 @@ namespace ImmPlayer
             // Keep the native texture's type explicit in the packet operation.
             bool depthIsMetalTexture = depthBuffer == IntPtr.Zero && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal;
             if (depthIsMetalTexture) depthBuffer = d.GetNativeDepthBufferPtr();
-            if (depthBuffer == IntPtr.Zero && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan)
+            if (depthBuffer == IntPtr.Zero && (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan ||
+                SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12))
             {
                 d.GetNativeDepthBufferPtr();
                 depthBuffer = d.depthBuffer.GetNativeRenderBufferPtr();
             }
-            if (colorBuffer == IntPtr.Zero && (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal ||
-                SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan))
+            if (colorBuffer == IntPtr.Zero)
             {
                 // RenderGraph allocation can precede native surface creation.
                 // Materialize the texture, then fetch its Unity buffer wrapper again.
