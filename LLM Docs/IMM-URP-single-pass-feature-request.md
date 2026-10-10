@@ -24,38 +24,34 @@ automating headset VR validation does not exempt non-VR changes from CI.
 
 ## Current status — 2026-10-10
 
-1. Last confirmed full-matrix green source: `f2a96640`; synchronized runtime
-   binaries: `1e1b1ea0`. [Run 38053085729](https://github.com/icosa-mirror/IMM/actions/runs/38053085729)
-   passed the required non-VR platform gates. The later successful `e528b13c`
-   run did not execute the full composition matrix and does not supersede this
-   checkpoint. The latest implementation still requires full hosted validation.
+1. Last confirmed full-matrix green source: `944a77a6`; synchronized runtime
+   binaries: `eed0081e`. [Run 38078148849](https://github.com/icosa-mirror/IMM/actions/runs/38078148849)
+   completed successfully on attempt 2 with 45 successful jobs and no failures.
+   Windows D3D12 composition, macOS Metal composition, iOS Metal Simulator,
+   Android Vulkan device/URP checks and final evidence aggregation passed.
+   Attempt 1 retains an isolated Windows Vulkan Unity startup kill; its one
+   permitted retry passed. This does not establish that the SIGKILL cause is fixed.
+
 2. Manual sample use exposed gaps despite passing offscreen CI probes: Windows
    defaulted to D3D11, runtime setup replaced saved settings, bounds-based camera
    framing put the viewer outside the sky, and normal D3D12 Game view attachments
    could lack native wrappers. Saved URP/D3D12 defaults, camera registration,
    shared authored-viewpoint loading and attachment materialization are committed.
-   The URP sample now renders visible content at its authored viewpoint locally.
+   The URP sample now renders visible content at its authored viewpoint locally. Its hosted URP rendering gates also pass.
 3. D3D12 mono and synthetic two-slice stereo, Metal mono, Vulkan mono and the
-   borrowed-device two-view adapter are implemented. These results do not establish
-   actual headset correctness. Run `38064166660` exposed premature native SetTime
-   calls and a smoke check that incorrectly rejected inherited URP settings.
-   Commit `57a343ba` waits for native loading and reads the effective pipeline;
-   managed compilation passes. Run 38069515191 confirmed iOS rendering,
-   depth composition, allocation and unload checks, then exposed a second
-   quality-override lookup in content fixtures. Windows exposed a hidden-player
-   loading deadlock: no automatic camera frames advanced GPU loading while the
-   probe waited for readiness. Both smoke issues are corrected; explicit render
-   requests now advance loading before readiness, and content fixtures read the
-   effective pipeline. The run was cancelled for these source fixes. Full hosted
-   confirmation of these source fixes is now available: run `38071517256`
-   passed Windows D3D12 composition, macOS Metal composition, iOS Metal Simulator
-   and Android Vulkan URP device validation. Its isolated Windows Vulkan startup
-   kill passed on the one manually requested retry. The automatic controller could
-   not fetch its log; API errors now retain stderr for diagnosis. Evidence reports
-   then failed because earlier report cleanup had deleted successful lanes' inputs.
-   Cleanup is moved to one final job gated on all pipeline dependencies succeeding;
-   intermediate reports retain inputs for retries. Workflow matrix and artifact
-   checks pass locally. Full pipeline confirmation of this CI fix remains pending.
+   borrowed-device two-view adapter are implemented. Native loading readiness,
+   inherited URP asset lookups and the hidden-player GPU-loading deadlock are
+   corrected and their hosted URP gates pass. Retry evidence retention is also
+   validated: intermediate reports retain inputs until all pipeline dependencies
+   succeed, then one final job cleans them up. The recovery controller's log-fetch
+   failure was traced to newer GitHub CLI protection against terminal escapes.
+   Commit `056f2fec` allows captured raw logs only when requested by that CLI and
+   strips ANSI control sequences before signature matching. Focused compatibility
+   checks pass, and the corrected controller requested the permitted retry through
+   the real GitHub API. The failing startup's recorded container peak was about
+   2.5 GiB, host available memory stayed above 12 GiB, and OOM counters were zero;
+   the underlying SIGKILL remains unexplained.
+
 4. The observed Windows performance regression is fixed locally. The RTX 4090
    Editor initially spent approximately 60-70 ms in the native rendering event.
    Commit `30775608` reuses descriptor heaps after frame completion. Commit
@@ -65,11 +61,13 @@ automating headset VR validation does not exempt non-VR changes from CI.
    event of 0.605 ms across eight captured frames. The existing D3D12 submission
    GPU readback passes, and the rendered sample was visually inspected. This is
    local Editor evidence, not a claim about headset performance.
-5. Remaining work is full non-VR CI validation of the latest fixes and actual
-   Windows OpenXR and Quest Vulkan headset pose/per-eye checks, including GPU
-   capture proving one scene draw sequence. The user requested one main sample
-   scene, with specialized CI fixtures outside the user project; that restructuring
-   is deferred until the current fixes and validation are complete.
+5. Current performance and non-VR CI repair work is complete. Actual Windows
+   OpenXR and Quest Vulkan headset pose/per-eye checks, including GPU capture
+   proving one scene draw sequence, remain outstanding for the original goal.
+   The user requested one main sample scene with specialized CI fixtures outside
+   the user project. That restructuring remains on hold for a separate discussion;
+   no scene consolidation has been performed during this repair work.
+
 6. Pipeline installation and the recommended saved Unity settings are committed
    with explicit user approval. The separate Godot review handoff is also committed.
 
