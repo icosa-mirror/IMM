@@ -789,6 +789,12 @@ jobs:
       - name: Prepare Unity DirectX artifact directory
         run: mkdir -p artifacts/unity-windows-directx-player/player
 
+      - name: Start live Unity directx memory diagnostics
+        run: |
+          mkdir -p artifacts/unity-windows-directx-player
+          nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-windows-directx-player/memory-directx.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-windows-directx-player/memory-directx-monitor.log 2>&1 &
+          echo $! > artifacts/unity-windows-directx-player/memory-directx.pid
+
       - name: Build Unity DirectX smoke player
         id: unity_directx_player_build
         timeout-minutes: 25
@@ -804,6 +810,10 @@ jobs:
           versioning: None
           buildMethod: ImmPlayer.Editor.ImmUrpXrBuild.BuildWindowsDirectXAndOpenXRPlayers
           customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe -immUrpXrPlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/openxr/ImmUnityOpenXR.exe
+
+      - name: Stop live Unity directx memory diagnostics
+        if: always()
+        run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-windows-directx-player/memory-directx.pid --output artifacts/unity-windows-directx-player/memory-directx.jsonl
 
       - name: Collect Unity DirectX runner memory diagnostics
         if: always()
@@ -1185,6 +1195,12 @@ jobs:
       - name: Prepare Unity Vulkan artifact directory
         run: mkdir -p artifacts/unity-windows-vulkan-player/player
 
+      - name: Start live Unity vulkan memory diagnostics
+        run: |
+          mkdir -p artifacts/unity-windows-vulkan-player
+          nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-windows-vulkan-player/memory-vulkan.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-windows-vulkan-player/memory-vulkan-monitor.log 2>&1 &
+          echo $! > artifacts/unity-windows-vulkan-player/memory-vulkan.pid
+
       - name: Build Unity Vulkan smoke player
         id: unity_vulkan_player_build
         timeout-minutes: 25
@@ -1200,6 +1216,10 @@ jobs:
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsVulkanSmokePlayer
           customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-windows-vulkan-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-vulkan-player/player/ImmUnitySmoke.exe
+
+      - name: Stop live Unity vulkan memory diagnostics
+        if: always()
+        run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-windows-vulkan-player/memory-vulkan.pid --output artifacts/unity-windows-vulkan-player/memory-vulkan.jsonl
 
       - name: Collect Unity Vulkan runner memory diagnostics
         if: always()
@@ -1252,15 +1272,28 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: ${{ github.run_attempt > 1 }}
           name: UnityWindowsVulkanPlayer
           path: artifacts/unity-windows-vulkan-player/player
           if-no-files-found: error
           retention-days: 1
 
+      - name: Retain Unity Vulkan memory evidence by attempt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: InfrastructureMemory-WindowsVulkan-attempt-${{ github.run_attempt }}
+          path: |
+            artifacts/unity-windows-vulkan-player/memory-*.jsonl
+            artifacts/unity-windows-vulkan-player/memory-*-monitor.log
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload Unity Vulkan build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: ${{ github.run_attempt > 1 }}
           name: UnityWindowsVulkanPlayerBuildEvidence
           path: artifacts/unity-windows-vulkan-player
           if-no-files-found: ignore
@@ -1433,6 +1466,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: ${{ github.run_attempt > 1 }}
           name: UnityWindowsVulkanSyntheticStereo
           path: artifacts/unity-windows-vulkan-synthetic-stereo
           if-no-files-found: ignore
@@ -1733,6 +1767,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: ${{ github.run_attempt > 1 }}
           name: UnityWindowsVulkanOrderedOverlay
           path: artifacts/unity-windows-vulkan-ordered-overlay
           if-no-files-found: ignore
@@ -1978,6 +2013,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: ${{ github.run_attempt > 1 }}
           name: UnityWindowsVulkanFullDepth
           path: artifacts/unity-windows-vulkan-full-depth
           if-no-files-found: ignore
@@ -2045,6 +2081,12 @@ jobs:
           restore-keys: |
             UnityLibrary-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
+      - name: Start live Unity quest memory diagnostics
+        run: |
+          mkdir -p artifacts/unity-android-vulkan
+          nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-android-vulkan/memory-quest.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-android-vulkan/memory-quest-monitor.log 2>&1 &
+          echo $! > artifacts/unity-android-vulkan/memory-quest.pid
+
       - name: Build Unity Android OpenXR Quest Vulkan player
         id: unity_android_quest_build
         if: steps.cache_unity_android_quest_shell.outputs.cache-hit != 'true'
@@ -2061,6 +2103,10 @@ jobs:
           versioning: None
           buildMethod: ImmPlayer.Editor.ImmUrpXrBuild.BuildAndroidOpenXRQuestPlayer
           customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-quest-editor.log -immQuestPlayerPath /github/workspace/.ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
+
+      - name: Stop live Unity quest memory diagnostics
+        if: always()
+        run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-android-vulkan/memory-quest.pid --output artifacts/unity-android-vulkan/memory-quest.jsonl
 
       - name: Collect Unity Android Quest runner memory diagnostics
         if: always()
@@ -2183,6 +2229,12 @@ jobs:
       - name: Preflight Unity Android Vulkan runner
         run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-android-vulkan/preflight.json
 
+      - name: Start live Unity android memory diagnostics
+        run: |
+          mkdir -p artifacts/unity-android-vulkan
+          nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-android-vulkan/memory-android.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-android-vulkan/memory-android-monitor.log 2>&1 &
+          echo $! > artifacts/unity-android-vulkan/memory-android.pid
+
       - name: Build Unity Android Vulkan smoke player
         id: unity_android_vulkan_build
         if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true'
@@ -2199,6 +2251,10 @@ jobs:
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
           customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/.ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+
+      - name: Stop live Unity android memory diagnostics
+        if: always()
+        run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-android-vulkan/memory-android.pid --output artifacts/unity-android-vulkan/memory-android.jsonl
 
       - name: Collect Unity Android smoke runner memory diagnostics
         if: always()
@@ -2927,6 +2983,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: ${{ github.run_attempt > 1 }}
           name: EngineValidationEvidence
           path: artifacts/engine-evidence/view
           if-no-files-found: error
@@ -2936,6 +2993,7 @@ jobs:
         if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS == 'true' }}
         uses: actions/upload-artifact@v4
         with:
+          overwrite: ${{ github.run_attempt > 1 }}
           name: EngineMatrixDebugArtifacts
           path: artifacts/engine-evidence
           if-no-files-found: ignore
