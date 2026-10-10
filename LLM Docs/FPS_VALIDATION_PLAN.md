@@ -8,15 +8,26 @@ while visual correctness tests still pass. Publish attributable sustained frame
 measurements and fail representative-hardware lanes when calibrated limits are
 missed.
 
-The first delivery is a working performance check on the normal Unity sample,
-with a matched local D3D12/Vulkan measurement. Build only the shared schema,
-verification and reporting needed for that delivery, then extend it across the
-existing matrix. This plan does not remove platforms, rendering backends or
-existing correctness gates. It does not require consolidating the sample scenes.
+The primary coverage axes are platform and host:
 
-Regression gates compare the same workload and hardware configuration over time.
-A separate controlled local comparison can compare backends on the same machine;
-results from unlike products, devices or CI runners must not be ranked together.
+1. Platforms: Windows, macOS, iOS and Android.
+2. Hosts: Unity, Godot and the native player (`standalone` in matrix identities).
+
+The first milestone is useful end-to-end measurement of the normal supported
+runtime paths across these platform/host combinations. Metal on macOS and iOS is
+part of that milestone, alongside the normal Windows and Android configurations.
+Graphics APIs, engine pipelines and drivers identify the tested configuration and
+help diagnose failures; they do not determine which platforms or hosts matter.
+A fast native player does not establish that the Unity or Godot integration is fast.
+
+Build only the shared schema, verification and reporting needed to collect and
+surface those real measurements. Extend the same implementation to existing web,
+XR and additional renderer variants. This plan does not remove platforms, hosts,
+rendering backends or correctness gates, and does not require scene consolidation.
+
+Regression gates compare the same platform/host workload and hardware profile over
+time. Controlled same-machine API or host comparisons are optional diagnostic
+investigations, not rollout prerequisites. Do not rank unlike devices or CI runners.
 
 ## Current State and Coverage Gap
 
@@ -33,9 +44,10 @@ results from unlike products, devices or CI runners must not be ranked together.
    GPU loading can also require render-thread work before readiness. An Update
    counter or unscaled delta alone therefore cannot establish rendering FPS.
 6. Hosted software-renderer and simulator measurements cannot establish real-GPU
-   performance. Representative Windows GPU coverage must be available before
-   claiming CI protects against the observed D3D12 regression. A local hardware
-   baseline is useful but does not fill that CI coverage gap.
+   performance. Each supported platform/host combination needs representative
+   hardware coverage before claiming CI protects its runtime performance. This
+   includes physical iOS and Android devices and real GPUs on Windows and macOS.
+   A local hardware baseline is useful but does not fill an absent CI hardware gate.
 
 ## Coverage and Gating Policy
 
@@ -57,16 +69,19 @@ results from unlike products, devices or CI runners must not be ranked together.
 6. Simulators, software/Lavapipe renderers and GPU-less hosted runners remain
    report only. Their results must identify the actual device and renderer; they
    cannot substitute for hardware coverage or silently promote to hard gating.
-7. Preserve every existing supported platform and correctness gate. Extend
-   measurement incrementally to Windows, macOS, iOS, Android and web, including
-   the renderer variants already required by the matrix.
+7. Inventory all twelve major platform/host combinations against the supported
+   matrix. Each supported runtime combination needs its own performance evidence
+   and target; explicitly identify unsupported, deferred or build-only cells.
+   Preserve existing correctness gates and renderer variants. Web and XR coverage
+   remain in scope in addition to the major platform/host grid.
 8. Use existing runtime jobs and artifact collection. Do not create a second
    complete matrix or duplicate long builds merely for FPS collection.
 
 ## Workload Identity
 
-A matrix row identifies a product/platform/mode family. Each measurement must also
-identify its exact workload and rendering path:
+A matrix row identifies a platform/host/mode family. Keep the native-player host
+named `standalone` in existing machine-readable identities. Each measurement must
+also identify its exact workload and rendering path:
 
 1. Actual graphics API, distinguishing D3D11 from D3D12; engine version and render
    pipeline, distinguishing Built-in from URP; MSAA and other material settings.
@@ -152,9 +167,9 @@ versioned schema. For example:
   "schema": "imm-performance-measurements-v1",
   "matrix": {
     "product": "unity",
-    "platform": "windows",
+    "platform": "macos",
     "mode": "non-vr",
-    "renderer": "directx"
+    "renderer": "metal"
   },
   "workload": {
     "id": "sample-normal-urp-v1",
@@ -162,7 +177,7 @@ versioned schema. For example:
     "fixture_sha256": "<content hash>",
     "camera_pose": "sample-authored-initial-v1",
     "playback_interval_seconds": [3.0, 13.0],
-    "graphics_api": "Direct3D12",
+    "graphics_api": "Metal",
     "render_pipeline": "URP",
     "msaa_samples": 8,
     "actual_resolution": { "width": 1280, "height": 720 },
@@ -221,7 +236,7 @@ versioned schema. For example:
 
 ## Runtime Integration
 
-1. **Unity:** instrument the normal saved sample in a standalone player first.
+1. **Unity:** instrument the normal saved sample in a built Unity player.
    Correlate frame timing with the intended camera's IMM submissions and visible
    content. Editor profiles remain diagnostic. Specialized explicit-render-request
    smoke measurements are supplementary and must not replace normal sample
@@ -234,6 +249,7 @@ versioned schema. For example:
 3. **Godot:** measure normal real-time rendering without `--fixed-fps`, correlate
    with IMM/compositor activity, and write to the lane output or Android `user://`.
    Include intermediate rendering/composite cost in whole-product frame timing.
+   Native-player measurements cannot stand in for these Godot integration costs.
 4. **Web:** adapt the existing performance test to the common evidence schema.
    Pin viewport, device pixel ratio, browser, playback interval and camera. Record
    the actual graphics backend; classify software rendering as report only.
@@ -254,67 +270,85 @@ versioned schema. For example:
    Run it after collection and before finalizing the lane manifest.
 3. Extend existing manifests, `verify_matrix_evidence.py` and
    `write_visual_evidence_report.py`; do not build a parallel reporting framework.
-4. Display each row's coverage mode, actual API/pipeline/hardware, workload,
-   sustained FPS, p95, cap, target, sample duration/count and verdict. Clearly show
-   not implemented and not tested/out of scope as different states.
+4. Lead the report with a Windows/macOS/iOS/Android by Unity/Godot/native coverage
+   grid, showing each cell's evidence and verdict or its explicit coverage gap.
+   Show supported API/mode variants under the relevant cell rather than collapsing
+   them into one passing result. Detailed rows record actual API/pipeline/hardware,
+   workload, FPS, p95, cap, target and sample duration/count. Keep not implemented,
+   unsupported, build-only and not tested/out of scope visibly distinct.
 5. Fail required enabled lanes on missing/invalid evidence. Fail gated lanes on
    threshold misses. Report valid slow report-only measurements without failing.
    Rows outside a partial workflow's requested scope remain not tested.
 6. Upload evidence on failure and retain intermediate inputs until all required
    lanes and evidence reports succeed, so isolated retries can reuse them.
-7. Representative Windows hardware must exercise the normal Unity D3D12 path for
-   a hard gate. If no suitable CI runner is available, report that coverage as
-   incomplete and retain the local baseline; do not claim software CI fills it.
+7. Gate each supported platform/host cell on its representative normal runtime
+   path: real GPUs for Windows/macOS and physical devices for iOS/Android. macOS
+   and iOS Metal are first-class requirements. If hardware is unavailable, expose
+   the specific cell as a coverage gap and retain any local baseline. Software or
+   simulator results, builds and another host's success do not fill that gap.
 
 ## Rollout Phases
 
-### Phase 1: Normal Unity Sample and Matched Local Baseline
+Phases are incremental and may overlap: enable a useful calibrated gate as soon as
+its cell is ready. Do not wait for every platform to finish before protecting one,
+and do not complete a backend-comparison project before collecting platform data.
 
-1. Implement the minimum common schema, sampler, verifier and report row needed
-   for one complete normal Unity Windows D3D12 measurement.
-2. Record a real-GPU baseline using the saved URP sample, with actual IMM rendering
-   and matching visual evidence outside the timed interval.
-3. Run the same Unity workload on Vulkan on the same machine, controlling content,
-   animation, camera, resolution, MSAA and presentation. Record artifact/build
-   identities. This comparison answers a local backend question; it does not rank
-   unrelated matrix rows or establish native-player/Godot overhead.
-4. Add native-renderer CPU timing where readily available for attribution.
-5. Demonstrate that a controlled slowdown or known slow build fails the check
-   while visual validation can still pass. Verify a no-render update loop cannot
-   produce passing performance evidence.
-6. Collect representative Windows CI samples and enable a loose initial D3D12
-   gate when calibrated hardware is available. Keep all other coverage explicitly
-   not implemented or report only as appropriate.
+### Phase 1: Real Baselines Across Major Platforms and Hosts
 
-Exit condition: a real workload produces an attributable result and actionable
-failure, the matched Vulkan baseline is recorded, and Windows hardware CI coverage
-is either operational or explicitly identified as an unresolved coverage gap.
-Synthetic report tests alone do not complete this phase.
+1. Inventory Windows, macOS, iOS and Android crossed with Unity, Godot and native.
+   Map each supported runtime cell to its normal configuration, available hardware
+   and existing validation lane. Record unsupported/build-only cases and concrete
+   hardware gaps without silently excluding them.
+2. Implement minimal reusable sampling, verification and reporting for the three
+   hosts, then collect actual rendered-frame measurements across the four major
+   platforms. Reuse each host's implementation across platforms where possible.
+3. Include macOS/iOS Metal and the normal supported Windows/Android paths. Pin
+   workload and settings per cell; do not require the same numerical FPS target
+   across different devices or host integrations.
+4. Measure normal delivered samples end to end, including Unity renderer-feature
+   and Godot compositor costs. Record visible correctness outside the sample.
+5. Add native-renderer CPU timing where readily available for attribution, without
+   making universal GPU profiling a prerequisite for collection.
+6. Demonstrate on representative hardware that a controlled slowdown or known
+   slow build fails while visual checks can still pass, and that a no-render
+   update loop cannot produce passing performance evidence.
 
-### Phase 2: Existing Desktop and Web Runtime Lanes
+Exit condition: the major platform/host coverage grid shows real baseline evidence
+for supported runtime cells and identifies every remaining hardware or collection
+blocker. Missing physical-device evidence remains incomplete; simulator results do
+not complete iOS coverage. A single Windows or native-player result does not
+complete this milestone. Synthetic report tests alone are insufficient.
 
-1. Reuse the working contract for standalone, Godot, remaining Unity desktop paths
-   and the existing web test. Keep product/compositor costs in whole-frame timing.
-2. Collect report-only calibration history on each actual hardware profile, then
-   enable appropriate gates without waiting for every other platform.
-3. Keep hosted software-renderer and simulator measurements report only.
+### Phase 2: CI Collection, Calibration and Enforcement
 
-Exit condition: enabled desktop/web lanes publish valid evidence, representative
-profiles enforce calibrated limits, and uncovered rows remain visible.
+1. Wire these measurements into existing runtime jobs and artifact collection,
+   including Firebase and available iOS device execution.
+2. Collect history on actual hardware profiles, then enable loose per-cell gates
+   incrementally. Calibrate thermal variance and presentation caps on mobile.
+3. Keep simulator/software results report only and expose hardware gaps in the
+   platform/host grid until representative CI execution is available.
+4. Verify collection, failure classification, retained retry evidence and final
+   reporting on the existing pipeline. Preserve normal runtime pacing.
 
-### Phase 3: Mobile and Available XR Hardware
+Exit condition: supported major platform/host cells have valid representative CI
+measurements and calibrated gates, or a clearly identified outstanding hardware
+blocker. Do not describe blocked cells as protected by CI.
 
-1. Extend sampling and existing Firebase collection to Android runtime lanes,
-   including the renderer variants already supported by the matrix.
-2. Cover available iOS device execution and keep simulator measurements separate.
-3. Calibrate device/thermal variance and capped presentation. Add XR measurements
-   on available hardware without changing required runtime pacing.
-4. Maintain an explicit outstanding list for hardware-dependent coverage; builds
-   and synthetic stereo tests do not count as headset performance acceptance.
+### Phase 3: Remaining Supported Configurations, Web and XR
 
-Exit condition: all supported renderable rows have valid measurements on their
+1. Extend the same mechanism to additional graphics API/configuration variants
+   already supported by the matrix. They remain separate attributable workloads
+   under their platform/host cell; do not drop their correctness requirements.
+2. Adapt the existing web performance test to the common artifact/report contract.
+3. Add XR measurements on available hardware, recording eye/target dimensions and
+   mandatory presentation pacing. Track hardware-dependent gaps explicitly.
+4. Run matched API or host comparisons only when useful to diagnose measured
+   results. Such investigations are separate from platform/host coverage acceptance.
+
+Exit condition: all supported renderable matrix rows have valid measurements on
 available execution infrastructure, representative hardware is gated, remaining
-hardware gaps are explicit, and build/preflight rows are correctly not applicable.
+hardware gaps are explicit, and build/preflight rows are not applicable. Builds
+and synthetic stereo tests do not count as headset performance acceptance.
 
 ## Focused Verification
 
@@ -328,28 +362,33 @@ hardware gaps are explicit, and build/preflight rows are correctly not applicabl
 4. Extend existing workflow contracts to require collection, verification and
    artifact/report wiring only for enabled runtime lanes, with no early cleanup.
 5. Use the phase-1 real slowdown and no-render controls as integration acceptance.
-   Avoid building a large synthetic fixture suite before that path works.
+   Verify the coverage report cannot substitute a passing host, backend or simulator
+   result for a missing platform/host runtime result. Avoid a large synthetic
+   fixture suite before real sampling works.
 
 ## Risks and Completion Criteria
 
 1. Noise, caps and thermal variation require calibrated hardware profiles and loose
    thresholds. Preserve observed results rather than selecting a favorable retry.
-2. A small fixture can miss content-dependent regressions. Start with the existing
-   sample that exposed this failure; add heavier workloads when evidence warrants
-   them rather than delaying the first useful gate.
+2. A small fixture can miss content-dependent regressions. Start with normal
+   existing samples for each host; add heavier workloads when evidence warrants
+   them rather than delaying useful measurements across the major platforms.
 3. Android Vulkan can expose a 1x1 native display image while the camera surface is
    full resolution. This is an integration portability issue: invalidate that
    workload's measurement instead of treating its apparent FPS as representative.
 4. Timing overhead must remain small. Avoid per-frame logging, capture, artificial
    waits and mandatory universal profiling machinery.
-5. Completion means every supported row has an explicit classification; enabled
-   runtime lanes produce valid evidence; representative hardware has calibrated
-   gates; and reports identify missing coverage and low FPS distinctly.
+5. Completion means every supported platform/host cell and required runtime
+   variant has an explicit classification and valid performance evidence;
+   representative hardware has calibrated gates; and reports identify missing
+   coverage and low FPS distinctly. Unresolved hardware gaps remain outstanding
+   work rather than evidence of completion.
 6. At least one real rendering slowdown must be caught while visual checks pass.
-   CI protection against the D3D12 failure specifically requires representative
-   Windows GPU execution of the normal sample path.
+   CI protection is claimed per measured platform/host/configuration, including
+   macOS/iOS Metal; a good backend microbenchmark or another host's success is
+   insufficient.
 7. Completing this plan does not prove headset pose/per-eye correctness or replace
-   manual XR acceptance. It also does not claim all Vulkan hosts have equal cost.
-8. Estimate further rollout from the completed phase-1 integration and observed CI
-   timings. Do not spend several days finishing schemas/reports before measuring
-   the workload that motivated this plan.
+   manual XR acceptance. Shared rendering code does not establish equal host costs.
+8. Estimate further rollout from real collection across the major platform/host
+   grid and observed CI timings. Do not spend several days finishing schemas or
+   backend comparisons before measuring the supported user experiences.
