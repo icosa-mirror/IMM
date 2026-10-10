@@ -43,16 +43,11 @@ HRESULT piDX12ShaderBindings::Bind(piDX12CommandContext& context, ID3D12Graphics
     }
     HRESULT result = context.Retain(mSignature.Get());
     if (FAILED(result)) return result;
-    D3D12_DESCRIPTOR_HEAP_DESC description = {};
-    description.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    description.NumDescriptors = ConstantCount + ResourceCount;
-    description.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> views, samplers;
-    result = mDevice->CreateDescriptorHeap(&description, IID_PPV_ARGS(&views));
+    result = context.AllocateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                                           ConstantCount + ResourceCount, &views);
     if (FAILED(result)) return result;
-    description.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
-    description.NumDescriptors = ResourceCount;
-    result = mDevice->CreateDescriptorHeap(&description, IID_PPV_ARGS(&samplers));
+    result = context.AllocateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, ResourceCount, &samplers);
     if (FAILED(result)) return result;
     auto view = views->GetCPUDescriptorHandleForHeapStart();
     const UINT viewStride = mDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);

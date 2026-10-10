@@ -5,7 +5,7 @@
 namespace ImmCore
 {
 // IMM's existing HLSL register layout: constants b0..b9, resources t0..t15,
-// samplers s0..s15. A Bind creates an immutable descriptor snapshot so later
+// samplers s0..s15. A Bind writes a private descriptor snapshot so later
 // layers/cameras cannot overwrite descriptors still being consumed by the GPU.
 class piDX12ShaderBindings final
 {

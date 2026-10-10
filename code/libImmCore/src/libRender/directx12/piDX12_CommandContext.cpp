@@ -17,6 +17,7 @@ piDX12CommandContext::~piDX12CommandContext()
         for (auto& frame : mFrames)
         {
             for (auto& object : frame.retained) object.Detach();
+            for (auto& heap : frame.descriptorHeaps) heap.Detach();
             frame.commands.Detach();
             frame.allocator.Detach();
         }
@@ -96,6 +97,7 @@ HRESULT piDX12CommandContext::Begin(ID3D12GraphicsCommandList** commands, DWORD 
     HRESULT result = Wait(frame.completionValue, timeoutMilliseconds);
     if (FAILED(result)) return result;
     frame.retained.clear();
+    frame.descriptorHeapCursor = 0;
     frame.completionValue = 0;
     result = frame.allocator->Reset();
     if (SUCCEEDED(result)) result = frame.commands->Reset(frame.allocator.Get(), nullptr);
@@ -107,6 +109,36 @@ HRESULT piDX12CommandContext::Begin(ID3D12GraphicsCommandList** commands, DWORD 
     mRecording = true;
     *commands = frame.commands.Get();
     return S_OK;
+}
+
+HRESULT piDX12CommandContext::AllocateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE type, UINT count,
+                                                     ID3D12DescriptorHeap** heap)
+{
+    if (!heap) return E_POINTER;
+    *heap = nullptr;
+    if (!mRecording || mFailed || count == 0 ||
+        (type != D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && type != D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER))
+        return E_INVALIDARG;
+    auto& frame = mFrames[mFrameIndex];
+    const size_t slot = frame.descriptorHeapCursor;
+    if (slot == frame.descriptorHeaps.size()) frame.descriptorHeaps.emplace_back();
+    auto& cached = frame.descriptorHeaps[slot];
+    if (cached)
+    {
+        const auto description = cached->GetDesc();
+        if (description.Type != type || description.NumDescriptors != count) cached.Reset();
+    }
+    if (!cached)
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC description = {};
+        description.Type = type;
+        description.NumDescriptors = count;
+        description.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        const HRESULT result = mDevice->CreateDescriptorHeap(&description, IID_PPV_ARGS(&cached));
+        if (FAILED(result)) return result;
+    }
+    ++frame.descriptorHeapCursor;
+    return cached.CopyTo(heap);
 }
 
 HRESULT piDX12CommandContext::Retain(IUnknown* object)
@@ -333,6 +365,8 @@ HRESULT piDX12CommandContext::Shutdown()
     for (auto& frame : mFrames)
     {
         frame.retained.clear();
+        frame.descriptorHeaps.clear();
+        frame.descriptorHeapCursor = 0;
         frame.commands.Reset();
         frame.allocator.Reset();
         frame.completionValue = 0;

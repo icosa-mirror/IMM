@@ -27,6 +27,10 @@ public:
     HRESULT Shutdown();
     HRESULT Begin(ID3D12GraphicsCommandList** commands, DWORD timeoutMilliseconds = 10000);
     HRESULT Retain(IUnknown* object);
+    // Each allocation is private to this recording. Reuse its storage only when
+    // the frame slot's fence has completed, preserving earlier draw snapshots.
+    HRESULT AllocateDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE type, UINT count,
+                                   ID3D12DescriptorHeap** heap);
     // Copies CPU data immediately, then records an upload into a new DEFAULT-heap
     // buffer. Valid only while recording. The returned buffer is GENERIC_READ
     // after execution; Cancel discards its initialization. Both GPU resources
@@ -59,6 +63,8 @@ private:
         Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
         Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commands;
         std::vector<Microsoft::WRL::ComPtr<IUnknown>> retained;
+        std::vector<Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> descriptorHeaps;
+        size_t descriptorHeapCursor = 0;
         uint64_t completionValue = 0;
     };
 
