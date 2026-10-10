@@ -70,7 +70,7 @@ def main() -> int:
         ],
         ROOT / "tests/tools/prepare_unity_ci_project.py": [
             "--preserve-xr",
-            "prepare_project(source, output, preserve_xr=args.preserve_xr)",
+            "preserve_xr=args.preserve_xr",
             '"Assets/Editor/ImmUrpXrBuild.cs"',
         ],
         ROOT / ".github/workflows/ci-engine.yml": [
