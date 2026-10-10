@@ -24,54 +24,38 @@ automating headset VR validation does not exempt non-VR changes from CI.
 
 ## Current status — 2026-10-10
 
-1. Last confirmed full-green source: `265fe132`; synchronized runtime binaries:
-   `b0396331`. Full [run 37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
-   passed the required non-VR platform gates. Later checkpoints have not replaced it.
-2. All held implementation changes were pushed at `216b0648`; package compilation
-   was corrected at `0b2f0732`, followed by paused-playback probe corrections.
-   Full [run 38038230496](https://github.com/icosa-mirror/IMM/actions/runs/38038230496)
-   on `f1d5eb60` completed with required Unity iOS/macOS Metal, Android Vulkan and
-   Windows D3D12 failures. Metal/Android brightness comparisons incorrectly treated
-   `sample1.imm` as surface-only: its 360 backdrop is correctly hidden by a rear
-   opaque quad. Mono/XR sample probes now hide and restore picture layers around
-   surface comparisons; separate corpus panorama gates remain required.
-   Windows passed all ten static documents, then exposed a real pretessellated
-   HLSL path defect: obsolete vertex layout/brush expansion, missing structured
-   buffer binding, and wrong colour-variant indexing. These are corrected and the
-   shader bytecode regenerated. A new paint-only native readback prevents the
-   sample backdrop from masking missing paint. All three local D3D12 CTests,
-   sample managed compilation and VR harness contract checks pass. Full hosted
-   confirmation remains pending; no later checkpoint is promoted to full green.
-   Subsequent run `38043793355` was cancelled after a Windows Vulkan startup kill
-   (exit 137), then fully rerun before the targeted-retry policy was implemented.
-   Existing post-exit diagnostics did not confirm OOM. The new live diagnostics
-   and bounded retry require their own hosted confirmation.
-   Full [run 38046361375](https://github.com/icosa-mirror/IMM/actions/runs/38046361375)
-   passed Windows D3D12 composition/corpus, Windows Vulkan and iOS Metal gates.
-   macOS player URP/corpus validation passed, but Editor Play exited with code 198
-   after reporting "No valid Unity Editor license found". Android's 30-second
-   Robo wait expired during the expanded corpus, allowing crawling to stop and
-   restart the app before its required completion markers. The URP device test
-   now uses a dedicated 180-second wait within the existing five-minute timeout;
-   required rendering markers and thresholds remain unchanged. This correction
-   still needs hosted confirmation; the run is not a full-green checkpoint.
-3. D3D12 mono and synthetic two-slice stereo, Vulkan mono and the borrowed-device
-   two-view adapter are implemented. Native paint/picture/model GPU readbacks pass;
-   these do not prove complete all-content rendering through Unity or headset
-   correctness. Windows OpenXR and Quest single-pass build/hardware harnesses exist.
-4. Published increments include model persistence and a ten-document corpus,
-   explicit static/pretessellated paint selection with packet ABI v4, both-technique
-   Unity corpus MSAA checks, real transparent blending/alpha-test controls, the
-   same-commit plugin ABI gate and Android fixture cache inputs. Their local
-   evidence and limits are recorded in entries 66–78. Actual hosted execution of
-   these increments remains required before promoting a checkpoint.
-5. Remaining acceptance includes full non-VR CI recovery, Unity corpus/depth/skybox/
-   blending/MSAA confirmation across the required matrix, a partly intersecting
-   geometry control (optional additional coverage), a later-renderer-feature control, complete stereo content
-   composition and stroke-edge quality. Real headset pose/per-eye checks and GPU
-   captures proving one scene draw sequence remain outstanding. Native probes and
-   managed event counts cannot substitute for those results. Measure any selected
-   offscreen route's allocation/synchronization/resolve/composite costs as required.
+1. Last confirmed full-green source: `f2a96640`; synchronized runtime binaries:
+   `1e1b1ea0`. Full [run 38053085729](https://github.com/icosa-mirror/IMM/actions/runs/38053085729)
+   passed the required non-VR platform gates. Later local fixes have not yet
+   replaced that hosted checkpoint.
+2. Manual sample use exposed gaps despite the passing offscreen CI probes:
+   Windows still defaulted to D3D11, runtime sample setup replaced saved settings,
+   bounds-based camera framing put the viewer outside the sky, and normal D3D12
+   Game view attachments could lack native wrappers. Saved URP/D3D12 defaults,
+   camera registration, shared authored-viewpoint loading and attachment
+   materialization are now committed. The rebuilt URP sample renders visible
+   content at its authored viewpoint with no current rendering exceptions.
+   These changes still require full hosted validation; the original feature-panel
+   scene and VR scene have not yet been manually rechecked under the saved default.
+3. D3D12 mono and synthetic two-slice stereo, Metal mono, Vulkan mono and the
+   borrowed-device two-view adapter are implemented. Native and Unity corpus
+   checks establish rendering correctness within their tested scopes, not actual
+   headset correctness or satisfactory interactive performance.
+4. Interactive Windows performance remains unresolved. The RTX 4090 Editor
+   profile initially spent approximately 60-70 ms in the native rendering event.
+   Per-draw descriptor heap allocation was a measured contributor. Commit
+   `30775608` reuses private heaps only after their frame fence completes; its
+   local 38-draw binding benchmark falls from approximately 13 ms to 0.14 ms
+   after warmup, and the existing native submission readback passes. The rebuilt
+   sample still spends approximately 48-56 ms in the native event. Buffer uploads
+   remain under investigation; do not claim the performance problem is fixed.
+5. Remaining work includes fixing interactive performance, running full non-VR
+   CI on these new commits and covering the ordinary automatic Game view route
+   which the offscreen probes missed. Actual Windows OpenXR and Quest Vulkan
+   headset pose/per-eye checks and GPU capture proving one scene draw sequence
+   remain outstanding. Do not expand optional validation in place of fixing
+   observed failures or obtaining the required human headset checks.
+
 6. The unrelated dirty sample OpenXR settings, Package Manager settings and Godot
    review handoff remain untouched and outside the validated checkpoint.
 7. Progress entries are chronological evidence. Pending statements in older entries
