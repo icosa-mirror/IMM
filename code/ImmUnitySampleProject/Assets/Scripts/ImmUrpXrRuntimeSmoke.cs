@@ -64,7 +64,7 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
         while (Time.realtimeSinceStartup < deadline)
         {
             displays.Clear();
-            SubsystemManager.GetInstances(displays);
+            SubsystemManager.GetSubsystems(displays);
             display = displays.Find(candidate => candidate.running);
             if (display != null && XRSettings.isDeviceActive && sample.DocumentCamera.stereoEnabled &&
                 sample.Document != null && sample.Document.GetStateInfo().Loading == ImmDocument.LoadingState.Loaded)
