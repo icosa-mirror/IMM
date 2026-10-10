@@ -119,7 +119,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             }
             Require(renderError == null, $"Unity reported: {renderError}");
             Require(ReadVisiblePixels(true, samples) > 100, $"No visible IMM content at {samples} samples.");
-            var depthProbe = VerifyDepthComposition(samples, sample.Document.GetBoundingBox());
+            var depthProbe = VerifyDepthComposition(samples, sample.Document.GetBoundingBox(), sample.Document);
             try
             {
                 while (depthProbe.MoveNext()) yield return depthProbe.Current;
@@ -315,7 +315,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                         if (!surface) Debug.Log($"[IMM_URP_CONTENT] PASS {name} survives Unity skybox with opt-out control.");
                         if (surface)
                         {
-                            var depth = VerifyDepthComposition(samples, bounds, $"{name}-{manager.UrpPaintRenderingTechnique}-{samples}x");
+                            var depth = VerifyDepthComposition(samples, bounds, document, $"{name}-{manager.UrpPaintRenderingTechnique}-{samples}x");
                             try { while (depth.MoveNext()) yield return depth.Current; }
                             finally { (depth as IDisposable)?.Dispose(); }
                         }
@@ -347,8 +347,19 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         }
     }
 
-    private IEnumerator VerifyDepthComposition(int samples, Bounds bounds, string fixture = "sample")
+    private IEnumerator VerifyDepthComposition(int samples, Bounds bounds, ImmDocument document, string fixture = "sample")
     {
+        // Brightness comparisons must use the same authored frame in every phase.
+        document.Pause();
+        float pauseDeadline = Time.realtimeSinceStartup + 30;
+        while (document.GetStateInfo().Playback != ImmDocument.PlaybackState.Paused &&
+               document.GetStateInfo().Playback != ImmDocument.PlaybackState.Finished)
+        {
+            Require(Time.realtimeSinceStartup < pauseDeadline, $"Could not pause depth fixture: {fixture}.");
+            yield return null;
+            RenderPipeline.SubmitRenderRequest(documentCamera, request);
+        }
+        long frozenTime = document.GetPlayTime();
         var shader = Resources.Load<Shader>("ImmUrpDepthProbe");
         Require(shader != null && shader.isSupported, "URP depth probe shader is unavailable.");
         var material = new Material(shader);
@@ -388,6 +399,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     RenderPipeline.SubmitRenderRequest(documentCamera, request);
                 }
                 Require(renderError == null, $"Unity reported: {renderError}");
+                Require(document.GetPlayTime() == frozenTime, $"Depth fixture time advanced during comparison: {fixture}.");
                 int visible = 0;
                 long brightness = 0;
                 foreach (var pixel in ReadTargetPixels(target, $"depth-{fixture}-{phase}-{samples}x"))

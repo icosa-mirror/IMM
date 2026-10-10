@@ -168,6 +168,15 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
 
     private IEnumerator VerifyStereoDepthComposition(XRDisplaySubsystem display, string captureRoot)
     {
+        sample.Document.Pause();
+        float pauseDeadline = Time.realtimeSinceStartup + 30;
+        while (sample.Document.GetStateInfo().Playback != ImmDocument.PlaybackState.Paused &&
+               sample.Document.GetStateInfo().Playback != ImmDocument.PlaybackState.Finished)
+        {
+            Require(Time.realtimeSinceStartup < pauseDeadline, "Could not pause stereo depth fixture.");
+            yield return null;
+        }
+        long frozenTime = sample.Document.GetPlayTime();
         var shader = Resources.Load<Shader>("ImmUrpDepthProbe");
         Require(shader != null && shader.isSupported, "Stereo depth probe shader is unavailable.");
         var material = new Material(shader);
@@ -206,6 +215,7 @@ public sealed class ImmUrpXrRuntimeSmoke : MonoBehaviour
                     (near ? -2 : 2) * radius, sample.DocumentCamera.transform.rotation);
                 for (int frame = 0; frame < 3; ++frame) yield return null;
                 var visible = new int[2];
+                Require(sample.Document.GetPlayTime() == frozenTime, "Stereo depth fixture time advanced during comparison.");
                 var brightness = new long[2];
                 var capture = CaptureStereoEyes(display, captureDirectory, phase, visible, brightness);
                 try { while (capture.MoveNext()) yield return capture.Current; }
