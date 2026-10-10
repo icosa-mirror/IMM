@@ -50,7 +50,8 @@ automating headset VR validation does not exempt non-VR changes from CI.
    evidence and limits are recorded in entries 66–78. Actual hosted execution of
    these increments remains required before promoting a checkpoint.
 5. Remaining acceptance includes full non-VR CI recovery, Unity corpus/depth/skybox/
-   blending/MSAA confirmation across the required matrix, complete stereo content
+   blending/MSAA confirmation across the required matrix, a partly intersecting
+   geometry control, a later-renderer-feature control, complete stereo content
    composition and stroke-edge quality. Real headset pose/per-eye checks and GPU
    captures proving one scene draw sequence remain outstanding. Native probes and
    managed event counts cannot substitute for those results. Measure any selected
@@ -2006,3 +2007,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
     into the local feature branch without conflicts or user-file changes. Model,
     ABI v4/paint selection, expanded MSAA/blend controls and cache-key changes remain
     held locally. No new full-green checkpoint is claimed.
+
+80. **Requirement-level harness review (2026-10-10):** the current near/far quad
+    phases establish full occlusion in either direction, not partial intersection
+    of Unity geometry with IMM within one frame. A planned cube control must compare
+    IMM-only, cube-only and combined captures; within their overlapping pixels it
+    must retain substantial IMM-visible and cube-visible regions. The later-renderer-
+    feature requirement also lacks an explicit harness. Local URP 17.6 exposes
+    public `rendererDataList`, `rendererFeatures` and `SetDirty`, allowing a temporary
+    sample-only feature to be attached and removed at runtime. A blue corner drawn
+    after transparents over a full panorama can establish later-pass ordering and
+    preservation of existing colour without private reflection, saved-asset changes
+    or consumer hooks. Both controls must eventually execute in the required mono
+    matrix and both XR eyes; their designs alone establish no rendering acceptance.
+    Implementation remains deferred until the focused recovery checkpoint passes.
