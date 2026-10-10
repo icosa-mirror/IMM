@@ -30,7 +30,12 @@ def api(path, method=None):
     command = ['gh', 'api', path]
     if method:
         command += ['--method', method]
-    return subprocess.run(command, capture_output=True, text=True, check=True).stdout
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode:
+        # Preserve gh's HTTP/error detail; CalledProcessError otherwise hides
+        # captured stderr and leaves recovery failures impossible to diagnose.
+        raise RuntimeError(f"GitHub API request {path} failed ({result.returncode}): {result.stderr.strip()}")
+    return result.stdout
 
 
 def eligible(run, repository, current_sha):
