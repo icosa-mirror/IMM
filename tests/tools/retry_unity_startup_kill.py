@@ -10,6 +10,7 @@ DOWNSTREAM = {'Engine / Engine Evidence Report', 'Validation Evidence'}
 
 
 def startup_kill(log):
+    log = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", log)
     # Require the observed immediate kill during initial domain reload. A 137
     # elsewhere (including imports, compilation or the player) is not sufficient.
     if re.search(r'error CS\d+|Shader error|IMM_URP_SMOKE.*FAIL|BuildFailedException', log):
@@ -31,6 +32,12 @@ def api(path, method=None):
     if method:
         command += ['--method', method]
     result = subprocess.run(command, capture_output=True, text=True)
+    if (path.endswith('/logs') and result.returncode and
+            'response contains terminal escape sequences' in result.stderr):
+        # New gh versions gate raw log output. It stays captured here and is
+        # stripped before signature matching; older versions need no new flag.
+        result = subprocess.run(command + ['--allow-escape-sequences'],
+                                capture_output=True, text=True)
     if result.returncode:
         # Preserve gh's HTTP/error detail; CalledProcessError otherwise hides
         # captured stderr and leaves recovery failures impossible to diagnose.
