@@ -24,8 +24,8 @@ automating headset VR validation does not exempt non-VR changes from CI.
 
 ## Current status — 2026-10-10
 
-1. Last confirmed full-green source: `f2a96640`; synchronized runtime binaries:
-   `1e1b1ea0`. Full [run 38053085729](https://github.com/icosa-mirror/IMM/actions/runs/38053085729)
+1. Last confirmed full-green source: `e528b13c`; synchronized runtime binaries:
+   `f6f8ec4e`. Full [run 38058944004](https://github.com/icosa-mirror/IMM/actions/runs/38058944004)
    passed the required non-VR platform gates. Later local fixes have not yet
    replaced that hosted checkpoint.
 2. Manual sample use exposed gaps despite the passing offscreen CI probes:
