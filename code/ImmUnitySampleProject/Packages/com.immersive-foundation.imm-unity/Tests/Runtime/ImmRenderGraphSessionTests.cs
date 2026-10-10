@@ -14,14 +14,14 @@ namespace ImmPlayer.Tests
             Assert.IsNull(ImmRenderGraphSession.Current);
             try
             {
-                var first = ImmRenderGraphSession.Start(true, false);
+                var first = ImmRenderGraphSession.Start(true, false, ImmPaintRenderingTechnique.Static);
                 Assert.IsTrue(first.Transport.IsReady);
                 Assert.AreSame(first, ImmRenderGraphSession.Current);
-                Assert.Throws<System.InvalidOperationException>(() => ImmRenderGraphSession.Start(true, false));
+                Assert.Throws<System.InvalidOperationException>(() => ImmRenderGraphSession.Start(true, false, ImmPaintRenderingTechnique.Static));
                 first.Dispose();
                 first.Dispose();
                 Assert.IsNull(ImmRenderGraphSession.Current);
-                using (var second = ImmRenderGraphSession.Start(false, false))
+                using (var second = ImmRenderGraphSession.Start(false, false, ImmPaintRenderingTechnique.Pretessellated))
                     Assert.IsTrue(second.Transport.IsReady);
                 Assert.IsNull(ImmRenderGraphSession.Current);
             }
