@@ -121,7 +121,7 @@ def main():
                     os.kill(pid, signal.SIGTERM)
                 except ProcessLookupError:
                     return
-                deadline = time.monotonic() + 8
+                deadline = time.monotonic() + 20
                 while command.exists() and time.monotonic() < deadline:
                     # Orphaned monitors may remain briefly as reaped zombies.
                     stat = Path(f'/proc/{pid}/stat')
@@ -129,7 +129,7 @@ def main():
                         return
                     time.sleep(0.1)
                 if command.exists():
-                    raise RuntimeError('Memory monitor did not stop and flush within eight seconds')
+                    raise RuntimeError('Memory monitor did not stop and flush within twenty seconds')
         return
     monitor(args.output, args.workspace.resolve(), args.max_seconds)
 

@@ -813,6 +813,8 @@ jobs:
 
       - name: Stop live Unity directx memory diagnostics
         if: always()
+        continue-on-error: true
+        timeout-minutes: 1
         run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-windows-directx-player/memory-directx.pid --output artifacts/unity-windows-directx-player/memory-directx.jsonl
 
       - name: Collect Unity DirectX runner memory diagnostics
@@ -1219,6 +1221,8 @@ jobs:
 
       - name: Stop live Unity vulkan memory diagnostics
         if: always()
+        continue-on-error: true
+        timeout-minutes: 1
         run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-windows-vulkan-player/memory-vulkan.pid --output artifacts/unity-windows-vulkan-player/memory-vulkan.jsonl
 
       - name: Collect Unity Vulkan runner memory diagnostics
@@ -2106,6 +2110,8 @@ jobs:
 
       - name: Stop live Unity quest memory diagnostics
         if: always()
+        continue-on-error: true
+        timeout-minutes: 1
         run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-android-vulkan/memory-quest.pid --output artifacts/unity-android-vulkan/memory-quest.jsonl
 
       - name: Collect Unity Android Quest runner memory diagnostics
@@ -2254,6 +2260,8 @@ jobs:
 
       - name: Stop live Unity android memory diagnostics
         if: always()
+        continue-on-error: true
+        timeout-minutes: 1
         run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-android-vulkan/memory-android.pid --output artifacts/unity-android-vulkan/memory-android.jsonl
 
       - name: Collect Unity Android smoke runner memory diagnostics
