@@ -673,6 +673,9 @@ jobs:
       - name: Prepare Unity iOS artifact directory
         run: mkdir -p artifacts/unity-ios-player-build
 
+      - name: Install inactive Unity performance probe in CI checkout
+        run: python3 tests/tools/prepare_unity_ci_project.py --output code/ImmUnitySampleProject --install-performance-probe-only
+
       - name: Export Unity iOS Metal Xcode project
         id: unity_ios_export
         uses: game-ci/unity-builder@v4
@@ -2099,7 +2102,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
-          key: UnityAndroidOpenXRQuestShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+          key: UnityAndroidOpenXRQuestShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'tests/unity/**', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
 
       - name: Restore Unity Android OpenXR Quest Library cache
         id: cache_unity_android_quest_library
@@ -2227,6 +2230,7 @@ jobs:
           python tests/tools/prepare_unity_ci_project.py
           --source code/ImmUnitySampleProject
           --output .ci-workspace/unity-android-vulkan-nonxr
+          --include-performance-probe
 
       - name: Restore cached Unity Android Vulkan shell APK
         id: cache_unity_android_vulkan_shell
@@ -2235,7 +2239,7 @@ jobs:
           path: |
             .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
             .ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk
-          key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+          key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'tests/unity/**', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
 
       - name: Restore Unity Android Library cache
         id: cache_unity_android_library
@@ -2552,6 +2556,14 @@ jobs:
           --required-marker "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down."
           --client-label "IMM Unity Android Vulkan URP"
 
+      - name: Verify unity-android-vulkan/urp rendered-frame evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $sample = Get-ChildItem -Path artifacts/unity-android-vulkan/urp -Recurse -Filter performance-measurements-raw.json -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $sample) { throw "Missing rendered-frame performance evidence" }
+          python tests/tools/verify_frame_sample.py $sample.FullName --output artifacts/unity-android-vulkan/urp/performance-verdict.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Record Unity Android Vulkan visual metrics
         if: always()
         continue-on-error: true

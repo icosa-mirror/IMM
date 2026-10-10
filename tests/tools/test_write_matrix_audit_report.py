@@ -60,7 +60,7 @@ def main() -> int:
         assert "## Major Platform / Host Performance Coverage" in markdown
         assert "not_implemented" in markdown
         assert "performance_mode_counts" in audit["summary"]
-        assert godot_ios["performance"]["mode"] == "not_implemented"
+        assert godot_ios["performance"]["mode"] == "report_only"
         assert "## Audio Pipelines" in markdown
         assert "AVFoundation" in markdown
 

@@ -156,6 +156,7 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=Path("code/ImmUnitySampleProject"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--performance-probe", action="store_true", help="Install an opt-in normal-scene FPS probe in this temporary project only.")
+    parser.add_argument("--include-performance-probe", action="store_true", help="Include an inactive probe; Android URP CI builds sample before correctness checks.")
     parser.add_argument("--install-performance-probe-only", action="store_true", help="Add the inactive probe to an existing CI checkout without replacing the project.")
     parser.add_argument(
         "--preserve-xr",
@@ -178,6 +179,8 @@ def main() -> int:
         install_performance_probe(output)
     else:
         prepare_project(source, output, preserve_xr=args.preserve_xr, performance_probe=args.performance_probe)
+        if args.include_performance_probe and not args.performance_probe:
+            install_performance_probe(output)
     print(f"Prepared Unity CI project: {output}")
     return 0
 

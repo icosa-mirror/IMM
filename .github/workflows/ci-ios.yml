@@ -211,6 +211,13 @@ jobs:
           wait "$face_launch_pid" 2>/dev/null || true
           xcrun simctl shutdown "$STANDALONE_IOS_UDID" >/dev/null 2>&1 || true
 
+      - name: Measure standalone iOS Simulator rendered-frame cadence
+        timeout-minutes: 3
+        run: >
+          python3 tests/tools/run_ios_frame_sample.py
+          --udid "$STANDALONE_IOS_UDID" --app "$STANDALONE_IOS_APP"
+          --product standalone --output-dir artifacts/standalone-ios-metal/performance
+
       - name: Classify standalone iOS Metal face orientation
         continue-on-error: true
         run: |
@@ -692,6 +699,17 @@ jobs:
           print("iOS URP Metal rendering, supported MSAA, opt-out and lifecycle passed")
           PY
 
+      - name: Measure Unity iOS Simulator rendered-frame cadence
+        timeout-minutes: 3
+        shell: bash
+        env:
+          IMM_URP_DERIVED_DATA: ${{ runner.temp }}/unity-ios-urp-derived-data
+        run: |
+          app="$(find "$IMM_URP_DERIVED_DATA/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app"
+          python3 tests/tools/run_ios_frame_sample.py --udid "$SIMULATOR_UDID" --app "$app" \
+            --product unity --output-dir artifacts/unity-ios-player-build/performance
+
       - name: Shut down iOS Simulator
         if: always()
         continue-on-error: true
@@ -1160,6 +1178,8 @@ jobs:
           set -euo pipefail
           cp exampleImmFiles/sample1.imm code/ImmGodotSampleProject/sample1.imm
           cp exampleImmFiles/face-orientation.imm code/ImmGodotSampleProject/face-orientation.imm
+          mkdir -p code/ImmGodotSampleProject/ci
+          cp tests/godot/performance_probe.gd code/ImmGodotSampleProject/ci/performance_probe.gd
           mkdir -p build/godot-ios-export
           "$GODOT_IOS_EXE" --headless --path code/ImmGodotSampleProject --import \
             > artifacts/godot-ios-metal/godot-import.log 2>&1
@@ -1847,6 +1867,13 @@ jobs:
           collect_user_file godot-ios-sample-play.log "$artifact_dir/godot-ios-sample-play.log" || runtime_status=1
           xcrun simctl shutdown "$simulator_udid" >/dev/null 2>&1 || true
           exit "$runtime_status"
+
+      - name: Measure Godot iOS Simulator rendered-frame cadence
+        timeout-minutes: 3
+        run: >
+          python3 tests/tools/run_ios_frame_sample.py
+          --udid "$GODOT_IOS_SIMULATOR_UDID" --app "$GODOT_IOS_SIMULATOR_APP"
+          --product godot --output-dir artifacts/godot-ios-metal/performance
 
       - name: Package Godot iOS application for Firebase Test Lab
         id: godot_ios_package

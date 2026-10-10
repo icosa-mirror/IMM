@@ -31,6 +31,9 @@ func _duration(name: String, fallback: float) -> float:
 	return text.to_float() if text.is_valid_float() else -1.0
 
 func _start() -> void:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--imm-performance-output="):
+			_output = argument.trim_prefix("--imm-performance-output=")
 	if _output.is_empty():
 		push_error("[IMM-FPS-GODOT] IMM_PERFORMANCE_OUTPUT is required")
 		quit(2)

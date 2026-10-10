@@ -1353,6 +1353,18 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetValidationRenderS
     ALOGV("IMMAVAL validation render size: %dx%d", width, height);
 }
 
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetPerformanceOutput(
+    JNIEnv* jni,
+    jclass,
+    jstring path) {
+    if (!path || gEngine.viewer) return;
+    const char* output = jni->GetStringUTFChars(path, nullptr);
+    if (output) {
+        setenv("IMM_PERFORMANCE_OUTPUT", output, 1);
+        jni->ReleaseStringUTFChars(path, output);
+    }
+}
+
 void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetValidationPlayback(
     JNIEnv*,
     jclass,

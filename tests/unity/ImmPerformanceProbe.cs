@@ -58,6 +58,17 @@ public sealed class ImmPerformanceProbe : MonoBehaviour
     private readonly bool renderRequests = Environment.GetEnvironmentVariable("IMM_PERFORMANCE_RENDER_REQUESTS") == "1";
     private UniversalRenderPipeline.SingleCameraRequest renderRequest;
 
+#if IMM_UNITY_ANDROID_URP_CI
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void EnableAndroidCiSample()
+    {
+        Environment.SetEnvironmentVariable("IMM_PERFORMANCE_OUTPUT",
+            Path.Combine(Application.persistentDataPath, "imm-ci", "performance-measurements-raw.json"));
+        Environment.SetEnvironmentVariable("IMM_PERFORMANCE_RENDER_REQUESTS", "1");
+        Environment.SetEnvironmentVariable("IMM_UNITY_PERFORMANCE_PENDING", "1");
+    }
+#endif
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
     {
@@ -67,6 +78,10 @@ public sealed class ImmPerformanceProbe : MonoBehaviour
         var probe = new GameObject("IMM CI Performance Probe").AddComponent<ImmPerformanceProbe>();
         DontDestroyOnLoad(probe.gameObject);
         probe.config = asset != null ? JsonUtility.FromJson<Configuration>(asset.text) : new Configuration();
+#if IMM_UNITY_ANDROID_URP_CI
+        // Resume the existing Android correctness probe after sampling.
+        probe.config.quit_after_sample = false;
+#endif
         probe.output = string.IsNullOrEmpty(path)
             ? Path.Combine(Application.persistentDataPath, "imm-ci", "performance-measurements-raw.json") : path;
         probe.config.warmup_seconds = Duration("IMM_PERFORMANCE_WARMUP_SECONDS", probe.config.warmup_seconds);
@@ -195,6 +210,7 @@ public sealed class ImmPerformanceProbe : MonoBehaviour
             Destroy(renderTarget);
         }
         Debug.Log($"[IMM-FPS-UNITY] Wrote {output}; IMM frames={sample.imm_rendered_frame_count}, seconds={sample.observed_seconds:F3}.");
+        Environment.SetEnvironmentVariable("IMM_UNITY_PERFORMANCE_PENDING", "0");
         if (config.quit_after_sample && !Application.isEditor) Application.Quit(errors.Count == 0 ? 0 : 1);
     }
 

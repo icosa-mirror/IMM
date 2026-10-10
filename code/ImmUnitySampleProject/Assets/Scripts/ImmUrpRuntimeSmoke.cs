@@ -38,6 +38,10 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
 
     private IEnumerator Start()
     {
+        // A CI-injected collector may sample the authored workload first. The
+        // normal project has no collector, so this introduces no default wait.
+        while (Environment.GetEnvironmentVariable("IMM_UNITY_PERFORMANCE_PENDING") == "1")
+            yield return null;
         Application.logMessageReceived += OnLog;
         Application.runInBackground = true;
         RenderPipelineManager.beginCameraRendering += OnCamera;

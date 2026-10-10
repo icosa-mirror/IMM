@@ -62,6 +62,24 @@ public final class GodotVulkanFtlSmokeTest {
 
         assertTrue("Godot diagnostic device capture missing: " + capturePath, capturePath.isFile());
         assertTrue("Godot diagnostic device capture is empty: " + capturePath, capturePath.length() > 0L);
+
+        String performancePackage = "org.linuxfoundation.imm.godot.performance";
+        runShell(device, "am force-stop " + performancePackage);
+        String performanceLaunch = runShell(device,
+                "am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p " + performancePackage);
+        assertTrue("Godot performance launcher failed: " + performanceLaunch, performanceLaunch.contains("Status: ok"));
+        try {
+            long deadline = SystemClock.elapsedRealtime() + 90000L;
+            String performanceLog;
+            do {
+                SystemClock.sleep(1000L);
+                performanceLog = runShell(device, "logcat -d");
+            } while (!performanceLog.contains("[IMM-FPS-GODOT] Wrote") && SystemClock.elapsedRealtime() < deadline);
+            writeText(new File(artifactDir, "performance-logcat.txt"), performanceLog);
+            requireMarker(performanceLog, "[IMM-FPS-GODOT] Wrote");
+        } finally {
+            runShell(device, "am force-stop " + performancePackage);
+        }
     }
 
     private static String waitForSmoke(UiDevice device, int waitSeconds) throws Exception {

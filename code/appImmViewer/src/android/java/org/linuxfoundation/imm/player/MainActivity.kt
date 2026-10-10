@@ -52,6 +52,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     @JvmStatic external fun nativeSetRenderingApi(renderingApi: String?)
     @JvmStatic external fun nativeSetValidationRenderSize(width: Int, height: Int)
     @JvmStatic external fun nativeSetValidationPlayback(fixedDt: Double, playerFrame: Long)
+    @JvmStatic external fun nativeSetPerformanceOutput(path: String)
     @JvmStatic
     external fun nativeSetEyeBufferScale(
         scaleFactor: Float
@@ -90,6 +91,11 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     applyRenderingApiExtra(intent)
     applyValidationRenderSizeExtra(intent)
     applyValidationPlaybackExtra(intent)
+    if (intent?.getBooleanExtra("PerformanceSample", false) == true) {
+      val directory = java.io.File(getExternalFilesDir(null), "imm-ftl")
+      directory.mkdirs()
+      nativeSetPerformanceOutput(java.io.File(directory, "performance-measurements-raw.json").absolutePath)
+    }
     super.onCreate(savedInstanceState)
 
     if (intent != null)

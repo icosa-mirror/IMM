@@ -35,6 +35,7 @@ public final class ImmFtlSmokeTest {
         int waitSeconds = parseInt(args.getString("waitSeconds"), 25);
         double validationFixedDt = parseDouble(args.getString("ValidationFixedDt"), DEFAULT_VALIDATION_FIXED_DT);
         long validationPlayerFrame = parseLong(args.getString("ValidationPlayerFrame"), DEFAULT_VALIDATION_PLAYER_FRAME);
+        boolean performanceSample = Boolean.parseBoolean(args.getString("PerformanceSample", "false"));
 
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         Context targetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -49,6 +50,7 @@ public final class ImmFtlSmokeTest {
         intent.putExtra("ValidationRenderHeight", VALIDATION_RENDER_HEIGHT);
         intent.putExtra("ValidationFixedDt", validationFixedDt);
         intent.putExtra("ValidationPlayerFrame", validationPlayerFrame);
+        intent.putExtra("PerformanceSample", performanceSample);
         targetContext.startActivity(intent);
 
         File artifactDir = new File(targetContext.getExternalFilesDir(null), "imm-ftl");
@@ -56,6 +58,14 @@ public final class ImmFtlSmokeTest {
 
         File nativeCapture = new File(artifactDir, "native-render-after.ppm");
         String logcat = waitForNativeCapture(device, nativeCapture, waitSeconds, true);
+
+        if (performanceSample) {
+            File sample = new File(artifactDir, "performance-measurements-raw.json");
+            long deadline = SystemClock.elapsedRealtime() + 90000L;
+            while (!sample.isFile() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(250L);
+            assertTrue("Native rendered-frame sample is missing", sample.isFile() && sample.length() > 0);
+            // Keep screenshots and the following reload cases outside sampling.
+        }
 
         File screenshot = new File(artifactDir, "screencap_after.png");
         assertTrue("FTL screenshot capture failed", device.takeScreenshot(screenshot));

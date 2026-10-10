@@ -237,7 +237,7 @@ jobs:
           --test-type instrumentation
           --artifact-dir artifacts/android-standalone-vulkan
           --timeout 5m
-          --environment-variable renderer=Vulkan,waitSeconds=90,ValidationFixedDt=0.0333333333333333,ValidationPlayerFrame=60
+          --environment-variable renderer=Vulkan,waitSeconds=90,ValidationFixedDt=0.0333333333333333,ValidationPlayerFrame=60,PerformanceSample=true
           --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player/files/imm-ftl
           --required-marker "IMM Android renderer API: Vulkan"
           --required-marker "IMMAVAL loadPath result=1"
@@ -251,6 +251,14 @@ jobs:
           --required-capture-name native-render-after.ppm
           --required-capture-name face-orientation.ppm
           --client-label "IMM Android Standalone Vulkan"
+      - name: Verify android-standalone-vulkan rendered-frame evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $sample = Get-ChildItem -Path artifacts/android-standalone-vulkan -Recurse -Filter performance-measurements-raw.json -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $sample) { throw "Missing rendered-frame performance evidence" }
+          python tests/tools/verify_frame_sample.py $sample.FullName --output artifacts/android-standalone-vulkan/performance-verdict.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Classify Android Vulkan face orientation
         if: always()
         shell: pwsh
@@ -471,6 +479,30 @@ jobs:
           )
           "$GODOT_EXE" "${godot_editor_args[@]}" --import
           "$GODOT_EXE" "${godot_editor_args[@]}" --export-debug "Android Debug" "$artifact_dir/imm-godot-sample-debug.apk"
+      - name: Build Android Godot performance APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_dir="$RUNNER_TEMP/ImmGodotSampleProjectAndroidExport"
+          cp code/ImmGodotSampleProject/scenes/SampleScene.tscn "$project_dir/scenes/SampleScene.tscn"
+          mkdir -p "$project_dir/ci"
+          cp tests/godot/performance_probe.gd "$project_dir/ci/performance_probe.gd"
+          python - "$project_dir" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+          root = Path(sys.argv[1])
+          project = root / "project.godot"
+          project.write_text(re.sub(r'^run/main_scene=.*$', 'run/main_scene="res://scenes/SampleScene.tscn"', project.read_text(), flags=re.M))
+          presets = root / "export_presets.cfg"
+          text = presets.read_text().replace('package/unique_name="org.linuxfoundation.imm.godot.sample"', 'package/unique_name="org.linuxfoundation.imm.godot.performance"')
+          arguments = '--script res://ci/performance_probe.gd -- --imm-performance-output=/sdcard/Android/data/org.linuxfoundation.imm.godot.performance/files/imm-ftl/performance-measurements-raw.json'
+          text = re.sub(r'^command_line/extra_args=.*$', f'command_line/extra_args="{arguments}"', text, flags=re.M)
+          presets.write_text(text)
+          PY
+          "$GODOT_EXE" --headless --display-driver headless --rendering-driver opengl3 --rendering-method gl_compatibility --path "$project_dir" --import
+          "$GODOT_EXE" --headless --display-driver headless --rendering-driver opengl3 --rendering-method gl_compatibility --path "$project_dir" \
+            --export-debug "Android Debug" "$GITHUB_WORKSPACE/artifacts/android-godot-vulkan/imm-godot-performance-debug.apk"
       - name: Build Android Godot Firebase test APKs
         working-directory: code/projects/android
         shell: bash
@@ -492,12 +524,14 @@ jobs:
             --app code/projects/android/appImmGodotFtlTest/build_godot_ftl_test/outputs/apk/debug/appImmGodotFtlTest-debug.apk \
             --test code/projects/android/appImmGodotFtlTest/build_godot_ftl_test/outputs/apk/androidTest/debug/appImmGodotFtlTest-debug-androidTest.apk \
             --additional-apk artifacts/android-godot-vulkan/imm-godot-sample-debug.apk \
+            --additional-apk artifacts/android-godot-vulkan/imm-godot-performance-debug.apk \
             --test-type instrumentation \
             --artifact-dir artifacts/android-godot-vulkan \
             --timeout 7m \
             --environment-variable waitSeconds=60 \
             --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.ftltest/files/imm-ftl \
             --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl \
+            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.performance/files/imm-ftl \
             --required-marker "IMM Godot Vulkan visual smoke passed" \
             --required-marker "Loaded in CPU" \
             --required-marker "Loaded in GPU" \
@@ -510,6 +544,14 @@ jobs:
             --required-capture-name vulkan_visual_smoke.png \
             --required-capture-name godot-android-vulkan-face-orientation.png \
             --client-label "IMM Android Godot Vulkan"
+      - name: Verify Android Godot rendered-frame evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $sample = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter performance-measurements-raw.json -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $sample) { throw "Missing Godot rendered-frame performance evidence" }
+          python tests/tools/verify_frame_sample.py $sample.FullName --output artifacts/android-godot-vulkan/performance-verdict.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Classify Android Godot Vulkan face orientation
         if: always()
         shell: pwsh

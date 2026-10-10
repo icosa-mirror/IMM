@@ -68,9 +68,9 @@ not claim that simulator results establish physical-device performance.
 ### Implementation checkpoint (2026-10-11)
 
 1. Matrix rows now declare performance coverage explicitly, and audit reports show
-   the platform/host grid. Six Windows/macOS runtime rows have report-only
-   collection wired; their first CI measurements are pending. Other runtime rows
-   remain `not_implemented` until wired.
+   the platform/host grid. The twelve primary platform/host runtime rows have report-only
+   collection wired; complete CI measurements are pending. Additional runtime
+   variants remain `not_implemented` until wired.
 2. The native viewer has an opt-in raw frame collector enabled by
    `IMM_PERFORMANCE_OUTPUT`. It samples the normal mono render loop after two
    seconds of warm-up for five seconds, counting frames with IMM draw work.
