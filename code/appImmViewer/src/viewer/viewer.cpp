@@ -449,10 +449,28 @@ void Viewer::RenderStereoMultiPass(const ivec2 & pixelResolutionIncludingSupersa
 
 void Viewer::RenderMono(const ivec2 & pixelResolutionIncludingSupersampling, const trans3d & vr_to_head, int eyeID)
 {
+    const auto recordFrame = [&](bool rendered)
+    {
+        // Multi-pass stereo calls this once per eye. Count a workload frame once.
+        if (eyeID != 0) return;
+        const char* api = "unknown";
+        switch (mRenderer->GetAPI())
+        {
+        case piRenderer::API::GL: api = "OpenGL"; break;
+        case piRenderer::API::DX: api = "Direct3D11"; break;
+        case piRenderer::API::GLES: api = "OpenGLES"; break;
+        case piRenderer::API::Metal: api = "Metal"; break;
+        case piRenderer::API::Vulkan: api = "Vulkan"; break;
+        case piRenderer::API::DX12: api = "Direct3D12"; break;
+        }
+        mFrameSample.Frame(rendered, pixelResolutionIncludingSupersampling.x,
+            pixelResolutionIncludingSupersampling.y, api);
+    };
     if (!mSpawnAreaReady)
     {
         const float colorBlack[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
         mRenderer->Clear(colorBlack, nullptr, nullptr, nullptr, true);
+        recordFrame(false);
         return;
     }
 
@@ -464,6 +482,7 @@ void Viewer::RenderMono(const ivec2 & pixelResolutionIncludingSupersampling, con
     const float colorBackground[4] = { playerInfo.mBackgrundColor.mRed,  playerInfo.mBackgrundColor.mGreen,  playerInfo.mBackgrundColor.mBlue, 1.0f };
     mRenderer->Clear(colorBackground, nullptr, nullptr, nullptr, true);
     mPlayer.RenderMono(pixelResolutionIncludingSupersampling, eyeID);
+    recordFrame(mPlayer.GetPerformanceInfoForFrame().numDrawCalls > 0);
 
     //======================================================
     // Render UI

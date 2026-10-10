@@ -14,6 +14,7 @@
 
 #include "../settings.h"
 #include "piCameraD.h"
+#include "frame_sample.h"
 
 
 namespace ExePlayer
@@ -68,6 +69,7 @@ namespace ExePlayer
         bool mFilesLoaded;
         bool mWasMouseDown = false;
         bool mSpawnAreaReady = false;
+        FrameSample mFrameSample;
 
         struct DisplayRenderState
         {
