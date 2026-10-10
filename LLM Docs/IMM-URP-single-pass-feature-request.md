@@ -27,21 +27,21 @@ automating headset VR validation does not exempt non-VR changes from CI.
 1. Last confirmed full-green source: `265fe132`; synchronized runtime binaries:
    `b0396331`. Full [run 37962975340](https://github.com/icosa-mirror/IMM/actions/runs/37962975340)
    passed the required non-VR platform gates. Later checkpoints have not replaced it.
-2. All held implementation changes were pushed at `216b0648`. Its full run
-   `38008497383` was cancelled after package test compilation failed because three
-   session calls omitted the new paint-technique argument. Fix `0b2f0732` compiled
-   locally. Its full [run 38010163133](https://github.com/icosa-mirror/IMM/actions/runs/38010163133)
-   was cancelled on macOS Metal and Windows D3D12 composition failures: the new
-   brightness comparisons used a sample whose playback was still advancing.
-   The correction pauses mono/XR depth fixtures, retaining the existing brightness
-   thresholds. Full run `38011863143` confirmed Windows sample depth/blending at
-   1/2/4/8 samples, then was cancelled after the static corpus hit an invalid
-   play-time guard. Still-document roots can report advancing play time while
-   animation is paused; the guard now requires paused/finished playback state
-   throughout each comparison instead. Local sample
-   compilation and VR harness contract checks pass; hosted rendering confirmation
-   remains pending. Recovery-only run `38005911818` was also cancelled and is not
-   a full-green checkpoint.
+2. All held implementation changes were pushed at `216b0648`; package compilation
+   was corrected at `0b2f0732`, followed by paused-playback probe corrections.
+   Full [run 38038230496](https://github.com/icosa-mirror/IMM/actions/runs/38038230496)
+   on `f1d5eb60` completed with required Unity iOS/macOS Metal, Android Vulkan and
+   Windows D3D12 failures. Metal/Android brightness comparisons incorrectly treated
+   `sample1.imm` as surface-only: its 360 backdrop is correctly hidden by a rear
+   opaque quad. Mono/XR sample probes now hide and restore picture layers around
+   surface comparisons; separate corpus panorama gates remain required.
+   Windows passed all ten static documents, then exposed a real pretessellated
+   HLSL path defect: obsolete vertex layout/brush expansion, missing structured
+   buffer binding, and wrong colour-variant indexing. These are corrected and the
+   shader bytecode regenerated. A new paint-only native readback prevents the
+   sample backdrop from masking missing paint. All three local D3D12 CTests,
+   sample managed compilation and VR harness contract checks pass. Full hosted
+   confirmation remains pending; no later checkpoint is promoted to full green.
 3. D3D12 mono and synthetic two-slice stereo, Vulkan mono and the borrowed-device
    two-view adapter are implemented. Native paint/picture/model GPU readbacks pass;
    these do not prove complete all-content rendering through Unity or headset
