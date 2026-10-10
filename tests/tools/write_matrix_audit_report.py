@@ -38,6 +38,9 @@ def summarize(rows: list[dict], audio_pipelines: list[dict]) -> dict:
     return {
         "row_count": len(rows),
         "status_counts": dict(sorted(status_counts.items())),
+        "performance_mode_counts": dict(sorted(Counter(
+            row.get("performance", {}).get("mode", "missing") for row in rows
+        ).items())),
         "supported_count": len(supported_rows),
         "deferred_count": len(deferred_rows),
         "unsupported_count": len(unsupported_rows),
@@ -81,13 +84,27 @@ def build_markdown(data: dict, summary: dict) -> str:
         lines.extend(markdown_table(blocker_rows))
         lines.append("")
 
+    lines.extend(["## Major Platform / Host Performance Coverage", ""])
+    coverage = [["Platform", "Unity", "Godot", "Native"]]
+    for platform_name in ("windows", "macos", "ios", "android"):
+        cells = [platform_name]
+        for product in ("unity", "godot", "standalone"):
+            matches = [row for row in rows if row.get("product") == product
+                       and row.get("platform") == platform_name and row.get("mode") == "non-vr"
+                       and row.get("status") == "supported" and row.get("renderer") != "preflight"]
+            cells.append("; ".join(f"{row['renderer']}: {row.get('performance', {}).get('mode', 'missing')}"
+                                   for row in matches) or "No supported runtime row")
+        coverage.append(cells)
+    lines.extend(markdown_table(coverage))
+    lines.extend(["", "Modes describe configured collection, not a passing speed result.", ""])
     lines.append("## Matrix Rows")
-    table = [["Row", "Status", "Hosted Gate", "Hardware Gate", "Baseline"]]
+    table = [["Row", "Status", "Performance", "Hosted Gate", "Hardware Gate", "Baseline"]]
     for row in rows:
         table.append(
             [
                 row_key(row),
                 str(row.get("status", "")),
+                str(row.get("performance", {}).get("mode", "missing")),
                 str(row.get("hosted_gate") or ""),
                 str(row.get("hardware_gate") or ""),
                 str(row.get("baseline") or ""),
@@ -153,6 +170,7 @@ def main() -> int:
                 "hosted_gate": row.get("hosted_gate"),
                 "hardware_gate": row.get("hardware_gate"),
                 "baseline": row.get("baseline"),
+                "performance": row.get("performance"),
                 "owner_decision": row.get("owner_decision", ""),
                 "promotion_criteria": row.get("promotion_criteria", ""),
             }

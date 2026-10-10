@@ -551,6 +551,23 @@ jobs:
     - name: Smoke macOS Metal standalone viewer
       run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
 
+    - name: Measure native macOS Metal rendered-frame cadence
+      timeout-minutes: 3
+      run: >
+        python3 tests/tools/run_frame_sample.py
+        --product standalone --graphics-api Metal --stop-after-sample
+        --output-dir build/macos/performance
+        -- "$PWD/build/macos/viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal"
+        "$PWD/exampleImmFiles/sample1.imm"
+
+    - name: Upload native macOS performance evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: NativeMacOSPerformance
+        path: build/macos/performance
+        if-no-files-found: warn
+
     - name: Validate macOS Metal live editing
       run: cmake --build build/macos --target validateAppImmViewerMetalLiveEdit --config Release
 
@@ -693,6 +710,7 @@ jobs:
         ditto "$app" "$staging/appImmViewerMetal.app"
         mkdir -p "$staging/validation"
         cp build/macos/metal-validation-captures/static.ppm "$staging/validation/macos-metal-static.ppm"
+        cp -R build/macos/performance "$staging/validation/performance"
         cp build/macos/face-orientation-captures/face-orientation-status.json "$staging/validation/face-orientation-status.json"
         mkdir -p "$staging/validation/captures/face-orientation"
         cp build/macos/face-orientation-captures/metal.png "$staging/validation/captures/face-orientation/metal.png"

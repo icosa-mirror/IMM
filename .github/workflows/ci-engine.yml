@@ -295,6 +295,9 @@ jobs:
       - name: Prepare Unity macOS Metal artifact directory
         run: mkdir -p artifacts/unity-macos-metal-composition build/unity-smoke/macos-metal
 
+      - name: Install inactive Unity performance probe in CI checkout
+        run: python3 tests/tools/prepare_unity_ci_project.py --output code/ImmUnitySampleProject --install-performance-probe-only
+
       - name: Build Unity macOS Metal smoke player and run project Play-button smoke
         id: unity_macos_metal_player_build
         timeout-minutes: 25
@@ -534,6 +537,17 @@ jobs:
             --require "[IMM_UNITY_SMOKE] scene composition overlay probe passed" \
             --require "[IMM_UNITY_SMOKE] capture=" \
             --output artifacts/unity-macos-metal-composition/ordered-overlay-log-contract.json
+
+      - name: Measure Unity Metal rendered-frame cadence
+        timeout-minutes: 3
+        run: |
+          app="$PWD/build/unity-smoke/macos-metal/urp/ImmUnityUrpSmoke.app"
+          executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
+          python3 tests/tools/run_frame_sample.py \
+            --product unity --graphics-api Metal --render-requests \
+            --output-dir artifacts/unity-macos-metal-composition/performance \
+            -- "$app/Contents/MacOS/$executable" -batchmode -force-metal \
+            -logFile "$PWD/artifacts/unity-macos-metal-composition/performance/player.log"
 
       - name: Validate packaged URP Metal rendering and lifecycle
         if: always()
@@ -795,6 +809,9 @@ jobs:
           nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-windows-directx-player/memory-directx.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-windows-directx-player/memory-directx-monitor.log 2>&1 &
           echo $! > artifacts/unity-windows-directx-player/memory-directx.pid
 
+      - name: Install inactive Unity performance probe in CI checkout
+        run: python3 tests/tools/prepare_unity_ci_project.py --output code/ImmUnitySampleProject --install-performance-probe-only
+
       - name: Build Unity DirectX smoke player
         id: unity_directx_player_build
         timeout-minutes: 25
@@ -933,6 +950,16 @@ jobs:
           } finally {
             $env:IMM_UNITY_D3D12_LIFECYCLE_SMOKE = $previousLifecycleFlag
           }
+
+      - name: Measure Unity D3D12 rendered-frame cadence
+        timeout-minutes: 3
+        shell: pwsh
+        run: >
+          python tests/tools/run_frame_sample.py
+          --product unity --graphics-api Direct3D12 --render-requests
+          --output-dir artifacts/unity-windows-directx-composition/performance
+          -- "$PWD/artifacts/unity-windows-directx-composition/player/urp/ImmUnityUrpSmoke.exe"
+          -batchmode -force-d3d12 -logFile "$PWD/artifacts/unity-windows-directx-composition/performance/player.log"
 
       - name: Verify configured Unity D3D12 URP scene
         timeout-minutes: 3

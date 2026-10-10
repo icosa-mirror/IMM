@@ -124,11 +124,26 @@ def strip_android_xr_manifest(project: Path) -> None:
     document.write(manifest, encoding="utf-8", xml_declaration=True)
 
 
-def prepare_project(source: Path, output: Path, preserve_xr: bool = False) -> None:
+def install_performance_probe(output: Path, auto_start: bool = False) -> None:
+    probe = Path(__file__).resolve().parents[1] / "unity" / "ImmPerformanceProbe.cs"
+    shutil.copy2(probe, output / "Assets" / "Scripts" / probe.name)
+    builder = probe.parent / "Editor" / "ImmPerformanceBuild.cs"
+    shutil.copy2(builder, output / "Assets" / "Editor" / builder.name)
+    if auto_start:
+        resources = output / "Assets" / "Resources"
+        resources.mkdir(parents=True, exist_ok=True)
+        (resources / "ImmPerformanceProbe.json").write_text(
+            '{"warmup_seconds":2,"requested_seconds":5,"quit_after_sample":true}\n', encoding="utf-8"
+        )
+
+
+def prepare_project(source: Path, output: Path, preserve_xr: bool = False, performance_probe: bool = False) -> None:
     if output.exists():
         shutil.rmtree(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     copytree(source, output)
+    if performance_probe:
+        install_performance_probe(output, auto_start=True)
     if not preserve_xr:
         for rel in EXCLUDED_ASSET_PATHS:
             remove_path(output / rel)
@@ -140,6 +155,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path("code/ImmUnitySampleProject"))
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--performance-probe", action="store_true", help="Install an opt-in normal-scene FPS probe in this temporary project only.")
+    parser.add_argument("--install-performance-probe-only", action="store_true", help="Add the inactive probe to an existing CI checkout without replacing the project.")
     parser.add_argument(
         "--preserve-xr",
         action="store_true",
@@ -157,7 +174,10 @@ def main() -> int:
     if args.preserve_xr and not (source / "Assets" / "Scenes" / "SampleSceneVR.unity").is_file():
         raise FileNotFoundError(f"Unity source project is missing SampleSceneVR.unity: {source}")
 
-    prepare_project(source, output, preserve_xr=args.preserve_xr)
+    if args.install_performance_probe_only:
+        install_performance_probe(output)
+    else:
+        prepare_project(source, output, preserve_xr=args.preserve_xr, performance_probe=args.performance_probe)
     print(f"Prepared Unity CI project: {output}")
     return 0
 

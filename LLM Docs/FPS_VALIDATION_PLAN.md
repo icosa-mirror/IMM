@@ -56,10 +56,21 @@ investigations, not rollout prerequisites. Do not rank unlike devices or CI runn
    includes physical iOS and Android devices and real GPUs on Windows and macOS.
    A local hardware baseline is useful but does not fill an absent CI hardware gate.
 
-### Implementation checkpoint (2026-10-10)
+### Current task boundary
 
-1. Matrix rows now declare performance coverage explicitly. Runtime lanes remain
-   `not_implemented` until collection is wired into CI.
+The immediate task is to check the existing CI targets on the four major
+platforms for degenerate performance, across the three hosts, and then pause.
+Use the available CI runners and device lanes. Identify simulator and software
+renderer results accurately; obtaining additional physical devices is follow-up
+coverage, not a prerequisite for this task's stopping point. This boundary does
+not claim that simulator results establish physical-device performance.
+
+### Implementation checkpoint (2026-10-11)
+
+1. Matrix rows now declare performance coverage explicitly, and audit reports show
+   the platform/host grid. Six Windows/macOS runtime rows have report-only
+   collection wired; their first CI measurements are pending. Other runtime rows
+   remain `not_implemented` until wired.
 2. The native viewer has an opt-in raw frame collector enabled by
    `IMM_PERFORMANCE_OUTPUT`. It samples the normal mono render loop after two
    seconds of warm-up for five seconds, counting frames with IMM draw work.
@@ -68,9 +79,17 @@ investigations, not rollout prerequisites. Do not rank unlike devices or CI runn
 3. The Windows native build and focused verifier tests passed. A local normal
    Vulkan sample measured approximately 357 FPS at 1280x720 on an RTX 4090.
    This is an initial measurement, not a calibrated CI target.
-4. Unity/Godot collectors, workload and hardware attribution, CI collection,
-   reporting and calibrated gates remain unfinished. No CI performance protection
-   is claimed by this checkpoint.
+4. Unity and Godot probes live under `tests`, outside the user projects. Unity's
+   hidden CI mode issues one full-size render request per engine tick and labels
+   this separately from normal window FPS. Collection does not perform per-frame
+   readback or add GPU waits. The runner retains raw samples, logs, input hashes
+   and a separate verdict; missing or invalid enabled evidence fails the lane.
+5. Exercising the delivered Unity scene exposed its missing saved `ImmCamera`
+   component. The saved main and VR cameras now opt into URP, and the defaults
+   command handles a fresh unnamed Editor scene. The corrected normal Windows
+   sample produced valid approximately 60 FPS evidence with v-sync enabled.
+6. iOS/Android collection and speed calibration remain unfinished. No completed
+   cross-platform performance protection is claimed by this checkpoint.
 
 ## Coverage and Gating Policy
 

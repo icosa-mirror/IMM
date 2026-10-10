@@ -333,6 +333,16 @@ jobs:
         shell: pwsh
         run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -DurationSeconds 420 -PresentSeconds 120 -MaxFrame 7200
 
+      - name: Measure native Vulkan rendered-frame cadence
+        timeout-minutes: 3
+        shell: pwsh
+        run: >
+          python tests/tools/run_frame_sample.py
+          --product standalone --graphics-api Vulkan --stop-after-sample
+          --cwd code/appImmViewer/exe
+          --output-dir artifacts/windows-standalone-vulkan/performance
+          -- "$PWD/code/appImmViewer/exe/appImmViewer_Release.exe" settings-vulkan-smoke.json
+
       - name: Capture and classify Vulkan face orientation
         shell: pwsh
         run: |
@@ -857,6 +867,16 @@ jobs:
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
           exit 0
 
+      - name: Measure normal Godot Vulkan frame cadence
+        timeout-minutes: 3
+        shell: pwsh
+        run: >
+          python tests/tools/run_frame_sample.py
+          --product godot --graphics-api vulkan
+          --output-dir artifacts/godot-smoke-windows-vulkan/performance
+          -- $env:GODOT_EXE --path code/ImmGodotSampleProject
+          --script "$PWD/tests/godot/performance_probe.gd"
+
       - name: Run Godot project Run-button smoke
         id: godot_sample_play
         continue-on-error: true
@@ -1310,6 +1330,15 @@ jobs:
           cp "$native" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib
           cp "$extension" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib
           cp "$native" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib
+
+      - name: Measure normal Godot Metal frame cadence
+        timeout-minutes: 3
+        run: >
+          python3 tests/tools/run_frame_sample.py
+          --product godot --graphics-api metal
+          --output-dir artifacts/godot-smoke-macos-metal/performance
+          -- "$GODOT_EXE" --path code/ImmGodotSampleProject
+          --rendering-driver metal --script "$PWD/tests/godot/performance_probe.gd"
 
       - name: Run Godot Metal visual smoke
         continue-on-error: true

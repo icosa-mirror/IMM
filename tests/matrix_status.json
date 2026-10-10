@@ -140,8 +140,8 @@
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
       "reason": "Hosted workflow has an opt-in GPU smoke and CI GPU Matrix defines the Windows Vulkan lane against the committed Windows DirectX sample1 reference capture.",
       "performance": {
-        "mode": "not_implemented",
-        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+        "mode": "report_only",
+        "reason": "Short rendered-frame collection is wired into the existing CI lane; speed limits are not calibrated. Software-renderer results do not establish physical-device performance."
       }
     },
     {
@@ -283,8 +283,8 @@
       "baseline": "tests/baselines/render/macos-standalone-metal-sample1.json",
       "reason": "Hosted macOS CI builds the Metal app, runs validation, and uploads ImmViewer-macOS.",
       "performance": {
-        "mode": "not_implemented",
-        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+        "mode": "report_only",
+        "reason": "Short rendered-frame collection is wired into the existing CI lane; speed limits are not calibrated. Software-renderer results do not establish physical-device performance."
       }
     },
     {
@@ -329,8 +329,8 @@
       "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
       "reason": "CI Engine Matrix builds a same-commit Windows DirectX Unity smoke player, runs it on a hosted Windows runner, validates render parity, and records full-depth composition status separately.",
       "performance": {
-        "mode": "not_implemented",
-        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+        "mode": "report_only",
+        "reason": "Short rendered-frame collection is wired into the existing CI lane; speed limits are not calibrated. Software-renderer results do not establish physical-device performance."
       }
     },
     {
@@ -376,8 +376,8 @@
       "baseline": "tests/baselines/render/unity-macos-metal-sample1.json",
       "reason": "CI Engine Matrix requires a committed-reference render comparison plus successful full-depth and ordered-overlay probes from the same Unity Metal player.",
       "performance": {
-        "mode": "not_implemented",
-        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+        "mode": "report_only",
+        "reason": "Short rendered-frame collection is wired into the existing CI lane; speed limits are not calibrated. Software-renderer results do not establish physical-device performance."
       }
     },
     {
@@ -485,8 +485,8 @@
       "baseline": "tests/baselines/render/godot-windows-vulkan-sample1.json",
       "reason": "GPU smoke is gated in build.yml and defined in CI GPU Matrix on GitHub-hosted Windows against the committed Windows DirectX sample1 reference capture with a Godot-specific render parity contract.",
       "performance": {
-        "mode": "not_implemented",
-        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+        "mode": "report_only",
+        "reason": "Short rendered-frame collection is wired into the existing CI lane; speed limits are not calibrated. Software-renderer results do not establish physical-device performance."
       }
     },
     {
@@ -545,8 +545,8 @@
       "baseline": "tests/baselines/render/macos-metal-sample1.json",
       "reason": "Hosted CI builds macOS Godot artifacts and CI GPU Matrix runs the visual Metal smoke on a hosted macOS runner.",
       "performance": {
-        "mode": "not_implemented",
-        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+        "mode": "report_only",
+        "reason": "Short rendered-frame collection is wired into the existing CI lane; speed limits are not calibrated. Software-renderer results do not establish physical-device performance."
       }
     },
     {
