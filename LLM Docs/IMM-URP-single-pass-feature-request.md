@@ -24,40 +24,40 @@ automating headset VR validation does not exempt non-VR changes from CI.
 
 ## Current status — 2026-10-10
 
-1. Last confirmed full-green source: `e528b13c`; synchronized runtime binaries:
-   `f6f8ec4e`. Full [run 38058944004](https://github.com/icosa-mirror/IMM/actions/runs/38058944004)
-   passed the required non-VR platform gates. Later local fixes have not yet
-   replaced that hosted checkpoint.
-2. Manual sample use exposed gaps despite the passing offscreen CI probes:
-   Windows still defaulted to D3D11, runtime sample setup replaced saved settings,
-   bounds-based camera framing put the viewer outside the sky, and normal D3D12
-   Game view attachments could lack native wrappers. Saved URP/D3D12 defaults,
-   camera registration, shared authored-viewpoint loading and attachment
-   materialization are now committed. The rebuilt URP sample renders visible
-   content at its authored viewpoint with no current rendering exceptions.
-   These changes still require full hosted validation; the original feature-panel
-   scene and VR scene have not yet been manually rechecked under the saved default.
+1. Last confirmed full-matrix green source: `f2a96640`; synchronized runtime
+   binaries: `1e1b1ea0`. [Run 38053085729](https://github.com/icosa-mirror/IMM/actions/runs/38053085729)
+   passed the required non-VR platform gates. The later successful `e528b13c`
+   run did not execute the full composition matrix and does not supersede this
+   checkpoint. The latest implementation still requires full hosted validation.
+2. Manual sample use exposed gaps despite passing offscreen CI probes: Windows
+   defaulted to D3D11, runtime setup replaced saved settings, bounds-based camera
+   framing put the viewer outside the sky, and normal D3D12 Game view attachments
+   could lack native wrappers. Saved URP/D3D12 defaults, camera registration,
+   shared authored-viewpoint loading and attachment materialization are committed.
+   The URP sample now renders visible content at its authored viewpoint locally.
 3. D3D12 mono and synthetic two-slice stereo, Metal mono, Vulkan mono and the
-   borrowed-device two-view adapter are implemented. Native and Unity corpus
-   checks establish rendering correctness within their tested scopes, not actual
-   headset correctness or satisfactory interactive performance.
-4. Interactive Windows performance remains unresolved. The RTX 4090 Editor
-   profile initially spent approximately 60-70 ms in the native rendering event.
-   Per-draw descriptor heap allocation was a measured contributor. Commit
-   `30775608` reuses private heaps only after their frame fence completes; its
-   local 38-draw binding benchmark falls from approximately 13 ms to 0.14 ms
-   after warmup, and the existing native submission readback passes. The rebuilt
-   sample still spends approximately 48-56 ms in the native event. Buffer uploads
-   remain under investigation; do not claim the performance problem is fixed.
-5. Remaining work includes fixing interactive performance, running full non-VR
-   CI on these new commits and covering the ordinary automatic Game view route
-   which the offscreen probes missed. Actual Windows OpenXR and Quest Vulkan
-   headset pose/per-eye checks and GPU capture proving one scene draw sequence
-   remain outstanding. Do not expand optional validation in place of fixing
-   observed failures or obtaining the required human headset checks.
+   borrowed-device two-view adapter are implemented. These results do not establish
+   actual headset correctness. Run `38064166660` exposed premature native SetTime
+   calls and a smoke check that incorrectly rejected inherited URP settings.
+   Commit `57a343ba` waits for native loading and reads the effective pipeline;
+   managed compilation passes, but hosted confirmation remains pending.
+4. The observed Windows performance regression is fixed locally. The RTX 4090
+   Editor initially spent approximately 60-70 ms in the native rendering event.
+   Commit `30775608` reuses descriptor heaps after frame completion. Commit
+   `6445b1f0` also reuses constant-buffer upload versions only after GPU completion
+   and release of their binding leases. With rebuilt plugin `4b666d93`, the same
+   URP sample measures approximately 240-260 fps and an average native rendering
+   event of 0.605 ms across eight captured frames. The existing D3D12 submission
+   GPU readback passes, and the rendered sample was visually inspected. This is
+   local Editor evidence, not a claim about headset performance.
+5. Remaining work is full non-VR CI validation of the latest fixes and actual
+   Windows OpenXR and Quest Vulkan headset pose/per-eye checks, including GPU
+   capture proving one scene draw sequence. The user requested one main sample
+   scene, with specialized CI fixtures outside the user project; that restructuring
+   is deferred until the current fixes and validation are complete.
+6. Pipeline installation and the recommended saved Unity settings are committed
+   with explicit user approval. The separate Godot review handoff is also committed.
 
-6. The unrelated dirty sample OpenXR settings, Package Manager settings and Godot
-   review handoff remain untouched and outside the validated checkpoint.
 7. Progress entries are chronological evidence. Pending statements in older entries
    describe those checkpoints; this section and the latest entry govern current
    status. Fix CI regressions before continuing feature implementation. Use the
