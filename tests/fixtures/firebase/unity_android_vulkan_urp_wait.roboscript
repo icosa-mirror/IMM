@@ -1,0 +1,6 @@
+[
+  {
+    "eventType": "WAIT",
+    "delayTime": 180000
+  }
+]
