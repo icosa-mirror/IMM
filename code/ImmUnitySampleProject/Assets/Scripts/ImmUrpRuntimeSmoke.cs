@@ -85,6 +85,17 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         // CI player's hidden window does not receive automatic camera rendering.
         request = new UniversalRenderPipeline.SingleCameraRequest { destination = target };
         float deadline = Time.realtimeSinceStartup + 30;
+        while (!sample.IsReady && Time.realtimeSinceStartup < deadline) yield return null;
+        Require(sample.IsReady, "The shared sample player did not finish its initial viewpoint setup.");
+        // The interactive sample uses authored viewpoints. Depth fixtures deliberately
+        // frame the whole document so their front/rear quads surround its surfaces.
+        var initialBounds = sample.Document.GetBoundingBox();
+        float initialRadius = Mathf.Max(initialBounds.extents.magnitude, 0.1f);
+        documentCamera.nearClipPlane = initialRadius * 0.01f;
+        documentCamera.farClipPlane = initialRadius * 8;
+        documentCamera.transform.position = initialBounds.center + Vector3.back * initialRadius * 3;
+        documentCamera.transform.LookAt(initialBounds.center);
+        sample.Document.SetTime(3 * 12600, 0);
         int visible;
         do
         {

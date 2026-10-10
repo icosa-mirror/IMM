@@ -53,6 +53,17 @@ namespace ImmPlayer
         private Coroutine _chapterSyncCoroutine;
         private Coroutine _spawnAreaApplyCoroutine;
 
+        public ImmDocument Document => _currentDocument;
+        public string LoadedDocumentPath { get; private set; }
+        public Camera DocumentCamera => targetCamera;
+        public bool InitialViewpointReady { get; private set; }
+        public void SetViewingOrigin(Transform origin) => spawnAreaTargetTransform = origin;
+
+        private bool UsesRenderGraph =>
+            GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset &&
+            targetCamera != null && targetCamera.TryGetComponent<ImmCamera>(out var registration) &&
+            registration.isActiveAndEnabled;
+
         private void Start()
         {
             _useScriptableRenderPipeline = GraphicsSettings.currentRenderPipeline != null;
@@ -99,8 +110,9 @@ namespace ImmPlayer
 
         private IEnumerator LoadDocumentAfterInit()
         {
-            // Wait for end of frame to ensure ImmPlayerManager.Start() has completed
-            yield return new WaitForEndOfFrame();
+            // Let the manager's Start run. End-of-frame waits do not resume in
+            // a batch Editor, although the same saved scene must work there.
+            yield return null;
 
             if (!string.IsNullOrEmpty(documentPath))
             {
@@ -110,7 +122,7 @@ namespace ImmPlayer
 
         private void Update()
         {
-            if (_currentDocument != null && _currentDocument.IsLoaded)
+            if (!UsesRenderGraph && _currentDocument != null && _currentDocument.IsLoaded)
             {
                 // Update camera matrices each frame
                 ImmPlayerManager.Instance.SetCameraMatrices(cameraId, targetCamera, stereoMode);
@@ -134,7 +146,7 @@ namespace ImmPlayer
 
         private void OnEndCameraRendering(ScriptableRenderContext context, Camera camera)
         {
-            if (!_useScriptableRenderPipeline)
+            if (!_useScriptableRenderPipeline || UsesRenderGraph)
                 return;
 
             if (camera != targetCamera)
@@ -206,6 +218,8 @@ namespace ImmPlayer
                 File.WriteAllBytes(destPath, data);
                 Log($"Copied to: {destPath}");
 
+                LoadedDocumentPath = destPath;
+                InitialViewpointReady = false;
                 _currentDocument = ImmPlayerManager.Instance.LoadDocument(destPath);
                 OnDocumentLoaded(fileName);
             }
@@ -244,6 +258,8 @@ namespace ImmPlayer
             Log($"Loading IMM file from FileSystem: {absolutePath}");
 
             // Load new document
+            LoadedDocumentPath = absolutePath;
+            InitialViewpointReady = false;
             _currentDocument = ImmPlayerManager.Instance.LoadDocument(absolutePath);
             OnDocumentLoaded(filePath);
         }
@@ -278,6 +294,7 @@ namespace ImmPlayer
         /// </summary>
         public void UnloadDocument()
         {
+            InitialViewpointReady = false;
             if (_currentDocument != null)
             {
                 if (_initialSpawnAreaCoroutine != null)
@@ -674,6 +691,7 @@ namespace ImmPlayer
             }
 
             ApplySpawnAreaViewpoint(resolvedSpawnAreaId);
+            InitialViewpointReady = true;
             _spawnAreaApplyCoroutine = null;
         }
 
@@ -817,6 +835,7 @@ namespace ImmPlayer
             }
 
             _initialSpawnAreaCoroutine = null;
+            InitialViewpointReady = true;
         }
 
         private void OnDestroy()

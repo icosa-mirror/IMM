@@ -270,6 +270,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1748574689}
   - component: {fileID: 1748574688}
+  - component: {fileID: 1748574690}
   m_Layer: 0
   m_Name: IMM URP Sample
   m_TagString: Untagged
@@ -289,8 +290,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 90de85c2b1688d94eb0a69ce2b51b7e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ImmUrpSample
-  pipeline: {fileID: 11400000, guid: 1256381f76bd3de48b69fc2ea76e3239, type: 2}
-  documentCamera: {fileID: 1734099206}
 --- !u!4 &1748574689
 Transform:
   m_ObjectHideFlags: 0
@@ -306,6 +305,30 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1748574690
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1748574687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 79201efbb2699ce42b5ccc2f6b61d4cc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ImmPlayer.ImmPlayerExample
+  loadSource: 1
+  documentPath: sample1.imm
+  loadOnStart: 1
+  autoPlay: 1
+  volume: 1
+  targetCamera: {fileID: 1734099206}
+  cameraId: 0
+  stereoMode: 0
+  applySpawnAreaToCamera: 1
+  spawnAreaTargetTransform: {fileID: 0}
+  keepCurrentViewHeightForFloorAreas: 1
+  constrainViewpointRotationToYawInXR: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

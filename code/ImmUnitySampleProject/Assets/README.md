@@ -2,11 +2,22 @@
 
 This directory contains C# wrapper classes for the IMM Unity native plugin.
 
+## Open and play
+
+1. Open `code/ImmUnitySampleProject` with Unity **6000.6.0f1** and let assets import.
+2. Open `Assets/Scenes/SampleScene.unity` and press **Play**.
+
+The project saves URP as its default pipeline and D3D12 as its Windows graphics
+API. The renderer feature and camera registration are saved in the assets;
+no setup menu or runtime pipeline switch is required. Sample documents and
+native plugins are included. Playback starts at the document's authored viewpoint.
+
 ## Sample scenes
 
 | Scene | What it exercises |
 |---|---|
 | `Assets/Scenes/SampleScene.unity` | `ImmFeatureExamples`: player load/unload, playback, chapters, spawn areas, layer list and layer overrides. |
+| `Assets/Scenes/SampleSceneURP.unity` | A minimal player using the same document loader and authored viewpoint, also used by the RenderGraph validation harness. |
 | `Assets/Scenes/SampleSceneVR.unity` | The same feature panel plus `XrSceneBootstrap`/`OpenXRFlyRig` for XR. |
 | `Assets/Scenes/StrokeReaderSampleScene.unity` | `ImmStrokeReaderExample`: the stroke reader package without the player - document info, layers, drawings, strokes and points, authoring layers with animation keys and frame buffers, spawn-area viewpoints, picture pixels, chapters, the SharpQuill adapter and the plugin build id. |
 
@@ -16,7 +27,7 @@ of the CI player builds; open it directly, or regenerate it with
 `-batchmode -quit -executeMethod ImmPlayer.EditorTools.StrokeReaderSampleSceneBuilder.CreateSampleScene`).
 
 Both the stroke reader scene and the playback scenes pick their document from
-`Assets/StreamingAssets` (a sample `.imm` file must be copied there), and the stroke
+`Assets/StreamingAssets` (sample documents are included), and the stroke
 reader example also accepts an explicit file path in the Inspector.
 
 ## Files
@@ -26,7 +37,10 @@ reader example also accepts an explicit file path in the Inspector.
 - **ImmDocument.cs** - Represents a loaded IMM document with playback controls
 - **ImmPlayerExample.cs** - Example component demonstrating usage
 
-## Quick Setup (Automated)
+## Rebuilding native plugins (development)
+
+These commands are for changes to native source. They are not required to open
+and play the checked-in sample project.
 
 From the repo root, run one of these commands:
 
@@ -47,13 +61,7 @@ This does all of the following:
    - `Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
    - `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
 
-## Unity MCP Setup
-
-This sample project includes the `com.coplaydev.unity-mcp` package in `Packages/manifest.json` so Codex and other MCP clients can inspect scenes, read console errors, run tests, and capture screenshots through the Unity Editor.
-
-After pulling this project, focus Unity while it is not in Play mode so Package Manager can resolve and import the package. The MCP setup wizard should open automatically; it can also be opened from **Window > MCP for Unity**. Confirm Python/uv dependencies in the wizard, then configure the MCP client from that window.
-
-## Manual Setup
+## Integration into another project
 
 ### 1. Copy Files to Unity Project
 

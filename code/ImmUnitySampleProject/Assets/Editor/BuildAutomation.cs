@@ -575,6 +575,13 @@ namespace ImmPlayer.Editor
             SessionState.SetString(EditorSmokeNativeLogPathKey, nativeLogPath);
             SessionState.SetString(EditorSmokeStartTicksKey, DateTime.UtcNow.Ticks.ToString());
 
+            // Retain the historical Built-in visual baseline as an explicit CI
+            // fixture; the downloadable project's saved default is URP.
+            if (scenePath != ImmUrpSampleSetup.ScenePath)
+            {
+                GraphicsSettings.defaultRenderPipeline = null;
+                QualitySettings.renderPipeline = null;
+            }
             EditorSceneManager.OpenScene(scenePath);
             ConfigureSmokeMsaaIfRequested();
             ConfigureEditorOverlayFixtureIfRequested();
@@ -758,7 +765,23 @@ namespace ImmPlayer.Editor
                 extraScriptingDefines = extraScriptingDefines ?? Array.Empty<string>()
             };
 
-            BuildReport report = BuildPipeline.BuildPlayer(buildOptions);
+            var previousPipeline = GraphicsSettings.defaultRenderPipeline;
+            var previousQualityPipeline = QualitySettings.renderPipeline;
+            BuildReport report;
+            try
+            {
+                if (!selectedScenes.Contains(ImmUrpSampleSetup.ScenePath))
+                {
+                    GraphicsSettings.defaultRenderPipeline = null;
+                    QualitySettings.renderPipeline = null;
+                }
+                report = BuildPipeline.BuildPlayer(buildOptions);
+            }
+            finally
+            {
+                GraphicsSettings.defaultRenderPipeline = previousPipeline;
+                QualitySettings.renderPipeline = previousQualityPipeline;
+            }
             if (report.summary.result != BuildResult.Succeeded)
             {
                 throw new InvalidOperationException($"{label} build failed: {report.summary.result}");
