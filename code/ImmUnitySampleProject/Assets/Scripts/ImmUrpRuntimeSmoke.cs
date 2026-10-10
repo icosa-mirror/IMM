@@ -359,7 +359,6 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             yield return null;
             RenderPipeline.SubmitRenderRequest(documentCamera, request);
         }
-        long frozenTime = document.GetPlayTime();
         var shader = Resources.Load<Shader>("ImmUrpDepthProbe");
         Require(shader != null && shader.isSupported, "URP depth probe shader is unavailable.");
         var material = new Material(shader);
@@ -399,7 +398,11 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     RenderPipeline.SubmitRenderRequest(documentCamera, request);
                 }
                 Require(renderError == null, $"Unity reported: {renderError}");
-                Require(document.GetPlayTime() == frozenTime, $"Depth fixture time advanced during comparison: {fixture}.");
+                // Still-document roots need not be timelines: their play-time counter
+                // can advance while MngrPlayer correctly holds animation paused.
+                var playback = document.GetStateInfo().Playback;
+                Require(playback == ImmDocument.PlaybackState.Paused || playback == ImmDocument.PlaybackState.Finished,
+                    $"Depth fixture resumed during comparison: {fixture}.");
                 int visible = 0;
                 long brightness = 0;
                 foreach (var pixel in ReadTargetPixels(target, $"depth-{fixture}-{phase}-{samples}x"))
