@@ -192,13 +192,17 @@ namespace ImmPlayer
         }
 
         /// <summary>
-        /// Load from StreamingAssets using UnityWebRequest (works on Android)
+        /// Load a local StreamingAssets file, extracting it from the APK on Android.
         /// </summary>
         private IEnumerator LoadFromStreamingAssets(string fileName)
         {
             string streamingPath = Path.Combine(Application.streamingAssetsPath, fileName);
             Log($"Loading IMM file from StreamingAssets: {streamingPath}");
 
+#if !UNITY_ANDROID || UNITY_EDITOR
+            LoadFromFileSystem(streamingPath);
+            yield break;
+#else
             using (UnityWebRequest request = UnityWebRequest.Get(streamingPath))
             {
                 yield return request.SendWebRequest();
@@ -223,6 +227,7 @@ namespace ImmPlayer
                 _currentDocument = ImmPlayerManager.Instance.LoadDocument(destPath);
                 OnDocumentLoaded(fileName);
             }
+#endif
         }
 
         /// <summary>
@@ -806,7 +811,8 @@ namespace ImmPlayer
             if (_currentDocument == null)
                 yield break;
 
-            while (_currentDocument != null && !_currentDocument.IsSequenceReady())
+            while (_currentDocument != null &&
+                   (!_currentDocument.IsLoaded || !_currentDocument.IsSequenceReady()))
             {
                 yield return null;
             }

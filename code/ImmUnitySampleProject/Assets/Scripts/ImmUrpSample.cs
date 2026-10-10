@@ -11,9 +11,10 @@ public sealed class ImmUrpSample : MonoBehaviour
     public ImmDocument Document => Player.Document;
     public string DocumentPath => Player.LoadedDocumentPath;
     public Camera DocumentCamera => Player.DocumentCamera;
-    public bool IsReady => Player.InitialViewpointReady;
+    public bool IsReady => Document != null && Document.IsLoaded && Player.InitialViewpointReady;
     private ImmPlayerExample Player => player != null ? player : player = GetComponent<ImmPlayerExample>();
     public void SetViewingOrigin(Transform origin) => Player.SetViewingOrigin(origin);
+    public void UnloadDocument() => Player.UnloadDocument();
 
     private void Awake() => manager = ImmPlayerManager.Instance;
 

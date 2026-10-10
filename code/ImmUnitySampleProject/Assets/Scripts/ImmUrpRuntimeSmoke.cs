@@ -173,7 +173,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         }
         int documentId = sample.Document.DocumentId;
         Require(ImmNativePlugin.IsDocumentActive(documentId), "Sample document was already inactive before unload.");
-        manager.UnloadDocument(sample.Document);
+        sample.UnloadDocument();
         deadline = Time.realtimeSinceStartup + 30;
         while (ImmNativePlugin.IsDocumentActive(documentId) && Time.realtimeSinceStartup < deadline)
             yield return null;
