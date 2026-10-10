@@ -42,6 +42,10 @@ automating headset VR validation does not exempt non-VR changes from CI.
    sample backdrop from masking missing paint. All three local D3D12 CTests,
    sample managed compilation and VR harness contract checks pass. Full hosted
    confirmation remains pending; no later checkpoint is promoted to full green.
+   Subsequent run `38043793355` was cancelled after a Windows Vulkan startup kill
+   (exit 137), then fully rerun before the targeted-retry policy was implemented.
+   Existing post-exit diagnostics did not confirm OOM. The new live diagnostics
+   and bounded retry require their own hosted confirmation.
 3. D3D12 mono and synthetic two-slice stereo, Vulkan mono and the borrowed-device
    two-view adapter are implemented. Native paint/picture/model GPU readbacks pass;
    these do not prove complete all-content rendering through Unity or headset
@@ -65,9 +69,16 @@ automating headset VR validation does not exempt non-VR changes from CI.
    describe those checkpoints; this section and the latest entry govern current
    status. Fix CI regressions before continuing feature implementation. Use the
    `[CI VALIDATION]` trigger or explicitly dispatch `mode=full`, then inspect which
-   platform gates actually ran before claiming recovery. Cancel remaining jobs as soon as a required CI job fails, fix the reported cause,
-   and start a new full run. Keep monitoring at a realistic cadence; do not wait
-   for a known-failed run to complete.
+   platform gates actually ran before claiming recovery. Cancel a run when a source failure requires a new commit. Preserve independent
+   jobs for isolated infrastructure failures and retry only the affected job and
+   its dependents once. The Linux Unity builders now record live host pressure,
+   container memory peaks/cgroup OOM counters and Docker kill/exit events. The
+   Windows Vulkan startup-kill controller requires the observed initial-domain-
+   reload/exit-137 signature, no other independent failures, the current main
+   commit, and attempt 1. It retains original memory evidence by attempt and
+   records the retry in the Actions summary. A repeat remains a failure; this
+   recovery mechanism does not establish that the underlying kill cause is fixed.
+   Keep monitoring at a realistic cadence.
 
 ## Motivation
 
