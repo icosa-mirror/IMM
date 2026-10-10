@@ -98,6 +98,7 @@ HRESULT piDX12CommandContext::Begin(ID3D12GraphicsCommandList** commands, DWORD 
     if (FAILED(result)) return result;
     frame.retained.clear();
     frame.descriptorHeapCursor = 0;
+    frame.constantBufferCursor = 0;
     frame.completionValue = 0;
     result = frame.allocator->Reset();
     if (SUCCEEDED(result)) result = frame.commands->Reset(frame.allocator.Get(), nullptr);
@@ -162,6 +163,50 @@ HRESULT piDX12CommandContext::Transition(ID3D12Resource* resource, D3D12_RESOURC
     barrier.Transition.Subresource = subresource;
     mFrames[mFrameIndex].commands->ResourceBarrier(1, &barrier);
     return S_OK;
+}
+
+HRESULT piDX12CommandContext::UploadConstants(const void* data, size_t bytes, ConstantBuffer* buffer)
+{
+    if (!buffer) return E_POINTER;
+    buffer->reset();
+    if (!mRecording || mFailed) return E_UNEXPECTED;
+    if (!data || bytes == 0 || bytes > D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16 ||
+        bytes % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT != 0) return E_INVALIDARG;
+    auto& frame = mFrames[mFrameIndex];
+    size_t slot = frame.constantBufferCursor;
+    for (; slot < frame.constantBuffers.size(); ++slot)
+    {
+        const auto& cached = frame.constantBuffers[slot];
+        if (cached.use_count() == 1 && (*cached)->GetDesc().Width == bytes) break;
+    }
+    if (slot == frame.constantBuffers.size())
+    {
+        D3D12_RESOURCE_DESC description = {};
+        description.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        description.Width = bytes;
+        description.Height = description.DepthOrArraySize = description.MipLevels = 1;
+        description.SampleDesc.Count = 1;
+        description.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        D3D12_HEAP_PROPERTIES heap = {};
+        heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+        auto resource = std::make_shared<Microsoft::WRL::ComPtr<ID3D12Resource>>();
+        const HRESULT result = mDevice->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE,
+            &description, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(resource->GetAddressOf()));
+        if (FAILED(result)) return result;
+        frame.constantBuffers.push_back(std::move(resource));
+    }
+    std::swap(frame.constantBuffers[slot], frame.constantBuffers[frame.constantBufferCursor]);
+    auto& resource = frame.constantBuffers[frame.constantBufferCursor++];
+    void* mapped = nullptr;
+    const D3D12_RANGE noReads = {0, 0};
+    HRESULT result = (*resource)->Map(0, &noReads, &mapped);
+    if (FAILED(result)) return result;
+    std::memcpy(mapped, data, bytes);
+    const D3D12_RANGE written = {0, bytes};
+    (*resource)->Unmap(0, &written);
+    result = Retain(resource->Get());
+    if (SUCCEEDED(result)) *buffer = resource;
+    return result;
 }
 
 HRESULT piDX12CommandContext::UploadBuffer(const void* data, size_t bytes, ID3D12Resource** buffer)
@@ -367,6 +412,8 @@ HRESULT piDX12CommandContext::Shutdown()
         frame.retained.clear();
         frame.descriptorHeaps.clear();
         frame.descriptorHeapCursor = 0;
+        frame.constantBuffers.clear();
+        frame.constantBufferCursor = 0;
         frame.commands.Reset();
         frame.allocator.Reset();
         frame.completionValue = 0;

@@ -4,6 +4,7 @@
 #include <wrl/client.h>
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace ImmCore
@@ -38,6 +39,10 @@ public:
     // Callers supply any layout/padding required by their view (e.g. CBV alignment).
     // Intended for immutable geometry/data, not a per-frame streaming allocator.
     HRESULT UploadBuffer(const void* data, size_t bytes, ID3D12Resource** buffer);
+    using ConstantBuffer = std::shared_ptr<Microsoft::WRL::ComPtr<ID3D12Resource>>;
+    // An immutable constant-buffer version. The caller's lease prevents reuse
+    // while that version is still bound, even after its GPU frame completes.
+    HRESULT UploadConstants(const void* data, size_t bytes, ConstantBuffer* buffer);
     struct TextureData
     {
         const void* data;
@@ -65,6 +70,8 @@ private:
         std::vector<Microsoft::WRL::ComPtr<IUnknown>> retained;
         std::vector<Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> descriptorHeaps;
         size_t descriptorHeapCursor = 0;
+        std::vector<ConstantBuffer> constantBuffers;
+        size_t constantBufferCursor = 0;
         uint64_t completionValue = 0;
     };
 

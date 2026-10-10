@@ -106,6 +106,7 @@ struct piRendererDX12::State
     {
         std::vector<unsigned char> data;
         Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+        piDX12CommandContext::ConstantBuffer constantVersion;
         BufferUse use;
         UINT stride = 0;
         bool mapped = false;
@@ -186,13 +187,15 @@ struct piRendererDX12::State
         HRESULT result = standaloneUpload ? context.Begin(&uploadCommands) : S_OK;
         if (FAILED(result)) return result;
         Microsoft::WRL::ComPtr<ID3D12Resource> replacement;
+        piDX12CommandContext::ConstantBuffer constantVersion;
         if (buffer.use == BufferUse::Constant)
         {
             // CBV sizes are 256-byte aligned; the logical piBuffer retains its
             // original length so UpdateBuffer bounds do not include padding.
             auto padded = buffer.data;
             padded.resize((padded.size() + 255) & ~size_t(255), 0);
-            result = context.UploadBuffer(padded.data(), padded.size(), &replacement);
+            result = context.UploadConstants(padded.data(), padded.size(), &constantVersion);
+            if (SUCCEEDED(result)) replacement = *constantVersion;
         }
         else result = context.UploadBuffer(buffer.data.data(), buffer.data.size(), &replacement);
         if (standaloneUpload)
@@ -204,7 +207,11 @@ struct piRendererDX12::State
                 result = context.Submit(&completion);
             }
         }
-        if (SUCCEEDED(result)) buffer.resource = std::move(replacement);
+        if (SUCCEEDED(result))
+        {
+            buffer.resource = std::move(replacement);
+            buffer.constantVersion = std::move(constantVersion);
+        }
         return result;
     }
     piBuffer Create(const void* data, UINT amount, BufferUse use, UINT stride, bool mapped)
