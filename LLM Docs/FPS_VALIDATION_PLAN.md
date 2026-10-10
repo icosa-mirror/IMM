@@ -8,6 +8,13 @@ while visual correctness tests still pass. Publish attributable sustained frame
 measurements and fail representative-hardware lanes when calibrated limits are
 missed.
 
+The priority is detecting degenerate cases, not optimizing already acceptable
+performance. Use short sustained samples and loose calibrated floors to catch
+multi-fold slowdowns, stalls and update loops that render no IMM content. Small
+FPS differences do not justify optimization work or block acceptance. Start with
+mean FPS and proof of rendering; add a tail-latency gate only when an observed
+failure warrants it. Do not make detailed profiling a prerequisite.
+
 The primary coverage axes are platform and host:
 
 1. Platforms: Windows, macOS, iOS and Android.
@@ -48,6 +55,22 @@ investigations, not rollout prerequisites. Do not rank unlike devices or CI runn
    hardware coverage before claiming CI protects its runtime performance. This
    includes physical iOS and Android devices and real GPUs on Windows and macOS.
    A local hardware baseline is useful but does not fill an absent CI hardware gate.
+
+### Implementation checkpoint (2026-10-10)
+
+1. Matrix rows now declare performance coverage explicitly. Runtime lanes remain
+   `not_implemented` until collection is wired into CI.
+2. The native viewer has an opt-in raw frame collector enabled by
+   `IMM_PERFORMANCE_OUTPUT`. It samples the normal mono render loop after two
+   seconds of warm-up for five seconds, counting frames with IMM draw work.
+   `tests/tools/verify_frame_sample.py` checks validity and an optional local FPS
+   floor. This raw artifact does not yet provide the full evidence contract below.
+3. The Windows native build and focused verifier tests passed. A local normal
+   Vulkan sample measured approximately 357 FPS at 1280x720 on an RTX 4090.
+   This is an initial measurement, not a calibrated CI target.
+4. Unity/Godot collectors, workload and hardware attribution, CI collection,
+   reporting and calibrated gates remain unfinished. No CI performance protection
+   is claimed by this checkpoint.
 
 ## Coverage and Gating Policy
 

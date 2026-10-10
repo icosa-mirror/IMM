@@ -169,6 +169,28 @@ def main() -> int:
         if not str(row["reason"]).strip():
             errors.append(f"Row {key} must include a reason")
 
+        performance = row.get("performance")
+        if not isinstance(performance, dict) or performance.get("mode") not in {
+            "not_implemented", "not_applicable", "report_only", "gated"
+        }:
+            errors.append(f"Row {key} must declare an explicit performance mode")
+        else:
+            perf_mode = performance["mode"]
+            runtime = status == "supported" and row["mode"] != "application-build" and row["renderer"] != "preflight"
+            if runtime == (perf_mode == "not_applicable"):
+                errors.append(f"Row {key} has an incorrect performance applicability declaration")
+            if perf_mode in {"not_implemented", "not_applicable"} and not str(performance.get("reason", "")).strip():
+                errors.append(f"Row {key} must explain its performance coverage gap or inapplicability")
+            if perf_mode == "gated":
+                target = performance.get("minimum_mean_fps")
+                if isinstance(target, bool) or not isinstance(target, (int, float)) or not 0 < target < float("inf"):
+                    errors.append(f"Row {key} needs a positive finite minimum_mean_fps")
+                if performance.get("representative_hardware") is not True:
+                    errors.append(f"Row {key} cannot gate without representative hardware")
+            ceiling = performance.get("maximum_p95_frame_ms")
+            if ceiling is not None and (isinstance(ceiling, bool) or not isinstance(ceiling, (int, float)) or not 0 < ceiling < float("inf")):
+                errors.append(f"Row {key} maximum_p95_frame_ms must be positive and finite")
+
         baseline = row.get("baseline")
         if baseline:
             baseline_path = repo_root / baseline

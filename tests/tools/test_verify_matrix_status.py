@@ -62,7 +62,19 @@ def main() -> int:
         assert null_audio.returncode != 0, "null audio must fail matrix status verification"
         assert "expected 'AVFoundation'" in null_audio.stderr
 
-    print("Matrix status release policy tests passed")
+    for performance in (None, {"mode": "not_applicable", "reason": "Skip runtime"},
+                        {"mode": "gated", "minimum_mean_fps": 20}):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "matrix_status.json"
+            data = json.loads(source.read_text(encoding="utf-8"))
+            row = next(row for row in data["rows"] if row["product"] == "standalone"
+                       and row["platform"] == "windows" and row["mode"] == "non-vr")
+            row["performance"] = performance
+            temp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            invalid = run_verify(temp_path)
+            assert invalid.returncode != 0, "missing or unjustified performance coverage should fail"
+
+    print("Matrix status release and performance coverage policy tests passed")
     return 0
 
 

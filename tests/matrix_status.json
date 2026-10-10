@@ -123,7 +123,11 @@
       "hosted_gate": "Build / Windows",
       "hardware_gate": "CI GPU Matrix / Windows Standalone DirectX",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "Windows hosted CI builds the viewer, validates DirectX render metrics against the committed Windows DirectX sample1 reference capture, and uploads live DirectX captures as diagnostic evidence."
+      "reason": "Windows hosted CI builds the viewer, validates DirectX render metrics against the committed Windows DirectX sample1 reference capture, and uploads live DirectX captures as diagnostic evidence.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "standalone",
@@ -134,7 +138,11 @@
       "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
       "hardware_gate": "CI GPU Matrix / Windows Standalone Vulkan",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "Hosted workflow has an opt-in GPU smoke and CI GPU Matrix defines the Windows Vulkan lane against the committed Windows DirectX sample1 reference capture."
+      "reason": "Hosted workflow has an opt-in GPU smoke and CI GPU Matrix defines the Windows Vulkan lane against the committed Windows DirectX sample1 reference capture.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "standalone",
@@ -145,7 +153,11 @@
       "hosted_gate": "Build / Windows",
       "hardware_gate": "CI GPU Matrix / Windows Standalone OpenGL",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "Windows hosted CI packages the OpenGL non-VR viewer settings and CI GPU Matrix validates OpenGL sample1 rendering against the committed Windows DirectX sample1 reference capture."
+      "reason": "Windows hosted CI packages the OpenGL non-VR viewer settings and CI GPU Matrix validates OpenGL sample1 rendering against the committed Windows DirectX sample1 reference capture.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "standalone",
@@ -158,7 +170,11 @@
       "baseline": "tests/baselines/content/sample1.json",
       "reason": "Packaged VR settings are validated and ci-gpu.yml defines a self-hosted Windows OpenGL VR smoke lane that launches settings-opengl-vr.json, requires legacy HMD initialization, viewer initialization, and IMM_LEGACY_VR_SMOKE frame-submission markers.",
       "owner_decision": "VR deferred until headset-capable runners are available for Windows OpenGL VR smoke. Enable with CI_ENABLE_VR_CHECKS=true.",
-      "promotion_criteria": "Reinstate as supported once a supported Windows OpenGL VR runner is available and this lane passes image/log contract evidence."
+      "promotion_criteria": "Reinstate as supported once a supported Windows OpenGL VR runner is available and this lane passes image/log contract evidence.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "standalone",
@@ -171,7 +187,11 @@
       "baseline": "tests/baselines/content/sample1.json",
       "reason": "ci-gpu.yml defines a self-hosted Windows OpenXR VR smoke lane that launches the standalone viewer with settings-openxr-probe.json and requires OpenXR instance, session, stereo view, swapchain, wait/begin/end frame, and two-projection-view frame evidence.",
       "owner_decision": "VR deferred until headset-capable runners are available for Windows OpenXR VR smoke. Enable with CI_ENABLE_VR_CHECKS=true.",
-      "promotion_criteria": "Reinstate as supported once a supported Windows OpenXR VR runner is available and this lane passes image/log contract evidence."
+      "promotion_criteria": "Reinstate as supported once a supported Windows OpenXR VR runner is available and this lane passes image/log contract evidence.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "standalone",
@@ -182,7 +202,11 @@
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Standalone GLES",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "Hosted CI builds the APK and ci-device.yml runs a Firebase Test Lab Android GLES runtime lane with a fixed 1280x720 validation capture compared against the committed Windows DirectX sample1 reference capture."
+      "reason": "Hosted CI builds the APK and ci-device.yml runs a Firebase Test Lab Android GLES runtime lane with a fixed 1280x720 validation capture compared against the committed Windows DirectX sample1 reference capture.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "standalone",
@@ -193,7 +217,11 @@
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Standalone Vulkan",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "Hosted CI builds the Vulkan APK and ci-device.yml runs a Firebase Test Lab Android Vulkan runtime lane with a fixed 1280x720 validation capture compared against the committed Windows DirectX sample1 reference capture."
+      "reason": "Hosted CI builds the Vulkan APK and ci-device.yml runs a Firebase Test Lab Android Vulkan runtime lane with a fixed 1280x720 validation capture compared against the committed Windows DirectX sample1 reference capture.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "standalone",
@@ -206,7 +234,11 @@
       "baseline": "tests/baselines/content/sample1.json",
       "owner_decision": "Keep Android OpenXR VR deferred until the app has an OpenXR document/frame path beyond component probing.",
       "promotion_criteria": "Promote to supported after a CI Device Matrix Android OpenXR app lane passes on a Quest runner and artifacts show OpenXR initialization, stereo view enumeration, document load, and frame submission.",
-      "reason": "ci-device.yml defines an Android OpenXR component probe with runtime initialization and stereo view enumeration; the standalone Quest app runtime path currently uses the GLES/VRAPI row."
+      "reason": "ci-device.yml defines an Android OpenXR component probe with runtime initialization and stereo view enumeration; the standalone Quest app runtime path currently uses the GLES/VRAPI row.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "standalone",
@@ -219,7 +251,11 @@
       "baseline": "tests/baselines/content/sample1.json",
       "reason": "Hosted CI builds the Quest-style APK and ci-device.yml defines a self-hosted Quest VR app smoke that requires VRAPI entry, sample1 IMM load from assets, CPU/GPU load completion, and IMM_ANDROID_VR_SMOKE document-frame submission markers.",
       "owner_decision": "VR deferred until Quest/VR-capable Android device runners are available. Enable with CI_ENABLE_VR_CHECKS=true.",
-      "promotion_criteria": "Reinstate as supported after Quest hardware-lane evidence returns image/log markers for load/render/composition with passing contracts."
+      "promotion_criteria": "Reinstate as supported after Quest hardware-lane evidence returns image/log markers for load/render/composition with passing contracts.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "standalone",
@@ -230,7 +266,11 @@
       "hosted_gate": "CI iOS Iteration / Standalone iOS Metal Validation",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/ios-standalone-metal-sample1.json",
-      "reason": "CI builds the UIKit application without signing, runs it in iOS Simulator through Metal, loads bundled sample1.imm, exercises suspend/resume, and retains a capture that must pass the standalone iOS visual contract."
+      "reason": "CI builds the UIKit application without signing, runs it in iOS Simulator through Metal, loads bundled sample1.imm, exercises suspend/resume, and retains a capture that must pass the standalone iOS visual contract.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "standalone",
@@ -241,7 +281,11 @@
       "hosted_gate": "Build / macOS",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/macos-standalone-metal-sample1.json",
-      "reason": "Hosted macOS CI builds the Metal app, runs validation, and uploads ImmViewer-macOS."
+      "reason": "Hosted macOS CI builds the Metal app, runs validation, and uploads ImmViewer-macOS.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "standalone",
@@ -253,7 +297,11 @@
       "hardware_gate": null,
       "baseline": null,
       "owner_decision": "Standalone macOS VR is not a supported product surface until a macOS XR target is added.",
-      "reason": "No macOS standalone XR target is currently present in the repository."
+      "reason": "No macOS standalone XR target is currently present in the repository.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "unity",
@@ -264,7 +312,11 @@
       "hosted_gate": "CI Engine Matrix / Unity Package Import",
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "CI Engine Matrix validates the cross-platform Unity package import and API surface independently of platform-specific runtime rendering."
+      "reason": "CI Engine Matrix validates the cross-platform Unity package import and API surface independently of platform-specific runtime rendering.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "unity",
@@ -275,7 +327,11 @@
       "hosted_gate": "CI Engine Matrix / Unity Windows DirectX Composition",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
-      "reason": "CI Engine Matrix builds a same-commit Windows DirectX Unity smoke player, runs it on a hosted Windows runner, validates render parity, and records full-depth composition status separately."
+      "reason": "CI Engine Matrix builds a same-commit Windows DirectX Unity smoke player, runs it on a hosted Windows runner, validates render parity, and records full-depth composition status separately.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "unity",
@@ -286,7 +342,11 @@
       "hosted_gate": null,
       "hardware_gate": "CI Engine Matrix / Unity Windows Vulkan",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "CI Engine Matrix requires a strict render baseline comparison and successful full-depth and ordered-overlay composition probes for Unity Vulkan."
+      "reason": "CI Engine Matrix requires a strict render baseline comparison and successful full-depth and ordered-overlay composition probes for Unity Vulkan.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "unity",
@@ -299,7 +359,11 @@
       "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
       "reason": "The hosted diagnostic verifies that Unity rejects Lavapipe instead of silently claiming Vulkan success, but the hosted runner cannot produce Unity Vulkan pixels. Android Firebase supplies the supported hosted Vulkan synthetic-stereo visual evidence.",
       "owner_decision": "Keep the Windows Lavapipe lane as a non-canonical runtime diagnostic; do not count its expected skip as either a visual pass or a normal hosted validation failure.",
-      "promotion_criteria": "Promote this row only when a Windows CI runner exposes a Vulkan device accepted by Unity and the lane produces two distinct eye captures that pass the strict visual contracts."
+      "promotion_criteria": "Promote this row only when a Windows CI runner exposes a Vulkan device accepted by Unity and the lane produces two distinct eye captures that pass the strict visual contracts.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "unity",
@@ -310,7 +374,11 @@
       "hosted_gate": "CI Engine Matrix / Unity macOS Metal Composition",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/unity-macos-metal-sample1.json",
-      "reason": "CI Engine Matrix requires a committed-reference render comparison plus successful full-depth and ordered-overlay probes from the same Unity Metal player."
+      "reason": "CI Engine Matrix requires a committed-reference render comparison plus successful full-depth and ordered-overlay probes from the same Unity Metal player.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "unity",
@@ -321,7 +389,11 @@
       "hosted_gate": "CI Engine Matrix / Unity iOS Player Build",
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "CI exports the ordinary Unity sample to an iOS Xcode project and compiles the generated application without signing. This is application-build evidence, not visual evidence."
+      "reason": "CI exports the ordinary Unity sample to an iOS Xcode project and compiles the generated application without signing. This is application-build evidence, not visual evidence.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "unity",
@@ -332,7 +404,11 @@
       "hosted_gate": "CI iOS Iteration / Unity iOS Metal Simulator Validation",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/unity-macos-metal-sample1.json",
-      "reason": "CI runs the Unity iOS application in an Apple-silicon iOS Simulator with Metal and requires retained render-only, full-depth, and ordered-overlay images to pass the localized visual contracts."
+      "reason": "CI runs the Unity iOS application in an Apple-silicon iOS Simulator with Metal and requires retained render-only, full-depth, and ordered-overlay images to pass the localized visual contracts.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "unity",
@@ -343,7 +419,11 @@
       "hosted_gate": "CI Engine Matrix / Unity Android Vulkan",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/unity-android-vulkan-sample1.json",
-      "reason": "CI Engine Matrix runs the Vulkan-only Unity Android player in Firebase Test Lab and requires separate strict render-baseline and full-depth composition evidence."
+      "reason": "CI Engine Matrix runs the Vulkan-only Unity Android player in Firebase Test Lab and requires separate strict render-baseline and full-depth composition evidence.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "unity",
@@ -356,7 +436,11 @@
       "baseline": "tests/baselines/content/sample1.json",
       "reason": "Hosted builds produce the tracked URP/OpenXR DX12 player; the gated hardware lane launches that same-commit player and requires two-view layout, attributed native events, calibrated zero-allocation callback checks and a mirror capture. Actual headset/per-eye/GPU acceptance remains pending.",
       "owner_decision": "VR deferred until headset-capable runners are available for Unity OpenXR validation. Enable with CI_ENABLE_VR_CHECKS=true.",
-      "promotion_criteria": "Reinstate as supported once Windows Unity OpenXR runner is available and this lane passes image/log contract evidence."
+      "promotion_criteria": "Reinstate as supported once Windows Unity OpenXR runner is available and this lane passes image/log contract evidence.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "unity",
@@ -369,7 +453,11 @@
       "baseline": "tests/baselines/content/sample1.json",
       "reason": "Hosted builds produce the tracked URP/OpenXR Quest Vulkan APK. The gated Quest lane installs the same-commit APK and requires correlated two-view submission, calibrated zero-allocation callback checks and a mirror capture. Hardware execution is unverified.",
       "owner_decision": "Quest runtime validation awaits an available headset runner; enable hardware CI with CI_ENABLE_VR_CHECKS=true.",
-      "promotion_criteria": "Promote after the Quest Unity lane passes and required per-eye, pose, content/depth composition and GPU one-sequence acceptance evidence is recorded."
+      "promotion_criteria": "Promote after the Quest Unity lane passes and required per-eye, pose, content/depth composition and GPU one-sequence acceptance evidence is recorded.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "godot",
@@ -380,7 +468,11 @@
       "hosted_gate": "CI Core Matrix / Godot Local Verifier",
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "CI Core Matrix validates GDExtension build/staging preflight and local API parity."
+      "reason": "CI Core Matrix validates GDExtension build/staging preflight and local API parity.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "godot",
@@ -391,7 +483,11 @@
       "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
       "hardware_gate": "CI GPU Matrix / Windows Godot Vulkan",
       "baseline": "tests/baselines/render/godot-windows-vulkan-sample1.json",
-      "reason": "GPU smoke is gated in build.yml and defined in CI GPU Matrix on GitHub-hosted Windows against the committed Windows DirectX sample1 reference capture with a Godot-specific render parity contract."
+      "reason": "GPU smoke is gated in build.yml and defined in CI GPU Matrix on GitHub-hosted Windows against the committed Windows DirectX sample1 reference capture with a Godot-specific render parity contract.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "godot",
@@ -402,7 +498,11 @@
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Godot Vulkan",
       "baseline": "tests/baselines/render/godot-android-vulkan-sample1.json",
-      "reason": "CI Device Matrix pulls the app-generated Godot Vulkan render and composition captures separately and validates the render capture against a committed reference contract."
+      "reason": "CI Device Matrix pulls the app-generated Godot Vulkan render and composition captures separately and validates the render capture against a committed reference contract.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "godot",
@@ -413,7 +513,11 @@
       "hosted_gate": "CI iOS Iteration / Godot iOS Package and Metal Validation",
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "CI builds the static Godot iOS GDExtension XCFramework, exports the ordinary sample project, and compiles its unsigned arm64 iOS application. This is application-build evidence, not visual evidence."
+      "reason": "CI builds the static Godot iOS GDExtension XCFramework, exports the ordinary sample project, and compiles its unsigned arm64 iOS application. This is application-build evidence, not visual evidence.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "godot",
@@ -424,7 +528,11 @@
       "hosted_gate": "CI iOS Iteration / Godot iOS Package and Metal Validation",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/godot-ios-metal-sample1.json",
-      "reason": "CI runs the ordinary Godot sample through a narrowly patched Godot 4.7.2 Metal engine on an Apple-silicon iOS Simulator and requires retained render-only, full-depth, ordered-overlay, and Run-button captures to pass their tolerant visual contracts. Firebase physical-device execution remains optional pending Apple signing."
+      "reason": "CI runs the ordinary Godot sample through a narrowly patched Godot 4.7.2 Metal engine on an Apple-silicon iOS Simulator and requires retained render-only, full-depth, ordered-overlay, and Run-button captures to pass their tolerant visual contracts. Firebase physical-device execution remains optional pending Apple signing.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "godot",
@@ -435,7 +543,11 @@
       "hosted_gate": "Build / macOS",
       "hardware_gate": "CI GPU Matrix / macOS Godot Metal",
       "baseline": "tests/baselines/render/macos-metal-sample1.json",
-      "reason": "Hosted CI builds macOS Godot artifacts and CI GPU Matrix runs the visual Metal smoke on a hosted macOS runner."
+      "reason": "Hosted CI builds macOS Godot artifacts and CI GPU Matrix runs the visual Metal smoke on a hosted macOS runner.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "web",
@@ -446,7 +558,11 @@
       "hosted_gate": "Web Player Build and Validation / Extended browser verification",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/web-three-sample1.json",
-      "reason": "Hosted CI builds the pinned Emscripten decoder, loads sample1 in the WebGL player, verifies exact decoded and GPU geometry counts, and compares a deterministic 1280x720 browser capture against the committed render contract."
+      "reason": "Hosted CI builds the pinned Emscripten decoder, loads sample1 in the WebGL player, verifies exact decoded and GPU geometry counts, and compares a deterministic 1280x720 browser capture against the committed render contract.",
+      "performance": {
+        "mode": "not_implemented",
+        "reason": "Rendered-frame performance collection is not wired into this lane yet."
+      }
     },
     {
       "product": "godot",
@@ -459,7 +575,11 @@
       "baseline": "tests/baselines/content/sample1.json",
       "reason": "ci-gpu.yml defines a self-hosted Windows Godot OpenXR VR lane that launches OpenXRSmokeScene.tscn, initializes Godot OpenXR, enables XR viewport rendering, loads sample1 through ImmViewerNode, requires compositor/frame diagnostics, and verifies IMM_GODOT_OPENXR_SMOKE contract markers.",
       "owner_decision": "VR deferred until headset-capable runners are available for Windows Godot OpenXR smoke. Enable with CI_ENABLE_VR_CHECKS=true.",
-      "promotion_criteria": "Reinstate as supported once a Windows Godot OpenXR runner is available and this lane passes image/log contract evidence."
+      "promotion_criteria": "Reinstate as supported once a Windows Godot OpenXR runner is available and this lane passes image/log contract evidence.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     },
     {
       "product": "godot",
@@ -472,7 +592,11 @@
       "baseline": "tests/baselines/content/sample1.json",
       "owner_decision": "Defer Godot Quest XR until Android Godot non-VR runtime smoke is stable and a Godot Quest XR lane is added.",
       "promotion_criteria": "Promote to supported after a CI Godot Quest OpenXR lane passes on hardware with addon import, document load, stereo rendering, and frame submission evidence.",
-      "reason": "Quest Godot XR validation is deferred until Android Godot non-VR runtime smoke is stable."
+      "reason": "Quest Godot XR validation is deferred until Android Godot non-VR runtime smoke is stable.",
+      "performance": {
+        "mode": "not_applicable",
+        "reason": "No supported runtime measurement in this row: build/preflight or deferred/unsupported execution."
+      }
     }
   ]
 }
