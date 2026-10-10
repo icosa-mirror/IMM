@@ -33,8 +33,12 @@ automating headset VR validation does not exempt non-VR changes from CI.
    locally. Its full [run 38010163133](https://github.com/icosa-mirror/IMM/actions/runs/38010163133)
    was cancelled on macOS Metal and Windows D3D12 composition failures: the new
    brightness comparisons used a sample whose playback was still advancing.
-   The correction pauses mono/XR depth fixtures and requires a fixed document time
-   across comparisons, retaining the existing brightness thresholds. Local sample
+   The correction pauses mono/XR depth fixtures, retaining the existing brightness
+   thresholds. Full run `38011863143` confirmed Windows sample depth/blending at
+   1/2/4/8 samples, then was cancelled after the static corpus hit an invalid
+   play-time guard. Still-document roots can report advancing play time while
+   animation is paused; the guard now requires paused/finished playback state
+   throughout each comparison instead. Local sample
    compilation and VR harness contract checks pass; hosted rendering confirmation
    remains pending. Recovery-only run `38005911818` was also cancelled and is not
    a full-green checkpoint.
