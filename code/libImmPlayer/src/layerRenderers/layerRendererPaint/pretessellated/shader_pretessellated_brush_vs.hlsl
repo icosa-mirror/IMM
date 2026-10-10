@@ -60,11 +60,8 @@ struct vertex_format_t
 	float   mPosX;
 	float   mPosY;
 	float   mPosZ;
-	float   mWid;
 	uint    mColAlp;
 	uint    mDirInf;
-	uint    mTanUn2;
-	uint    mNorUn3;
 	float   mTim;
 };
 
@@ -117,24 +114,8 @@ void main(uint vertexID : SV_VertexID,
 	      out uint   oInfo     : V2P_INFO )
 {
 
-	uint real_vertexID = vertexID + chunk_data[0].vertexOffset;
-
-#if BRUSHTYPE==0
-	uint bid = uint(vertexID);
-#endif
-#if BRUSHTYPE==1
-	uint bid = uint(real_vertexID) >> 1u;
-	uint vid = uint(real_vertexID) & 1u;
-#endif
-#if BRUSHTYPE==2 || BRUSHTYPE==3
-	uint bid = uint(real_vertexID) / 7u;
-	uint vid = uint(real_vertexID) % 7u;
-#endif
-#if BRUSHTYPE==4
-	uint bid = uint(real_vertexID) >> 2u;
-	uint vid = uint(real_vertexID) & 3u;
-#endif
-
+	// Indexed draws already include the chunk base vertex. Positions are tessellated on the CPU.
+	uint bid = vertexID;
 
 	vertex_format_t vertex = data[bid];
 
@@ -144,9 +125,6 @@ void main(uint vertexID : SV_VertexID,
 	float  inTime = vertex.mTim;
 	float4 inColAlpha = unpack4(vertex.mColAlp);
 	float3 inOri = normalize(-1.0 + 2.0*unpack3(vertex.mDirInf));
-	float3 inAxU = normalize(-1.0 + 2.0*unpack3(vertex.mTanUn2));
-	float3 inAxV = normalize(-1.0 + 2.0*unpack3(vertex.mNorUn3));
-	float inWid = vertex.mWid;
 
 
 	float3 pos = inVertex;
@@ -188,52 +166,7 @@ void main(uint vertexID : SV_VertexID,
 	oColor.w *= smoothstep(layer.mDrawInParams.z, layer.mDrawInParams.z + layer.mDrawInParams.w, drawingT);
 	#endif
 
-	//==================================================
-	float3  bPos = cpos;
-	float3  bV = normalize((mul(layer.mMatrix,float4(inAxV, 0.0))).xyz);
-	float3  bU = normalize((mul(layer.mMatrix,float4(inAxU, 0.0))).xyz);
-
-	//-------- line brush -------------------------
-
-#if BRUSHTYPE==0
-	float3 bWPos = bPos;
-#endif
-
-	//-------- ribbon brush -------------------------
-
-#if BRUSHTYPE==1
-	float u = float(vid) / 1.0;
-
-	float wb = (-1.0 + 2.0*u) * inWid * layer.mScale;
-	float3 bWPos = bPos - wb*bU;
-#endif
-
-	//-------- sphere and thick ribbon brush -------------------------
-
-#if BRUSHTYPE==2 || BRUSHTYPE==3
-	float u = float(vid) / 7.0;
-	float a = u*6.283185;
-	float2 sc = float2(cos(a), sin(a));
-	#if BRUSHTYPE==3
-	sc *= float2(1.0, 0.3);
-	#endif
-	float wb = inWid * layer.mScale;
-
-	float3 bWPos = bPos + wb*(bU*sc.x + bV*sc.y);
-#endif
-
-	//-------- cube brush -------------------------
-
-#if BRUSHTYPE==4
-	float u = float(vid) / 4.0;
-
-	float wb = inWid * layer.mScale;
-
-	// this can be done based on vid with ints, no need to go float
-	float2 sc = float2(sign(0.2 - abs(u - 0.65)), sign(abs(u - 0.35) - 0.3));   // generate the vertices of a square, for u = {0.0, 0.25, 0.5, 0.75, 1.0=0.0}
-
-	float3 bWPos = bPos + wb*(bU*sc.x + bV*sc.y);
-#endif
+	float3 bWPos = cpos;
 
 	float4x4 mat = display.mEye[iid].mMatrix_CamPrj;
 

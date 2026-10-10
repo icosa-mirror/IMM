@@ -57,4 +57,9 @@ if(IMM_D3D12_PLAYER_SMOKE)
     endforeach()
     add_test(NAME d3d12_player_scene_readback COMMAND imm_d3d12_player_smoke)
     set_tests_properties(d3d12_player_scene_readback PROPERTIES TIMEOUT 60)
+    # A mixed sample can remain visible through its picture backdrop even when
+    # the pretessellated paint shader submits no usable vertices.
+    add_test(NAME d3d12_paint_document_readback COMMAND imm_d3d12_player_smoke)
+    set_tests_properties(d3d12_paint_document_readback PROPERTIES TIMEOUT 60
+        ENVIRONMENT "IMM_D3D12_DOCUMENT=${IMM_ROOT}/exampleImmFiles/urp-content/paint-segment.imm")
 endif()

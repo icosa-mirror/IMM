@@ -147,7 +147,10 @@ namespace ImmPlayer
                 if (nv == 0) continue;
 
 
-				dst->mVBO = renderer->CreateBuffer(src->mVertices.GetAddress(0), nv*sizeof(DrawingPretessellated::MyVertexFormat), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Vertex);
+				if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12)
+                    dst->mVBO = renderer->CreateStructuredBuffer(src->mVertices.GetAddress(0), nv, sizeof(DrawingPretessellated::MyVertexFormat), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::ShaderResource);
+                else
+                    dst->mVBO = renderer->CreateBuffer(src->mVertices.GetAddress(0), nv*sizeof(DrawingPretessellated::MyVertexFormat), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Vertex);
 				if (dst->mVBO == nullptr)
 				{
 					log->Printf(LT_ERROR, L"Couldn't create data resource");
@@ -317,7 +320,7 @@ namespace ImmPlayer
 				int vs_index = i +
 					j * 3 +
 					k * 3 * 2 +
-					(static_cast<int>(colorSpace)) * 3 * 2 * 2;
+					(static_cast<int>(colorSpace)) * 3 * 2 * 2 * 5; // BRUSHTYPE variants precede colour variants.
 				const int fs_index = i;
 
 				mShader[dindex] = renderer->CreateShaderBinary(nullptr, shader_pretessellated_brush_vs_code[vs_index], shader_pretessellated_brush_vs_size[vs_index], nullptr, 0, nullptr, 0, nullptr, 0,
@@ -703,7 +706,11 @@ namespace ImmPlayer
                 if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan)
                     renderer->AttachVertexArray(info->mVertexArray[0]);
                 else
+                    {
                     renderer->AttachVertexArray2(info->mVertexArray[stereoModeInt]);
+                    if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12)
+                        renderer->AttachShaderBuffer(info->mVBO, 8);
+                }
 
                 mDrawCallInfo.numDrawCalls += static_cast<int>(numChunks);
 

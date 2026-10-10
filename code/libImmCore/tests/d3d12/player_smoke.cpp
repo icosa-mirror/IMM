@@ -4,6 +4,8 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <stdexcept>
 #include <vector>
 #include <fstream>
@@ -573,7 +575,9 @@ int main()
             configuration.frontIsCCW = true;
             if (!player.Init(&renderer, nullptr, &log, &timer, &configuration))
                 throw std::runtime_error("Player initialization failed; see d3d12-player.log");
-            const int document = player.Load(IMM_D3D12_SAMPLE_FILE);
+            const char* fixturePath = std::getenv("IMM_D3D12_DOCUMENT");
+            const auto documentPath = fixturePath ? std::filesystem::path(fixturePath).wstring() : std::wstring(IMM_D3D12_SAMPLE_FILE);
+            const int document = player.Load(documentPath.c_str());
             if (document < 0) throw std::runtime_error("Queue sample document load");
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
             for (;;)
