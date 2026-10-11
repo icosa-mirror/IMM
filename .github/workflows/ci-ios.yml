@@ -413,6 +413,9 @@ jobs:
           restore-keys: |
             UnityLibrary-ios-simulator-metal-${{ env.UNITY_VERSION }}-
 
+      - name: Discard compiler PIDs from the restored Library
+        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+
       - name: Prepare compact diagnostic artifact
         run: mkdir -p artifacts/unity-ios-player-build
 

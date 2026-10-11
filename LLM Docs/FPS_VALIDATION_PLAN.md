@@ -93,6 +93,19 @@ not claim that simulator results establish physical-device performance.
 
 ### Android Godot investigation (2026-10-11)
 
+The corrected same-run binary validation in run `38150209754` measured
+**51.44 FPS** on the physical Mali-G715 Android device at 2400x1080, compared
+with 10.3 FPS before persistent render-pass reuse. This resolves the observed
+degenerate Android Godot case for that workload; it is a short CI sample, not a
+claim about sustained thermal performance.
+
+CI startup reliability was separately traced to cached `Library/burst.pid`
+records: Unity can kill a reused PID on a new runner while cleaning up an old
+Burst compiler. The CI-only cache sanitizer removes compiler PID records after
+Library restoration, preserving compiled assets and required gates. See
+[the investigation and validation record](../docs/ci-unity-startup-kills.md).
+Fix confirmation is pending CI; retries alone do not establish reliability.
+
 1. Run `38135593727`, source `b2c29023`, measured 10.3 FPS for the delivered
    sample on Firebase's akita Android 34 / Mali-G715 at 2400x1080. Measurement
    validity passed; acceptable performance has not. No FPS floor is enforced yet.
@@ -115,7 +128,7 @@ not claim that simulator results establish physical-device performance.
    candidate. The job now downloads the same-commit Android native artifact and
    checks both exported APKs against its exact library bytes, recording hashes.
    The valid source-built Windows llvmpipe measurement rose from 3.16 to 8.49 FPS;
-   the Android comparison remains pending. Simulator and software-renderer
+   the corrected Android comparison is recorded above. Simulator and software-renderer
    results do not establish hardware performance on those platforms.
 
 ## Coverage and Gating Policy

@@ -8,6 +8,10 @@ on:
         type: choice
         default: windows
         options: [windows, android, inspect]
+      sanitize:
+        description: Remove restored compiler PID records before starting Unity
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -100,6 +104,10 @@ jobs:
           output.parent.mkdir(parents=True, exist_ok=True)
           output.write_text(json.dumps(records, indent=2))
           PY
+
+      - name: Apply the compiler PID cache fix
+        if: inputs.sanitize && inputs.profile != 'inspect'
+        run: python3 tests/tools/sanitize_unity_library_cache.py --project "${{ env.IMM_STARTUP_PROJECT }}"
 
       - name: Start signal and resource diagnostics
         if: inputs.profile != 'inspect'

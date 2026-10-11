@@ -158,6 +158,9 @@ jobs:
           restore-keys: |
             UnityLibrary-package-import-${{ env.UNITY_VERSION }}-
 
+      - name: Discard compiler PIDs from the restored Library
+        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+
       - name: Restore Unity PackageCache cache
         id: cache_packagecache
         uses: actions/cache/restore@v4
@@ -288,6 +291,9 @@ jobs:
           key: UnityLibrary-macos-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
             UnityLibrary-macos-metal-${{ env.UNITY_VERSION }}-
+
+      - name: Discard compiler PIDs from the restored Library
+        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
 
       - name: Preflight Unity macOS Metal runner
         run: python3 tests/tools/preflight_runner.py --profile unity --output artifacts/unity-macos-metal-composition/preflight.json
@@ -670,6 +676,9 @@ jobs:
           restore-keys: |
             UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-
 
+      - name: Discard compiler PIDs from the restored Library
+        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+
       - name: Prepare Unity iOS artifact directory
         run: mkdir -p artifacts/unity-ios-player-build
 
@@ -788,6 +797,9 @@ jobs:
           key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
             UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-
+
+      - name: Discard compiler PIDs from the restored Library
+        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
 
       - name: Restore Unity PackageCache cache
         id: cache_packagecache
@@ -1209,6 +1221,9 @@ jobs:
           key: UnityLibrary-windows-vulkan-v2-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
             UnityLibrary-windows-vulkan-v2-${{ env.UNITY_VERSION }}-
+
+      - name: Discard compiler PIDs from the restored Library
+        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
 
       - name: Restore Unity PackageCache cache
         id: cache_packagecache
@@ -2115,6 +2130,9 @@ jobs:
           restore-keys: |
             UnityLibrary-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
+      - name: Discard compiler PIDs from the restored Library
+        run: python tests/tools/sanitize_unity_library_cache.py --project .ci-workspace/unity-android-openxr-quest
+
       - name: Start live Unity quest memory diagnostics
         run: |
           mkdir -p artifacts/unity-android-vulkan
@@ -2251,6 +2269,9 @@ jobs:
           key: UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
             UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
+
+      - name: Discard compiler PIDs from the restored Library
+        run: python tests/tools/sanitize_unity_library_cache.py --project .ci-workspace/unity-android-vulkan-nonxr
 
       - name: Restore Unity PackageCache cache
         id: cache_unity_android_packagecache

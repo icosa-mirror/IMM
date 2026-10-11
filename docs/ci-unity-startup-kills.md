@@ -1,8 +1,31 @@
 # Intermittent Unity Linux startup kills
 
-Root cause remains unresolved. A single permitted retry is recovery, not a fix.
+Root cause identified: restored `Library/burst.pid` can identify an unrelated
+process or thread on a new runner. Unity kills that reused PID while cleaning up
+the previous Burst compiler. The cache fix is implemented; CI confirmation is pending.
 
-## Evidence
+## Cause and fix
+
+1. Restored-cache Android trial 2 in run 38162470693 reproduced exit 137. Unity's
+   main thread issued `kill(2234, SIGKILL)` in the container PID namespace. The
+   kernel identified the target as `Debugger agent`, immediately before the
+   Editor died. The cached PID did not identify the old Burst compiler there.
+2. Read-only inspection run 38163140981 confirmed that the same immutable cache
+   contains `burst.pid = 2234` and `ilpp.pid = 2347`. The former exactly matches
+   the kill argument. This explains why failures depend on PID reuse rather than
+   a fixed execution-time or memory limit.
+3. Every production Unity Library restore now runs
+   `tests/tools/sanitize_unity_library_cache.py` before launching Unity. It removes
+   only `burst.pid` and `ilpp.pid`, which are session-specific compiler process
+   records. It preserves compiled assets and cache keys. Existing caches are safe
+   to reuse after sanitization; no full Library deletion or gate relaxation is needed.
+4. The sanitizer refuses non-CI invocation and projects outside the CI workspace.
+   It does not terminate processes or touch the local Editor's Library.
+5. The diagnostic workflow's `sanitize` input enables the same fix against the
+   original restored cache, retaining its PID values in the evidence for comparison.
+
+## Investigation evidence
+
 
 1. Unity exits 137 during its first assembly reload, after registering precompiled
    DLLs and before project compilation. The shell reports `Killed`.
