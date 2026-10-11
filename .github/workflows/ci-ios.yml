@@ -677,6 +677,9 @@ jobs:
           for image in captures.glob("*.png"):
               shutil.copy2(image, artifacts / image.name)
           text = log.read_text(errors="replace")
+          failures = [line for line in text.splitlines() if "[IMM_URP_SMOKE] FAIL" in line]
+          if failures:
+              raise SystemExit(f"iOS URP Metal validation failed: {failures[-1]}")
           if exit_before_cleanup not in (None, 0):
               raise SystemExit(f"iOS URP launcher exited {exit_before_cleanup} before cleanup")
           required = ["[IMM_URP_SMOKE] graphicsDevice=Metal", passed,

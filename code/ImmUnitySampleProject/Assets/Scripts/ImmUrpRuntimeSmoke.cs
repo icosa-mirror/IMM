@@ -430,6 +430,19 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
                     yield return null;
                     RenderPipeline.SubmitRenderRequest(documentCamera, request);
                 }
+                if (transparent)
+                {
+                    // Pausing authored animation does not freeze IMM's frame-indexed
+                    // blue-noise alpha coverage. Compare control and probe without
+                    // yielding, so GlobalWork cannot advance that coverage pattern.
+                    quad.SetActive(false);
+                    RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                    unblendedBrightness = 0;
+                    foreach (var pixel in ReadTargetPixels(target, $"depth-{fixture}-{phase}-control-{samples}x"))
+                        unblendedBrightness += pixel.r + pixel.g + pixel.b;
+                    quad.SetActive(true);
+                    RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                }
                 Require(renderError == null, $"Unity reported: {renderError}");
                 // Still-document roots need not be timelines: their play-time counter
                 // can advance while MngrPlayer correctly holds animation paused.
