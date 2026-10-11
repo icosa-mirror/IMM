@@ -69,7 +69,7 @@ public final class GodotVulkanFtlSmokeTest {
                 "am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p " + performancePackage);
         assertTrue("Godot performance launcher failed: " + performanceLaunch, performanceLaunch.contains("Status: ok"));
         try {
-            long deadline = SystemClock.elapsedRealtime() + 90000L;
+            long deadline = SystemClock.elapsedRealtime() + 120000L;
             String performanceLog;
             do {
                 SystemClock.sleep(1000L);

@@ -162,9 +162,15 @@ func _load_document_after_render_warmup() -> void:
 		_apply_background_color()
 		_update_status()
 		return
-	for _frame in range(3):
+	# Graphics initialization happens in the compositor callback, which can
+	# arrive later than three process frames on mobile renderers.
+	var graphics_deadline := Time.get_ticks_msec() + 30000
+	while int(viewer.get_render_diagnostics().get("adapter_graphics_initialized_count", 0)) == 0:
 		_queue_active_camera()
 		await get_tree().process_frame
+		if Time.get_ticks_msec() >= graphics_deadline:
+			push_error("[IMM_SAMPLE_STARTUP] Graphics initialization timed out: %s" % viewer.get_render_diagnostics())
+			return
 	var load_result: int = int(viewer.load_document())
 	if load_result < 0:
 		push_error("IMM sample load_document returned %d" % load_result)
