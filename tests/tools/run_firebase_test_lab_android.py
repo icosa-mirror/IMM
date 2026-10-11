@@ -230,8 +230,8 @@ def build_firebase_command(args: argparse.Namespace, results_dir: str) -> list[s
         command.extend(["--additional-apks", ",".join(Path(value).as_posix() for value in args.additional_apk)])
     for value in args.environment_variable:
         command.extend(["--environment-variables", value])
-    for value in args.directory_to_pull:
-        command.extend(["--directories-to-pull", value])
+    if args.directory_to_pull:
+        command.extend(["--directories-to-pull", ",".join(args.directory_to_pull)])
     if args.client_label:
         command.extend(["--client-details", f"matrixLabel={args.client_label}"])
     return command

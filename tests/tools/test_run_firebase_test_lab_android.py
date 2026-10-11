@@ -50,6 +50,17 @@ def main() -> int:
             results_dir="dir",
             test_type="instrumentation",
         )
+        command_args = Namespace(
+            **vars(args), app=root / "app.apk", test=None, robo_script=None,
+            timeout="5m", additional_apk=[], environment_variable=[], client_label="",
+            directory_to_pull=["/sdcard/correctness", "/sdcard/sample", "/sdcard/performance"],
+        )
+        tool.resolve_gcloud = lambda: "gcloud"
+        command = tool.build_firebase_command(command_args, "results")
+        assert command.count("--directories-to-pull") == 1
+        assert command[command.index("--directories-to-pull") + 1] == "/sdcard/correctness,/sdcard/sample,/sdcard/performance"
+        command_args.directory_to_pull = []
+        assert "--directories-to-pull" not in tool.build_firebase_command(command_args, "results")
         capture = root / "ftl-results/device/screencap_after.png"
         capture.parent.mkdir(parents=True)
         capture.write_bytes(b"png")
