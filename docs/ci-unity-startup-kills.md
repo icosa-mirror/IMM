@@ -26,6 +26,11 @@ Root cause remains unresolved. A single permitted retry is recovery, not a fix.
    Cold diagnostic starts passed. Run 38160310932's nominal warm trial also
    missed the cache: the Windows Library cache had been evicted. This is a
    correlation to investigate, not proof of a corrupt cache or a cache-related bug.
+8. Run 38161621738 passed two initial starts and six warm restarts against
+   Libraries populated on the same runners. This did not reproduce the kill.
+   The subsequent Android diagnostic profile restores the existing CI Library
+   onto four fresh runners and requires an exact cache hit. It uses the same
+   prepared Quest project path and Android image as the previously failing job.
 
 ## Signal evidence on subsequent builds
 

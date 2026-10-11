@@ -2,6 +2,12 @@ name: Investigate Unity startup kills
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: Windows cold/warm starts or Android starts from the existing CI cache
+        type: choice
+        default: windows
+        options: [windows, android]
 
 permissions:
   contents: read
@@ -15,23 +21,39 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        trial: [1, 2]
+        trial: ${{ fromJSON(inputs.profile == 'android' && '[1,2,3,4]' || '[1,2]') }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Prepare startup-only entry point and existing CI license configuration
         shell: bash
+        env:
+          IMM_STARTUP_PROFILE: ${{ inputs.profile }}
         run: |
           python3 -m pip install --disable-pip-version-check PyYAML
           python3 - <<'PY'
           import os
+          import subprocess
+          import sys
           from pathlib import Path
           import yaml
           config = yaml.safe_load(Path('.github/workflows/ci-engine.yml').read_text())['env']
+          android = os.environ['IMM_STARTUP_PROFILE'] == 'android'
+          project = 'code/ImmUnitySampleProject'
+          if android:
+              project = '.ci-workspace/unity-android-openxr-quest'
+              subprocess.run([sys.executable, 'tests/tools/prepare_unity_ci_project.py',
+                              '--source', 'code/ImmUnitySampleProject', '--output', project,
+                              '--preserve-xr'], check=True)
+          version = config['UNITY_ANDROID_VULKAN_VERSION' if android else 'UNITY_VERSION']
           with open(os.environ['GITHUB_ENV'], 'a') as stream:
-              stream.write(f"UNITY_VERSION={config['UNITY_VERSION']}\n")
+              stream.write(f"UNITY_VERSION={version}\n")
+              stream.write(f"IMM_STARTUP_PROJECT={project}\n")
+              stream.write(f"IMM_STARTUP_TARGET={'Android' if android else 'StandaloneWindows64'}\n")
+              stream.write(f"IMM_STARTUP_CACHE={'UnityLibrary-android-openxr-quest' if android else 'UnityLibrary-windows-directx'}\n")
+              stream.write(f"IMM_STARTUP_IMAGE=unityci/editor:ubuntu-{version}-{'android' if android else 'windows-mono'}-3\n")
               stream.write(f"IMM_UNITY_FALLBACK_LICENSE<<IMM_LICENSE_END\n{config['IMM_UNITY_FALLBACK_LICENSE']}\nIMM_LICENSE_END\n")
-          path = Path('code/ImmUnitySampleProject/Assets/Editor/ImmStartupDiagnostic.cs')
+          path = Path(project) / 'Assets/Editor/ImmStartupDiagnostic.cs'
           path.parent.mkdir(parents=True, exist_ok=True)
           path.write_text('''using UnityEditor;
           public static class ImmStartupDiagnostic {
@@ -43,15 +65,22 @@ jobs:
           ''')
           PY
 
-      - name: Restore the existing DirectX build Library if available
+      - name: Restore the existing build Library
+        id: library
         uses: actions/cache/restore@v4
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: ${{ env.IMM_STARTUP_PROJECT }}/Library
+          key: ${{ env.IMM_STARTUP_CACHE }}-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-
+            ${{ env.IMM_STARTUP_CACHE }}-${{ env.UNITY_VERSION }}-
+
+      - name: Require the exact restored-cache condition for Android trials
+        if: inputs.profile == 'android' && steps.library.outputs.cache-hit != 'true'
+        run: |
+          echo 'The Android CI Library cache was unavailable; refusing a cold-start substitute.'
+          exit 1
 
       - name: Start signal and resource diagnostics
         shell: bash
@@ -68,14 +97,15 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
           UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
         with:
-          projectPath: code/ImmUnitySampleProject
+          projectPath: ${{ env.IMM_STARTUP_PROJECT }}
           unityVersion: ${{ env.UNITY_VERSION }}
-          targetPlatform: StandaloneWindows64
+          targetPlatform: ${{ env.IMM_STARTUP_TARGET }}
           versioning: None
           buildMethod: ImmStartupDiagnostic.Run
           customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-startup/editor.log
 
       - name: Restart against the populated Library (warm start 1)
+        if: success() && inputs.profile == 'windows'
         uses: game-ci/unity-builder@v4
         timeout-minutes: 5
         env:
@@ -91,6 +121,7 @@ jobs:
           customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-startup/editor-warm-1.log
 
       - name: Restart against the populated Library (warm start 2)
+        if: success() && inputs.profile == 'windows'
         uses: game-ci/unity-builder@v4
         timeout-minutes: 5
         env:
@@ -106,6 +137,7 @@ jobs:
           customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-startup/editor-warm-2.log
 
       - name: Restart against the populated Library (warm start 3)
+        if: success() && inputs.profile == 'windows'
         uses: game-ci/unity-builder@v4
         timeout-minutes: 5
         env:
@@ -126,7 +158,7 @@ jobs:
         run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-startup/monitor.pid --output artifacts/unity-startup/memory.jsonl
 
       - name: Resolve Unity kill stacks against the exact Editor image
-        if: failure()
+        if: failure() && (inputs.profile == 'windows' || steps.library.outputs.cache-hit == 'true')
         continue-on-error: true
         timeout-minutes: 5
         shell: bash
@@ -134,7 +166,7 @@ jobs:
           docker run --rm --entrypoint python3 \
             -v "$PWD/artifacts/unity-startup:/evidence:ro" \
             -v "$PWD/tests/tools:/tools:ro" \
-            "unityci/editor:ubuntu-${UNITY_VERSION}-windows-mono-3" \
+            "$IMM_STARTUP_IMAGE" \
             /tools/resolve_unity_kill_stack.py /evidence/memory-signals.jsonl \
             > artifacts/unity-startup/resolved-kill-stacks.json
 
