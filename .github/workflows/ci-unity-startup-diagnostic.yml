@@ -43,6 +43,17 @@ jobs:
           ''')
           PY
 
+      - name: Restore the existing DirectX build Library for warm-cache trials
+        if: matrix.trial >= 4
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-
+
       - name: Start signal and resource diagnostics
         shell: bash
         run: |

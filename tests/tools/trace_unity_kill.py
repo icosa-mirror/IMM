@@ -22,6 +22,7 @@ def trace(output, duration):
     root = Path('/sys/kernel/tracing')
     instance = root / 'instances' / f'imm-unity-kill-{os.getpid()}'
     enabled = []
+    unity_maps = {}
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open('a', buffering=1) as stream:
         def emit(kind, **values):
@@ -73,6 +74,11 @@ def trace(output, duration):
                     deadline = time.monotonic() + duration
                     pending = b''
                     while not stopping and time.monotonic() < deadline:
+                        for unity_pid in list(unity_maps):
+                            try:
+                                unity_maps[unity_pid] = [s for s in Path(f'/proc/{unity_pid}/maps').read_text().splitlines() if 'r-xp' in s]
+                            except OSError:
+                                pass  # Retain the last maps after process exit.
                         if not selector.select(timeout=0.25):
                             continue
                         try:
@@ -90,8 +96,11 @@ def trace(output, duration):
                                 if match:
                                     proc = Path('/proc') / match[1]
                                     try:
-                                        exe = (proc / 'exe').resolve(strict=True)
+                                        # The target path belongs to the container's mount
+                                        # namespace and need not exist on the host.
+                                        exe = Path(os.readlink(proc / 'exe'))
                                         if exe.name == 'Unity':
+                                            unity_maps[int(match[1])] = []
                                             status = (proc / 'status').read_text().splitlines()
                                             args = (proc / 'cmdline').read_bytes().split(b'\0')
                                             # Classify activation without retaining any argument values.
@@ -110,6 +119,16 @@ def trace(output, duration):
         except (OSError, subprocess.SubprocessError) as error:
             emit('unavailable', error=f'{type(error).__name__}: {error}')
         finally:
+            if instance.exists():
+                try:
+                    mapping_file = instance / 'saved_tgids'
+                    if not mapping_file.exists():
+                        mapping_file = root / 'saved_tgids'
+                    emit('thread_groups', mappings=mapping_file.read_text().splitlines())
+                except OSError:
+                    pass
+            for unity_pid, maps in unity_maps.items():
+                emit('unity_final_maps', pid=unity_pid, executable_maps=maps)
             for event in enabled:
                 try:
                     (event / 'enable').write_text('0')
