@@ -209,7 +209,6 @@ jobs:
           xcrun simctl terminate "$STANDALONE_IOS_UDID" "$STANDALONE_IOS_BUNDLE_ID" >/dev/null 2>&1 || true
           kill "$face_launch_pid" 2>/dev/null || true
           wait "$face_launch_pid" 2>/dev/null || true
-          xcrun simctl shutdown "$STANDALONE_IOS_UDID" >/dev/null 2>&1 || true
 
       - name: Measure standalone iOS Simulator rendered-frame cadence
         timeout-minutes: 5
@@ -217,6 +216,10 @@ jobs:
           python3 tests/tools/run_ios_frame_sample.py
           --udid "$STANDALONE_IOS_UDID" --app "$STANDALONE_IOS_APP"
           --product standalone --output-dir artifacts/standalone-ios-metal/performance
+
+      - name: Shut down standalone iOS Simulator
+        if: always()
+        run: xcrun simctl shutdown "$STANDALONE_IOS_UDID" >/dev/null 2>&1 || true
 
       - name: Classify standalone iOS Metal face orientation
         continue-on-error: true
