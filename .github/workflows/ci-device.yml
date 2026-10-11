@@ -493,7 +493,9 @@ jobs:
           from pathlib import Path
           root = Path(sys.argv[1])
           project = root / "project.godot"
-          project.write_text(re.sub(r'^run/main_scene=.*$', 'run/main_scene="res://scenes/SampleScene.tscn"', project.read_text(), flags=re.M) + '\n[autoload]\nImmPerformanceProbe="*res://ci/performance_probe.gd"\n')
+          # The Linux exporter has no IMM native classes. Preserve the authored
+          # scene as text so Android constructs its native resources at runtime.
+          project.write_text(re.sub(r'^run/main_scene=.*$', 'run/main_scene="res://scenes/SampleScene.tscn"', project.read_text(), flags=re.M) + '\n[autoload]\nImmPerformanceProbe="*res://ci/performance_probe.gd"\n\n[editor]\nexport/convert_text_resources_to_binary=false\n')
           presets = root / "export_presets.cfg"
           text = presets.read_text().replace('package/unique_name="org.linuxfoundation.imm.godot.sample"', 'package/unique_name="org.linuxfoundation.imm.godot.performance"')
           arguments = '-- --imm-performance-output=/sdcard/Android/data/org.linuxfoundation.imm.godot.performance/files/imm-ftl/performance-measurements-raw.json'
@@ -503,6 +505,17 @@ jobs:
           "$GODOT_EXE" --headless --display-driver headless --rendering-driver opengl3 --rendering-method gl_compatibility --path "$project_dir" --import
           "$GODOT_EXE" --headless --display-driver headless --rendering-driver opengl3 --rendering-method gl_compatibility --path "$project_dir" \
             --export-debug "Android Debug" "$GITHUB_WORKSPACE/artifacts/android-godot-vulkan/imm-godot-performance-debug.apk"
+          python - "$GITHUB_WORKSPACE/artifacts/android-godot-vulkan/imm-godot-performance-debug.apk" <<'PY'
+          import sys
+          from zipfile import ZipFile
+          from pathlib import Path
+          with ZipFile(sys.argv[1]) as apk:
+              scene = apk.read("assets/scenes/SampleScene.tscn")
+          source = Path("code/ImmGodotSampleProject/scenes/SampleScene.tscn").read_bytes()
+          if scene != source:
+              raise SystemExit("Export changed the normal sample scene; native compositor resources must be retained intact")
+          print("[IMM-FPS-EXPORT] Normal scene retained byte-for-byte in the Android APK")
+          PY
       - name: Build Android Godot Firebase test APKs
         working-directory: code/projects/android
         shell: bash
