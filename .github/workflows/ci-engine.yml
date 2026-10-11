@@ -153,13 +153,16 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-package-import-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-package-import-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-package-import-${{ env.UNITY_VERSION }}-
-
-      - name: Discard compiler PIDs from the restored Library
-        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+            UnityLibrary-allowlist-v1-package-import-${{ env.UNITY_VERSION }}-
 
       - name: Restore Unity PackageCache cache
         id: cache_packagecache
@@ -239,8 +242,14 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-package-import-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-package-import-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity results
         if: always()
@@ -287,13 +296,16 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-macos-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-macos-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-macos-metal-${{ env.UNITY_VERSION }}-
-
-      - name: Discard compiler PIDs from the restored Library
-        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+            UnityLibrary-allowlist-v1-macos-metal-${{ env.UNITY_VERSION }}-
 
       - name: Preflight Unity macOS Metal runner
         run: python3 tests/tools/preflight_runner.py --profile unity --output artifacts/unity-macos-metal-composition/preflight.json
@@ -621,8 +633,14 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-macos-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-macos-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity macOS Metal artifacts
         if: always()
@@ -671,13 +689,16 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-
-
-      - name: Discard compiler PIDs from the restored Library
-        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+            UnityLibrary-allowlist-v1-ios-metal-${{ env.UNITY_VERSION }}-
 
       - name: Prepare Unity iOS artifact directory
         run: mkdir -p artifacts/unity-ios-player-build
@@ -758,8 +779,14 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity iOS player-build artifacts
         if: always()
@@ -793,13 +820,16 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-
-
-      - name: Discard compiler PIDs from the restored Library
-        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+            UnityLibrary-allowlist-v1-windows-directx-${{ env.UNITY_VERSION }}-
 
       - name: Restore Unity PackageCache cache
         id: cache_packagecache
@@ -894,8 +924,14 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity DirectX smoke player
         if: success()
@@ -1217,13 +1253,16 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-windows-vulkan-v2-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-windows-vulkan-v2-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-windows-vulkan-v2-${{ env.UNITY_VERSION }}-
-
-      - name: Discard compiler PIDs from the restored Library
-        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+            UnityLibrary-allowlist-v1-windows-vulkan-v2-${{ env.UNITY_VERSION }}-
 
       - name: Restore Unity PackageCache cache
         id: cache_packagecache
@@ -1314,8 +1353,14 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-windows-vulkan-v2-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-windows-vulkan-v2-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity Vulkan smoke player
         if: success()
@@ -2125,13 +2170,16 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: .ci-workspace/unity-android-openxr-quest/Library
-          key: UnityLibrary-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            .ci-workspace/unity-android-openxr-quest/Library/PackageCache/
+            .ci-workspace/unity-android-openxr-quest/Library/DataStore/
+            .ci-workspace/unity-android-openxr-quest/Library/ArtifactDB
+            .ci-workspace/unity-android-openxr-quest/Library/SourceAssetDB
+            .ci-workspace/unity-android-openxr-quest/Library/ShaderCache/
+            .ci-workspace/unity-android-openxr-quest/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
-
-      - name: Discard compiler PIDs from the restored Library
-        run: python tests/tools/sanitize_unity_library_cache.py --project .ci-workspace/unity-android-openxr-quest
+            UnityLibrary-allowlist-v1-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
       - name: Start live Unity quest memory diagnostics
         run: |
@@ -2265,13 +2313,16 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: .ci-workspace/unity-android-vulkan-nonxr/Library
-          key: UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/DataStore/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ArtifactDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
-
-      - name: Discard compiler PIDs from the restored Library
-        run: python tests/tools/sanitize_unity_library_cache.py --project .ci-workspace/unity-android-vulkan-nonxr
+            UnityLibrary-allowlist-v1-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
       - name: Restore Unity PackageCache cache
         id: cache_unity_android_packagecache
@@ -2779,8 +2830,14 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: .ci-workspace/unity-android-vulkan-nonxr/Library
-          key: UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/DataStore/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ArtifactDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Save Unity Android OpenXR Quest Library cache
         if: always() && steps.unity_android_quest_build.outcome == 'success' && steps.cache_unity_android_quest_library.outputs.cache-hit != 'true'
@@ -2789,8 +2846,14 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: .ci-workspace/unity-android-openxr-quest/Library
-          key: UnityLibrary-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            .ci-workspace/unity-android-openxr-quest/Library/PackageCache/
+            .ci-workspace/unity-android-openxr-quest/Library/DataStore/
+            .ci-workspace/unity-android-openxr-quest/Library/ArtifactDB
+            .ci-workspace/unity-android-openxr-quest/Library/SourceAssetDB
+            .ci-workspace/unity-android-openxr-quest/Library/ShaderCache/
+            .ci-workspace/unity-android-openxr-quest/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity Android Vulkan artifacts
         if: always()

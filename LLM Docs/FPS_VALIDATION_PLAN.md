@@ -101,10 +101,14 @@ claim about sustained thermal performance.
 
 CI startup reliability was separately traced to cached `Library/burst.pid`
 records: Unity can kill a reused PID on a new runner while cleaning up an old
-Burst compiler. The CI-only cache sanitizer removes compiler PID records after
-Library restoration, preserving compiled assets and required gates. See
+Burst compiler. Four restored-cache startup trials passed with PID cleanup in
+run `38163769973`. Production saves and restores now allowlist only package,
+imported-asset and shader-cache data, using new keys that exclude old whole-Library
+archives. Compiler PIDs and other unlisted session/build state are regenerated.
+Required gates remain unchanged. See
 [the investigation and validation record](../docs/ci-unity-startup-kills.md).
-Fix confirmation is pending CI; retries alone do not establish reliability.
+Full validation of the allowlist policy is pending CI; retries alone do not
+establish reliability. Warm-cache build times must be measured before expanding it.
 
 1. Run `38135593727`, source `b2c29023`, measured 10.3 FPS for the delivered
    sample on Firebase's akita Android 34 / Mali-G715 at 2400x1080. Measurement

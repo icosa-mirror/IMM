@@ -2,7 +2,9 @@
 
 Root cause identified: restored `Library/burst.pid` can identify an unrelated
 process or thread on a new runner. Unity kills that reused PID while cleaning up
-the previous Burst compiler. The cache fix is implemented; CI confirmation is pending.
+the previous Burst compiler. Four restored-cache startup trials passed with PID
+cleanup in run 38163769973. Production caching now uses an explicit allowlist;
+full validation of that cache policy is pending.
 
 ## Cause and fix
 
@@ -14,15 +16,36 @@ the previous Burst compiler. The cache fix is implemented; CI confirmation is pe
    contains `burst.pid = 2234` and `ilpp.pid = 2347`. The former exactly matches
    the kill argument. This explains why failures depend on PID reuse rather than
    a fixed execution-time or memory limit.
-3. Every production Unity Library restore now runs
-   `tests/tools/sanitize_unity_library_cache.py` before launching Unity. It removes
-   only `burst.pid` and `ilpp.pid`, which are session-specific compiler process
-   records. It preserves compiled assets and cache keys. Existing caches are safe
-   to reuse after sanitization; no full Library deletion or gate relaxation is needed.
-4. The sanitizer refuses non-CI invocation and projects outside the CI workspace.
-   It does not terminate processes or touch the local Editor's Library.
-5. The diagnostic workflow's `sanitize` input enables the same fix against the
-   original restored cache, retaining its PID values in the evidence for comparison.
+3. All eight production Library cache configurations save and restore only:
+
+   ```text
+   Library/PackageCache/
+   Library/DataStore/
+   Library/ArtifactDB
+   Library/SourceAssetDB
+   Library/ShaderCache/
+   Library/ShaderCache.db
+   ```
+
+   This preserves package contents, imported asset data and indexes, and shader
+   caches. Unity regenerates all other Library state, including compiler PID
+   records, database lock files, Bee build state, script assemblies, Burst cache,
+   temporary artifacts, editor preferences and build history. New unlisted
+   session files are excluded automatically. This is our initial cache boundary,
+   not a Unity guarantee that every retained file is portable between machines.
+4. Every production key and fallback uses `UnityLibrary-allowlist-v1-`, so old
+   whole-Library archives cannot match. Saves and restores use the same paths.
+   `test_unity_library_cache_policy.py` checks all eight configurations in CI.
+   The separate PackageCache-only caches remain unchanged.
+5. The diagnostic workflow deliberately retains the old whole-Library keys to
+   reproduce the original failure. Its `sanitize` input removes only `burst.pid`
+   and `ilpp.pid` using `sanitize_unity_library_cache.py`, retaining their original
+   values in evidence. All four trials in run 38163769973 passed with this cleanup.
+   Production no longer needs that cleanup because the allowlist excludes both
+   files. No process termination or local Editor Library modification is involved.
+6. The first allowlist run will miss the old caches. Compare later warm-cache
+   build durations with prior runs before considering additional cache entries;
+   add entries only when their contents and measured savings justify inclusion.
 
 ## Investigation evidence
 

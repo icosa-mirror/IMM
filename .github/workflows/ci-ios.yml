@@ -408,13 +408,16 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-ios-simulator-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-ios-simulator-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-ios-simulator-metal-${{ env.UNITY_VERSION }}-
-
-      - name: Discard compiler PIDs from the restored Library
-        run: python tests/tools/sanitize_unity_library_cache.py --project code/ImmUnitySampleProject
+            UnityLibrary-allowlist-v1-ios-simulator-metal-${{ env.UNITY_VERSION }}-
 
       - name: Prepare compact diagnostic artifact
         run: mkdir -p artifacts/unity-ios-player-build
@@ -810,8 +813,14 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-ios-simulator-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          path: |
+            code/ImmUnitySampleProject/Library/PackageCache/
+            code/ImmUnitySampleProject/Library/DataStore/
+            code/ImmUnitySampleProject/Library/ArtifactDB
+            code/ImmUnitySampleProject/Library/SourceAssetDB
+            code/ImmUnitySampleProject/Library/ShaderCache/
+            code/ImmUnitySampleProject/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-ios-simulator-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload compact Unity iOS diagnostics
         if: always()

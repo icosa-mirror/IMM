@@ -69,7 +69,9 @@ jobs:
           ''')
           PY
 
-      - name: Restore the existing build Library
+      # Intentionally retain legacy whole-Library keys for root-cause reproduction.
+      # Production uses UnityLibrary-allowlist-v1-* and explicit paths instead.
+      - name: Restore the legacy whole-Library cache for diagnosis
         id: library
         uses: actions/cache/restore@v4
         env:
