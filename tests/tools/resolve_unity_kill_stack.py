@@ -9,6 +9,10 @@ import sys
 def resolve(source):
     records = [json.loads(line) for line in source.read_text().splitlines()]
     identities = {r['pid']: r for r in records if r['kind'] == 'unity_process'}
+    groups = {}
+    for record in records:
+        if record['kind'] == 'thread_groups':
+            groups.update(dict(tuple(map(int, row.split())) for row in record['mappings']))
     maps = {pid: r['executable_maps'] for pid, r in identities.items()}
     maps.update({r['pid']: r['executable_maps'] for r in records
                  if r['kind'] == 'unity_final_maps' and r['executable_maps']})
@@ -25,9 +29,12 @@ def resolve(source):
         if 'Unity' not in line or 'signal_generate: sig=9' not in line or 'code=0' not in line:
             continue
         target = int(re.search(r'\bpid=(\d+)', line)[1])
+        target_group = groups.get(target)
         result = dict(signal=line, sender_tid=tid, sender_tgid=tgid, target_pid=target,
-                      same_process=target == tgid, syscall=calls.get(tid),
-                      target_role=identities.get(target, {}).get('role'), frames=[])
+                      target_tgid=target_group,
+                      same_process=target_group == tgid if target_group is not None else None,
+                      syscall=calls.get(tid),
+                      target_role=identities.get(target_group or target, {}).get('role'), frames=[])
         for frame in traces[index + 1:index + 35]:
             if '<user stack trace>' in frame:
                 continue
