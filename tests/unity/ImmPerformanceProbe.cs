@@ -57,6 +57,7 @@ public sealed class ImmPerformanceProbe : MonoBehaviour
     private bool originalEnabled;
     private readonly bool renderRequests = Environment.GetEnvironmentVariable("IMM_PERFORMANCE_RENDER_REQUESTS") == "1";
     private UniversalRenderPipeline.SingleCameraRequest renderRequest;
+    private int requestWidth = 1280, requestHeight = 720;
 
 #if IMM_UNITY_ANDROID_URP_CI
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -79,6 +80,25 @@ public sealed class ImmPerformanceProbe : MonoBehaviour
         DontDestroyOnLoad(probe.gameObject);
         probe.config = asset != null ? JsonUtility.FromJson<Configuration>(asset.text) : new Configuration();
 #if IMM_UNITY_ANDROID_URP_CI
+        // Opt-in phone comparisons use one APK; normal CI retains its defaults.
+        using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+        using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+        using (var intent = activity.Call<AndroidJavaObject>("getIntent"))
+        {
+            int fps = intent.Call<int>("getIntExtra", "ImmPerformanceTargetFps", 0);
+            int msaa = intent.Call<int>("getIntExtra", "ImmPerformanceMsaa", 0);
+            int width = intent.Call<int>("getIntExtra", "ImmPerformanceWidth", 1280);
+            int height = intent.Call<int>("getIntExtra", "ImmPerformanceHeight", 720);
+            if (fps == 30 || fps == 60 || fps == 120) Application.targetFrameRate = fps;
+            if ((msaa == 1 || msaa == 2 || msaa == 4 || msaa == 8) &&
+                GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset pipeline)
+                pipeline.msaaSampleCount = msaa;
+            if (width >= 200 && width <= 8192 && height >= 200 && height <= 8192)
+            {
+                probe.requestWidth = width;
+                probe.requestHeight = height;
+            }
+        }
         // Resume the existing Android correctness probe after sampling.
         probe.config.quit_after_sample = false;
 #endif
@@ -123,7 +143,7 @@ public sealed class ImmPerformanceProbe : MonoBehaviour
                 originalTarget = camera.targetTexture;
                 originalEnabled = camera.enabled;
                 int msaa = (GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset)?.msaaSampleCount ?? 1;
-                var descriptor = new RenderTextureDescriptor(1280, 720)
+                var descriptor = new RenderTextureDescriptor(requestWidth, requestHeight)
                 {
                     graphicsFormat = SystemInfo.GetGraphicsFormat(DefaultFormat.LDR),
                     depthStencilFormat = SystemInfo.GetGraphicsFormat(DefaultFormat.DepthStencil),

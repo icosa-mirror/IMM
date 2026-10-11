@@ -132,6 +132,31 @@ created a 1x1 surface and was rejected by frame validation; that launch/resize
 anomaly also remains unresolved. Benchmark apps must be force-stopped immediately
 after collecting each sample, including on failure.
 
+### Android Unity follow-up (2026-10-11)
+
+On A059, the Unity URP APK from run `38167228187` measured 29.93 FPS at
+1280x720, with requested 8x MSAA clamped to actual 4x by the device. Its
+`target_frame_rate` was -1. Unity documents a default Android cap of 30 FPS;
+this measurement does not establish that rendering itself takes 33 ms.
+The app was force-stopped after collection. APK SHA-256:
+`1f5e25c4d67e3115a2aa1233560c827b584f0239c2fb4d3168d1e55b0eeb78f7`.
+
+The temporary validation project's performance probe accepts integer Android
+intent extras `ImmPerformanceTargetFps` (30/60/120), `ImmPerformanceMsaa`
+(1/2/4/8), and `ImmPerformanceWidth`/`ImmPerformanceHeight` (200–8192).
+Without these extras, existing CI settings remain unchanged. Use one APK for
+the 30-versus-60 target comparison, then measure 4x at phone resolution. An
+unsupported 8x request clamped to 4x is not an 8x performance measurement.
+Record actual samples and resolution from the resulting JSON. These controls
+are confined to the opt-in validation probe; no sample-app frame-rate policy
+change has been accepted yet.
+
+Local building is paused at the user's request while they play a game. The
+interrupted build's temporary scripts and serialized settings changes were
+removed/restored; use CI to produce the controlled probe APK. Resume local
+building only after the user says they have finished playing. Phone performance
+work remains outstanding; the 30 FPS cap hypothesis requires a matched run.
+
 The corrected same-run binary validation in run `38150209754` measured
 **51.44 FPS** on the physical Mali-G715 Android device at 2400x1080, compared
 with 10.3 FPS before persistent render-pass reuse. This resolves the observed
