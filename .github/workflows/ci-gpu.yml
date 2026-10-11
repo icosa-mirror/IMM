@@ -1049,7 +1049,7 @@ jobs:
           --product godot --graphics-api vulkan
           --output-dir artifacts/godot-smoke-windows-vulkan/performance
           -- $env:GODOT_EXE --path code/ImmGodotSampleProject
-          --script "$PWD/tests/godot/performance_probe.gd"
+          --script "$PWD/tests/godot/performance_main_loop.gd"
 
       - name: Classify Windows Godot Vulkan evidence
         if: always()
@@ -1394,7 +1394,7 @@ jobs:
           --product godot --graphics-api metal
           --output-dir artifacts/godot-smoke-macos-metal/performance
           -- "$GODOT_EXE" --path code/ImmGodotSampleProject
-          --rendering-driver metal --script "$PWD/tests/godot/performance_probe.gd"
+          --rendering-driver metal --script "$PWD/tests/godot/performance_main_loop.gd"
 
       - name: Verify Godot Metal audio pipeline
         if: always()

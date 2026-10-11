@@ -1,6 +1,6 @@
-extends SceneTree
+extends Node
 ## Run the delivered main scene without fixed-fps or visual-smoke timing.
-## Usage: IMM_PERFORMANCE_OUTPUT=... godot --path <sample> --script <this file>
+## Desktop: use performance_main_loop.gd. Mobile CI: install as an opt-in autoload.
 
 var _scene: Node
 var _viewer: Node
@@ -21,7 +21,7 @@ var _sample := {
 	"intervals_ms": [], "errors": []
 }
 
-func _initialize() -> void:
+func _ready() -> void:
 	call_deferred("_start")
 
 func _duration(name: String, fallback: float) -> float:
@@ -35,8 +35,7 @@ func _start() -> void:
 		if argument.begins_with("--imm-performance-output="):
 			_output = argument.trim_prefix("--imm-performance-output=")
 	if _output.is_empty():
-		push_error("[IMM-FPS-GODOT] IMM_PERFORMANCE_OUTPUT is required")
-		quit(2)
+		set_process(false)
 		return
 	_sample.warmup_seconds = _duration("IMM_PERFORMANCE_WARMUP_SECONDS", 2.0)
 	_sample.requested_seconds = _duration("IMM_PERFORMANCE_SAMPLE_SECONDS", 5.0)
@@ -55,22 +54,25 @@ func _start() -> void:
 		if status != OK and status != ERR_ALREADY_EXISTS:
 			_finish("Cannot load the IMM native extension: %d" % status)
 			return
-	var packed := load(ProjectSettings.get_setting("application/run/main_scene")) as PackedScene
-	if packed == null:
-		_finish("Cannot load the normal sample main scene.")
-		return
-	_scene = packed.instantiate()
-	root.add_child(_scene)
-	current_scene = _scene
+	_scene = get_tree().current_scene
+	if _scene == null:
+		var packed := load(ProjectSettings.get_setting("application/run/main_scene")) as PackedScene
+		if packed == null:
+			_finish("Cannot load the normal sample main scene.")
+			return
+		_scene = packed.instantiate()
+		get_tree().root.add_child(_scene)
+		get_tree().current_scene = _scene
+	print("[IMM-FPS-GODOT] Started rendered-frame collector")
 	RenderingServer.frame_post_draw.connect(_observe_render)
 	_sample.graphics_api = RenderingServer.get_current_rendering_driver_name()
 	_sample.gpu = RenderingServer.get_video_adapter_name()
 	_sample.vsync_mode = DisplayServer.window_get_vsync_mode()
 	_sample.target_frame_rate = Engine.max_fps
 
-func _process(_delta: float) -> bool:
+func _process(_delta: float) -> void:
 	if _finished or _scene == null:
-		return false
+		return
 	var now := Time.get_ticks_usec()
 	if _viewer == null:
 		_viewer = _scene.get("viewer") as Node
@@ -91,12 +93,12 @@ func _process(_delta: float) -> bool:
 			_ready_at = -1
 		if _sample_at < 0 and (now - _started) / 1000000.0 >= 90:
 			_finish("Normal sample did not become ready within 90 seconds.")
-		return false
+		return
 	_sample.engine_frame_count += 1
 	_sample.observed_seconds = (now - _sample_at) / 1000000.0
 	if _sample.observed_seconds >= _sample.requested_seconds:
 		_finish("")
-	return false
+	return
 
 func _observe_render() -> void:
 	if _finished or _sample_at < 0 or _viewer == null:
@@ -137,14 +139,14 @@ func _finish(error: String) -> void:
 	var file := FileAccess.open(_output, FileAccess.WRITE)
 	if file == null:
 		push_error("[IMM-FPS-GODOT] Cannot write %s: %s" % [_output, FileAccess.get_open_error()])
-		quit(2)
+		get_tree().quit(2)
 		return
 	file.store_string(JSON.stringify(_sample, "\t"))
 	file.close()
 	print("[IMM-FPS-GODOT] Wrote %s; IMM frames=%d, seconds=%.3f" % [
 		_output, _sample.imm_rendered_frame_count, _sample.observed_seconds])
-	quit(0 if _sample.errors.is_empty() else 1)
+	get_tree().quit(0 if _sample.errors.is_empty() else 1)
 
-func _finalize() -> void:
+func _exit_tree() -> void:
 	if not _finished and not _output.is_empty():
 		_finish("Player stopped before sampling completed.")

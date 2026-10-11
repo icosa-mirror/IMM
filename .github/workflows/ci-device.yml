@@ -493,10 +493,10 @@ jobs:
           from pathlib import Path
           root = Path(sys.argv[1])
           project = root / "project.godot"
-          project.write_text(re.sub(r'^run/main_scene=.*$', 'run/main_scene="res://scenes/SampleScene.tscn"', project.read_text(), flags=re.M))
+          project.write_text(re.sub(r'^run/main_scene=.*$', 'run/main_scene="res://scenes/SampleScene.tscn"', project.read_text(), flags=re.M) + '\n[autoload]\nImmPerformanceProbe="*res://ci/performance_probe.gd"\n')
           presets = root / "export_presets.cfg"
           text = presets.read_text().replace('package/unique_name="org.linuxfoundation.imm.godot.sample"', 'package/unique_name="org.linuxfoundation.imm.godot.performance"')
-          arguments = '--script res://ci/performance_probe.gd -- --imm-performance-output=/sdcard/Android/data/org.linuxfoundation.imm.godot.performance/files/imm-ftl/performance-measurements-raw.json'
+          arguments = '-- --imm-performance-output=/sdcard/Android/data/org.linuxfoundation.imm.godot.performance/files/imm-ftl/performance-measurements-raw.json'
           text = re.sub(r'^command_line/extra_args=.*$', f'command_line/extra_args="{arguments}"', text, flags=re.M)
           presets.write_text(text)
           PY
