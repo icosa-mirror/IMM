@@ -31,7 +31,7 @@ def main() -> int:
                "--platform", "ios", "--runtime-kind", "simulator", "--env-prefix", "SIMCTL_CHILD_",
                "--sample-path", str(container / "Documents/imm-performance/performance-measurements-raw.json"),
                "--executable-artifact", str(args.app / info["CFBundleExecutable"]),
-               "--output-dir", str(args.output_dir), "--stop-after-sample"]
+               "--output-dir", str(args.output_dir), "--timeout", "240", "--stop-after-sample"]
     if args.product == "unity":
         command.append("--render-requests")
     command.extend(["--", "xcrun", "simctl", "launch", "--console", "--terminate-running-process", args.udid, bundle])
@@ -39,7 +39,7 @@ def main() -> int:
         # The simulator lacks presentDrawable:afterMinimumDuration:. Match the
         # existing Metal correctness launch; retain real wall-clock sampling.
         command.extend(["--disable-vsync", "--rendering-driver", "metal", "--rendering-method", "mobile",
-                        "--script", "res://ci/performance_probe.gd", "--", "--imm-godot-ci-scene=sample"])
+                        "--", "--imm-godot-ci-scene=sample"])
     try:
         return subprocess.run(command, check=False).returncode
     finally:

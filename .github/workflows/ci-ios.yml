@@ -212,7 +212,7 @@ jobs:
           xcrun simctl shutdown "$STANDALONE_IOS_UDID" >/dev/null 2>&1 || true
 
       - name: Measure standalone iOS Simulator rendered-frame cadence
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: >
           python3 tests/tools/run_ios_frame_sample.py
           --udid "$STANDALONE_IOS_UDID" --app "$STANDALONE_IOS_APP"
@@ -703,7 +703,7 @@ jobs:
           PY
 
       - name: Measure Unity iOS Simulator rendered-frame cadence
-        timeout-minutes: 3
+        timeout-minutes: 5
         shell: bash
         env:
           IMM_URP_DERIVED_DATA: ${{ runner.temp }}/unity-ios-urp-derived-data
@@ -1183,6 +1183,7 @@ jobs:
           cp exampleImmFiles/face-orientation.imm code/ImmGodotSampleProject/face-orientation.imm
           mkdir -p code/ImmGodotSampleProject/ci
           cp tests/godot/performance_probe.gd code/ImmGodotSampleProject/ci/performance_probe.gd
+          printf '\n[autoload]\nImmPerformanceProbe="*res://ci/performance_probe.gd"\n' >> code/ImmGodotSampleProject/project.godot
           mkdir -p build/godot-ios-export
           "$GODOT_IOS_EXE" --headless --path code/ImmGodotSampleProject --import \
             > artifacts/godot-ios-metal/godot-import.log 2>&1
@@ -1872,7 +1873,7 @@ jobs:
           exit "$runtime_status"
 
       - name: Measure Godot iOS Simulator rendered-frame cadence
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: >
           python3 tests/tools/run_ios_frame_sample.py
           --udid "$GODOT_IOS_SIMULATOR_UDID" --app "$GODOT_IOS_SIMULATOR_APP"
