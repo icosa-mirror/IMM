@@ -76,7 +76,9 @@ def trace(output, duration):
                     while not stopping and time.monotonic() < deadline:
                         for unity_pid in list(unity_maps):
                             try:
-                                unity_maps[unity_pid] = [s for s in Path(f'/proc/{unity_pid}/maps').read_text().splitlines() if 'r-xp' in s]
+                                maps = [s for s in Path(f'/proc/{unity_pid}/maps').read_text().splitlines() if 'r-xp' in s]
+                                if maps:
+                                    unity_maps[unity_pid] = maps
                             except OSError:
                                 pass  # Retain the last maps after process exit.
                         if not selector.select(timeout=0.25):
@@ -104,7 +106,9 @@ def trace(output, duration):
                                             status = (proc / 'status').read_text().splitlines()
                                             args = (proc / 'cmdline').read_bytes().split(b'\0')
                                             # Classify activation without retaining any argument values.
-                                            role = 'activation' if b'-serial' in args else 'return_license' if b'-returnlicense' in args else 'project'
+                                            role = ('activation' if b'-serial' in args else
+                                                    'return_license' if b'-returnlicense' in args else
+                                                    'asset_import_worker' if b'-assetImportWorker' in args else 'project')
                                             emit('unity_process', pid=int(match[1]), role=role,
                                                  identity=[s for s in status if s.split(':', 1)[0] in ('Name', 'Pid', 'Tgid', 'PPid', 'NSpid')],
                                                  executable=str(exe),

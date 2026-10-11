@@ -57,10 +57,14 @@ def main():
         (group / 'memory.peak').write_text('456')
         (group / 'memory.max').write_text('max')
         (group / 'memory.events').write_text('oom 2\noom_kill 1\n')
+        (group / 'pids.max').write_text('512')
+        (group / 'pids.events').write_text('max 0\n')
         assert cgroup_directory('0::/docker/test', root) == group.resolve()
         assert cgroup_directory('0::/../../outside', root) is None
         assert read_memory(group)['memory.peak'] == '456'
         assert read_memory(group)['memory.events']['oom_kill'] == 1
+        assert read_memory(group)['pids.max'] == '512'
+        assert read_memory(group)['pids.events']['max'] == 0
         assert counters('MemAvailable: 123\nSwapFree: 456')['MemAvailable:'] == 123
     with tempfile.TemporaryDirectory() as temp:
         event = Path(temp) / 'event.json'

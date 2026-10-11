@@ -22,6 +22,10 @@ Root cause remains unresolved. A single permitted retry is recovery, not a fix.
    reported exit 137. Peak memory was 2,569,994,240 bytes with zero OOM events.
    The first tracer did not record thread-group IDs or call stacks, so this does
    not yet prove whether the kill was internal to the same Unity process.
+7. All nine captured startup-kill jobs inspected restored a Library cache.
+   Cold diagnostic starts passed. Run 38160310932's nominal warm trial also
+   missed the cache: the Windows Library cache had been evicted. This is a
+   correlation to investigate, not proof of a corrupt cache or a cache-related bug.
 
 ## Signal evidence on subsequent builds
 
@@ -54,7 +58,10 @@ investigate trace loss and the editor/wrapper exit path before attributing the
 failure to GitHub infrastructure. Do not change resource limits or add repeated
 retries without evidence linking them to the failure.
 
-`Investigate Unity startup kills` is a manually dispatched, bounded six-trial
-workflow using the same Unity version, activation and sample project. Each trial
-exits at a dedicated Editor entry point instead of building or testing a player.
+`Investigate Unity startup kills` is a manually dispatched workflow with two
+independent runners, each performing an initial start followed by up to three
+warm starts against its populated Library. It uses the same Unity version,
+activation and sample project. Each start exits at a dedicated Editor entry point
+instead of building or testing a player. A failure stops further starts on that
+runner and resolves captured kill stacks inside the matching Editor Docker image.
 It does not contribute acceptance evidence or replace the full validation gates.

@@ -26,10 +26,11 @@ def cgroup_directory(text, root=Path('/sys/fs/cgroup')):
 
 def read_memory(directory):
     result = {}
-    for name in ('memory.current', 'memory.peak', 'memory.max', 'memory.swap.current', 'memory.events'):
+    for name in ('memory.current', 'memory.peak', 'memory.max', 'memory.swap.current', 'memory.events',
+                 'pids.current', 'pids.peak', 'pids.max', 'pids.events'):
         try:
             value = (directory / name).read_text().strip()
-            result[name] = counters(value) if name == 'memory.events' else value
+            result[name] = counters(value) if name.endswith('.events') else value
         except OSError:
             pass
     return result
