@@ -1840,6 +1840,11 @@ struct piVulkanState
     VkShaderModule presentFragmentModule = VK_NULL_SHADER_MODULE;
     VkPipeline presentPipeline = VK_NULL_PIPELINE;
     VkSampler presentSampler = VK_NULL_SAMPLER;
+    VkImage presentResolveImage = 0;
+    VkImageView presentResolveView = VK_NULL_IMAGE_VIEW;
+    VkDeviceMemory presentResolveMemory = VK_NULL_DEVICE_MEMORY;
+    uint32_t presentResolveWidth = 0, presentResolveHeight = 0;
+    VkFormat presentResolveFormat = 0;
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
     bool unsupportedReported[(int)piVulkanUnsupportedFeature::Count] = {};
@@ -8427,6 +8432,21 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
     return true;
 }
 
+static void iDestroyPresentResolve(piVulkanState *state)
+{
+    if (state->presentResolveView != VK_NULL_IMAGE_VIEW)
+        state->vkDestroyImageView(state->device, state->presentResolveView, nullptr);
+    if (state->presentResolveImage != 0)
+        state->vkDestroyImage(state->device, state->presentResolveImage, nullptr);
+    if (state->presentResolveMemory != VK_NULL_DEVICE_MEMORY)
+        state->vkFreeMemory(state->device, state->presentResolveMemory, nullptr);
+    state->presentResolveImage = 0;
+    state->presentResolveView = VK_NULL_IMAGE_VIEW;
+    state->presentResolveMemory = VK_NULL_DEVICE_MEMORY;
+    state->presentResolveWidth = state->presentResolveHeight = 0;
+    state->presentResolveFormat = 0;
+}
+
 void piRendererVulkan::Deinitialize(void)
 {
     if (!mState)
@@ -8440,6 +8460,7 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDeviceWaitIdle(mState->device);
         }
+        iDestroyPresentResolve(mState);
         for (auto &frame : mState->hostFrames)
         {
             for (piBuffer page : frame.uniformPages) DestroyBuffer(page);
@@ -8870,27 +8891,51 @@ static bool iRecordSrgbPresentPass(piVulkanState *state, piTexture source, uint3
     return true;
 }
 
-static void iDestroyPresentScratch(piVulkanState *state, VkImage image, VkImageView view, VkDeviceMemory memory)
+// SwapBuffers waits its previous presentation fence before reusing this image.
+// Keep it until size/format changes or teardown; allocating full-resolution GPU
+// memory on every presented MSAA frame defeats the normal resource lifetime.
+static bool iEnsurePresentResolve(piVulkanState *state, piTexture source, piRenderer::piReporter *reporter)
 {
-    if (!state || state->device == VK_NULL_DEVICE)
+    const uint32_t width = static_cast<uint32_t>(source->info.mXres);
+    const uint32_t height = static_cast<uint32_t>(source->info.mYres);
+    if (state->presentResolveImage != 0 && state->presentResolveView != VK_NULL_IMAGE_VIEW &&
+        state->presentResolveWidth == width && state->presentResolveHeight == height &&
+        state->presentResolveFormat == source->vkFormat)
+        return true;
+
+    iDestroyPresentResolve(state);
+    const VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                   VK_IMAGE_USAGE_SAMPLED_BIT;
+    if (!iCreateDeviceLocalImage(state, width, height, source->vkFormat, VK_SAMPLE_COUNT_1_BIT, usage,
+                                 &state->presentResolveImage, &state->presentResolveMemory, reporter))
     {
-        return;
+        iDestroyPresentResolve(state);
+        return false;
     }
-    if (view != VK_NULL_IMAGE_VIEW && state->vkDestroyImageView)
+    VkImageViewCreateInfo viewInfo = {};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = state->presentResolveImage;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = source->vkFormat;
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.layerCount = 1;
+    if (state->vkCreateImageView(state->device, &viewInfo, nullptr, &state->presentResolveView) != VK_SUCCESS ||
+        state->presentResolveView == VK_NULL_IMAGE_VIEW)
     {
-        state->vkDestroyImageView(state->device, view, nullptr);
+        iError(reporter, "Vulkan renderer failed to create persistent present resolve view");
+        iDestroyPresentResolve(state);
+        return false;
     }
-    if (memory != VK_NULL_DEVICE_MEMORY)
-    {
-        if (image != 0 && state->vkDestroyImage)
-        {
-            state->vkDestroyImage(state->device, image, nullptr);
-        }
-        if (state->vkFreeMemory)
-        {
-            state->vkFreeMemory(state->device, memory, nullptr);
-        }
-    }
+    state->presentResolveWidth = width;
+    state->presentResolveHeight = height;
+    state->presentResolveFormat = source->vkFormat;
+    iReport(reporter, "[IMM_VK_PRESENT_REUSE] Created persistent MSAA presentation resolve image");
+    return true;
 }
 
 void piRendererVulkan::SwapBuffers(void)
@@ -8928,7 +8973,6 @@ void piRendererVulkan::SwapBuffers(void)
     piTexture presentTexture = mState->pendingPresentTexture;
     VkImage directPresentImage = presentTexture ? presentTexture->image : 0;
     VkImageView directPresentImageView = VK_NULL_IMAGE_VIEW;
-    VkDeviceMemory directPresentMemory = VK_NULL_DEVICE_MEMORY;
     const bool directPresentNeedsResolve = presentTexture && presentTexture->sampleCount != VK_SAMPLE_COUNT_1_BIT;
     bool directPresentTexture =
         presentTexture && presentTexture->image != 0 &&
@@ -8956,40 +9000,11 @@ void piRendererVulkan::SwapBuffers(void)
         presentTexture->vkFormat == VK_FORMAT_B10G11R11_UFLOAT_PACK32;
     if (directPresentTexture && directPresentNeedsResolve)
     {
-        const VkImageUsageFlags resolveUsage = srgbGpuPresentTexture
-                                                   ? (VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                                                   : (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-        directPresentTexture = iCreateDeviceLocalImage(mState,
-                                                       (uint32_t)presentTexture->info.mXres,
-                                                       (uint32_t)presentTexture->info.mYres,
-                                                       presentTexture->vkFormat,
-                                                       VK_SAMPLE_COUNT_1_BIT,
-                                                       resolveUsage,
-                                                       &directPresentImage,
-                                                       &directPresentMemory,
-                                                       mReporter);
-        if (directPresentTexture && srgbGpuPresentTexture)
+        directPresentTexture = iEnsurePresentResolve(mState, presentTexture, mReporter);
+        if (directPresentTexture)
         {
-            VkImageViewCreateInfo viewInfo = {};
-            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            viewInfo.image = directPresentImage;
-            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            viewInfo.format = presentTexture->vkFormat;
-            viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            viewInfo.subresourceRange.baseMipLevel = 0;
-            viewInfo.subresourceRange.levelCount = 1;
-            viewInfo.subresourceRange.baseArrayLayer = 0;
-            viewInfo.subresourceRange.layerCount = 1;
-            VkResult viewResult = mState->vkCreateImageView(mState->device, &viewInfo, nullptr, &directPresentImageView);
-            if (viewResult != VK_SUCCESS || directPresentImageView == VK_NULL_IMAGE_VIEW)
-            {
-                iError(mReporter, "Vulkan renderer failed to create sRGB present resolve image view");
-                directPresentTexture = false;
-            }
+            directPresentImage = mState->presentResolveImage;
+            directPresentImageView = mState->presentResolveView;
         }
     }
     if (!mState->presentSelectionReported && presentTexture)
@@ -9026,7 +9041,6 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkBeginCommandBuffer(mState->commandBuffer, &beginInfo);
     if (result != VK_SUCCESS)
     {
-        iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
         return;
     }
 
@@ -9152,7 +9166,6 @@ void piRendererVulkan::SwapBuffers(void)
                 mState->gpuReadbackFailureReported = true;
                 iError(mReporter, "Vulkan renderer failed to record sRGB present pass");
             }
-            iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
             return;
         }
         directPresentTexture = false;
@@ -9424,7 +9437,6 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkEndCommandBuffer(mState->commandBuffer);
     if (result != VK_SUCCESS)
     {
-        iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
         return;
     }
 
@@ -9441,13 +9453,11 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkQueueSubmit(mState->graphicsQueue, 1, &submitInfo, mState->frameFence);
     if (result != VK_SUCCESS)
     {
-        iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
         return;
     }
     result = mState->vkWaitForFences(mState->device, 1, &mState->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
-        iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
         return;
     }
 #if defined(WINDOWS)
@@ -9506,7 +9516,6 @@ void piRendererVulkan::SwapBuffers(void)
             iReport(mReporter, "Vulkan renderer presented swapchain clear frame");
         }
     }
-    iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
 }
 
 void piRendererVulkan::EndExternalImageFrame(void)

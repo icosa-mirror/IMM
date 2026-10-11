@@ -93,6 +93,27 @@ not claim that simulator results establish physical-device performance.
 
 ### Android Godot investigation (2026-10-11)
 
+Local physical-device follow-up on A059 (Android 16, Adreno 810): the same Godot
+benchmark APK from run `38150209754` produced 58.49, 26.75 and 24.18 FPS in three
+five-second samples at 2392x1080. All samples passed rendered-frame validity;
+the variation is unresolved and the first result must not stand alone.
+
+The native Vulkan APK from green run `38167228187` produced **10.15 FPS** at
+2266x1080 with 8x MSAA. Its saved log records about 0.5 ms of scene command
+recording but 20–57 ms waiting for submitted GPU work. This is an unresolved
+physical-device performance problem, despite full CI validation passing.
+
+The first candidate reuses the full-resolution MSAA presentation resolve image
+instead of allocating/freeing it every frame. It retains the existing resolution,
+MSAA, presentation waits and visual behavior. A single before/after Windows
+Vulkan comparison on an RTX 4090 at 1280x720 improved from 383.10 to 613.05 FPS
+(2.61 to 1.63 ms/frame). This is desktop evidence, not an Android improvement claim.
+The Android APK builds; seven existing Vulkan tests and the native sample
+readback/live-presentation smoke pass. A059 retesting is pending: the user has
+reclaimed the phone, and no further device interaction is authorized until it is
+made available again. Raw samples, logs, verdicts and the candidate APK are kept
+locally under ignored `artifacts/a059-phone/`.
+
 The corrected same-run binary validation in run `38150209754` measured
 **51.44 FPS** on the physical Mali-G715 Android device at 2400x1080, compared
 with 10.3 FPS before persistent render-pass reuse. This resolves the observed
