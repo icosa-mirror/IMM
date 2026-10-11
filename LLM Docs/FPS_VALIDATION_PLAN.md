@@ -107,8 +107,10 @@ imported-asset and shader-cache data, using new keys that exclude old whole-Libr
 archives. Compiler PIDs and other unlisted session/build state are regenerated.
 Required gates remain unchanged. See
 [the investigation and validation record](../docs/ci-unity-startup-kills.md).
-Full validation of the allowlist policy is pending CI; retries alone do not
-establish reliability. Warm-cache build times must be measured before expanding it.
+Full validation run [38167228187](https://github.com/icosa-mirror/IMM/actions/runs/38167228187)
+passed all 45 jobs at source `f4229d82` with the allowlist policy. This is a
+successful full run, not a measured failure rate. Warm-cache build times must
+be measured before expanding the allowlist.
 
 1. Run `38135593727`, source `b2c29023`, measured 10.3 FPS for the delivered
    sample on Firebase's akita Android 34 / Mali-G715 at 2400x1080. Measurement

@@ -3,8 +3,10 @@
 Root cause identified: restored `Library/burst.pid` can identify an unrelated
 process or thread on a new runner. Unity kills that reused PID while cleaning up
 the previous Burst compiler. Four restored-cache startup trials passed with PID
-cleanup in run 38163769973. Production caching now uses an explicit allowlist;
-full validation of that cache policy is pending.
+cleanup in run 38163769973. Production caching now uses an explicit allowlist.
+Full validation run [38167228187](https://github.com/icosa-mirror/IMM/actions/runs/38167228187)
+passed all 45 jobs at source commit `f4229d82`. Warm-cache build times have not
+yet been measured; one successful run does not establish a failure rate.
 
 ## Cause and fix
 
