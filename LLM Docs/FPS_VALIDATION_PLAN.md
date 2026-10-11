@@ -109,10 +109,28 @@ MSAA, presentation waits and visual behavior. A single before/after Windows
 Vulkan comparison on an RTX 4090 at 1280x720 improved from 383.10 to 613.05 FPS
 (2.61 to 1.63 ms/frame). This is desktop evidence, not an Android improvement claim.
 The Android APK builds; seven existing Vulkan tests and the native sample
-readback/live-presentation smoke pass. A059 retesting is pending: the user has
-reclaimed the phone, and no further device interaction is authorized until it is
-made available again. Raw samples, logs, verdicts and the candidate APK are kept
-locally under ignored `artifacts/a059-phone/`.
+readback/live-presentation smoke pass. Matched A059 baseline/candidate/baseline
+samples were 11.51 / 8.93 / 8.59 FPS: resolve-image reuse alone did not resolve
+the phone slowdown. Raw samples, logs, verdicts and APK hashes are kept locally
+under ignored `artifacts/a059-phone/`.
+
+Phase timing then found a separate per-frame CPU shadow-buffer clear costing
+15–38 ms in the Android debug build at 2266x1080. Replacing per-pixel assignments
+with bulk copies reduced that measured phase to 2–4 ms; a short 8x sample reached
+18.97 FPS. A packed-pixel `std::fill_n` experiment did not remove the debug-loop
+cost and was rejected. A transient-attachment/in-pass-resolve experiment measured
+17.22 FPS at 8x and showed no clear improvement; it was removed rather than
+expanding the shared renderer contract without demonstrated benefit.
+
+The existing attachment path with bulk clear, without phase probes, measured
+23.65 and 22.82 FPS at 4x MSAA and 16.70 FPS at 8x using the same APK and
+2266x1080 surface (APK SHA-256
+`ae33106f7254aac359c023710a9a5a9ca7a2445cc05ab8e8ba4bff803ebabea6`).
+Logs confirm actual sample counts and 37 paint draws. These are short debug-build
+samples, not completion evidence: phone performance remains unresolved. One repeat
+created a 1x1 surface and was rejected by frame validation; that launch/resize
+anomaly also remains unresolved. Benchmark apps must be force-stopped immediately
+after collecting each sample, including on failure.
 
 The corrected same-run binary validation in run `38150209754` measured
 **51.44 FPS** on the physical Mali-G715 Android device at 2400x1080, compared
@@ -194,6 +212,10 @@ also identify its exact workload and rendering path:
 
 1. Actual graphics API, distinguishing D3D11 from D3D12; engine version and render
    pipeline, distinguishing Built-in from URP; MSAA and other material settings.
+   Include 4x MSAA as a required mobile baseline where supported. Preserve 8x as a
+   separate comparison where currently used; compare at matched resolution,
+   workload and APK/build identity, verify actual sample counts, and do not
+   attribute a quality reduction to an implementation speedup.
 2. Actual GPU/device model, driver version when available, OS and build identity.
 3. Fixture filename and content hash, pinned camera pose with explicit values or
    a versioned pose definition, and animation time or a deterministic playback

@@ -50,6 +50,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     @JvmStatic external fun nativeSendMessage(message: String?, messageType: Int)
     @JvmStatic external fun nativeSetQuillRenderingTechnique(renderingTechnique: Int)
     @JvmStatic external fun nativeSetRenderingApi(renderingApi: String?)
+    @JvmStatic external fun nativeSetRenderingSamples(samples: Int)
     @JvmStatic external fun nativeSetValidationRenderSize(width: Int, height: Int)
     @JvmStatic external fun nativeSetValidationPlayback(fixedDt: Double, playerFrame: Long)
     @JvmStatic external fun nativeSetPerformanceOutput(path: String)
@@ -89,6 +90,9 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
 
   override fun onCreate(savedInstanceState: Bundle?) {
     applyRenderingApiExtra(intent)
+    if (intent?.hasExtra("RenderingSamples") == true) {
+      nativeSetRenderingSamples(intent.getIntExtra("RenderingSamples", 8))
+    }
     applyValidationRenderSizeExtra(intent)
     applyValidationPlaybackExtra(intent)
     if (intent?.getBooleanExtra("PerformanceSample", false) == true) {

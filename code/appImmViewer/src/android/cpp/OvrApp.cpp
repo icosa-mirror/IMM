@@ -359,6 +359,12 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetQuillRenderingTec
     immPlayerState.renderingTechnique = static_cast<ExePlayer::Settings::Rendering::Technique>(renderingTechnique);
 }
 
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetRenderingSamples(
+        JNIEnv *, jclass, jint samples)
+{
+    ALOGV("nativeSetRenderingSamples ignored by Oculus/GLES VR path: %d", samples);
+}
+
 void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetRenderingApi(
         JNIEnv * jni,
         jclass clazz,

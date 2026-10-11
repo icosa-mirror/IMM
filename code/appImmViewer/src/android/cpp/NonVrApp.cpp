@@ -69,6 +69,7 @@ struct EngineState {
     bool hasWindow = false;
     bool running = false;
     bool useVulkan = false;
+    int renderingSamples = 8;
 
     piRenderer* renderer = nullptr;
     piLog* log = nullptr;
@@ -871,7 +872,7 @@ bool ensureRenderTarget() {
         width,
         height,
         1,
-        8,
+        gEngine.renderingSamples,
         1,
         0
     };
@@ -881,7 +882,7 @@ bool ensureRenderTarget() {
         width,
         height,
         1,
-        8,
+        gEngine.renderingSamples,
         1,
         0
     };
@@ -1306,6 +1307,14 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetQuillRenderingTec
     jclass,
     jint renderingTechnique) {
     gEngine.renderingTechnique = static_cast<Settings::Rendering::Technique>(renderingTechnique);
+}
+
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetRenderingSamples(
+    JNIEnv*, jclass, jint samples) {
+    if (!gEngine.renderer && (samples == 4 || samples == 8)) {
+        gEngine.renderingSamples = samples;
+        ALOGV("IMM Android requested MSAA: %dx", samples);
+    }
 }
 
 void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetRenderingApi(

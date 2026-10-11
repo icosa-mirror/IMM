@@ -126,6 +126,18 @@ adb shell am start -n org.linuxfoundation.imm.player/.MainActivity
 | `-PimmBuildDir=<dir>` | `build` | Custom build output dir (use `build_vr` for VR to avoid conflicts) |
 | `-PimmRendererApi=GLES/Vulkan` | `Vulkan` for non-VR, `GLES` for VR | Selects the Android startup renderer. Non-VR can still request `RenderingAPI` through intent extras before native renderer initialization. |
 
+For matched native Vulkan performance comparisons, launch with the integer intent
+extra `RenderingSamples` set to `4` or `8` before renderer initialization. The
+default remains 8x; the Oculus/GLES VR path ignores this override. For example:
+
+```powershell
+adb shell am start -W -n org.linuxfoundation.imm.player/.MainActivity --es RenderingAPI Vulkan --ei RenderingSamples 4 --ez PerformanceSample true
+```
+
+Verify the actual `sampleCount` and target dimensions in the `IMMAVAL present
+select` log. Stop the app immediately after retrieving its frame sample:
+`adb shell am force-stop org.linuxfoundation.imm.player`.
+
 ## Loading IMM content on device
 
 The Android player loads content in this order:
