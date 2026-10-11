@@ -652,6 +652,22 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
         throw std::runtime_error("Initialize cached normal-depth probe");
     auto normalDepth = renderer.CreateDepthState(true, true);
     renderer.SetDepthState(normalDepth);
+    // The real Godot host supplies a depth attachment already in attachment
+    // layout. Newly allocated test images begin undefined; establish that input.
+    VkCommandBufferBeginInfo prepare = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    Check(vkBeginCommandBuffer(host.commands, &prepare), "Begin cached depth host preparation");
+    VkImageMemoryBarrier attachment = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    attachment.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    attachment.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; attachment.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    attachment.srcQueueFamilyIndex = attachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    attachment.image = host.depth; attachment.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
+    vkCmdPipelineBarrier(host.commands, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &attachment);
+    Check(vkEndCommandBuffer(host.commands), "End cached depth host preparation");
+    VkSubmitInfo prepareSubmit = {VK_STRUCTURE_TYPE_SUBMIT_INFO}; prepareSubmit.commandBufferCount = 1; prepareSubmit.pCommandBuffers = &host.commands;
+    Check(vkQueueSubmit(host.queue, 1, &prepareSubmit, VK_NULL_HANDLE), "Submit cached depth host preparation");
+    Check(vkQueueWaitIdle(host.queue), "Complete cached depth host preparation");
     for (int frame = 0; frame < 2; ++frame)
     {
         if (!renderer.BeginExternalImageFrame(reinterpret_cast<void*>(host.color), VK_FORMAT_R8G8B8A8_UNORM,
@@ -663,14 +679,15 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
         Check(vkBeginCommandBuffer(host.commands, &begin), "Begin cached depth readback");
         VkImageMemoryBarrier barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
         barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT; barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = host.depth; barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
         vkCmdPipelineBarrier(host.commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
         VkBufferImageCopy copy = {}; copy.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1}; copy.imageExtent = {Size, Size, 1};
         vkCmdCopyImageToBuffer(host.commands, host.depth, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, host.readback, 1, &copy);
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT; barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         vkCmdPipelineBarrier(host.commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
         Check(vkEndCommandBuffer(host.commands), "End cached depth readback");
         VkSubmitInfo submit = {VK_STRUCTURE_TYPE_SUBMIT_INFO}; submit.commandBufferCount = 1; submit.pCommandBuffers = &host.commands;
