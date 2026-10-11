@@ -7,7 +7,7 @@ on:
         description: Windows cold/warm starts or Android starts from the existing CI cache
         type: choice
         default: windows
-        options: [windows, android]
+        options: [windows, android, inspect]
 
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        trial: ${{ fromJSON(inputs.profile == 'android' && '[1,2,3,4]' || '[1,2]') }}
+        trial: ${{ fromJSON(inputs.profile == 'android' && '[1,2,3,4]' || inputs.profile == 'inspect' && '[1]' || '[1,2]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +38,7 @@ jobs:
           from pathlib import Path
           import yaml
           config = yaml.safe_load(Path('.github/workflows/ci-engine.yml').read_text())['env']
-          android = os.environ['IMM_STARTUP_PROFILE'] == 'android'
+          android = os.environ['IMM_STARTUP_PROFILE'] != 'windows'
           project = 'code/ImmUnitySampleProject'
           if android:
               project = '.ci-workspace/unity-android-openxr-quest'
@@ -77,12 +77,32 @@ jobs:
             ${{ env.IMM_STARTUP_CACHE }}-${{ env.UNITY_VERSION }}-
 
       - name: Require the exact restored-cache condition for Android trials
-        if: inputs.profile == 'android' && steps.library.outputs.cache-hit != 'true'
+        if: inputs.profile != 'windows' && steps.library.outputs.cache-hit != 'true'
         run: |
           echo 'The Android CI Library cache was unavailable; refusing a cold-start substitute.'
           exit 1
 
+      - name: Record compiler PIDs preserved in the restored Library
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          library = Path(os.environ['IMM_STARTUP_PROJECT']) / 'Library'
+          records = {}
+          for name in ('burst.pid', 'ilpp.pid'):
+              path = library / name
+              if path.exists():
+                  text = path.read_text().strip()
+                  records[name] = int(text) if text.isdecimal() else 'not a numeric PID'
+          output = Path('artifacts/unity-startup/restored-compiler-pids.json')
+          output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text(json.dumps(records, indent=2))
+          PY
+
       - name: Start signal and resource diagnostics
+        if: inputs.profile != 'inspect'
         shell: bash
         run: |
           mkdir -p artifacts/unity-startup
@@ -90,6 +110,7 @@ jobs:
           echo $! > artifacts/unity-startup/monitor.pid
 
       - name: Activate and launch the sample project without building a player
+        if: inputs.profile != 'inspect'
         uses: game-ci/unity-builder@v4
         timeout-minutes: 20
         env:
