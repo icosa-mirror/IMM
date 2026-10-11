@@ -48,6 +48,13 @@ func _start() -> void:
 		if argument == "--fixed-fps" or argument.begins_with("--fixed-fps="):
 			_finish("Synthetic fixed-fps timing is unsuitable for performance evidence.")
 			return
+	# Fresh CI checkouts may not have an imported extension registry yet.
+	# Match the existing visual probe's explicit native-class discovery.
+	if not ClassDB.class_exists("ImmViewerCompositorEffect"):
+		var status := GDExtensionManager.load_extension("res://addons/imm_viewer/imm_viewer.gdextension")
+		if status != OK and status != ERR_ALREADY_EXISTS:
+			_finish("Cannot load the IMM native extension: %d" % status)
+			return
 	var packed := load(ProjectSettings.get_setting("application/run/main_scene")) as PackedScene
 	if packed == null:
 		_finish("Cannot load the normal sample main scene.")
