@@ -91,6 +91,25 @@ not claim that simulator results establish physical-device performance.
 6. iOS/Android collection and speed calibration remain unfinished. No completed
    cross-platform performance protection is claimed by this checkpoint.
 
+### Android Godot investigation (2026-10-11)
+
+1. Run `38135593727`, source `b2c29023`, measured 10.3 FPS for the delivered
+   sample on Firebase's akita Android 34 / Mali-G715 at 2400x1080. Measurement
+   validity passed; acceptable performance has not. No FPS floor is enforced yet.
+2. Existing renderer timings show 62-75 ms of CPU recording, almost all inside
+   draw API calls, and approximately 15 ms of submit/completion time for 38 draws.
+   Captured handles show stable color/depth images but a recreated render pass
+   each frame. The pipeline cache requires matching render-pass handles.
+3. Candidate: use the existing persistent external-image wrappers for Godot's
+   intermediate targets. Keep the direct host-color/depth path unchanged. Preserve
+   normal-Z depth clearing on cache hits. At most this can recover the measured
+   62-75 ms CPU cost; it cannot eliminate the GPU/composition cost.
+4. Budget: one focused local Vulkan check and one matched Firebase comparison.
+   Accept only if the same fixture, resolution, device profile and source-built
+   binaries improve sustained FPS materially and existing composition checks pass.
+   Stop this candidate if recording time remains high or correctness regresses;
+   do not hide the slowdown by lowering resolution or relaxing correctness gates.
+
 ## Coverage and Gating Policy
 
 1. Every supported matrix row explicitly declares one performance mode:

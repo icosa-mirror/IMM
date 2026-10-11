@@ -304,7 +304,22 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFra
     piRendererVulkan *renderer = static_cast<piRendererVulkan *>(gBridge.GetRenderer());
     const bool clearExternalDepth = frame->version >= 2 && (frame->flags & ImmGodotVulkanFrameFlag_ClearExternalDepth) != 0;
     bool began = false;
-    if (frame->depthImage != nullptr && frame->depthImageView != nullptr && frame->depthFormat != 0)
+    if (clearExternalDepth && frame->depthImage != nullptr && frame->depthFormat != 0)
+    {
+        // Intermediate images survive across compositor callbacks. Retain their
+        // wrappers/render passes so each paint pipeline can also survive, rather
+        // than recompiling against a new render-pass handle every frame. The
+        // cache owns its image views; Godot continues to own the actual images.
+        began = renderer->BeginExternalImageFrame(frame->colorImage,
+                                                  frame->colorFormat,
+                                                  frame->width,
+                                                  frame->height,
+                                                  1,
+                                                  frame->depthImage,
+                                                  frame->depthFormat,
+                                                  true);
+    }
+    else if (frame->depthImage != nullptr && frame->depthImageView != nullptr && frame->depthFormat != 0)
     {
         began = renderer->BeginExternalImageFrame(frame->colorImage,
                                                   frame->colorImageView,

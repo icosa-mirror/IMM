@@ -9800,11 +9800,17 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
             const bool deferClears = iBatchEnabled(mState) && iInPassClearEnabled(mState) &&
                                      entry.renderTarget->clearRenderPass != VK_NULL_RENDER_PASS;
             const float transparentBlack[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+            // Match fresh-wrapper clearing: Godot's intermediate projection is
+            // normal-Z, while Unity's external eye projection is reversed-Z.
+            const bool clearDepthAsReverseZ =
+                (mState->currentDepthState && !mState->currentDepthState->lessEqual) ||
+                (mState->externalDepthReverseZ && !mState->hostRenderPassFrameActive &&
+                 iExternalReverseZEnabled(mState));
             if (!SetRenderTarget(entry.renderTarget) ||
                 (!deferClears &&
                  (!iClearColorTextureImage(mState, entry.colorTexture, transparentBlack, mReporter) ||
                   !iClearDepthTextureImage(mState, entry.depthTexture, mReporter,
-                                           iExternalReverseZEnabled(mState) ? 0.0f : 1.0f))))
+                                           clearDepthAsReverseZ ? 0.0f : 1.0f))))
             {
                 // Entry unusable - drop it and rebuild through the create path.
                 DestroyRenderTarget(entry.renderTarget);

@@ -167,8 +167,8 @@ struct Host
         VkCommandBufferAllocateInfo ai = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         ai.commandPool = pool; ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY; ai.commandBufferCount = 1;
         Check(vkAllocateCommandBuffers(device, &ai, &commands), "Allocate host command buffer");
-        Image(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_IMAGE_ASPECT_COLOR_BIT, color, colorView);
-        Image(VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, depth, depthView);
+        Image(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT, color, colorView);
+        Image(VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, depth, depthView);
         VkAttachmentDescription attachments[2] = {};
         attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
         attachments[0].samples = VK_SAMPLE_COUNT_1_BIT; attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -645,6 +645,47 @@ void RunVulkanMultiviewProbe(ImmCore::piRenderer::piReporter& reporter, ImmCore:
     Host host; host.Init();
     piRendererVulkan renderer;
     piVulkanExternalDevice external = {host.instance, host.physical, host.device, host.queue, host.family, false, false};
+    // Exercise the fresh and cached Godot intermediate-image paths with actual
+    // GPU readback. Explicit clears also cover the non-batched fallback.
+    _putenv_s("IMM_UNITY_VK_NO_INPASS_CLEAR", "1");
+    if (!renderer.Initialize(0, nullptr, 0, true, false, &reporter, false, &external))
+        throw std::runtime_error("Initialize cached normal-depth probe");
+    auto normalDepth = renderer.CreateDepthState(true, true);
+    renderer.SetDepthState(normalDepth);
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        if (!renderer.BeginExternalImageFrame(reinterpret_cast<void*>(host.color), VK_FORMAT_R8G8B8A8_UNORM,
+                Size, Size, 1, reinterpret_cast<void*>(host.depth), VK_FORMAT_D32_SFLOAT, true))
+            throw std::runtime_error("Begin cached normal-depth frame");
+        renderer.EndExternalImageFrame();
+        Check(vkResetCommandBuffer(host.commands, 0), "Reset cached depth readback");
+        VkCommandBufferBeginInfo begin = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        Check(vkBeginCommandBuffer(host.commands, &begin), "Begin cached depth readback");
+        VkImageMemoryBarrier barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT; barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = host.depth; barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
+        vkCmdPipelineBarrier(host.commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        VkBufferImageCopy copy = {}; copy.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1}; copy.imageExtent = {Size, Size, 1};
+        vkCmdCopyImageToBuffer(host.commands, host.depth, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, host.readback, 1, &copy);
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT; barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        vkCmdPipelineBarrier(host.commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+        Check(vkEndCommandBuffer(host.commands), "End cached depth readback");
+        VkSubmitInfo submit = {VK_STRUCTURE_TYPE_SUBMIT_INFO}; submit.commandBufferCount = 1; submit.pCommandBuffers = &host.commands;
+        Check(vkQueueSubmit(host.queue, 1, &submit, VK_NULL_HANDLE), "Submit cached depth readback");
+        Check(vkQueueWaitIdle(host.queue), "Complete cached depth readback");
+        void* mapped = nullptr;
+        Check(vkMapMemory(host.device, host.readbackMemory, 0, Size * Size * sizeof(float), 0, &mapped), "Map cached depth readback");
+        const float clearDepth = static_cast<float*>(mapped)[Size * Size / 2];
+        vkUnmapMemory(host.device, host.readbackMemory);
+        if (clearDepth != 1.0f) throw std::runtime_error("Cached Godot normal-Z depth was not cleared to one");
+    }
+    renderer.DestroyDepthState(normalDepth);
+    renderer.Deinitialize();
+    _putenv_s("IMM_UNITY_VK_NO_INPASS_CLEAR", "");
+    std::puts("IMM_VULKAN_CACHED_DEPTH PASS fresh and cached normal-Z readback");
     // No capability is inferred from physical support or the presence of array attachments.
     if (!renderer.Initialize(0, nullptr, 0, true, false, &reporter, false, &external))
         throw std::runtime_error("Initialize mono-only borrowed Vulkan renderer");
