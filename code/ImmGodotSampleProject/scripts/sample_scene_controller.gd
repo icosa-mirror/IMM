@@ -165,6 +165,19 @@ func _load_document_after_render_warmup() -> void:
 	for _frame in range(3):
 		_queue_active_camera()
 		await get_tree().process_frame
+	# A successful borrowed frame completes native graphics initialization.
+	# The API-initialized callback can fire earlier, especially on Android.
+	var effect = camera.compositor.compositor_effects[0]
+	var graphics_deadline := Time.get_ticks_msec() + 30000
+	while true:
+		var diagnostics: Dictionary = effect.get_diagnostics()
+		if bool(diagnostics.get("ever_vulkan_frame_started", false)) or bool(diagnostics.get("last_metal_frame_started", false)):
+			break
+		if Time.get_ticks_msec() >= graphics_deadline:
+			push_error("[IMM_SAMPLE_STARTUP] No borrowed graphics frame: %s" % diagnostics)
+			return
+		_queue_active_camera()
+		await get_tree().process_frame
 	var load_result: int = int(viewer.load_document())
 	if load_result < 0:
 		push_error("IMM sample load_document returned %d" % load_result)
