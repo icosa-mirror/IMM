@@ -379,6 +379,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Download same-commit Android Godot native binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmPlayerPlugin-Godot
+          path: artifacts/godot-source-package
+      - name: Install source-built Android libraries for export
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp artifacts/godot-source-package/addons/imm_viewer/bin/android/debug/*.so \
+            code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -515,6 +526,30 @@ jobs:
           if scene != source:
               raise SystemExit("Export changed the normal sample scene; native compositor resources must be retained intact")
           print("[IMM-FPS-EXPORT] Normal scene retained byte-for-byte in the Android APK")
+          PY
+      - name: Verify exported APKs contain same-commit native libraries
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile
+          root = Path("artifacts/android-godot-vulkan")
+          native = Path("code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug")
+          evidence = {"source_commit": os.environ["GITHUB_SHA"], "apks": {}}
+          for name in ("imm-godot-sample-debug.apk", "imm-godot-performance-debug.apk"):
+              inputs = {}
+              with ZipFile(root / name) as apk:
+                  for library in ("libImmGodotPlugin.so", "libimm_godot_extension.arm64.so"):
+                      built = (native / library).read_bytes()
+                      if apk.read(f"lib/arm64-v8a/{library}") != built:
+                          raise SystemExit(f"{name} does not contain the same-run source-built {library}")
+                      inputs[library] = hashlib.sha256(built).hexdigest()
+              evidence["apks"][name] = inputs
+          (root / "native-inputs.json").write_text(json.dumps(evidence, indent=2) + "\n")
+          print("[IMM-FPS-EXPORT] Both APKs contain the same-run source-built native libraries")
           PY
       - name: Build Android Godot Firebase test APKs
         working-directory: code/projects/android

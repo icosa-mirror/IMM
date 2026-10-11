@@ -109,6 +109,14 @@ not claim that simulator results establish physical-device performance.
    binaries improve sustained FPS materially and existing composition checks pass.
    Stop this candidate if recording time remains high or correctness regresses;
    do not hide the slowdown by lowering resolution or relaxing correctness gates.
+5. Run `38144175925` still measured 10.36 FPS on Android, but its uncached-path
+   logs exposed stale inputs: the device job exported checked-in native libraries
+   rather than the same-run build artifact. This is not a valid comparison of the
+   candidate. The job now downloads the same-commit Android native artifact and
+   checks both exported APKs against its exact library bytes, recording hashes.
+   The valid source-built Windows llvmpipe measurement rose from 3.16 to 8.49 FPS;
+   the Android comparison remains pending. Simulator and software-renderer
+   results do not establish hardware performance on those platforms.
 
 ## Coverage and Gating Policy
 
