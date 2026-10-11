@@ -10382,15 +10382,18 @@ void piRendererVulkan::Clear(const float *color0, const float *color1, const flo
     const uint8_t r = color0 ? (uint8_t)(color0[0] * 255.0f) : 0;
     const uint8_t g = color0 ? (uint8_t)(color0[1] * 255.0f) : 0;
     const uint8_t b = color0 ? (uint8_t)(color0[2] * 255.0f) : 0;
-    for (int y = 0; y < texture->info.mYres; ++y)
+    const uint8_t pixel[4] = { r, g, b, 255 };
+    const size_t bytes = static_cast<size_t>(texture->info.mXres) * static_cast<size_t>(texture->info.mYres) * sizeof(pixel);
+    if (bytes != 0)
     {
-        for (int x = 0; x < texture->info.mXres; ++x)
+        std::memcpy(texture->data, pixel, sizeof(pixel));
+        // Bulk copies use libc's vectorized implementation even in debug builds.
+        // Each source prefix is already initialized and never overlaps its copy.
+        for (size_t filled = sizeof(pixel); filled < bytes;)
         {
-            uint8_t *dst = texture->data + ((size_t)y * (size_t)texture->info.mXres + (size_t)x) * 4u;
-            dst[0] = r;
-            dst[1] = g;
-            dst[2] = b;
-            dst[3] = 255;
+            const size_t count = std::min(filled, bytes - filled);
+            std::memcpy(texture->data + filled, texture->data, count);
+            filled += count;
         }
     }
     if (!iClearColorTextureImage(mState, texture, color0, mReporter))
