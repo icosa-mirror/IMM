@@ -36,7 +36,10 @@ def main() -> int:
         command.append("--render-requests")
     command.extend(["--", "xcrun", "simctl", "launch", "--console", "--terminate-running-process", args.udid, bundle])
     if args.product == "godot":
-        command.extend(["--script", "res://ci/performance_probe.gd", "--", "--imm-godot-ci-scene=sample"])
+        # The simulator lacks presentDrawable:afterMinimumDuration:. Match the
+        # existing Metal correctness launch; retain real wall-clock sampling.
+        command.extend(["--disable-vsync", "--rendering-driver", "metal", "--rendering-method", "mobile",
+                        "--script", "res://ci/performance_probe.gd", "--", "--imm-godot-ci-scene=sample"])
     try:
         return subprocess.run(command, check=False).returncode
     finally:

@@ -413,6 +413,9 @@ jobs:
       - name: Prepare compact diagnostic artifact
         run: mkdir -p artifacts/unity-ios-player-build
 
+      - name: Install inactive Unity performance probe in Simulator CI checkout
+        run: python3 tests/tools/prepare_unity_ci_project.py --output code/ImmUnitySampleProject --install-performance-probe-only
+
       - name: Export Unity iOS Metal Simulator Xcode project
         id: unity_ios_simulator_export
         continue-on-error: true
