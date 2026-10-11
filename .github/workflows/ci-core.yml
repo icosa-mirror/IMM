@@ -181,6 +181,9 @@ jobs:
           --json-output artifacts/matrix-status/matrix-audit.json
           --markdown-output artifacts/matrix-status/matrix-audit.md
 
+      - name: Install workflow parser for cache-policy checks
+        run: python -m pip install --disable-pip-version-check PyYAML
+
       - name: Run CI tool self-tests
         run: |
           python tests/tools/test_collect_ci_artifacts.py
