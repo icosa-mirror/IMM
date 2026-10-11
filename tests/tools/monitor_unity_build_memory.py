@@ -6,6 +6,7 @@ from pathlib import Path
 import queue
 import signal
 import subprocess
+import sys
 import threading
 import time
 
@@ -40,6 +41,12 @@ def docker(*args):
 
 def monitor(output, workspace, duration):
     output.parent.mkdir(parents=True, exist_ok=True)
+    # sudo forwards termination to this owned child. No process arguments or
+    # environment values are traced; the output remains in the existing artifact.
+    kill_trace = subprocess.Popen([
+        'sudo', '-n', sys.executable, str(Path(__file__).with_name('trace_unity_kill.py').resolve()),
+        '--output', str(output.with_name(f'{output.stem}-signals.jsonl').resolve()),
+        '--max-seconds', str(duration)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     pending = queue.Queue()
     stopping = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -86,6 +93,12 @@ def monitor(output, workspace, duration):
                              exit_code=event.get('Actor', {}).get('Attributes', {}).get('exitCode'))
                 stopping.wait(2)
         finally:
+            if kill_trace.poll() is None:
+                kill_trace.terminate()
+            try:
+                kill_trace.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                emit('diagnostic_error', error='Signal tracer did not stop within five seconds')
             events.terminate()
             try:
                 events.wait(timeout=3)

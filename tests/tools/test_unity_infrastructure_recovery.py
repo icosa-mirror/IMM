@@ -3,6 +3,8 @@ from pathlib import Path
 import tempfile
 import json
 import os
+import subprocess
+import sys
 from unittest.mock import patch
 import retry_unity_startup_kill as retry
 from monitor_unity_build_memory import cgroup_directory, counters, read_memory
@@ -10,6 +12,17 @@ from retry_unity_startup_kill import candidate, eligible, startup_kill, TARGET
 
 
 def main():
+    if sys.platform == 'linux' and os.environ.get('GITHUB_ACTIONS') == 'true':
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / 'signals.jsonl'
+            subprocess.run(['sudo', '-n', sys.executable,
+                            str(Path(__file__).with_name('trace_unity_kill.py').resolve()),
+                            '--output', str(output), '--max-seconds', '1'],
+                           check=True, timeout=20)
+            events = [json.loads(line) for line in output.read_text().splitlines()]
+            assert any(e['kind'] == 'ready' for e in events), 'CI kernel signal tracing unavailable'
+            assert any(e['kind'] == 'self_test_result' and e['observed'] for e in events), \
+                'CI tracer failed to observe its own SIGKILL probe'
     observed = '\n'.join([
         '2026-10-10T10:24:00Z CodeReloadManager initialized',
         '2026-10-10T10:24:00Z Begin MonoManager ReloadAssembly',
