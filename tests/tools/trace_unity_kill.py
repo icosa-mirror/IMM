@@ -32,10 +32,24 @@ def trace(output, duration):
                 subprocess.run(['mount', '-t', 'tracefs', 'tracefs', str(root)],
                                capture_output=True, check=True, timeout=10)
             instance.mkdir()
+            for option in ('record-tgid', 'userstacktrace'):
+                path = instance / 'options' / option
+                if path.exists():
+                    path.write_text('1')
             event = instance / 'events/signal/signal_generate'
             (event / 'filter').write_text('sig == 9')
             (event / 'enable').write_text('1')
             enabled.append(event)
+            for name in ('sys_enter_kill', 'sys_enter_tkill', 'sys_enter_tgkill'):
+                syscall = instance / 'events/syscalls' / name
+                if syscall.exists():
+                    (syscall / 'filter').write_text('sig == 9')
+                    (syscall / 'enable').write_text('1')
+                    enabled.append(syscall)
+            exec_event = instance / 'events/sched/sched_process_exec'
+            if exec_event.exists():
+                (exec_event / 'enable').write_text('1')
+                enabled.append(exec_event)
             oom = instance / 'events/oom/mark_victim'
             if oom.exists():
                 (oom / 'enable').write_text('1')
@@ -71,6 +85,23 @@ def trace(output, duration):
                             # Prefix identifies sender task/PID; payload identifies target.
                             decoded = line.decode(errors='replace')
                             emit('kernel_event', trace=decoded)
+                            if 'sched_process_exec:' in decoded:
+                                match = re.search(r'\bpid=(\d+)\b', decoded)
+                                if match:
+                                    proc = Path('/proc') / match[1]
+                                    try:
+                                        exe = (proc / 'exe').resolve(strict=True)
+                                        if exe.name == 'Unity':
+                                            status = (proc / 'status').read_text().splitlines()
+                                            args = (proc / 'cmdline').read_bytes().split(b'\0')
+                                            # Classify activation without retaining any argument values.
+                                            role = 'activation' if b'-serial' in args else 'return_license' if b'-returnlicense' in args else 'project'
+                                            emit('unity_process', pid=int(match[1]), role=role,
+                                                 identity=[s for s in status if s.split(':', 1)[0] in ('Name', 'Pid', 'Tgid', 'PPid', 'NSpid')],
+                                                 executable=str(exe),
+                                                 executable_maps=[s for s in (proc / 'maps').read_text().splitlines() if 'r-xp' in s])
+                                    except OSError:
+                                        pass  # A short-lived exec may already have exited.
                             if 'signal_generate:' in decoded and re.search(rf'\bpid={probe.pid}\b', decoded):
                                 probe_observed = True
                     emit('self_test_result', observed=probe_observed)

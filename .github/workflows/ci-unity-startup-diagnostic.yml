@@ -1,0 +1,78 @@
+name: Investigate Unity startup kills
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    name: Startup trial ${{ matrix.trial }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        trial: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare startup-only entry point and existing CI license configuration
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check PyYAML
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
+          config = yaml.safe_load(Path('.github/workflows/ci-engine.yml').read_text())['env']
+          with open(os.environ['GITHUB_ENV'], 'a') as stream:
+              stream.write(f"UNITY_VERSION={config['UNITY_VERSION']}\n")
+              stream.write(f"IMM_UNITY_FALLBACK_LICENSE<<IMM_LICENSE_END\n{config['IMM_UNITY_FALLBACK_LICENSE']}\nIMM_LICENSE_END\n")
+          path = Path('code/ImmUnitySampleProject/Assets/Editor/ImmStartupDiagnostic.cs')
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text('''using UnityEditor;
+          public static class ImmStartupDiagnostic {
+              public static void Run() {
+                  UnityEngine.Debug.Log("[IMM_STARTUP_DIAGNOSTIC] Entry point reached");
+                  EditorApplication.Exit(0);
+              }
+          }
+          ''')
+          PY
+
+      - name: Start signal and resource diagnostics
+        shell: bash
+        run: |
+          mkdir -p artifacts/unity-startup
+          nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-startup/memory.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-startup/monitor.log 2>&1 &
+          echo $! > artifacts/unity-startup/monitor.pid
+
+      - name: Activate and launch the sample project without building a player
+        uses: game-ci/unity-builder@v4
+        timeout-minutes: 20
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: code/ImmUnitySampleProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneWindows64
+          versioning: None
+          buildMethod: ImmStartupDiagnostic.Run
+          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-startup/editor.log
+
+      - name: Stop and flush diagnostics
+        if: always()
+        shell: bash
+        run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-startup/monitor.pid --output artifacts/unity-startup/memory.jsonl
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: UnityStartupTrial-${{ matrix.trial }}
+          path: artifacts/unity-startup
+          retention-days: 14
