@@ -37,6 +37,18 @@ struct ImmVulkanRenderGraphState
     int32_t preparationResult = 0;
 };
 
+inline ImmCore::mat4x4 ImmUnityVulkanClipProjection(const float* unityProjection)
+{
+    // Unity's Vulkan vertex compiler negates SV_Position.y after projection.
+    // IMM's GLSL/SPIR-V shaders do not, so apply that clip-space reflection here
+    // to the complete Y row, including asymmetric XR frustum terms. Packets
+    // still carry GL.GetGPUProjectionMatrix output; do not compensate in C# too.
+    // This conversion belongs only to Unity Vulkan RenderGraph, not other hosts.
+    ImmCore::mat4x4 projection(unityProjection);
+    for (int i = 4; i < 8; ++i) projection[i] = -projection[i];
+    return projection;
+}
+
 inline uint32_t ImmVulkanPacketFormat(uint32_t format)
 {
     switch (format)
@@ -132,8 +144,11 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         config.paintRenderingTechnique = packet.paintRenderingTechnique;
         config.enableSound = packet.enableSound != 0;
         config.reverseDepthBuffer = true;
+        // The clip-Y reflection in ImmUnityVulkanClipProjection reverses winding
+        // with our positive-height Unity viewport. Keep this front-face reversal
+        // paired with it: changing just one fixes orientation but swaps faces.
         config.overrideFrontIsCCW = true;
-        config.frontIsCCW = false;
+        config.frontIsCCW = true;
         config.logFileName = state.logFileName.c_str();
         config.tmpFolderName = state.tmpFolderName.c_str();
         if (!instance.device) return failed;
@@ -161,14 +176,16 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
             return finishPreparation(reject("logical-device multiview not enabled", invalid));
         for (int i = 0; i < 16; ++i)
             if (!std::isfinite(packet.worldToView[i]) || !std::isfinite(packet.projection[i])) return finishPreparation(invalid);
-        const ImmCore::mat4x4 view(packet.worldToView), projection(packet.projection);
+        const ImmCore::mat4x4 view(packet.worldToView);
+        const auto projection = ImmUnityVulkanClipProjection(packet.projection);
         if (packet.viewCount == 2)
         {
             for (int i = 0; i < 16; ++i)
                 if (!std::isfinite(packet.leftView[i]) || !std::isfinite(packet.leftProjection[i]) ||
                     !std::isfinite(packet.rightView[i]) || !std::isfinite(packet.rightProjection[i])) return finishPreparation(invalid);
-            const ImmCore::mat4x4 leftView(packet.leftView), leftProjection(packet.leftProjection);
-            const ImmCore::mat4x4 rightView(packet.rightView), rightProjection(packet.rightProjection);
+            const ImmCore::mat4x4 leftView(packet.leftView), rightView(packet.rightView);
+            const auto leftProjection = ImmUnityVulkanClipProjection(packet.leftProjection);
+            const auto rightProjection = ImmUnityVulkanClipProjection(packet.rightProjection);
             bridge.SetCameraMatrices(packet.camera, 2, &view, &projection,
                 &leftView, &leftProjection, &rightView, &rightProjection);
         }

@@ -60,6 +60,9 @@ if(IMM_VULKAN_MODEL_SMOKE)
     add_test(NAME vulkan_model_readback COMMAND imm_vulkan_model_smoke)
     set_tests_properties(vulkan_model_readback PROPERTIES TIMEOUT 60)
     add_test(NAME vulkan_model_document_readback COMMAND imm_vulkan_model_smoke)
+    add_test(NAME vulkan_unity_face_orientation_readback COMMAND imm_vulkan_model_smoke)
+    set_tests_properties(vulkan_unity_face_orientation_readback PROPERTIES TIMEOUT 60
+        ENVIRONMENT "IMM_VULKAN_SAMPLE_FILE=${IMM_ROOT}/exampleImmFiles/face-orientation.imm;IMM_VULKAN_FACE_ORIENTATION=1")
     set_tests_properties(vulkan_model_document_readback PROPERTIES TIMEOUT 60
         ENVIRONMENT "IMM_VULKAN_SAMPLE_FILE=${IMM_ROOT}/exampleImmFiles/urp-content/model-unlit.imm")
     add_test(NAME vulkan_pretessellated_document_readback COMMAND imm_vulkan_model_smoke)

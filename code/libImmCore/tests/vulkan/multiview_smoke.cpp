@@ -288,9 +288,12 @@ void RunUnityAdapterProbe(Host& host)
     const auto bounds = player->GetDocumentBBox(document);
     const double radius = std::max({bounds.mMaxX - bounds.mMinX, bounds.mMaxY - bounds.mMinY, bounds.mMaxZ - bounds.mMinZ, 1.0}) * .6;
     const auto view = trans3d::translate(-(bounds.mMinX + bounds.mMaxX) * .5,
-        -(bounds.mMinY + bounds.mMaxY) * .5, -(bounds.mMinZ + bounds.mMaxZ) * .5 - radius * 2);
+        -(bounds.mMinY + bounds.mMaxY) * .5 + radius * .6, -(bounds.mMinZ + bounds.mMaxZ) * .5 - radius * 2);
     const float nearPlane = float(radius) * .01f, farPlane = float(radius) * 4;
-    const mat4x4 projection(1,0,0,0, 0,1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);
+    // Unity's render-texture GPU projection has negative Y. Move the scene off
+    // center vertically so omitting the Vulkan compiler's clip-Y reflection
+    // cannot pass this readback merely by preserving coverage and eye parallax.
+    const mat4x4 projection(1,0,0,0, 0,-1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);
     const auto head = d2f(toMatrix(view)); auto left = head, right = head;
     left[3] -= float(radius) * .1f; right[3] += float(radius) * .1f;
     ImmRenderGraphPacket packet; packet.operation = 1; packet.viewCount = 2;
@@ -334,24 +337,41 @@ void RunUnityAdapterProbe(Host& host)
     void* mapped = nullptr;
     Check(vkMapMemory(host.device, host.readbackMemory, 0, VK_WHOLE_SIZE, 0, &mapped), "Map adapter readback");
     const auto* pixels = static_cast<const unsigned char*>(mapped);
-    int coverage[2] = {}, different = 0;
-    double centroids[2] = {};
+    int coverage[2] = {}, cyan[2] = {}, orange[2] = {}, different = 0;
+    double centroids[2] = {}, verticalCentroids[2] = {};
     for (uint32_t i = 0; i < Size * Size; ++i) {
         for (int eye = 0; eye < 2; ++eye) {
             const auto* pixel = pixels + (eye * Size * Size + i) * 4;
-            if (std::max({pixel[0], pixel[1], pixel[2]}) > 8) { ++coverage[eye]; centroids[eye] += i % Size; }
+            if (pixel[1] > 40 && pixel[2] > pixel[0] * 2 && pixel[1] > pixel[0] * 2) ++cyan[eye];
+            if (pixel[0] > 40 && pixel[0] > pixel[1] * 2 && pixel[0] > pixel[2] * 2) ++orange[eye];
+            if (std::max({pixel[0], pixel[1], pixel[2]}) > 8) {
+                ++coverage[eye]; centroids[eye] += i % Size; verticalCentroids[eye] += i / Size;
+            }
         }
         for (int c = 0; c < 3; ++c) if (pixels[i * 4 + c] != pixels[(Size * Size + i) * 4 + c]) { ++different; break; }
     }
     vkUnmapMemory(host.device, host.readbackMemory);
-    for (int eye = 0; eye < 2; ++eye) if (coverage[eye]) centroids[eye] /= coverage[eye];
+    for (int eye = 0; eye < 2; ++eye) if (coverage[eye]) {
+        centroids[eye] /= coverage[eye]; verticalCentroids[eye] /= coverage[eye];
+    }
     ImmRenderGraphPacket shutdown; shutdown.operation = 2;
     if (ProcessImmVulkanRenderGraph(state, bridge, shutdown, ImmRenderGraphShutdownEventId, acknowledge) != 0 || state.ready)
         throw std::runtime_error("Shutdown Unity Vulkan adapter");
     capture.device.store(nullptr); capture.multiview.store(false); adapterHost = nullptr;
-    std::printf("IMM_VULKAN_UNITY_ADAPTER stereo=preferred coverage=%d,%d different=%d centroids=%.2f,%.2f\n", coverage[0], coverage[1], different, centroids[0], centroids[1]);
+    std::printf("IMM_VULKAN_UNITY_ADAPTER stereo=preferred coverage=%d,%d different=%d centroids=%.2f,%.2f vertical=%.2f,%.2f\n", coverage[0], coverage[1], different, centroids[0], centroids[1], verticalCentroids[0], verticalCentroids[1]);
+    if (std::getenv("IMM_VULKAN_FACE_ORIENTATION"))
+    {
+        std::printf("IMM_VULKAN_UNITY_ADAPTER faces cyan=%d,%d orange=%d,%d\n", cyan[0], cyan[1], orange[0], orange[1]);
+        // The open square shell has a dark interior with correctly culled back
+        // faces. Its orange exterior edges remain visible; reversed winding
+        // exposes the large orange interior while cyan coverage barely changes.
+        for (int eye = 0; eye < 2; ++eye)
+            if (cyan[eye] < 40 || orange[eye] * 2 > cyan[eye])
+                throw std::runtime_error("Unity Vulkan adapter exposed the backface sentinel");
+    }
     if (coverage[0] < 20 || coverage[1] < 20 || different < 50 || centroids[1] - centroids[0] < 1 ||
-        centroids[0] < 16 || centroids[1] > 48 || host.validationErrors.load() != 0)
+        centroids[0] < 16 || centroids[1] > 48 || verticalCentroids[0] < Size * .55 ||
+        verticalCentroids[1] < Size * .55 || host.validationErrors.load() != 0)
         throw std::runtime_error("Unity adapter stereo readback or Vulkan validation failed");
     std::puts("IMM_VULKAN_UNITY_ADAPTER PASS prepared two-view packet and scene GPU readback");
 }

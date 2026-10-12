@@ -1370,6 +1370,9 @@ struct piRTargetS
     uint32_t colorAttachmentCount = 0;
     bool hasDepth = false;
     bool ownsRenderPassObjects = true;
+    // Host-adjusted projections use positive-height viewports in the draw paths;
+    // other targets use negative height. Changing this sign also reverses
+    // projected triangle winding, so raster front-face state must agree.
     bool unityProjectionAdjusted = false;
     // MSAA (native-viewer quality contract): draws rasterize at renderSampleCount
     // into transient tile-memory attachments below and resolve in-pass into the

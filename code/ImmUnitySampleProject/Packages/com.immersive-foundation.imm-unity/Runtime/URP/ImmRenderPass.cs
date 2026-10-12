@@ -14,10 +14,8 @@ namespace ImmPlayer
         private sealed class PassData
         {
             internal TextureHandle Color, Depth;
-            internal bool HasTargetTexture;
             internal bool Stereo;
             internal bool DynamicResolution;
-            internal RenderTargetIdentifier XrTarget;
             internal Rect XrViewport;
             internal ImmRenderGraphTransport Transport;
             internal ImmRenderPass Owner;
@@ -87,7 +85,7 @@ namespace ImmPlayer
                     builder.AllowGlobalStateModification(true);
                     builder.AllowPassCulling(false);
                     builder.SetRenderFunc(static (PassData pass, RasterGraphContext context) =>
-                        ExecuteNative(pass, null, context.cmd));
+                        ExecuteNative(pass, null, context.GetTextureUVOrigin(pass.Color) == TextureUVOrigin.BottomLeft, context.cmd));
                 }
                 return;
             }
@@ -97,7 +95,8 @@ namespace ImmPlayer
                 builder.UseTexture(data.Color, AccessFlags.ReadWrite);
                 builder.UseTexture(data.Depth, AccessFlags.ReadWrite);
                 builder.AllowPassCulling(false);
-                builder.SetRenderFunc(static (PassData pass, UnsafeGraphContext context) => ExecuteNative(pass, CommandBufferHelpers.GetNativeCommandBuffer(context.cmd)));
+                builder.SetRenderFunc(static (PassData pass, UnsafeGraphContext context) => ExecuteNative(pass, CommandBufferHelpers.GetNativeCommandBuffer(context.cmd),
+                    context.GetTextureUVOrigin(pass.Color) == TextureUVOrigin.BottomLeft));
             }
         }
 
@@ -106,7 +105,6 @@ namespace ImmPlayer
         {
             data.Color = resources.activeColorTexture;
             data.Depth = resources.activeDepthTexture;
-            data.HasTargetTexture = camera.targetTexture != null;
             data.Transport = transport;
             data.CameraId = cameraId;
             data.FrameIndex = Time.frameCount;
@@ -118,7 +116,6 @@ namespace ImmPlayer
             data.DynamicResolution = camera.camera.allowDynamicResolution;
             if (stereo)
             {
-                data.XrTarget = new RenderTargetIdentifier(camera.xr.renderTarget, 0, CubemapFace.Unknown, 0);
                 data.XrViewport = camera.xr.GetViewport(0);
                 data.View = camera.xr.cullingParams.stereoViewMatrix;
                 data.Projection = camera.xr.cullingParams.stereoProjectionMatrix;
@@ -129,7 +126,7 @@ namespace ImmPlayer
             }
         }
 
-        private static void ExecuteNative(PassData data, CommandBuffer commands, RasterCommandBuffer rasterCommands = null)
+        private static void ExecuteNative(PassData data, CommandBuffer commands, bool flipped, RasterCommandBuffer rasterCommands = null)
         {
             using var allocation = ImmRenderingDiagnostics.Measure(ImmRenderCallback.ExecuteNative);
             if (data.Transport.IsDisposed) return;
@@ -165,15 +162,8 @@ namespace ImmPlayer
                 data.Owner.Report($"Unsupported IMM attachment formats: {c.graphicsFormat}, {d.depthStencilFormat}.");
                 return;
             }
-            // URP 17.6's GPU accessor is internal. Follow its public RenderObjects pass:
-            // convert the URP projection once, using the actual attachments' flip state.
-            // Snapshot camera state at record time instead of retaining URP's pooled
-            // UniversalCameraData. This is URP 17.6's flip rule for the supported
-            // game camera, evaluated against the resolved attachment and XR target.
-            var colorId = new RenderTargetIdentifier(color.nameID, 0, CubemapFace.Unknown, 0);
-            bool isBackbuffer = colorId == BuiltinRenderTextureType.CameraTarget ||
-                colorId == BuiltinRenderTextureType.Depth || (data.Stereo && colorId == data.XrTarget);
-            bool flipped = !SystemInfo.graphicsUVStartsAtTop || data.HasTargetTexture || !isBackbuffer;
+            // Send Unity GPU projections unchanged. The Vulkan adapter separately
+            // matches Unity's vertex-compiler clip-Y conversion and raster winding.
             Matrix4x4 projection = GL.GetGPUProjectionMatrix(data.Projection, flipped);
             var size = color.useScaling
                 ? color.GetScaledSize(color.rtHandleProperties.currentViewportSize)
