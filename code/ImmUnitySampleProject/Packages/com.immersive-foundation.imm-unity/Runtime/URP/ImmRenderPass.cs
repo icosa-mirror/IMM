@@ -16,6 +16,7 @@ namespace ImmPlayer
             internal TextureHandle Color, Depth;
             internal bool HasTargetTexture;
             internal bool Stereo;
+            internal bool DynamicResolution;
             internal RenderTargetIdentifier XrTarget;
             internal Rect XrViewport;
             internal ImmRenderGraphTransport Transport;
@@ -114,6 +115,7 @@ namespace ImmPlayer
             data.View = camera.GetViewMatrix();
             data.Projection = camera.GetProjectionMatrix();
             data.Stereo = stereo;
+            data.DynamicResolution = camera.camera.allowDynamicResolution;
             if (stereo)
             {
                 data.XrTarget = new RenderTargetIdentifier(camera.xr.renderTarget, 0, CubemapFace.Unknown, 0);
@@ -147,11 +149,15 @@ namespace ImmPlayer
                 c.volumeDepth != slices || d.volumeDepth != slices || c.width != d.width || c.height != d.height ||
                 c.antiAliasing != d.antiAliasing ||
                 (c.antiAliasing != 1 && c.antiAliasing != 2 && c.antiAliasing != 4 && c.antiAliasing != 8) ||
-                c.useDynamicScale || d.useDynamicScale)
+                data.DynamicResolution ||
+                ((c.useDynamicScale || d.useDynamicScale) &&
+                    (ScalableBufferManager.widthScaleFactor != 1f || ScalableBufferManager.heightScaleFactor != 1f)))
             {
                 data.Owner.Report("IMM requires matching mono 2D or stereo two-slice attachments with 1, 2, 4 or 8 samples without dynamic resolution.");
                 return;
             }
+            // URP marks XR intermediate textures as dynamic-scale capable even for
+            // fixed-resolution cameras. Reject enabled/active scaling, not that capability.
             uint colorFormat = AttachmentFormat(c.graphicsFormat);
             uint depthFormat = AttachmentFormat(d.depthStencilFormat);
             if (colorFormat == 0 || depthFormat == 0)
