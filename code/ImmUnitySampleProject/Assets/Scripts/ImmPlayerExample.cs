@@ -66,6 +66,11 @@ namespace ImmPlayer
 
         private void Start()
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // Android otherwise defaults to 30 FPS. Let XR and explicit application settings choose their own rate.
+            if (Application.targetFrameRate == -1 && !IsXrSettingsEnabled())
+                Application.targetFrameRate = 60;
+#endif
             _useScriptableRenderPipeline = GraphicsSettings.currentRenderPipeline != null;
 
             // Ensure we have a camera reference

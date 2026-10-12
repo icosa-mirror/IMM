@@ -65,7 +65,13 @@ public sealed class ImmPerformanceProbe : MonoBehaviour
     {
         Environment.SetEnvironmentVariable("IMM_PERFORMANCE_OUTPUT",
             Path.Combine(Application.persistentDataPath, "imm-ci", "performance-measurements-raw.json"));
-        Environment.SetEnvironmentVariable("IMM_PERFORMANCE_RENDER_REQUESTS", "1");
+        using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+        using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+        using (var intent = activity.Call<AndroidJavaObject>("getIntent"))
+        {
+            bool visible = intent.Call<bool>("getBooleanExtra", "ImmPerformanceVisible", false);
+            Environment.SetEnvironmentVariable("IMM_PERFORMANCE_RENDER_REQUESTS", visible ? "0" : "1");
+        }
         Environment.SetEnvironmentVariable("IMM_UNITY_PERFORMANCE_PENDING", "1");
     }
 #endif
@@ -164,9 +170,26 @@ public sealed class ImmPerformanceProbe : MonoBehaviour
                 if (now - readyAt >= config.warmup_seconds)
                 {
                     sampleAt = previousRender = now;
+                    // Sample scripts may set their frame-rate policy in Start, after this probe is installed.
+                    sample.target_frame_rate = Application.targetFrameRate;
+                    sample.vsync_count = QualitySettings.vSyncCount;
                     firstFrame = Time.frameCount;
                     sample.width = camera.scaledPixelWidth;
                     sample.height = camera.scaledPixelHeight;
+                    if (!renderRequests)
+                    {
+                        int msaa = camera.allowMSAA
+                            ? (GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset)?.msaaSampleCount ?? QualitySettings.antiAliasing
+                            : 1;
+                        sample.requested_msaa_samples = Math.Max(1, msaa);
+                        var descriptor = new RenderTextureDescriptor(sample.width, sample.height)
+                        {
+                            graphicsFormat = SystemInfo.GetGraphicsFormat(camera.allowHDR ? DefaultFormat.HDR : DefaultFormat.LDR),
+                            depthStencilFormat = SystemInfo.GetGraphicsFormat(DefaultFormat.DepthStencil),
+                            msaaSamples = sample.requested_msaa_samples
+                        };
+                        sample.msaa_samples = SystemInfo.GetRenderTextureSupportedMSAASampleCount(descriptor);
+                    }
                 }
             }
             else readyAt = -1;

@@ -148,14 +148,40 @@ Without these extras, existing CI settings remain unchanged. Use one APK for
 the 30-versus-60 target comparison, then measure 4x at phone resolution. An
 unsupported 8x request clamped to 4x is not an 8x performance measurement.
 Record actual samples and resolution from the resulting JSON. These controls
-are confined to the opt-in validation probe; no sample-app frame-rate policy
-change has been accepted yet.
+are confined to the opt-in validation probe; the sample-app default is described
+below.
 
-Local building is paused at the user's request while they play a game. The
-interrupted build's temporary scripts and serialized settings changes were
-removed/restored; use CI to produce the controlled probe APK. Resume local
-building only after the user says they have finished playing. Phone performance
-work remains outstanding; the 30 FPS cap hypothesis requires a matched run.
+The user resumed local builds. The original probe disabled the display camera
+and submitted offscreen render requests, leaving the phone screen black. Its
+results establish offscreen renderer headroom only, not visible sample performance.
+The `ImmPerformanceVisible` boolean intent extra now keeps the authored camera
+rendering normally; width/height extras apply only to offscreen requests. In visible
+mode, the MSAA metadata reports the configured count and the device-supported count
+for the camera format; it is not a direct inspection of the display attachment.
+
+On 2026-10-12, a screenshot confirmed that the normal sample displayed its scene on
+A059. Matched five-second samples from one APK at 1080x2392 and configured/supported
+4x MSAA measured **29.79 FPS** with target 30 and **59.46 FPS** with target 60.
+Their p95 frame intervals were 34.27 ms and 17.48 ms respectively. Both used
+`normal-rendered-workload-frames`, not offscreen requests. APK SHA-256:
+`5f7bef68b6cb1ec09f01f890b5d4962cfd7d616a875e563193bc0fecd0f4d0ee`.
+The app was force-stopped after every check. This identifies the 30 FPS cap as the
+limit for this Unity workload; it does not resolve the separate native-player
+slowdown or establish sustained thermal performance.
+
+The Android sample now defaults to 60 FPS when no explicit frame-rate setting
+exists and XR is inactive. A further visible-camera sample without the target-FPS
+intent override measured **59.47 FPS** at 1080x2392 and 4x MSAA (p95 17.32 ms).
+APK SHA-256:
+`8713e211b5ae7ccbb03325683e91f1fd6925f1dd08fe978a497933f4bde8f148`.
+The app was force-stopped immediately after collection. Full CI validation remains
+required before treating the change as validated across platforms.
+
+The scheduled CI run `38228830676` failed compiling the Android probe because the
+minimal validation manifest omitted `com.unity.modules.androidjni`. The normal
+sample manifest already includes it, which explains why local builds passed.
+The minimal manifest now explicitly includes that dependency. The green retry-helper
+run did not rerun this source failure and does not establish full validation success.
 
 The corrected same-run binary validation in run `38150209754` measured
 **51.44 FPS** on the physical Mali-G715 Android device at 2400x1080, compared
