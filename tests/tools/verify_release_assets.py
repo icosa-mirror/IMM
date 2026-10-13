@@ -105,8 +105,8 @@ def main() -> int:
         ("ImmViewer-Android", "standalone", "android", "packaged"),
         ("ImmViewer-macOS", "standalone", "macos", "packaged"),
         ("ImmPlayerPlugin-Godot", "godot", "all", "package"),
-        ("upm/com.immersive-foundation.imm-stroke-reader", "unity", "all", "package"),
-        ("upm/com.immersive-foundation.imm-unity", "unity", "all", "package"),
+        ("ImmStrokeReaderPlugin-Unity", "unity", "all", "package"),
+        ("ImmPlayerPlugin-Unity", "unity", "all", "package"),
     ]
     for rel, product, platform, mode in expected:
         verify_artifact(root, rel, product, platform, mode, errors)

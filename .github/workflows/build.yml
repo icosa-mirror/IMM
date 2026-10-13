@@ -1262,10 +1262,10 @@ jobs:
           echo "No binary changes — nothing to commit"
         else
           git commit -m "chore: update committed runtime binaries (Unity + Godot + Web) [skip ci]"
-          git pull --rebase origin "$TARGET_BRANCH"
+          git fetch origin "$TARGET_BRANCH"
           # Binary-only commits can be merged. If source has changed, the newer
           # workflow owns publication; never attach old binaries to new code.
-          if ! git diff --quiet "$BUILD_SHA" HEAD -- . \
+          if ! git diff --quiet "$BUILD_SHA" "origin/$TARGET_BRANCH" -- . \
             ':(glob,exclude)code/ImmUnitySampleProject/Packages/*/Plugins/**' \
             ':(glob,exclude)code/ImmGodotSampleProject/addons/imm_viewer/bin/**' \
             ':(glob,exclude)code/ImmGodotXRSampleProject/addons/imm_viewer/bin/**' \
@@ -1273,6 +1273,9 @@ jobs:
             echo "Source advanced after this build; leaving binary publication to the newer workflow."
             exit 0
           fi
+          # This commit contains generated files only. During rebase, theirs
+          # selects this build output over a competing binary-only publication.
+          git rebase -X theirs "origin/$TARGET_BRANCH"
           git push origin "HEAD:$TARGET_BRANCH"
         fi
 
@@ -1299,13 +1302,13 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: ImmStrokeReaderPlugin-Unity
-        path: release-assets/upm
+        path: release-assets/ImmStrokeReaderPlugin-Unity
 
     - name: Download Unity player package
       uses: actions/download-artifact@v4
       with:
         name: ImmPlayerPlugin-Unity
-        path: release-assets/upm
+        path: release-assets/ImmPlayerPlugin-Unity
 
     - name: Download Windows viewer
       uses: actions/download-artifact@v4
@@ -1340,8 +1343,8 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        python tests/tools/verify_package_layout.py unity release-assets/upm/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
-        python tests/tools/verify_package_layout.py unity release-assets/upm/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+        python tests/tools/verify_package_layout.py unity release-assets/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+        python tests/tools/verify_package_layout.py unity release-assets/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
         python tests/tools/verify_package_layout.py godot release-assets/ImmPlayerPlugin-Godot
         python tests/tools/verify_viewer_artifact.py windows release-assets/ImmViewer-Windows
         python tests/tools/verify_viewer_artifact.py macos release-assets/ImmViewer-macOS
@@ -1354,8 +1357,8 @@ jobs:
         cd release-assets
         zip -r ImmViewer-Windows.zip ImmViewer-Windows
         zip -r ImmViewer-macOS.zip ImmViewer-macOS
-        (cd upm && zip -r ../ImmStrokeReaderPlugin-Unity.zip com.immersive-foundation.imm-stroke-reader)
-        (cd upm && zip -r ../ImmPlayerPlugin-Unity.zip com.immersive-foundation.imm-unity)
+        (cd ImmStrokeReaderPlugin-Unity && zip -r ../ImmStrokeReaderPlugin-Unity.zip com.immersive-foundation.imm-stroke-reader manifest.json artifact-summary.json)
+        (cd ImmPlayerPlugin-Unity && zip -r ../ImmPlayerPlugin-Unity.zip com.immersive-foundation.imm-unity manifest.json artifact-summary.json)
         (cd ImmPlayerPlugin-Godot && zip -r ../ImmPlayerPlugin-Godot.zip README.md addons)
 
     - name: Verify Android APK names
@@ -1412,7 +1415,8 @@ jobs:
           --include release-assets/matrix-audit.md \
           --include release-assets/baseline-drift.json \
           --include release-assets/baseline-drift.md \
-          --include release-assets/upm
+          --include release-assets/ImmStrokeReaderPlugin-Unity \
+          --include release-assets/ImmPlayerPlugin-Unity
 
     - name: Collect release artifact summary
       run: |
