@@ -8,6 +8,25 @@ import sys
 from pathlib import Path
 
 
+def collect_launch_diagnostics(udid: str, executable: str, output: Path) -> None:
+    """Retain launch evidence even when simctl never attaches a console."""
+    output.mkdir(parents=True, exist_ok=True)
+    commands = {
+        "simulator-devices.json": ["xcrun", "simctl", "list", "devices", "--json"],
+        "simulator-processes.txt": ["ps", "-axo", "pid,ppid,state,%cpu,etime,command"],
+        "simulator-system.log": ["xcrun", "simctl", "spawn", udid, "log", "show",
+                                 "--style", "compact", "--last", "5m", "--predicate",
+                                 f'process == "{executable}" OR process == "SpringBoard"'],
+    }
+    for name, command in commands.items():
+        with (output / name).open("wb") as stream:
+            try:
+                subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT,
+                               timeout=15, check=False)
+            except subprocess.TimeoutExpired:
+                stream.write(b"\n[IMM-FPS-IOS] Diagnostic command timed out.\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--udid", required=True)
@@ -31,7 +50,7 @@ def main() -> int:
                "--platform", "ios", "--runtime-kind", "simulator", "--env-prefix", "SIMCTL_CHILD_",
                "--sample-path", str(container / "Documents/imm-performance/performance-measurements-raw.json"),
                "--executable-artifact", str(args.app / info["CFBundleExecutable"]),
-               "--output-dir", str(args.output_dir), "--timeout", "240", "--stop-after-sample"]
+               "--output-dir", str(args.output_dir), "--timeout", "120", "--stop-after-sample"]
     if args.product == "unity":
         command.append("--render-requests")
     command.extend(["--", "xcrun", "simctl", "launch", "--console", "--terminate-running-process", args.udid, bundle])
@@ -41,7 +60,10 @@ def main() -> int:
         command.extend(["--disable-vsync", "--rendering-driver", "metal", "--rendering-method", "mobile",
                         "--", "--imm-godot-ci-scene=sample"])
     try:
-        return subprocess.run(command, check=False).returncode
+        status = subprocess.run(command, check=False).returncode
+        if status:
+            collect_launch_diagnostics(args.udid, info["CFBundleExecutable"], args.output_dir)
+        return status
     finally:
         subprocess.run(["xcrun", "simctl", "terminate", args.udid, bundle],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
