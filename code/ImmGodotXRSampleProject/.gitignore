@@ -1,2 +1,9 @@
 .godot/
 addons/imm_viewer/bin/**/godot-extension-*.txt
+
+# Locally installed Quest export dependencies and generated output.
+addons/godotopenxrvendors/
+android/
+build/
+sample1.imm
+addons/imm_viewer/bin/**/~*.TMP
