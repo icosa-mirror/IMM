@@ -1,6 +1,6 @@
 extends Node3D
 
-const LOG_PREFIX := "[IMM_GODOT_WINDOWS_XR_SAMPLE_20260825]"
+const LOG_PREFIX := "[IMM_GODOT_XR_SAMPLE]"
 const DEBUG_LOG_PATH := "user://xr_debug.log"
 const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const REPOSITORY_SAMPLE_PATH := "res://../../exampleImmFiles/sample1.imm"
@@ -26,7 +26,7 @@ func _ready() -> void:
 	if debug_log != null:
 		debug_log.store_line("%s started_unix=%d" % [LOG_PREFIX, Time.get_unix_time_from_system()])
 		debug_log.close()
-	_set_status("Starting Windows OpenXR…")
+	_set_status("Starting OpenXR…")
 	call_deferred("_start_xr_sample")
 
 func _process(_delta: float) -> void:
@@ -66,6 +66,7 @@ func _start_xr_sample() -> void:
 		_fail("sample1.imm was not found. Put it beside project.godot and run again.")
 		return
 	_viewer.document_path = document_path
+	_log("loading_document path=%s" % document_path)
 	var load_result: int = int(_viewer.load_document())
 	if load_result < 0:
 		_fail("IMM load failed with result %d for %s" % [load_result, document_path])
@@ -73,8 +74,13 @@ func _start_xr_sample() -> void:
 
 	_set_status("OpenXR started; loading IMM content…")
 	var deadline_msec := Time.get_ticks_msec() + int(READY_TIMEOUT_SECONDS * 1000.0)
+	var previous_document_state := ""
 	while Time.get_ticks_msec() < deadline_msec:
 		_queue_xr_camera()
+		var document_state := str(_viewer.get_document_state())
+		if document_state != previous_document_state:
+			_log("document_state=%s" % document_state)
+			previous_document_state = document_state
 		if _viewer.is_loaded() and _viewer.is_sequence_ready() and _xr_stereo_rendering_is_ready():
 			_spawn_applied = _move_origin_to_active_spawn()
 			RenderingServer.set_default_clear_color(_viewer.get_background_color())
@@ -186,8 +192,31 @@ func _find_sample_document() -> String:
 		if candidate.is_empty():
 			continue
 		if FileAccess.file_exists(candidate):
+			# Packaged res:// files are inside the APK/PCK. The native IMM loader
+			# needs an actual filesystem file; globalize_path does not extract it.
+			if not OS.has_feature("editor") and candidate.begins_with("res://"):
+				return _extract_packaged_document(candidate)
 			return candidate
 	return ""
+
+func _extract_packaged_document(source_path: String) -> String:
+	var data := FileAccess.get_file_as_bytes(source_path)
+	if data.is_empty():
+		_log("Could not read packaged document: %s" % source_path)
+		return ""
+	var target_path := "user://xr_sample.imm"
+	var target := FileAccess.open(target_path, FileAccess.WRITE)
+	if target == null:
+		_log("Could not extract packaged document: %s" % error_string(FileAccess.get_open_error()))
+		return ""
+	target.store_buffer(data)
+	target.flush()
+	var result := target.get_error()
+	target.close()
+	if result != OK:
+		_log("Could not write packaged document: %s" % error_string(result))
+		return ""
+	return ProjectSettings.globalize_path(target_path)
 
 func _queue_xr_camera() -> void:
 	if _viewer == null:
