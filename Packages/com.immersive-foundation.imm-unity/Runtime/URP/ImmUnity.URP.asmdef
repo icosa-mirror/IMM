@@ -1,0 +1,10 @@
+{
+  "name": "ImmUnity.URP",
+  "rootNamespace": "ImmPlayer",
+  "references": [
+    "ImmUnity.Runtime",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime"
+  ],
+  "autoReferenced": true
+}

@@ -146,6 +146,21 @@ namespace ImmPlayer
         [Header("Player Settings")]
         [SerializeField] private bool useLinearColorSpace = true;
         [SerializeField] private int antialiasingLevel = 8;
+        [SerializeField] private ImmPaintRenderingTechnique urpPaintRenderingTechnique = ImmPaintRenderingTechnique.Static;
+
+        /// <summary>Select the URP paint importer before initializing the manager.</summary>
+        public ImmPaintRenderingTechnique UrpPaintRenderingTechnique
+        {
+            get => urpPaintRenderingTechnique;
+            set
+            {
+                if (_isInitialized) throw new InvalidOperationException("Select the URP paint technique before initialization.");
+                if (value != ImmPaintRenderingTechnique.Static && value != ImmPaintRenderingTechnique.Pretessellated)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                urpPaintRenderingTechnique = value;
+            }
+        }
+
         [SerializeField] private string logFileName = "imm_player_log.txt";
         [SerializeField] private Camera renderCamera = null;
 
@@ -154,6 +169,7 @@ namespace ImmPlayer
         #region State
 
         private bool _isInitialized = false;
+        private ImmRenderGraphSession _renderGraphSession;
         private Dictionary<int, ImmDocument> _loadedDocuments = new Dictionary<int, ImmDocument>();
         private Dictionary<int, IntPtr> _documentMemoryPtrs = new Dictionary<int, IntPtr>(); // Track memory for async loading
         private readonly Dictionary<int, ImmDocument> _pendingUnloadDocuments = new Dictionary<int, ImmDocument>();
@@ -275,7 +291,7 @@ namespace ImmPlayer
 
         private void Start()
         {
-            Initialize();
+            if (!_isInitialized) Initialize();
         }
 
         private void OnEnable()
@@ -296,10 +312,19 @@ namespace ImmPlayer
             {
                 _vulkanSampleEventCoroutine = StartCoroutine(IssueVulkanSampleEventAfterEndOfFrame());
             }
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS || UNITY_ANDROID
+            if (Application.isPlaying && !_isInitialized &&
+                (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12 ||
+                 SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal ||
+                 SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan) &&
+                GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset)
+                Initialize();
+#endif
         }
 
         private void OnDisable()
         {
+            if (_renderGraphSession != null) Shutdown();
             if (_useCommandBufferRendering || _useCameraCallbackRendering)
             {
                 Camera.onPreCull -= OnCameraPreCull;
@@ -376,6 +401,34 @@ namespace ImmPlayer
             }
 
             Log("=== IMM Player Initialization Started ===");
+
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS || UNITY_ANDROID
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12 ||
+                ((SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal ||
+                  SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan) &&
+                 GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset))
+            {
+                if (!(GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset))
+                {
+                    LogError("[IMM_RENDER_GRAPH] D3D12 requires URP with ImmRendererFeature and opted-in ImmCamera components.");
+                    return false;
+                }
+                try
+                {
+#if UNITY_IOS && !UNITY_EDITOR
+                    ImmNativePlugin.ImmUnityRegisterRenderingPlugin();
+#endif
+                    _renderGraphSession = ImmRenderGraphSession.Start(QualitySettings.activeColorSpace == ColorSpace.Linear, true, urpPaintRenderingTechnique);
+                    _isInitialized = true;
+                    return true;
+                }
+                catch (Exception error)
+                {
+                    LogError($"[IMM_RENDER_GRAPH] Session initialization failed: {error}");
+                    return false;
+                }
+            }
+#endif
 
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS
             if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Metal)
@@ -467,7 +520,15 @@ namespace ImmPlayer
             _nativeUnloadsInFlight.Clear();
 
             // Native shutdown synchronously stops document loading before input buffers are released.
-            ImmNativePlugin.End();
+            if (_renderGraphSession != null)
+            {
+                _renderGraphSession.Dispose();
+                _renderGraphSession = null;
+            }
+            else
+            {
+                ImmNativePlugin.End();
+            }
 
             foreach (var memPtr in _documentMemoryPtrs.Values)
             {
@@ -745,7 +806,13 @@ namespace ImmPlayer
 
         private void IssueNativeUnloadDrainEvent()
         {
-            if (_nativeUnloadsInFlight.Count > 0 && _renderEventFunc != IntPtr.Zero)
+            if (_renderGraphSession != null)
+            {
+                // Deferred unloads must finish GPU loading before the unload can be queued.
+                if (_nativeUnloadsInFlight.Count > 0 || _pendingUnloadDocuments.Count > 0)
+                    _renderGraphSession.MaintainGPU();
+            }
+            else if (_nativeUnloadsInFlight.Count > 0 && _renderEventFunc != IntPtr.Zero)
                 GL.IssuePluginEvent(_renderEventFunc, 0);
         }
 
@@ -1367,7 +1434,7 @@ namespace ImmPlayer
             {
                 Debug.Log(
                     $"[IMM_SYNTH_PRESENT_EYE_20260804] eye={presentationEye} " +
-                    $"targetId={eyeTarget.GetInstanceID()} " +
+                    $"targetId={eyeTarget.GetEntityId().ToString()} " +
                     $"targetPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
             }
 
@@ -1401,10 +1468,10 @@ namespace ImmPlayer
                 ++_vulkanOnRenderImageLogCount;
                 Debug.Log(
                     $"[IMM_UNITY_VK_ONRENDERIMAGE_20260802] frame={Time.frameCount} cam={cam.name} " +
-                    $"source={(source != null ? source.GetInstanceID() : 0)} " +
-                    $"destination={(destination != null ? destination.GetInstanceID() : 0)} " +
+                    $"source={(source != null ? source.GetEntityId().ToString() : "0")} " +
+                    $"destination={(destination != null ? destination.GetEntityId().ToString() : "0")} " +
                     $"eye={presentationEye} " +
-                    $"imm={eyeTarget.GetInstanceID()} depth={(eyeDepthTarget != null ? eyeDepthTarget.GetInstanceID() : 0)} " +
+                    $"imm={eyeTarget.GetEntityId().ToString()} depth={(eyeDepthTarget != null ? eyeDepthTarget.GetEntityId().ToString() : "0")} " +
                     $"shader={composite.shader.name} " +
                     $"supported={composite.shader.isSupported}");
             }
@@ -1415,7 +1482,7 @@ namespace ImmPlayer
                 Debug.Log(
                     $"[IMM_UNITY_VK_STEREO_PRESENT_20260811] frame={Time.frameCount} cam={cam.name} " +
                     $"activeEye={cam.stereoActiveEye} selectedEye={presentationEye} " +
-                    $"targetId={eyeTarget.GetInstanceID()} " +
+                    $"targetId={eyeTarget.GetEntityId().ToString()} " +
                     $"targetPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
             }
             return true;
@@ -1805,7 +1872,7 @@ namespace ImmPlayer
                             Debug.Log(
                                 $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] dispatch cameraId={info.CameraId} " +
                                 $"eye={eye} eventId={syntheticEventId} " +
-                                $"targetId={eyeTarget.GetInstanceID()} targetPtr=0x{eyeTargetPtr.ToInt64():X}");
+                                $"targetId={eyeTarget.GetEntityId().ToString()} targetPtr=0x{eyeTargetPtr.ToInt64():X}");
                         }
                     }
                     if (!_loggedVulkanRenderTargetSource.Contains(cam))
@@ -1927,8 +1994,8 @@ namespace ImmPlayer
                             $"[IMM_UNITY_VK_STEREO_FRAME_20260811] frame={Time.frameCount} " +
                             $"cameraId={info.CameraId} activeEye={cam.stereoActiveEye} " +
                             $"events={leftEventId},{rightEventId} " +
-                            $"leftTarget={(info.VulkanEyeTargets[0] != null ? info.VulkanEyeTargets[0].GetInstanceID() : 0)} " +
-                            $"rightTarget={(info.VulkanEyeTargets[1] != null ? info.VulkanEyeTargets[1].GetInstanceID() : 0)} " +
+                            $"leftTarget={(info.VulkanEyeTargets[0] != null ? info.VulkanEyeTargets[0].GetEntityId().ToString() : "0")} " +
+                            $"rightTarget={(info.VulkanEyeTargets[1] != null ? info.VulkanEyeTargets[1].GetEntityId().ToString() : "0")} " +
                             $"gpuEyeSelection={(useAndroidVulkanStereoQuad ? 1 : 0)}");
                     }
                 }
@@ -2015,7 +2082,7 @@ namespace ImmPlayer
                                 ++_vulkanCompositeLogCount;
                                 Debug.Log(
                                     $"[IMM_UNITY_VK_COMPOSITE_20260802] frame={Time.frameCount} eye={eyeIndex} " +
-                                    $"blitEye={blitEye} rt={eyeTarget.GetInstanceID()} " +
+                                    $"blitEye={blitEye} rt={eyeTarget.GetEntityId().ToString()} " +
                                     $"shader={composite.shader.name} supported={composite.shader.isSupported} " +
                                     $"colorPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
                             }

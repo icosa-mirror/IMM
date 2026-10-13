@@ -2,6 +2,112 @@
 
 Local UPM package for the IMM Unity runtime, editor tools, and samples.
 
+## Experimental URP RenderGraph sample
+
+The repository sample project includes `Assets/Scenes/SampleSceneURP.unity` for
+Unity 6.6 / URP 17.6 on Windows D3D12. Start the Editor with `-force-d3d12`, open
+that scene, and enter Play Mode. Use a plugin built from the same source revision.
+The sample loads `StreamingAssets/sample1.imm` and frames its bounds at three seconds.
+
+`Assets/Settings/ImmURPRenderer.asset` contains `ImmRendererFeature`; the scene's
+camera has `ImmCamera`. `ImmUrpSample` selects the configured URP asset for the
+scene's lifetime and restores the previous quality pipeline when destroyed. For
+an application, assign the URP asset in its graphics/quality settings, add the
+renderer feature, add `ImmCamera` to each participating camera, and initialize
+an `ImmPlayerManager`. Rendering uses RenderGraph at `AfterRenderingSkybox`.
+
+Select `ImmPlayerManager.UrpPaintRenderingTechnique` before initialization: `Static`
+is the default; `Pretessellated` selects the other native paint import/render path.
+Changing the technique requires shutting down the manager and initializing it again.
+The mono CI content gate loads the fixture corpus independently under both techniques.
+
+The implementation accepts perspective or orthographic base cameras, a full
+viewport, matching colour/depth attachments with 1, 2, 4 or 8 samples and no
+dynamic resolution. D3D12 has mono and two-slice single-pass packet paths;
+Metal currently accepts mono cameras. Vulkan also has an experimental two-view
+single-pass path requiring matching two-layer attachments and observed logical-device
+multiview enablement. Actual Unity/OpenXR headset acceptance remains outstanding.
+Unsupported MSAA levels must
+be skipped explicitly rather than reported as validated at a downgraded level.
+See `LLM Docs/IMM-URP-single-pass-feature-request.md` in the repository for scoped
+CI evidence and remaining layer/platform/headset acceptance work.
+
+The Vulkan native plugin must load at startup to observe the features enabled
+on Unity's logical device. The shipped Windows and Android plugin metadata
+sets `Load on startup`. Device creation is forwarded unchanged. Late plugin
+loading cannot establish enabled multiview capability, so two-view packets are
+rejected in that case. Native GPU adapter tests establish two-slice submission;
+they do not establish Quest headset correctness.
+
+## Submission diagnostics
+
+`ImmRenderingDiagnostics.SubmissionCompleted` reports a native scene event after
+its completion is acknowledged on the main thread. Each record includes the
+source camera, recorded frame, request sequence, XR pass, view count, native
+scene-event count and result. Mono uses XR pass `-1`; the supported single
+two-view XR pass uses `0`. Direct transport probes can have a null camera.
+Callbacks run during completion polling: do not queue or dispose sessions from
+a callback. Avoid allocating in listeners during performance measurements.
+With no subscribers, the transport skips diagnostic record construction.
+Idle diagnostic fixtures should call `PollCompletions()` on the main thread after
+their GPU readback completes; it polls acknowledgements without waiting or rendering.
+
+This requires packet ABI version 4 (496 bytes). Ship matching managed and native
+plugin revisions; older packet layouts are rejected. Automated mono checks cover
+two distinct cameras and camera opt-out; synthetic stereo checks cover one native
+scene event for a two-view request. These counters do not prove GPU draw counts
+or actual headset single-pass execution.
+
+`ManagedAllocationMeasured` optionally detects managed allocations on the current thread inside
+`AddRenderPasses`, `RecordRenderGraph` and `ExecuteNative`, including transport work
+and any submission listeners they invoke. No profiler recorders are created without
+a measurement subscriber. Measurement listeners run after recording stops
+and must not allocate or change rendering state. Native/GPU allocations and surrounding
+Unity frame work are outside these scopes. CI calibrates Unity's `GC.Alloc` recorder,
+warms the mono pass for 16 frames, then requires no allocation samples over at least
+32 calls to each callback. A one-sample recorder detects any allocation; it does not
+report total allocated bytes. The CLR thread-allocation counter is unimplemented in IL2CPP.
+Allocation probes require a working `GC.Alloc` marker (CI uses Development players);
+failed calibration must not be interpreted as zero allocations.
+The hardware XR probe warms for 32 acknowledged stereo frames, then requires
+no allocation samples over at least 64 calls to each callback. Hosted mono and hardware
+stereo execution of these allocation checks remain outstanding.
+
+## OpenXR sample builds
+
+The repository sample has dedicated OpenXR builds:
+`ImmPlayer.Editor.ImmUrpXrBuild.BuildWindowsOpenXRPlayer` (D3D12) and
+`ImmPlayer.Editor.ImmUrpXrBuild.BuildAndroidOpenXRQuestPlayer` (Vulkan/ARM64).
+They build `SampleSceneURP`, require one configured OpenXR loader, select
+Single Pass Instanced and add a tracked head camera under a separate viewing
+origin. Use `-immUrpXrPlayerPath` or `-immQuestPlayerPath` for the output path.
+Build-time settings are restored afterwards. CI builds both variants; actual
+OpenXR rendering/headset acceptance is a separate outstanding check.
+
+On a Windows runner with an active OpenXR headset session, launch
+`ImmUnityOpenXR.exe -force-d3d12 -immUrpXrSmoke -immUrpXrCapturePath "<absolute PNG path>"`.
+The opt-in hardware probe waits for a loaded document and running stereo display,
+requires one display pass with two views and 120 distinct camera-attributed stereo
+frames with one successful native scene event each, then reads both layers of
+the actual XR colour target. It checks visible baseline content and Unity opaque
+and transparent geometry in front of/behind IMM in both eyes. Ten per-eye PNGs
+are written under `imm-urp-xr-<run ID>` beside the mirror capture before exit.
+Failure or timeout exits with an error. The Windows hardware CI lane runs this
+same-commit player instead of the legacy Editor scene. This prepared probe still
+needs hardware execution; its depth checks do not replace visual/MSAA edge
+acceptance or GPU draw-count evidence.
+
+For Quest, run `code/projects/android/run-unity-quest-urp-smoke.ps1 -Apk <Quest APK>`
+from the repository root, optionally adding `-Serial <ADB serial>`. It requires an
+authorized, awake headset and an inactive Unity sample. The harness installs the
+specified APK, launches the same probe through Unity's Android intent arguments,
+uses a unique run ID to reject stale logs, pulls a mirror PNG and all ten per-eye
+depth PNGs, and stops its own
+sample instance afterwards. It preserves shared logcat buffers. The gated
+`Unity Quest URP OpenXR VR` CI lane downloads the same-commit APK and retains
+correlated logs, capture and manifest. Both XR matrix rows remain deferred pending
+actual hardware evidence; the automated probe does not replace per-eye acceptance.
+
 ## Android Vulkan rendering contract
 
 On Android Vulkan, IMM does not access Unity's display render buffer or
