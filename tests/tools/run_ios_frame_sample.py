@@ -27,6 +27,18 @@ def collect_launch_diagnostics(udid: str, executable: str, output: Path) -> None
                 stream.write(b"\n[IMM-FPS-IOS] Diagnostic command timed out.\n")
 
 
+def cleanup_simulator(udid: str, bundle: str, booted_here: bool) -> None:
+    commands = [["xcrun", "simctl", "terminate", udid, bundle]]
+    if booted_here:
+        commands.append(["xcrun", "simctl", "shutdown", udid])
+    for command in commands:
+        try:
+            subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=15, check=False)
+        except subprocess.TimeoutExpired:
+            print(f"[IMM-FPS-IOS] Cleanup timed out: simctl {command[2]}", flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--udid", required=True)
@@ -65,10 +77,7 @@ def main() -> int:
             collect_launch_diagnostics(args.udid, info["CFBundleExecutable"], args.output_dir)
         return status
     finally:
-        subprocess.run(["xcrun", "simctl", "terminate", args.udid, bundle],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        if booted_here:
-            subprocess.run(["xcrun", "simctl", "shutdown", args.udid], check=False)
+        cleanup_simulator(args.udid, bundle, booted_here)
 
 
 if __name__ == "__main__":

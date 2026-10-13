@@ -1887,7 +1887,8 @@ jobs:
             --imm-godot-sample-play-log=user://godot-ios-sample-play.log || runtime_status=$?
           collect_user_file godot-ios-sample-play.png "$artifact_dir/godot-ios-sample-play.png" || runtime_status=1
           collect_user_file godot-ios-sample-play.log "$artifact_dir/godot-ios-sample-play.log" || runtime_status=1
-          xcrun simctl shutdown "$simulator_udid" >/dev/null 2>&1 || true
+          # Reuse the booted simulator for cadence sampling. Rebooting here
+          # re-enters SpringBoard startup before the next app launch.
           exit "$runtime_status"
 
       - name: Measure Godot iOS Simulator rendered-frame cadence
@@ -1896,6 +1897,11 @@ jobs:
           python3 tests/tools/run_ios_frame_sample.py
           --udid "$GODOT_IOS_SIMULATOR_UDID" --app "$GODOT_IOS_SIMULATOR_APP"
           --product godot --output-dir artifacts/godot-ios-metal/performance
+
+      - name: Shut down Godot iOS Simulator
+        if: always() && env.GODOT_IOS_SIMULATOR_UDID != ''
+        timeout-minutes: 1
+        run: xcrun simctl shutdown "$GODOT_IOS_SIMULATOR_UDID" >/dev/null 2>&1 || true
 
       - name: Package Godot iOS application for Firebase Test Lab
         id: godot_ios_package
