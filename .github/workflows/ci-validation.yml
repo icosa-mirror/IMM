@@ -358,6 +358,7 @@ jobs:
       (needs.device.result == 'success' || needs.device.result == 'skipped') &&
       (needs.engine.result == 'success' || needs.engine.result == 'skipped') &&
       (needs.gpu.result == 'success' || needs.gpu.result == 'skipped') &&
+      (needs.ios.result == 'success' || needs.ios.result == 'skipped') &&
       needs.validation-evidence.result == 'success' &&
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
@@ -370,6 +371,7 @@ jobs:
       - device
       - engine
       - gpu
+      - ios
       - validation-evidence
     uses: ./.github/workflows/build.yml
     permissions:
