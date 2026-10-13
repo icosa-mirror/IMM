@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 def load_json(path: Path, errors: list[str]) -> object | None:
@@ -57,7 +57,7 @@ def verify_manifest(path: Path, expected_product: str, expected_platform: str, e
         errors.append(f"{path} is missing fixtures list")
 
 
-def verify_summary(path: Path, expected_manifest_rel: str, errors: list[str]) -> None:
+def verify_summary(path: Path, manifest_path: Path, errors: list[str]) -> None:
     require_file(path, errors)
     if not path.exists():
         return
@@ -73,15 +73,19 @@ def verify_summary(path: Path, expected_manifest_rel: str, errors: list[str]) ->
     if not isinstance(artifacts, list) or not artifacts:
         errors.append(f"{path} has no artifact entries")
         return
-    manifest_files = []
+    expected_manifest = load_json(manifest_path, errors) if manifest_path.exists() else None
     for artifact in artifacts:
-        if not isinstance(artifact, dict):
+        if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str):
             continue
+        # Summary paths describe the producer workspace, not the download
+        # destination. Match its own artifact root and the actual manifest
+        # content so moving a package cannot invalidate or misassociate evidence.
+        recorded_manifest = str(PurePosixPath(artifact["path"]) / "manifest.json")
         for manifest in artifact.get("manifests", []):
-            if isinstance(manifest, dict):
-                manifest_files.append(manifest.get("file"))
-    if expected_manifest_rel not in manifest_files:
-        errors.append(f"{path} does not summarize {expected_manifest_rel}")
+            if (isinstance(manifest, dict) and manifest.get("file") == recorded_manifest
+                    and expected_manifest is not None and manifest.get("content") == expected_manifest):
+                return
+    errors.append(f"{path} does not summarize the downloaded manifest {manifest_path}")
 
 
 def verify_artifact(root: Path, rel: str, product: str, platform: str, mode: str, errors: list[str]) -> None:
@@ -90,7 +94,7 @@ def verify_artifact(root: Path, rel: str, product: str, platform: str, mode: str
         errors.append(f"Missing release artifact directory: {artifact}")
         return
     verify_manifest(artifact / "manifest.json", product, platform, mode, errors)
-    verify_summary(artifact / "artifact-summary.json", f"{rel}/manifest.json", errors)
+    verify_summary(artifact / "artifact-summary.json", artifact / "manifest.json", errors)
 
 
 def main() -> int:

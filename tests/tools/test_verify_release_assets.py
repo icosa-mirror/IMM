@@ -46,14 +46,14 @@ def manifest(product: str, platform: str, mode: str) -> dict:
     }
 
 
-def summary(rel: str) -> dict:
+def summary(rel: str, content: dict) -> dict:
     return {
         "schema": "imm-ci-artifact-summary-v1",
         "passed": True,
         "artifacts": [
             {
-                "path": rel,
-                "manifests": [{"file": f"{rel}/manifest.json", "content": {}}],
+                "path": f"artifacts/{rel}",
+                "manifests": [{"file": f"artifacts/{rel}/manifest.json", "content": content}],
             }
         ],
     }
@@ -65,7 +65,7 @@ def write_release_tree(root: Path) -> None:
         artifact.mkdir(parents=True)
         (artifact / "payload.bin").write_bytes(b"x")
         (artifact / "manifest.json").write_text(json.dumps(manifest(product, platform, mode)) + "\n", encoding="utf-8")
-        (artifact / "artifact-summary.json").write_text(json.dumps(summary(rel)) + "\n", encoding="utf-8")
+        (artifact / "artifact-summary.json").write_text(json.dumps(summary(rel, manifest(product, platform, mode))) + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -74,6 +74,17 @@ def main() -> int:
         write_release_tree(root)
         ok = run_verify(root)
         assert ok.returncode == 0, ok.stderr
+
+        # A summary from another build must fail even if its path is plausible.
+        mismatched = root / "ImmViewer-Android" / "artifact-summary.json"
+        original = mismatched.read_text(encoding="utf-8")
+        data = json.loads(original)
+        data["artifacts"][0]["manifests"][0]["content"]["files"][0]["sha256"] = "1" * 64
+        mismatched.write_text(json.dumps(data), encoding="utf-8")
+        failed = run_verify(root)
+        assert failed.returncode != 0
+        assert "does not summarize the downloaded manifest" in failed.stderr
+        mismatched.write_text(original, encoding="utf-8")
 
         broken_summary = root / "ImmViewer-Windows" / "artifact-summary.json"
         data = json.loads(broken_summary.read_text(encoding="utf-8"))
