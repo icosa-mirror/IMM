@@ -25,6 +25,6 @@
 ## Quest acceptance status
 
 1. The corrected 4x MSAA Quest sample builds successfully. Its installed native library was pulled back and verified: SHA256 `e705559556006b80ae9263bb52c50e7f8fe0cf4070590ee93dda0278aab11ef2`.
-2. Human confirmation of upright rendering, correct surface-facing, both eyes and head tracking is pending. The app remains stopped until the user is ready. A successful build or GPU fixture test does not substitute for that confirmation.
+2. On 2026-10-13 the user confirmed the verified Unity build was correct in the headset: upright rendering, correct faces, both eyes and head tracking. The standalone native Oculus/OpenGL VR APK from the same CI run was separately confirmed working. These confirmations do not cover Godot XR.
 3. Off-headset eye readbacks and OS captures were black even with the proximity override. Those captures establish neither correct rendering nor a scene-rendering failure. No further capture is required to establish the compiler mismatch above.
-4. Full cross-platform CI is required for the final source changes. The earlier green run 38286973696 predates this fix.
+4. Full cross-platform CI run 38318940025 passed for merged head 609d31df, including the new orientation and face checks. The earlier green run 38286973696 predates this fix.
