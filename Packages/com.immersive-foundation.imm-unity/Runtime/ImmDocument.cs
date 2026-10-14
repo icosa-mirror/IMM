@@ -475,6 +475,86 @@ namespace ImmPlayer
         }
 
         /// <summary>
+        /// Optional availability policy: evaluated visibility of the viewpoint and all
+        /// ancestors, including playback overrides. Does not change legacy selection.
+        /// </summary>
+        public bool IsSpawnAreaAvailable(int spawnAreaId) => IsLoaded &&
+            ImmNativePlugin.IsSpawnAreaAvailable(DocumentId, spawnAreaId) != 0;
+
+        /// <summary>
+        /// Fill a reusable buffer in document order. Returns the total required count,
+        /// or -1 when state is unavailable. Only the first buffer.Length IDs are written.
+        /// Pass null for a count-only query. No managed allocation on this path.
+        /// </summary>
+        public int GetAvailableSpawnAreaIds(int[] buffer) => IsLoaded
+            ? ImmNativePlugin.GetAvailableSpawnAreaIds(DocumentId, buffer?.Length ?? 0, buffer)
+            : -1;
+
+        /// <summary>Convenience allocating query. Prefer the buffer overload when polling.</summary>
+        public int[] GetAvailableSpawnAreaIds()
+        {
+            if (!IsLoaded) return System.Array.Empty<int>();
+            int[] ids = new int[GetSpawnAreaCount()];
+            int count = GetAvailableSpawnAreaIds(ids);
+            if (count < 0) return System.Array.Empty<int>();
+            if (count > ids.Length)
+            {
+                ids = new int[count];
+                count = GetAvailableSpawnAreaIds(ids);
+                if (count < 0 || count > ids.Length) return System.Array.Empty<int>();
+            }
+            if (count != ids.Length) System.Array.Resize(ref ids, count);
+            return ids;
+        }
+
+        /// <summary>
+        /// Atomically read evaluation/request status, available IDs, preferred/active IDs,
+        /// and both poses. Null requests header/poses only. With a short buffer, returns
+        /// false but supplies a valid snapshot and the required availableCount.
+        /// </summary>
+        public bool TryGetSpawnAreaSnapshot(int[] availableIds, out SpawnAreaSnapshot snapshot)
+        {
+            snapshot = SpawnAreaSnapshot.Create();
+            if (!IsLoaded) return false;
+            int count = ImmNativePlugin.GetSpawnAreaSnapshot(DocumentId, ref snapshot,
+                availableIds?.Length ?? 0, availableIds);
+            return count >= 0 && (availableIds == null || count <= availableIds.Length);
+        }
+
+        /// <summary>
+        /// Checked optional selection. Rejects invisible viewpoints, pending tracked requests,
+        /// and stale nonzero evaluation revisions. Returns the selected pose under the same lock;
+        /// align the scene only after success. Does not acknowledge MakeDefault requests.
+        /// </summary>
+        public bool TrySetActiveSpawnAreaId(int spawnAreaId, out SpawnAreaPose pose,
+            ulong expectedEvaluationRevision = 0)
+        {
+            pose = default;
+            return IsLoaded && ImmNativePlugin.TrySetActiveSpawnAreaId(DocumentId,
+                spawnAreaId, expectedEvaluationRevision, out pose) != 0;
+        }
+
+        public bool TrySetActiveSpawnAreaId(int spawnAreaId) =>
+            TrySetActiveSpawnAreaId(spawnAreaId, out SpawnAreaPose pose);
+
+        /// <summary>
+        /// Queue a tracked chapter change. Zero means invalid/unloaded/hidden/busy.
+        /// Poll snapshots until IsComplete(token); a changed requestedCommand means
+        /// supersession. Legacy SetChapter remains unchanged.
+        /// </summary>
+        public ulong RequestSetChapter(int chapterIndex) => IsLoaded
+            ? ImmNativePlugin.RequestSetChapter(DocumentId, chapterIndex) : 0;
+
+        /// <summary>
+        /// Queue a tracked seek using the same tick units/arguments as SetTime. Unlike
+        /// legacy SetTime, it is queued and evaluates even while paused, without resuming.
+        /// Completion is reported after visibility, preferred viewpoint, and poses evaluate.
+        /// Zero means invalid/unloaded/hidden/busy. Requires continued player updates.
+        /// </summary>
+        public ulong RequestSetTime(long timeSinceStart, long timeSinceStop) => IsLoaded
+            ? ImmNativePlugin.RequestSetTime(DocumentId, timeSinceStart, timeSinceStop) : 0;
+
+        /// <summary>
         /// Get the list of spawn area IDs
         /// </summary>
         public int[] GetSpawnAreaList()
