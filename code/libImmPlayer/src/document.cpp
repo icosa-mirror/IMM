@@ -104,6 +104,10 @@ namespace ImmPlayer
         mMemoryView = nullptr;
         mSequenceReady = false;
         mEditing = false;
+        mEvaluationRevision = 0;
+        mRequestedPlaybackCommand = 0;
+        mCompletedPlaybackCommand = 0;
+        mPlaybackRequestStatus = PlaybackRequestStatus::None;
         mRequestedRevision = 0;
         mPreparedRevision = 0;
         mPresentedRevision = 0;
@@ -169,6 +173,100 @@ namespace ImmPlayer
     {
         const Layer * layer = mSequence.GetInitialSpawnArea();
         return layer != nullptr ? static_cast<int>(layer->GetID()) : -1;
+    }
+
+    bool Document::IsSpawnAreaAvailable(int spawnAreaId)
+    {
+        if (mState.mLoadingState != LoadingState::Loaded || mEvaluationRevision == 0 ||
+            spawnAreaId < 0 || spawnAreaId >= GetSpawnAreaCount())
+            return false;
+        return mPlayerManager.GetSpawnAreaLayer(spawnAreaId)->GetWorldVisible();
+    }
+
+    int Document::GetAvailableSpawnAreaIds(int capacity, int * ids)
+    {
+        if (capacity < 0 || (capacity > 0 && ids == nullptr) ||
+            mState.mLoadingState != LoadingState::Loaded || mEvaluationRevision == 0)
+            return -1;
+        int required = 0;
+        for (int id = 0; id < GetSpawnAreaCount(); ++id)
+        {
+            if (!IsSpawnAreaAvailable(id)) continue;
+            if (required < capacity) ids[required] = id;
+            ++required;
+        }
+        return required;
+    }
+
+    void Document::GetSpawnAreaPoseState(int spawnAreaId, SpawnAreaPoseState & pose)
+    {
+        pose = {};
+        if (spawnAreaId < 0 || spawnAreaId >= GetSpawnAreaCount()) return;
+        SpawnAreaInfo info;
+        GetSpawnAreaInfo(info, spawnAreaId);
+        const trans3d & transform = info.mSpawnAreaToWorld;
+        pose.posx = static_cast<float>(transform.mTranslation.x);
+        pose.posy = static_cast<float>(transform.mTranslation.y);
+        pose.posz = static_cast<float>(transform.mTranslation.z);
+        pose.rotx = static_cast<float>(transform.mRotation.x);
+        pose.roty = static_cast<float>(transform.mRotation.y);
+        pose.rotz = static_cast<float>(transform.mRotation.z);
+        pose.rotw = static_cast<float>(transform.mRotation.w);
+        pose.sca = static_cast<float>(transform.mScale);
+        pose.animated = info.mAnimated ? 1 : 0;
+        pose.isFloorLevel = info.mIsFloorLevel ? 1 : 0;
+        pose.locomotion = (info.mVolume.mAllowTranslationX ? 4 : 0) |
+            (info.mVolume.mAllowTranslationY ? 2 : 0) | (info.mVolume.mAllowTranslationZ ? 1 : 0);
+    }
+
+    int Document::GetSpawnAreaSnapshot(SpawnAreaSnapshot & snapshot, int capacity, int * ids)
+    {
+        const int count = GetAvailableSpawnAreaIds(capacity, ids);
+        if (count < 0) return -1;
+        snapshot = {};
+        snapshot.structSize = sizeof(SpawnAreaSnapshot);
+        snapshot.structVersion = 1;
+        snapshot.evaluationRevision = mEvaluationRevision;
+        snapshot.requestedCommand = mRequestedPlaybackCommand;
+        snapshot.completedCommand = mCompletedPlaybackCommand;
+        snapshot.commandStatus = static_cast<int32_t>(mPlaybackRequestStatus);
+        snapshot.chapter = GetCurrentChapter();
+        const int active = GetSpawnArea();
+        const int preferred = GetInitialSpawnArea();
+        snapshot.activeId = active >= 0 && active < GetSpawnAreaCount() ? active : -1;
+        snapshot.preferredId = preferred >= 0 && preferred < GetSpawnAreaCount() ? preferred : -1;
+        snapshot.availableCount = count;
+        snapshot.activeAvailable = IsSpawnAreaAvailable(snapshot.activeId) ? 1 : 0;
+        snapshot.preferredAvailable = IsSpawnAreaAvailable(snapshot.preferredId) ? 1 : 0;
+        snapshot.needsUpdate = GetSpawnAreaNeedsUpdate() ? 1 : 0;
+        GetSpawnAreaPoseState(snapshot.activeId, snapshot.activePose);
+        GetSpawnAreaPoseState(snapshot.preferredId, snapshot.preferredPose);
+        return count;
+    }
+
+    bool Document::TrySetActiveSpawnAreaId(int spawnAreaId, uint64_t expectedEvaluationRevision,
+        SpawnAreaPoseState & pose)
+    {
+        pose = {};
+        if (mPlaybackRequestStatus == PlaybackRequestStatus::Pending ||
+            (expectedEvaluationRevision != 0 && expectedEvaluationRevision != mEvaluationRevision) ||
+            !IsSpawnAreaAvailable(spawnAreaId))
+            return false;
+        GetSpawnAreaPoseState(spawnAreaId, pose);
+        mPlayerManager.SetSpawnArea(spawnAreaId);
+        return true;
+    }
+
+    bool Document::CanRequestPlaybackEvaluation() const
+    {
+        return mState.mLoadingState == LoadingState::Loaded && !mHidden &&
+            mPlaybackRequestStatus != PlaybackRequestStatus::Pending;
+    }
+
+    uint64_t Document::BeginPlaybackEvaluationRequest()
+    {
+        mPlaybackRequestStatus = PlaybackRequestStatus::Pending;
+        return ++mRequestedPlaybackCommand;
     }
 
     void Document::SetSpawnArea(int spawnAreaId)
@@ -270,8 +368,26 @@ namespace ImmPlayer
         Drawing::ColorSpace colorSpace,
         Drawing::PaintRenderingTechnique renderingTechnique,
         piSoundEngine* soundEngine, piLog *log, const piTick now,
-        const Command * command)
+        const Command * command, const Command * queuedCommand)
     {
+        const bool trackedCommand = mPlaybackRequestStatus == PlaybackRequestStatus::Pending &&
+            command != nullptr &&
+            (command->mType == Command::Type::RequestSetChapter ||
+             command->mType == Command::Type::RequestSetTime) &&
+            command->mEvaluationRequest == mRequestedPlaybackCommand;
+        bool trackedCommandApplied = false;
+        const bool trackedStillQueued = queuedCommand != nullptr &&
+            (queuedCommand->mType == Command::Type::RequestSetChapter ||
+             queuedCommand->mType == Command::Type::RequestSetTime) &&
+            queuedCommand->mEvaluationRequest == mRequestedPlaybackCommand;
+        if (mPlaybackRequestStatus == PlaybackRequestStatus::Pending &&
+            !trackedCommand && !trackedStillQueued)
+        {
+            // A legacy command may replace the existing single command slot.
+            mCompletedPlaybackCommand = mRequestedPlaybackCommand;
+            mPlaybackRequestStatus = PlaybackRequestStatus::Superseded;
+        }
+
         // Authoring work enters through the same per-document command slot as playback and
         // loading commands. ABI mutation calls only copy into the open batch.
         if (mEditing && mState.mLoadingState == LoadingState::Loaded && command != nullptr &&
@@ -421,6 +537,21 @@ namespace ImmPlayer
                     mPlayerManager.SkipBack(now);
                 }
             }
+            else if (trackedCommand)
+            {
+                if (mState.mLoadingState == LoadingState::Loaded && !mHidden)
+                {
+                    if (command->mType == Command::Type::RequestSetChapter)
+                        trackedCommandApplied = mPlayerManager.SetChapter(now,
+                            static_cast<size_t>(command->mIntArg));
+                    else
+                    {
+                        mPlayerManager.SetTime(now, piTick(command->mSeekStartTicks),
+                            piTick(command->mSeekStopTicks));
+                        trackedCommandApplied = true;
+                    }
+                }
+            }
             else if (command->mType == Command::Type::SetChapter)
             {
                 if (mState.mLoadingState == LoadingState::Loaded)
@@ -525,9 +656,21 @@ namespace ImmPlayer
         if (shouldRender)
         {
             if (mPlayerManager.GetIsPlaying())
-                mPlayerManager.Update(now);
+            {
+                const bool evaluates = !mPlayerManager.GetIsPaused() || trackedCommandApplied;
+                mPlayerManager.Update(now, trackedCommandApplied);
+                if (evaluates) ++mEvaluationRevision;
+            }
         }
 
+
+        if (trackedCommand)
+        {
+            mCompletedPlaybackCommand = mRequestedPlaybackCommand;
+            mPlaybackRequestStatus = trackedCommandApplied && shouldRender &&
+                mPlayerManager.GetIsPlaying() ? PlaybackRequestStatus::Applied :
+                PlaybackRequestStatus::Rejected;
+        }
 
         // should we animate+render?
         return shouldRender;

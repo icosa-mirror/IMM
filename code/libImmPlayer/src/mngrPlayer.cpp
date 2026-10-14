@@ -491,9 +491,9 @@ namespace ImmPlayer
     }
 
 
-    void MngrPlayer::Update(const piTick now)
+    void MngrPlayer::Update(const piTick now, bool evaluateWhilePaused)
     {
-        if (!mIsPaused)
+        if (!mIsPaused || evaluateWhilePaused)
         {
             // Update all layer states
             auto update = [this, &now](Layer* layer, int level, int child, bool instance) -> bool
@@ -558,6 +558,13 @@ namespace ImmPlayer
                         break;
                     }
                 }
+            }
+            if (evaluateWhilePaused && mIsPaused)
+            {
+                // A seek can activate previously hidden sound/paint/timeline layers.
+                // Reapply the normal pause policy to those layers before returning.
+                mIsPaused = false;
+                Pause(now);
             }
         }
     }

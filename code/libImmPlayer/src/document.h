@@ -1,4 +1,5 @@
 #pragma once
+#include "spawnAreaState.h"
 
 #include <deque>
 #include <memory>
@@ -90,10 +91,15 @@ namespace ImmPlayer {
                 Restart = 9,
                 Continue = 10,
                 SetChapter = 11,
-                AuthoringCommit = 12
+                AuthoringCommit = 12,
+                RequestSetChapter = 13,
+                RequestSetTime = 14
             }mType;
             const uint8_t* mMemoryData = nullptr;
             uint64_t mMemorySize = 0;
+            uint64_t mEvaluationRequest = 0;
+            int64_t mSeekStartTicks = 0;
+            int64_t mSeekStopTicks = 0;
             ImmCore::piString mStrArg;
             uint64_t mIntArg;
             ImportType mFileType;
@@ -118,7 +124,8 @@ namespace ImmPlayer {
             LayerRendererModel *layerRendererModel,
             ImmImporter::Drawing::ColorSpace colorSpace,
             ImmImporter::Drawing::PaintRenderingTechnique renderingTechnique,
-            ImmCore::piSoundEngine* soundEngine, ImmCore::piLog *log, const ImmCore::piTick time, const Command * command);
+            ImmCore::piSoundEngine* soundEngine, ImmCore::piLog *log, const ImmCore::piTick time, const Command * command,
+            const Command * queuedCommand = nullptr);
         bool UpdateStateGPU(LayerRendererPaint *layerPaintRender, LayerRendererPicture *layerRenderPicture, LayerRendererModel *layerRenderModel,
             ImmCore::piRenderer* renderer, ImmCore::piLog *log, ImmImporter::Drawing::ColorSpace colorSpace);
         void UnloadSync(
@@ -154,6 +161,14 @@ namespace ImmPlayer {
         void GetSpawnAreaInfo(SpawnAreaInfo &info, int spawnAreaId);
         bool GetSpawnAreaNeedsUpdate();
         void SetSpawnAreaNeedsUpdate(bool state);
+
+        bool IsSpawnAreaAvailable(int spawnAreaId);
+        int GetAvailableSpawnAreaIds(int capacity, int * ids);
+        int GetSpawnAreaSnapshot(SpawnAreaSnapshot & snapshot, int capacity, int * ids);
+        bool TrySetActiveSpawnAreaId(int spawnAreaId, uint64_t expectedEvaluationRevision,
+            SpawnAreaPoseState & pose);
+        bool CanRequestPlaybackEvaluation() const;
+        uint64_t BeginPlaybackEvaluationRequest();
 
         void GetTime(ImmCore::piTick now, ImmCore::piTick* timeSinceStart, ImmCore::piTick* timeSinceStop);
         void SetTime(ImmCore::piTick now, ImmCore::piTick timeSinceStart, ImmCore::piTick timeSinceStop);
@@ -246,6 +261,12 @@ namespace ImmPlayer {
 
     private:
         bool mEditing = false;
+        void GetSpawnAreaPoseState(int spawnAreaId, SpawnAreaPoseState & pose);
+        uint64_t mEvaluationRevision = 0;
+        uint64_t mRequestedPlaybackCommand = 0;
+        uint64_t mCompletedPlaybackCommand = 0;
+        PlaybackRequestStatus mPlaybackRequestStatus = PlaybackRequestStatus::None;
+
         uint64_t mRequestedRevision = 0;
         uint64_t mPreparedRevision = 0;
         uint64_t mPresentedRevision = 0;

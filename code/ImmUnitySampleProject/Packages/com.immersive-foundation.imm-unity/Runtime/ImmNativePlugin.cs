@@ -362,6 +362,27 @@ namespace ImmPlayer
         public static extern int GetSpawnAreaCount(int docId);
 
         [DllImport(DllName)]
+        public static extern int GetAvailableSpawnAreaIds(int docId, int capacity, [Out] int[] ids);
+
+        [DllImport(DllName)]
+        public static extern int IsSpawnAreaAvailable(int docId, int spawnAreaId);
+
+        [DllImport(DllName)]
+        public static extern int TrySetActiveSpawnAreaId(int docId, int spawnAreaId,
+            ulong expectedEvaluationRevision, out SpawnAreaPose pose);
+
+        [DllImport(DllName)]
+        public static extern int GetSpawnAreaSnapshot(int docId, ref SpawnAreaSnapshot snapshot,
+            int capacity, [Out] int[] ids);
+
+        [DllImport(DllName)]
+        public static extern ulong RequestSetChapter(int docId, int chapterIndex);
+
+        [DllImport(DllName)]
+        public static extern ulong RequestSetTime(int docId, long timeSinceStart, long timeSinceStop);
+
+
+        [DllImport(DllName)]
         public static extern int GetSpawnAreaList(int docId, int spawnAreaIdsSize, int[] pSpawnAreaIds);
 
         [DllImport(DllName)]
@@ -442,6 +463,38 @@ namespace ImmPlayer
         public int numTriangles;
         public int numTrianglesCulled;
         public float gpuTimeAverageMs;
+    }
+
+    public enum PlaybackRequestStatus
+    {
+        None = 0, Pending = 1, Applied = 2, Rejected = 3, Superseded = 4
+    }
+
+    /// <summary>
+    /// One evaluated viewpoint snapshot. Poses are in IMM space. IDs are document-local
+    /// spawn indices, not layer IDs. A negative ID has no valid pose. Request tokens and
+    /// evaluation revisions are scoped to this loaded document; this is not a history.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SpawnAreaSnapshot
+    {
+        public uint structSize, structVersion;
+        public ulong evaluationRevision, requestedCommand, completedCommand;
+        public PlaybackRequestStatus commandStatus;
+        public int chapter, activeId, preferredId, availableCount;
+        public int activeAvailable, preferredAvailable, needsUpdate;
+        public SpawnAreaPose activePose, preferredPose;
+        private uint reserved0, reserved1;
+
+        internal static SpawnAreaSnapshot Create() => new SpawnAreaSnapshot
+        {
+            structSize = 160,
+            structVersion = 1
+        };
+
+        public bool IsComplete(ulong requestId) => requestId != 0 &&
+            requestedCommand == requestId && completedCommand == requestId &&
+            commandStatus == PlaybackRequestStatus.Applied;
     }
 
     // Mirror of the native SerializedSpawnAreaPose (main.cpp): the spawn area's

@@ -110,7 +110,7 @@ Godot plugin, so plugin-side changes affect both engines.
 6. Paint authoring and export (`ImmExporter_*`), Windows only.
 7. Runtime flag plumbing (`SetRuntimeFlag`) so raw `getenv` toggles work on Android.
 
-### 2.2 Native API (97 entry points)
+### 2.2 Native API
 
 `C#` column: `Native` = `Runtime/ImmNativePlugin.cs`, `Export` = `Runtime/ImmExporter.cs`.
 "callers" lists managed code that actually invokes it; `—` means the P/Invoke exists but
@@ -179,8 +179,17 @@ triggered from C# by `ImmUnityRegisterRenderingPlugin()` (iOS-only `#if` in
 | `GetActiveSpawnAreaId` / `SetActiveSpawnAreaId` | Native | `ImmDocument` |
 | `GetInitialSpawnAreaId` | Native | `ImmDocument` |
 | `GetSpawnAreaInfo` | Native | `ImmDocument` |
-| `GetSpawnAreaPose` | Native | — |
-| `GetSpawnAreaNeedsUpdate` / `SetSpawnAreaNeedsUpdate` | Native | — |
+| `GetSpawnAreaPose` | Native | `ImmDocument` |
+| `GetSpawnAreaNeedsUpdate` / `SetSpawnAreaNeedsUpdate` | Native | `ImmDocument` |
+| `GetAvailableSpawnAreaIds` / `IsSpawnAreaAvailable` | Native (optional policy) | `ImmDocument` |
+| `TrySetActiveSpawnAreaId` | Native (optional checked selection + pose) | `ImmDocument` |
+| `GetSpawnAreaSnapshot` | Native (consistent evaluated state + caller-owned ID buffer) | `ImmDocument` |
+| `RequestSetChapter` / `RequestSetTime` | Native (tracked optional commands) | `ImmDocument` |
+
+The optional APIs preserve existing enumeration, unrestricted setters, and standalone-viewer
+behavior. See [runtime viewpoint policy and evaluation](runtime-viewpoints.md) for availability,
+completion, buffer/ABI contracts, and validation. Source additions require rebuilt native
+binaries; availability is not inferred from legacy capability flags.
 
 #### Exporter (Windows only)
 

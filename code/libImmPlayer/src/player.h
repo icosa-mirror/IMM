@@ -92,6 +92,14 @@ namespace ImmPlayer {
         const ImmCore::piImage* GetSpawnAreaScreenshot(int docId, int spawnAreaId);
         bool GetSpawnAreaInfo(Document::SpawnAreaInfo & info, int docId, int spawnAreaId);
 
+        bool IsSpawnAreaAvailable(int docId, int spawnAreaId);
+        int GetAvailableSpawnAreaIds(int docId, int capacity, int * ids);
+        int GetSpawnAreaSnapshot(int docId, SpawnAreaSnapshot & snapshot, int capacity, int * ids);
+        bool TrySetActiveSpawnAreaId(int docId, int spawnAreaId,
+            uint64_t expectedEvaluationRevision, SpawnAreaPoseState & pose);
+        uint64_t RequestSetChapter(int docId, int chapterIndex);
+        uint64_t RequestSetTime(int docId, int64_t timeSinceStart, int64_t timeSinceStop);
+
         // playback control
         void SetTime(int id, ImmCore::piTick timeSinceStart, ImmCore::piTick timeSinceStop);
         void GetTime(int id, ImmCore::piTick* timeSinceStart, ImmCore::piTick* timeSinceStop);

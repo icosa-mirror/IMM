@@ -20,7 +20,7 @@ namespace ImmPlayer
 
         bool Init(ImmCore::piLog* log);
         void Deinit();
-        void Update(const ImmCore::piTick now); // should be called every frame
+        void Update(const ImmCore::piTick now, bool evaluateWhilePaused = false); // should be called every frame
 
         // All file types
         void Enter(Sequence * document, const ImmCore::piTick now);

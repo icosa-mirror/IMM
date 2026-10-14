@@ -3289,6 +3289,49 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetLayerInfoByIndex(int docId, int index,
 
 #pragma region SpawnArea
 
+// Optional viewpoint availability. Legacy list and setter below remain unrestricted.
+extern "C" int UNITY_INTERFACE_EXPORT GetAvailableSpawnAreaIds(int docId, int capacity, int * ids)
+{
+    IMM_UNITY_NATIVE_LOCK();
+    return iPlayer().GetAvailableSpawnAreaIds(docId, capacity, ids);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT IsSpawnAreaAvailable(int docId, int spawnAreaId)
+{
+    IMM_UNITY_NATIVE_LOCK();
+    return iPlayer().IsSpawnAreaAvailable(docId, spawnAreaId) ? 1 : 0;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT TrySetActiveSpawnAreaId(int docId, int spawnAreaId,
+    uint64_t expectedEvaluationRevision, ImmPlayer::SpawnAreaPoseState * pose)
+{
+    IMM_UNITY_NATIVE_LOCK();
+    if (pose == nullptr) return 0;
+    return iPlayer().TrySetActiveSpawnAreaId(docId, spawnAreaId, expectedEvaluationRevision, *pose) ? 1 : 0;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT GetSpawnAreaSnapshot(int docId,
+    ImmPlayer::SpawnAreaSnapshot * snapshot, int capacity, int * ids)
+{
+    IMM_UNITY_NATIVE_LOCK();
+    if (snapshot == nullptr || snapshot->structVersion != 1 ||
+        snapshot->structSize < sizeof(ImmPlayer::SpawnAreaSnapshot)) return -1;
+    return iPlayer().GetSpawnAreaSnapshot(docId, *snapshot, capacity, ids);
+}
+
+extern "C" uint64_t UNITY_INTERFACE_EXPORT RequestSetChapter(int docId, int chapterIndex)
+{
+    IMM_UNITY_NATIVE_LOCK();
+    return iPlayer().RequestSetChapter(docId, chapterIndex);
+}
+
+extern "C" uint64_t UNITY_INTERFACE_EXPORT RequestSetTime(int docId,
+    int64_t timeSinceStart, int64_t timeSinceStop)
+{
+    IMM_UNITY_NATIVE_LOCK();
+    return iPlayer().RequestSetTime(docId, timeSinceStart, timeSinceStop);
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT GetSpawnAreaCount(int docId)
 {
     return iPlayer().GetSpawnAreaCount(docId);

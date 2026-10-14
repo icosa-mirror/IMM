@@ -1025,6 +1025,81 @@ namespace ImmPlayer
         doc->SetDocumentToWorld(m);
     }
 
+    bool Player::IsSpawnAreaAvailable(int docId, int spawnAreaId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() ||
+            !mDocuments.IsUsed(docId)) return false;
+        return static_cast<Document *>(mDocuments.GetAddress(docId))->IsSpawnAreaAvailable(spawnAreaId);
+    }
+
+    int Player::GetAvailableSpawnAreaIds(int docId, int capacity, int * ids)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() ||
+            !mDocuments.IsUsed(docId)) return -1;
+        return static_cast<Document *>(mDocuments.GetAddress(docId))->GetAvailableSpawnAreaIds(capacity, ids);
+    }
+
+    int Player::GetSpawnAreaSnapshot(int docId, SpawnAreaSnapshot & snapshot, int capacity, int * ids)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() ||
+            !mDocuments.IsUsed(docId)) return -1;
+        return static_cast<Document *>(mDocuments.GetAddress(docId))->GetSpawnAreaSnapshot(snapshot, capacity, ids);
+    }
+
+    bool Player::TrySetActiveSpawnAreaId(int docId, int spawnAreaId,
+        uint64_t expectedEvaluationRevision, SpawnAreaPoseState & pose)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        pose = {};
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() ||
+            !mDocuments.IsUsed(docId)) return false;
+        return static_cast<Document *>(mDocuments.GetAddress(docId))->TrySetActiveSpawnAreaId(
+            spawnAreaId, expectedEvaluationRevision, pose);
+    }
+
+    uint64_t Player::RequestSetChapter(int docId, int chapterIndex)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() ||
+            !mDocuments.IsUsed(docId)) return 0;
+        Document * doc = static_cast<Document *>(mDocuments.GetAddress(docId));
+        if (!doc->CanRequestPlaybackEvaluation() || chapterIndex < 0 ||
+            chapterIndex >= doc->GetChapterCount()) return 0;
+        const int slot = doc->GetCommandId();
+        if (slot < 0 || slot >= mCommandList.GetLength() ||
+            mCommandList[slot].mCommand.mType != Document::Command::Type::None) return 0;
+        const uint64_t request = doc->BeginPlaybackEvaluationRequest();
+        Document::Command & command = mCommandList[slot].mCommand;
+        command.mType = Document::Command::Type::RequestSetChapter;
+        command.mIntArg = static_cast<uint64_t>(chapterIndex);
+        command.mEvaluationRequest = request;
+        mCommandList[slot].mTarget = docId;
+        return request;
+    }
+
+    uint64_t Player::RequestSetTime(int docId, int64_t timeSinceStart, int64_t timeSinceStop)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() ||
+            !mDocuments.IsUsed(docId) || timeSinceStart < 0 || timeSinceStop < 0) return 0;
+        Document * doc = static_cast<Document *>(mDocuments.GetAddress(docId));
+        if (!doc->CanRequestPlaybackEvaluation()) return 0;
+        const int slot = doc->GetCommandId();
+        if (slot < 0 || slot >= mCommandList.GetLength() ||
+            mCommandList[slot].mCommand.mType != Document::Command::Type::None) return 0;
+        const uint64_t request = doc->BeginPlaybackEvaluationRequest();
+        Document::Command & command = mCommandList[slot].mCommand;
+        command.mType = Document::Command::Type::RequestSetTime;
+        command.mSeekStartTicks = timeSinceStart;
+        command.mSeekStopTicks = timeSinceStop;
+        command.mEvaluationRequest = request;
+        mCommandList[slot].mTarget = docId;
+        return request;
+    }
+
     int Player::GetSpawnAreaCount(int docId)
     {
         Document *doc = (Document *)mDocuments.GetAddress(docId);
@@ -1244,6 +1319,8 @@ namespace ImmPlayer
 
                     // cmd already resolved above
 
+                    // A global hide/show can temporarily mask, rather than replace, the slot.
+                    const Document::Command * queuedCommand = cmd;
                     if (needDisable)
                     {
                         cmd = &cmdHide;
@@ -1258,7 +1335,7 @@ namespace ImmPlayer
                         cmd == &mCommandList[cmdId].mCommand;
 
                     // update loading process OR animation scenegraph
-                    bool docReady = doc->UpdateStateCPU(&mLayerRenderSound, mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mColorSpace, mPaintRenderingTechnique, mSoundEngine, mLog, mTime, cmd);
+                    bool docReady = doc->UpdateStateCPU(&mLayerRenderSound, mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mColorSpace, mPaintRenderingTechnique, mSoundEngine, mLog, mTime, cmd, queuedCommand);
                     if (docReady)
                     {
                         iGlobalWorkLayer(doc->GetSequence()->GetRoot(), doc->GetVolume());
