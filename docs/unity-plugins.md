@@ -20,7 +20,7 @@ tools required). It exits 1 on drift.
 
 The second compiles the package runtime assemblies with MSBuild against the Unity Editor's
 own managed DLLs, using the `.csproj` files Unity writes into `code/ImmUnitySampleProject`.
-That catches C# errors the export check cannot see — see
+That catches C# errors the export check cannot see â€” see
 [G19](#g19--nothing-compiles-the-unity-package-c-on-push) for why this is currently a local
 check rather than a CI gate.
 
@@ -30,8 +30,8 @@ committed binaries have not been rebuilt yet (CI rebuilds Android, iOS and macOS
 `sync-binaries` job commits the results); use `--platform windows` or `--platform android`
 to check only what was built locally.
 
-CI runs the same tool in `build.yml` — in `package-unity-plugins`, after the four platform
-artifacts are staged into the packages, and again in `sync-binaries` before it commits — so
+CI runs the same tool in `build.yml` â€” in `package-unity-plugins`, after the four platform
+artifacts are staged into the packages, and again in `sync-binaries` before it commits â€” so
 drift fails the build instead of surfacing as an `EntryPointNotFoundException` at runtime
 (see [G16](#g16--no-automated-export-vs-dllimport-check)).
 
@@ -82,7 +82,7 @@ Windows runtime dependencies (from the PE import tables):
 - `ImmUnityPlugin.dll`: `Audio360.dll`, `opusenc.dll`, `zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`, `vorbis.dll`, `vorbisenc.dll`, plus system `d3d11`/`opengl32`/`DSOUND`.
 - `ImmStrokeReader.dll`: `zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`, `vorbis.dll`.
 
-Each package ships only its own subset, so `imm-unity` alone cannot load on Windows —
+Each package ships only its own subset, so `imm-unity` alone cannot load on Windows â€”
 the `zlib1`/`jpeg62`/`libpng16`/`ogg`/`vorbis` DLLs come from the stroke-reader package.
 This is why the READMEs require installing the stroke reader first (see
 [G10](#g10--imm-unity-depends-on-the-stroke-reader-package-for-its-windows-dll-dependencies)).
@@ -92,7 +92,7 @@ This is why the READMEs require installing the stroke reader first (see
 ## 2. ImmUnityPlugin
 
 Source: `code/appImmUnity/src/main.cpp` (~3100 lines) plus the shared engine bridge
-`code/appImmShared/src/imm_engine_bridge.cpp` — the same bridge file is compiled into the
+`code/appImmShared/src/imm_engine_bridge.cpp` â€” the same bridge file is compiled into the
 Godot plugin, so plugin-side changes affect both engines.
 
 ### 2.1 Responsibilities
@@ -113,7 +113,7 @@ Godot plugin, so plugin-side changes affect both engines.
 ### 2.2 Native API
 
 `C#` column: `Native` = `Runtime/ImmNativePlugin.cs`, `Export` = `Runtime/ImmExporter.cs`.
-"callers" lists managed code that actually invokes it; `—` means the P/Invoke exists but
+"callers" lists managed code that actually invokes it; `â€”` means the P/Invoke exists but
 nothing in the repository calls it.
 
 #### Unity graphics-plugin callbacks
@@ -145,7 +145,7 @@ triggered from C# by `ImmUnityRegisterRenderingPlugin()` (iOS-only `#if` in
 | `SetVulkanCameraEyeRenderBuffers(...)` | Native | `ImmPlayerManager` |
 | `IsReadyForDocumentLoad()` | Native | `ImmPlayerManager` |
 | `SetVulkanDedicatedQueueAllowed(allowed)` | Native | `ImmPlayerManager` |
-| `Debug()` | Native | — |
+| `Debug()` | Native | â€” |
 | `SetRuntimeFlag(name, value)` | Native | `ImmPlayerManager` |
 
 #### Documents, layers, playback
@@ -170,6 +170,31 @@ triggered from C# by `ImmUnityRegisterRenderingPlugin()` (iOS-only `#if` in
 | `GetPlayerInfo` / `GetDocumentState` / `GetDocumentInfoEx` | Native | `ImmDocument`, `ImmPlayerManager` |
 | `GetSound` / `SetSound` | Native | `ImmDocument` |
 | `GetBoundingBox` | Native | `ImmDocument` |
+
+#### File path encoding
+
+`LoadFromFile` accepts a null-terminated UTF-8 `char*`. The managed declaration uses explicit
+`MarshalAs(UnmanagedType.LPUTF8Str)`; native code strictly decodes once into an owned wide
+string (UTF-16 on Windows, native wide characters elsewhere). It does not interpret paths
+through the Windows ANSI code page. ASCII paths remain compatible; native callers supplying
+non-ASCII paths must send UTF-8. Invalid UTF-8 is rejected before queueing a load. A returned
+nonnegative document ID means queued, not that disk import has finished.
+
+`[IMM_LOAD_PATH]` logs queueing/encoding errors. `[IMM_FILE_OPEN]` logs the complete failed path,
+CRT `errno`, and the Windows DOS/OS error code when available, including asynchronous asset
+reopens. Windows text logs use UTF-8 and write formatted messages literally so Unicode and `%`
+in filenames remain intact. Memory-load names and unrelated legacy string APIs are unchanged.
+
+Regression command (Windows, after building the production native targets):
+
+```powershell
+python code/appImmUnity/tests/unicode_path_smoke.py --msbuild "<MSBuild.exe>" --fixture "<existing IMM file>"
+```
+
+The headless test extracts the production managed `LoadFromFile` declaration verbatim and uses the shared strict decoder,
+and the real disk importer. It compares identical fixture bytes under ASCII, Chinese-directory/
+filename, and supplementary-Unicode/percent filenames; it also checks missing-file diagnostics,
+UTF-8 log contents, and malformed UTF-8 rejection. It does not require an Editor or GPU. The Windows CI build runs it against the public sample fixture.
 
 #### Spawn areas
 
@@ -239,7 +264,7 @@ binaries; availability is not inferred from legacy capability flags.
 - **Apple**: Metal with `metalUnityProjectionAdjusted`, `reverseDepthBuffer`,
   `overrideFrontIsCCW = true`; OpenGL core is the only alternative. Unsupported renderers
   return `-1` from `Init`.
-- **`GlobalWork`** passes the historical 9000 µs work budget; `GlobalWorkEx` (and
+- **`GlobalWork`** passes the historical 9000 Âµs work budget; `GlobalWorkEx` (and
   `ImmPlayerManager.GlobalWorkBudgetMicroseconds`) carry an explicit one.
 - **`SetCameraViewport`** only stores width/height and only on `__APPLE__`
   (`main.cpp:1602`); `SetCameraViewportEx` sets origin, sub-rect size, depth range and the
@@ -249,7 +274,7 @@ binaries; availability is not inferred from legacy capability flags.
 
 | C# struct | Native | Layout |
 |---|---|---|
-| `PlayerInfo` | `Player::PlayerInfo` (`player.h:59`) | 3 floats (`mBackgrundColor` → `backgroundColor`) |
+| `PlayerInfo` | `Player::PlayerInfo` (`player.h:59`) | 3 floats (`mBackgrundColor` â†’ `backgroundColor`) |
 | `DocumentState` | `Player::DocumentState` (`player.h:200`) | 2 int enums |
 | `LayerDiagnosticsNative` | `Player::LayerDiagnostics` (`player.h:119`) | 9 int + 2 float |
 | `LayerInfoNative` | `UnityLayerInfo` (`main.cpp:2018`) | 6 int + float + int + `bound3` (6 floats) + 5 int + `char16_t[128]` + `char16_t[256]`; marshalled as `ByValTStr` with `CharSet.Unicode` |
@@ -283,7 +308,7 @@ Raw `getenv` toggles read by the plugin (all overridable at runtime through
 `IMM_UNITY_METAL_SKIP_DRAW`.
 
 The shared engine bridge additionally reads `IMM_GODOT_NATIVE_CAPTURE_PATH` and
-`IMM_GODOT_DEBUG_CAMERA` (`imm_engine_bridge.cpp:249`, `:302`) — the Godot-flavoured
+`IMM_GODOT_DEBUG_CAMERA` (`imm_engine_bridge.cpp:249`, `:302`) â€” the Godot-flavoured
 names apply to the Unity plugin too.
 
 C#-side flags read by `ImmPlayerManager`: `IMM_UNITY_FORCE_CAMERA_CALLBACK`,
@@ -306,7 +331,7 @@ All are declared in `Runtime/ImmStrokeReader.cs`.
 
 | Group | Entry points |
 |---|---|
-| Build/init | `StrokeReader_GetBuildId`, `Init`, `IsInitialized`, `End` (—), `GetDocumentCount` |
+| Build/init | `StrokeReader_GetBuildId`, `Init`, `IsInitialized`, `End` (â€”), `GetDocumentCount` |
 | Load | `LoadFromFile`, `LoadFromMemory`, `Unload` |
 | Document | `GetDocumentInfo` |
 | Layers | `GetLayerCount`, `GetLayerInfo`, `GetLayerTransform` |
@@ -318,7 +343,7 @@ All are declared in `Runtime/ImmStrokeReader.cs`.
 | Pictures | `GetPictureInfo`, `GetPicturePixelData` |
 | Chapters | `GetChapterCount`, `GetChapterCountFromFile`, `GetCurrentChapter`, `SetChapter` |
 
-`GetBuildId` returns `IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5` — the intended way to
+`GetBuildId` returns `IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5` â€” the intended way to
 confirm which native build Unity actually loaded.
 
 ### 3.2 Managed wrapper
@@ -360,7 +385,7 @@ live package is the one under `code/ImmUnitySampleProject/Packages/`.
 
 | Platform | Project | Output | Copy into the package |
 |---|---|---|---|
-| Windows x64 | `code/projects/windows/imm.sln` → `appImmUnity.vcxproj`, `appImmStrokeReader.vcxproj` (both `OutDir` = `exe\`) | `ImmUnityPlugin.dll`, `ImmStrokeReader.dll` | `PostBuildEvent` copy into `Plugins/x86_64` |
+| Windows x64 | `code/projects/windows/imm.sln` â†’ `appImmUnity.vcxproj`, `appImmStrokeReader.vcxproj` (both `OutDir` = `exe\`) | `ImmUnityPlugin.dll`, `ImmStrokeReader.dll` | `PostBuildEvent` copy into `Plugins/x86_64` |
 | Android arm64-v8a | Gradle + CMake (`code/appImmUnity/Projects/Android`, `code/appImmStrokeReader/Projects/Android`) | `libImmUnityPlugin.so`, `libImmStrokeReader.so` | `copyToUnity` Gradle task, attached with `finalizedBy` to `assembleDebug`/`assembleRelease` |
 | iOS | CMake (`code/projects/ios`) with an `xcrun libtool -static` POST_BUILD merge of the archive set | `libImmUnityPlugin.a`, `libImmStrokeReader.a` | copy into `Plugins/iOS` (skipped for the iphonesimulator sysroot) |
 | macOS | CMake (`code/projects/macos`): `ImmUnity` as `MODULE`/`BUNDLE`, `ImmStrokeReader` as `SHARED` | `ImmUnityPlugin.bundle`, `libImmStrokeReader.dylib` | copy into `Plugins/OSX`, `Plugins/macOS` |
@@ -369,7 +394,7 @@ Defines: Windows gets `WIN32;NDEBUG;_WINDOWS;_USRDLL;RENDERINGPLUGIN_EXPORTS`
 (`IMMSTROKEREADER_EXPORTS` for the stroke reader) and `WINDOWS` from
 `code/projects/windows/ImmCommonPropertySheet.props`; Android adds `-D__ANDROID__ -DANDROID`
 (unity) and `-DANDROID -Werror` (stroke reader); iOS adds `IMM_IOS=1`; macOS adds no
-plugin-specific define. Exports are `__declspec(dllexport)` / `visibility("default")` —
+plugin-specific define. Exports are `__declspec(dllexport)` / `visibility("default")` â€”
 there is no `.def` file or export list, which is why the non-Windows libraries expose
 their full symbol tables.
 
@@ -384,7 +409,7 @@ job **commits the packaged binaries back into the repository** as
 regenerates a `upm` branch; the `release` job runs `gh release create`.
 
 Existing CI verification only checks that the Windows plugin exists, is non-empty
-(`tests/tools/verify_package_layout.py`) and exports three names — `GetRenderEventFunc`,
+(`tests/tools/verify_package_layout.py`) and exports three names â€” `GetRenderEventFunc`,
 `GetRenderEventAndDataFunc`, `ConfigureVulkanRenderEvent`
 (`ci-engine.yml:99-126`). Nothing verifies the rest of the API, which is how
 [G1/G2](#g1--impexporter_layeraddanimationkey-is-declared-and-called-but-does-not-exist) went unnoticed.
@@ -402,10 +427,10 @@ are kept in full detail after it.
 | # | Severity | Gap | Status |
 |---|---|---|---|
 | [G1](#fix-log) | S1 | `ImmExporter_LayerAddAnimationKey` called by C#, absent from every binary and from native source | Fixed |
-| [G2](#fix-log) | S1 | `ImmExporter_PaintSetMaxRepeatCount` — same | Fixed |
+| [G2](#fix-log) | S1 | `ImmExporter_PaintSetMaxRepeatCount` â€” same | Fixed |
 | [G3](#fix-log) | S2 | 21 exporter entry points existed only on Windows | Fixed |
 | [G4](#fix-log) | S2 | `ImmExporter_CreateSpawnAreaLayer` exported, no C# binding, no authoring layer type | Fixed |
-| [G5](#fix-log) | S2 | `GlobalWork` budget hardcoded to 9000 µs | Fixed |
+| [G5](#fix-log) | S2 | `GlobalWork` budget hardcoded to 9000 Âµs | Fixed |
 | [G6](#fix-log) | S2 | viewport x/y/minDepth/maxDepth/forceViewport unreachable; export was Apple-only | Fixed |
 | [G7](#fix-log) | S2 | `GetSpawnAreaPose`, `GetSpawnAreaNeedsUpdate`/`SetSpawnAreaNeedsUpdate` wrapped but never called | Fixed |
 | [G8](#fix-log) | S2 | screenshot pointer/format/size returned by `GetSpawnAreaInfo`, dropped by the wrapper | Fixed |
@@ -477,24 +502,24 @@ listed.
   `StrokeReaderDocument.TryGetDrawingBiggestStroke` wrap the two entry points that had no
   binding; the smoke test asserts the build-id prefix and re-reads the drawing's
   biggest-stroke value (the largest element bounding-box extent the format stores per
-  drawing — not a brush width, which the first draft of these docs claimed).
+  drawing â€” not a brush width, which the first draft of these docs claimed).
 - **G15 (S3).** Rebuilding `appImmStrokeReader` refreshed the tracked
   `code/appImmStrokeReader/exe/ImmStrokeReader.dll`, which was nine entry points behind.
 - **G17 (S3).** This document is the reference for the entry points, the ABI structs, the
   render-event contract and the runtime flags.
 
-### G10 — imm-unity depends on the stroke-reader package for its Windows DLL dependencies
+### G10 â€” imm-unity depends on the stroke-reader package for its Windows DLL dependencies
 
 `ImmUnityPlugin.dll` imports `zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`,
 `vorbis.dll` (plus `Audio360.dll`, `opusenc.dll`, `vorbisenc.dll`, which it does ship).
 The imm-unity package's `Plugins/x86_64` contains only the latter three plus
 `Audio360.dll`; the missing five are shipped by the stroke-reader package. Installing
 imm-unity without the stroke reader leaves a Windows player that cannot load the plugin.
-The dependency is declared in `package.json` and in the README, but nothing verifies it —
+The dependency is declared in `package.json` and in the README, but nothing verifies it â€”
 and the two packages use different plugin folder conventions (`OSX/*.bundle` vs
 `macOS/*.dylib`, `Android/libs/arm64-v8a` vs `Android/arm64-v8a`).
 
-### G13 — `StrokeReader_End` is never called
+### G13 â€” `StrokeReader_End` is never called
 
 Declared (`ImmStrokeReader.cs:38`) but never invoked, so the native document map and log
 are never torn down from managed code (domain reload / play-mode exit leaves them to
@@ -502,16 +527,16 @@ process teardown). `StrokeReaderDocument` is `IDisposable` for individual docume
 the static `ImmStrokeReader` binding class offers no shutdown path that calls
 `StrokeReader_End`.
 
-### G14 — `Debug()` is unused
+### G14 â€” `Debug()` is unused
 
 `ImmNativePlugin.Debug()` (`main.cpp:1515` logs renderer initialisation state) has no
 caller. Useful when diagnosing "plugin loaded but renderer absent" on device.
 
-### G16 — no automated export-vs-DllImport check
+### G16 â€” no automated export-vs-DllImport check
 
 Closed. `ci-engine.yml:99-126` asserts three export names via `dumpbin`, and
 `tests/tools/verify_package_layout.py` checks existence and non-zero size, but neither
-compared the C# `[DllImport]` set against a plugin's export table — which is how G1/G2 (a
+compared the C# `[DllImport]` set against a plugin's export table â€” which is how G1/G2 (a
 declared entry point missing from every binary) survived.
 
 `tests/tools/verify_unity_plugin_exports.py` performs the missing check offline for all four
@@ -519,9 +544,9 @@ platforms, and `build.yml` now runs it twice, both times after fresh binaries ha
 staged into the package folders it reads:
 
 - `package-unity-plugins`, which runs once per run after all four platform artifacts are
-  synced into the packages — this gates the UPM zips on every trigger, including PRs and the
+  synced into the packages â€” this gates the UPM zips on every trigger, including PRs and the
   daily schedule;
-- `sync-binaries`, before its commit — this refuses to publish a binary refresh that would
+- `sync-binaries`, before its commit â€” this refuses to publish a binary refresh that would
   leave a declaration unexported.
 
 Both invocations are non-strict, so the documented known gap (`ImmUnityRegisterRenderingPlugin`
@@ -530,20 +555,20 @@ failing. They read the freshly built binaries inside the job workspace rather th
 committed ones, so a native change does not turn the pipeline red while the Android/iOS/macOS
 binaries are still waiting for their binary sync.
 
-### G18 — `ImmStrokeReaderUPM/` is a broken package skeleton
+### G18 â€” `ImmStrokeReaderUPM/` is a broken package skeleton
 
 Contains `package.json` (version `0.1.0`, no `com.unity.nuget.newtonsoft-json`
 dependency) and `README.md` advertising `Plugins/`, `Runtime/` and `Samples~/Examples`
 that do not exist. Its manifest's `samples[0].path` points at a missing folder. It is not
 the shipped package, but it sits at a plausible install path.
 
-### G19 — nothing compiles the Unity package C# on push
+### G19 â€” nothing compiles the Unity package C# on push
 
 No job on a push or pull request compiles the C# in `com.immersive-foundation.imm-unity`.
 `build.yml` compiles the stroke-reader package's `ImmStrokeReader.cs` through the
 SharpQuill adapter (`dotnet run --project .../SharpQuillAdapter.csproj`, which is how G1/G2
 and a duplicate `GetBuildId` were caught), and everything else the Unity packages contain
-reaches a compiler only in the engine-phase Unity jobs — which run on the daily schedule and
+reaches a compiler only in the engine-phase Unity jobs â€” which run on the daily schedule and
 on `full`/`hardware`/`release` dispatches, not on an ordinary push.
 
 That gap shipped a real error: commit `037e9a44` mapped a spawn-area screenshot to
@@ -561,13 +586,13 @@ compile (or `unity test` in EditMode) on push.
 - `README.md:163` states the macOS ImmUnity build "is currently disabled in CI";
   `build.yml:501` builds `--target ImmUnity` on `macos-14`.
 - The committed `ImmUnityPlugin.bundle`'s `_CodeSignature/CodeResources` predates the
-  committed binary (signature no longer covers it) — `sync-binaries` refreshes the bundle
+  committed binary (signature no longer covers it) â€” `sync-binaries` refreshes the bundle
   binary but not its `_CodeSignature`. The export sets themselves are current on all four
   platforms as of `32e99926`.
 
 ---
 
-## 7. Appendix — full export lists
+## 7. Appendix â€” full export lists
 
 `ImmUnityPlugin` (97 on Windows, same API set on Android, iOS and macOS):
 

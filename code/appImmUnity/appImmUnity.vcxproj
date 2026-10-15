@@ -13,6 +13,7 @@
   <ItemGroup>
     <ClInclude Include="..\appImmShared\src\imm_engine_bridge.h" />
     <ClInclude Include="src\imm_authoring.h" />
+    <ClInclude Include="src\imm_utf8.h" />
     <ClInclude Include="src\IUnityGraphicsD3D11.h" />
     <ClInclude Include="src\IUnityGraphicsD3D12.h" />
     <ClInclude Include="src\imm_unity_d3d12_host.h" />

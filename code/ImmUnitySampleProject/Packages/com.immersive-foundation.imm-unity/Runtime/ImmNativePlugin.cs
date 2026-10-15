@@ -149,10 +149,10 @@ namespace ImmPlayer
         /// <summary>
         /// Load an IMM document from a file
         /// </summary>
-        /// <param name="fileName">Path to the IMM file</param>
+        /// <param name="fileName">Path to the IMM file, marshaled as null-terminated UTF-8.</param>
         /// <returns>Document ID, or negative on error</returns>
         [DllImport(DllName)]
-        public static extern int LoadFromFile(string fileName);
+        public static extern int LoadFromFile([MarshalAs(UnmanagedType.LPUTF8Str)] string fileName);
 
         /// <summary>
         /// Load an IMM document from memory

@@ -55,7 +55,8 @@ public:
     bool Init( const wchar_t *path, const piLogStartInfo *info )
     {
         //path
-        mFp = _wfopen( path, L"wt" );
+        // Keep Unicode filenames intact regardless of the Windows ANSI code page.
+        mFp = _wfopen( path, L"wt, ccs=UTF-8" );
         if( !mFp )
             return false;
 
@@ -91,23 +92,23 @@ public:
             {
             case 1:
                 fwprintf( mFp, L"[%d]  %s::%s (%d) :", threadId, file, func, line );
-                fwprintf( mFp, str  );
+                fwprintf( mFp, L"%ls", str );
                 fwprintf( mFp, L"\n" );
                 break;
 
             case 2:
                 fwprintf( mFp, L"[%d]  %s::%s (%d) :", threadId, file, func, line );
-                fwprintf( mFp, str  );
+                fwprintf( mFp, L"%ls", str );
                 fwprintf( mFp, L"\n" );
                 break;
 
             case 3:
-                fwprintf( mFp, str  );
+                fwprintf( mFp, L"%ls", str );
                 fwprintf( mFp, L"\n" );
                 break;
 
             case 4:
-                fwprintf( mFp, str  );
+                fwprintf( mFp, L"%ls", str );
                 fwprintf( mFp, L"\n" );
                 break;
             }

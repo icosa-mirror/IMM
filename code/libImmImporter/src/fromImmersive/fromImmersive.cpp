@@ -15,6 +15,8 @@
 #include "fromImmersiveUtils.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <thread>
 #include "fromImmersive.h"
 
@@ -24,6 +26,19 @@ using namespace ImmCore;
 
 namespace ImmImporter
 {
+
+    static void iLogFileOpenError(piLog * log, const wchar_t * filename)
+    {
+        // Capture CRT/thread-local errors before logging can overwrite them.
+        const int openErrno = errno;
+        unsigned long osError = 0;
+#if defined(_WIN32)
+        _get_doserrno(&osError);
+#endif
+        if (log) log->Printf(LT_ERROR,
+            L"[IMM_FILE_OPEN] open failed filename=\"%ls\" errno=%d osError=%lu",
+            filename, openErrno, osError);
+    }
 
     static volatile bool doLoad = true;
     static volatile bool doneLoading = true;
@@ -331,7 +346,11 @@ namespace ImmImporter
             if (filename != nullptr)
             {
                 if (!file.Open(filename, L"rb"))
+                {
+                    iLogFileOpenError(log, filename);
+                    doneLoading = true;
                     return false;
+                }
                 stream = new piIStreamFile(&file, piIStreamFile::kDefaultFileSize);
             }
             else stream = fp;
@@ -856,7 +875,10 @@ namespace ImmImporter
         if (log) log->Printf(LT_MESSAGE, L"IMM_IMPORT: filename pointer=%p", filename);
         piFile fp;
         if (!fp.Open(filename, L"rb"))
+        {
+            iLogFileOpenError(log, filename);
             return false;
+        }
 
         if (log) log->Printf(LT_MESSAGE, L"IMM_IMPORT: ImportFromDisk opened file");
         piIStreamFile fstr(&fp, piIStreamFile::kDefaultFileSize);
@@ -910,7 +932,10 @@ namespace ImmImporter
 
         piFile fp;
         if (!fp.Open(filename, L"rb"))
+        {
+            iLogFileOpenError(log, filename);
             return false;
+        }
 
         piIStreamFile fstr(&fp, piIStreamFile::kDefaultFileSize);
 

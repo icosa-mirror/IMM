@@ -1,3 +1,5 @@
+#include "imm_utf8.h"
+#include <cstring>
 // ------------------------
 // Host API
 // ------------------------
@@ -2059,11 +2061,11 @@ extern "C" void UNITY_INTERFACE_EXPORT End(void)
     gImmUnityPlugin.mBridge.Shutdown();
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
+extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(const char *fileName)
 {
     if (fileName == nullptr || fileName[0] == '\0')
     {
-        iLog().Printf(LT_ERROR, L"LoadFromFile: filename is null or empty");
+        iLog().Printf(LT_ERROR, L"[IMM_LOAD_PATH] filename is null or empty");
         return -1;
     }
 
@@ -2079,24 +2081,29 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
     }
 #endif
 
-    iLog().Printf(LT_DEBUG, L"loading from file: %s", pistr2ws(fileName));
-
     try
     {
-        int result = iPlayer().Load(pistr2ws(fileName));
+        std::wstring path;
+        if (!ImmUnity::DecodeUtf8(fileName, std::strlen(fileName), path))
+        {
+            iLog().Printf(LT_ERROR, L"[IMM_LOAD_PATH] filename is not valid UTF-8");
+            return -1;
+        }
+        iLog().Printf(LT_DEBUG, L"[IMM_LOAD_PATH] loading UTF-8 filename=\"%ls\"", path.c_str());
+        int result = iPlayer().Load(path.c_str());
         if (result < 0)
         {
-            iLog().Printf(LT_ERROR, L"LoadFromFile: Player.Load failed with code %d for file: %s", result, pistr2ws(fileName));
+            iLog().Printf(LT_ERROR, L"[IMM_LOAD_PATH] Player.Load rejected code=%d filename=\"%ls\"", result, path.c_str());
         }
         else
         {
-            iLog().Printf(LT_MESSAGE, L"LoadFromFile: Successfully loaded file: %s (ID: %d)", pistr2ws(fileName), result);
+            iLog().Printf(LT_MESSAGE, L"[IMM_LOAD_PATH] queued docId=%d filename=\"%ls\"", result, path.c_str());
         }
         return result;
     }
     catch (...)
     {
-        iLog().Printf(LT_ERROR, L"LoadFromFile: Exception caught while loading file: %s", pistr2ws(fileName));
+        iLog().Printf(LT_ERROR, L"[IMM_LOAD_PATH] exception while decoding or queueing filename");
         return -1;
     }
 }
@@ -2190,66 +2197,6 @@ static int32_t iRequireAttachedAuthoringDocument(int32_t docId)
     return attached ? IMM_AUTHORING_OK : IMM_AUTHORING_INVALID_STATE;
 }
 
-static bool iDecodeAuthoringUtf8(const char * data, uint32_t length, std::wstring & result)
-{
-    result.clear();
-    for (uint32_t offset = 0; offset < length;)
-    {
-        const uint8_t first = static_cast<uint8_t>(data[offset++]);
-        uint32_t codePoint = 0;
-        uint32_t continuationCount = 0;
-        uint32_t minimum = 0;
-        if (first < 0x80)
-        {
-            codePoint = first;
-        }
-        else if ((first & 0xe0) == 0xc0)
-        {
-            codePoint = first & 0x1f;
-            continuationCount = 1;
-            minimum = 0x80;
-        }
-        else if ((first & 0xf0) == 0xe0)
-        {
-            codePoint = first & 0x0f;
-            continuationCount = 2;
-            minimum = 0x800;
-        }
-        else if ((first & 0xf8) == 0xf0)
-        {
-            codePoint = first & 0x07;
-            continuationCount = 3;
-            minimum = 0x10000;
-        }
-        else
-        {
-            return false;
-        }
-        if (offset + continuationCount > length)
-            return false;
-        for (uint32_t i = 0; i < continuationCount; i++)
-        {
-            const uint8_t next = static_cast<uint8_t>(data[offset++]);
-            if ((next & 0xc0) != 0x80)
-                return false;
-            codePoint = (codePoint << 6) | (next & 0x3f);
-        }
-        if (codePoint < minimum || codePoint == 0 || codePoint > 0x10ffff ||
-            (codePoint >= 0xd800 && codePoint <= 0xdfff))
-            return false;
-        if (sizeof(wchar_t) == 2 && codePoint > 0xffff)
-        {
-            codePoint -= 0x10000;
-            result.push_back(static_cast<wchar_t>(0xd800 + (codePoint >> 10)));
-            result.push_back(static_cast<wchar_t>(0xdc00 + (codePoint & 0x3ff)));
-        }
-        else
-        {
-            result.push_back(static_cast<wchar_t>(codePoint));
-        }
-    }
-    return !result.empty();
-}
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int32_t docId)
 {
@@ -2354,7 +2301,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     try
     {
         std::wstring name;
-        if (!iDecodeAuthoringUtf8(nameUtf8, nameLength, name))
+        if (!ImmUnity::DecodeUtf8(nameUtf8, nameLength, name))
             return IMM_AUTHORING_INVALID_ARGUMENT;
         uint32_t layerId = 0;
         const int32_t result = iPlayer().QueueGroupLayerCreation(

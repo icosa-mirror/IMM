@@ -173,6 +173,13 @@ jobs:
       with:
         dotnet-version: '8.0.x'
 
+    - name: Verify Unicode IMM file paths
+      shell: pwsh
+      run: >-
+        python code/appImmUnity/tests/unicode_path_smoke.py
+        --msbuild (Get-Command msbuild).Source
+        --fixture exampleImmFiles/sample1.imm
+
     - name: Verify SharpQuill adapter skips spawn metadata
       shell: pwsh
       run: >-
