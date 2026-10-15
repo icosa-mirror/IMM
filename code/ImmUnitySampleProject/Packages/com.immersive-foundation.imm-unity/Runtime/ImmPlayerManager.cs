@@ -343,6 +343,7 @@ namespace ImmPlayer
 
         private void LateUpdate()
         {
+            ImmNativeLogging.Flush();
             // Heartbeat: proves the main thread is alive when native logs go silent
             // (distinguishes an app-wide wedge from a render-thread-only stall).
             if (Time.frameCount % 72 == 0)
@@ -444,7 +445,7 @@ namespace ImmPlayer
 
             // Use Unity's temporary cache path for temporary files
             string tempFolder = Application.temporaryCachePath;
-            string nativeLogPath = Path.Combine(tempFolder, logFileName);
+            string nativeLogPath = ImmNativeLogging.ResolveLogPath(logFileName);
 
             try
             {

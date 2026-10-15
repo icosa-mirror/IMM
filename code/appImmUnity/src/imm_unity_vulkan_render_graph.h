@@ -126,7 +126,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
             packet.colorSpace < 0 || packet.colorSpace > 1 ||
             packet.paintRenderingTechnique < 0 || packet.paintRenderingTechnique > 1 || packet.samples != 8 ||
             packet.enableSound < 0 || packet.enableSound > 1 ||
-            state.logFileName.empty() || state.tmpFolderName.empty()) return invalid;
+            state.tmpFolderName.empty()) return invalid;
         const auto instance = unity->Instance();
         state.device.instance = instance.instance;
         state.device.physicalDevice = instance.physicalDevice;
@@ -149,7 +149,8 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         // paired with it: changing just one fixes orientation but swaps faces.
         config.overrideFrontIsCCW = true;
         config.frontIsCCW = true;
-        config.logFileName = state.logFileName.c_str();
+        config.logFileName = state.logFileName.empty() ? nullptr : state.logFileName.c_str();
+        config.captureWarnings = true;
         config.tmpFolderName = state.tmpFolderName.c_str();
         if (!instance.device) return failed;
         ImmVulkanRenderGraphDiagnostic("Logical-device multiview: captured=%d enabled=%d",

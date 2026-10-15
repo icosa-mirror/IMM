@@ -12,6 +12,7 @@
 #include "../piThread.h"
 #include "../piStr.h"
 #include "../piLog.h"
+#include "../piUtf8.h"
 
 namespace ImmCore {
 
@@ -43,67 +44,23 @@ public:
 class piTxtLogger: public piLogger
 {
 public:
-    bool Init(const wchar_t *path, const piLogStartInfo *info)
+    bool Init(const wchar_t * path, const piLogStartInfo *)
     {
-        char *cpath = piws2str(path);
-        if (!cpath)
-            return false;
-        mFp = fopen(cpath, "wt");
-        free(cpath);
-        if (!mFp)
-            return false;
-
-        fwprintf(mFp, L"===================================================\n");
-        fwprintf(mFp, L"date  : %s\n", info->date);
-        fwprintf(mFp, L"\n");
-        fwprintf(mFp, L"Memory: %d / %d Megabytes \n", info->free_memory_MB, info->total_memory_MB);
-        fwprintf(mFp, L"CPU   : %s\n", info->processor);
-        fwprintf(mFp, L"Units : %d\n", info->number_cpus);
-        fwprintf(mFp, L"Speed : %d Mhz\n", info->mhz);
-        fwprintf(mFp, L"OS    : macOS\n");
-        fwprintf(mFp, L"GPU   : %s, %s\n", info->gpuVendor, info->gpuModel);
-        fwprintf(mFp, L"VRam  : %d Megabytes \n", info->total_videomemory_MB);
-        fwprintf(mFp, L"Screen: %d x %d\n", info->mScreenResolution[0], info->mScreenResolution[1]);
-        fwprintf(mFp, L"Multitouch Integrated: %d\n", info->mIntegratedMultitouch);
-        fwprintf(mFp, L"Monitors: %d\n", info->mNumMonitors);
-        fwprintf(mFp, L"===================================================\n");
-        fflush(mFp);
-
-        return true;
+        const std::string utf8 = EncodeUtf8(path);
+        mFp = fopen(utf8.c_str(), "wb");
+        return mFp != nullptr;
     }
-
-    void End(void)
+    void End(void) { if (mFp) fclose(mFp); mFp = nullptr; }
+    void Printf(int, int, const wchar_t *, const wchar_t *, int, int, const wchar_t * text)
     {
-        if (mFp)
-            fclose(mFp);
-        mFp = 0;
-    }
-
-    void Printf(int messageId, int threadId, const wchar_t *file, const wchar_t *func, int line, int type, const wchar_t *str)
-    {
-        (void)messageId;
-        if (!mFp)
-            return;
-
-        switch (type)
-        {
-        case 1:
-        case 2:
-            fwprintf(mFp, L"[%d]  %s::%s (%d) :", threadId, file, func, line);
-            fwprintf(mFp, str);
-            fwprintf(mFp, L"\n");
-            break;
-        case 3:
-        case 4:
-            fwprintf(mFp, str);
-            fwprintf(mFp, L"\n");
-            break;
-        }
+        if (!mFp) return;
+        const std::string utf8 = EncodeUtf8(text);
+        fwrite(utf8.data(), 1, utf8.size(), mFp);
+        fputc('\n', mFp);
         fflush(mFp);
     }
-
 private:
-    FILE *mFp = 0;
+    FILE * mFp = nullptr;
 };
 
 class piCnsLogger: public piLogger
@@ -181,7 +138,7 @@ struct iLog
 {
     int       mNumLoggers;
     piLogger *mLoggers[8];
-    int       mMessageCounter;
+
 };
 
 piLog::piLog()
@@ -199,11 +156,11 @@ bool piLog::Init(const wchar_t *path, int loggers)
         return false;
     mImp = me;
 
-    piLogStartInfo info;
-    piLogStartInfo_Get(&info);
+    piLogStartInfo info{};
+    if (loggers) piLogStartInfo_Get(&info);
 
     me->mNumLoggers = 0;
-    me->mMessageCounter = 0;
+    mMessageCounter.store(0, std::memory_order_relaxed);
 
     for (int i = 0; i < 2; i++)
     {
@@ -217,7 +174,7 @@ bool piLog::Init(const wchar_t *path, int loggers)
             continue;
 
         if (!lo->Init(path, &info))
-            return false;
+        { delete lo; End(); return false; }
 
         me->mLoggers[me->mNumLoggers++] = lo;
     }
@@ -228,6 +185,7 @@ bool piLog::Init(const wchar_t *path, int loggers)
 void piLog::End(void)
 {
     iLog *me = (iLog*)mImp;
+    if (!me) return;
     for (int i = 0; i < me->mNumLoggers; i++)
     {
         piLogger *lo = me->mLoggers[i];
@@ -235,6 +193,7 @@ void piLog::End(void)
         delete lo;
     }
     free(me);
+    mImp = nullptr;
 }
 
 void piLog::Printf(const wchar_t *file, const wchar_t *func, int line, int type, const wchar_t *format, ...)
@@ -244,7 +203,7 @@ void piLog::Printf(const wchar_t *file, const wchar_t *func, int line, int type,
 #endif
 
     iLog *me = (iLog*)mImp;
-    if (me->mNumLoggers < 1)
+    if ((!me || me->mNumLoggers < 1) && !Captures(type))
         return;
 
     va_list arglist;
@@ -258,7 +217,10 @@ void piLog::Printf(const wchar_t *file, const wchar_t *func, int line, int type,
         return;
     }
 
-    const int res = vswprintf(tmpstr, tmpstrLen, format, arglist);
+    std::wstring portableFormat(format);
+    for (size_t pos = 0; (pos = portableFormat.find(L"%s", pos)) != std::wstring::npos; pos += 3)
+        portableFormat.replace(pos, 2, L"%ls");
+    const int res = vswprintf(tmpstr, tmpstrLen, portableFormat.c_str(), arglist);
     va_end(arglist);
     if (res < 0)
     {
@@ -266,14 +228,15 @@ void piLog::Printf(const wchar_t *file, const wchar_t *func, int line, int type,
         return;
     }
 
-    for (int i = 0; i < me->mNumLoggers; i++)
+    Capture(type, tmpstr);
+    const int messageId = mMessageCounter.fetch_add(1, std::memory_order_relaxed);
+    for (int i = 0; me && i < me->mNumLoggers; i++)
     {
         piLogger *lo = me->mLoggers[i];
-        lo->Printf(me->mMessageCounter, (int)(uint64_t)piThread_GetOSID(), file, func, line, type, tmpstr);
+        lo->Printf(messageId, (int)(uint64_t)piThread_GetOSID(), file, func, line, type, tmpstr);
     }
 
     free(tmpstr);
-    me->mMessageCounter++;
 }
 
 }

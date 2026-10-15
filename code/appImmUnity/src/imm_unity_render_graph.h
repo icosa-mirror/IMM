@@ -10,6 +10,7 @@ struct ImmRenderGraphState
     ImmUnityD3D12Host host;
     IUnityGraphicsD3D12v7* unity = nullptr;
     bool configured = false, ready = false;
+    std::string logFileName, tmpFolderName;
 };
 inline bool ConfigureImmRenderGraph(ImmRenderGraphState& state, IUnityGraphicsD3D12v7* unity)
 {
@@ -41,7 +42,9 @@ inline HRESULT ProcessImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmE
         config.colorSpace = packet.colorSpace; config.antialiasing = packet.samples;
         config.paintRenderingTechnique = packet.paintRenderingTechnique;
         config.enableSound = packet.enableSound != 0;
-        config.logFileName = "imm-render-graph.log";
+        config.captureWarnings = true;
+        config.logFileName = state.logFileName.empty() ? nullptr : state.logFileName.c_str();
+        config.tmpFolderName = state.tmpFolderName.empty() ? nullptr : state.tmpFolderName.c_str();
         if (!bridge.Init(config)) { bridge.Shutdown(); ShutdownImmRenderGraph(state, bridge); return E_FAIL; }
         state.ready = true;
         return S_OK;

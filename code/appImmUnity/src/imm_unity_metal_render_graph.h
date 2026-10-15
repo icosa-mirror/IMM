@@ -79,10 +79,10 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
         if (!temporary.length) return failed;
         // Keep these strings alive while the bridge retains the configuration.
         // iOS cannot create logs relative to the application's working directory.
-        state.tmpFolderName = temporary.UTF8String;
-        state.logFileName = state.tmpFolderName + "imm-render-graph.log";
+        if (state.tmpFolderName.empty()) state.tmpFolderName = temporary.UTF8String;
         config.tmpFolderName = state.tmpFolderName.c_str();
-        config.logFileName = state.logFileName.c_str();
+        config.logFileName = state.logFileName.empty() ? nullptr : state.logFileName.c_str();
+        config.captureWarnings = true;
         if (!config.graphicsDevice || !bridge.Init(config)) { bridge.Shutdown(); return failed; }
         state.ready = true;
         return 0;

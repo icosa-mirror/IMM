@@ -1,6 +1,7 @@
 #pragma once
 
 #include "libImmPlayer/src/player.h"
+#include "libImmCore/src/libBasics/piDiagnosticQueue.h"
 
 namespace ImmShared
 {
@@ -15,7 +16,8 @@ namespace ImmShared
             int antialiasing = 0;
             // -1 retains platform defaults; 0 static, 1 pretessellated.
             int paintRenderingTechnique = -1;
-            const char *logFileName = nullptr;
+            const char *logFileName = nullptr; // UTF-8; null disables Unity file logging (standalone retains its default).
+            bool captureWarnings = false;
             const char *tmpFolderName = nullptr;
             ImmCore::piRenderer::API rendererApi = ImmCore::piRenderer::API::GL;
             void *graphicsDevice = nullptr;
@@ -87,6 +89,8 @@ namespace ImmShared
         const CameraState *GetCameraState(int cameraID) const;
         bool IsInitialized() const;
         bool IsGraphicsInitialized() const;
+        int ReadDiagnostic(char * output, int capacity, int * severity)
+        { return mDiagnostics.Read(output, capacity, severity); }
 
     private:
         struct MainRenderReporter;
@@ -106,6 +110,7 @@ namespace ImmShared
         ImmCore::piRenderer *mRenderer;
         MainRenderReporter *mRenderReporter;
         ImmCore::piLog mLog;
+        ImmCore::piDiagnosticQueue mDiagnostics;
         ImmCore::piSoundEngineBackend *mSoundBackend;
         ImmCore::piTimer mTimer;
         ImmPlayer::Player mPlayer;

@@ -1,9 +1,127 @@
 using System;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Text;
+using System.Threading;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace ImmPlayer
 {
+    /// <summary>
+    /// Common native diagnostics policy. Configure EnableFileLogging before initializing
+    /// plugins. Warnings/errors are polled on Unity's main thread; no managed delegates
+    /// are invoked from native importer or rendering threads.
+    /// </summary>
+    public static class ImmNativeLogging
+    {
+        public delegate int ReadMessage(byte[] buffer, int capacity, out int severity);
+        private sealed class Sink
+        {
+            internal string Source;
+            internal ReadMessage Read;
+            internal byte[] Buffer = new byte[4096];
+            internal bool Unavailable;
+        }
+        private static readonly object gate = new object();
+        private static volatile Sink[] sinks = Array.Empty<Sink>();
+        private static readonly ConcurrentQueue<string> setupWarnings = new ConcurrentQueue<string>();
+        private static string cacheRoot;
+        private static int mainThread;
+        /// <summary>Default false. Diagnostic files are opt-in and apply on the next native initialization.</summary>
+        public static bool EnableFileLogging { get; set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+#endif
+        private static void Initialize()
+        {
+            mainThread = Thread.CurrentThread.ManagedThreadId;
+            cacheRoot = Path.Combine(Application.temporaryCachePath, "IMM");
+            Application.onBeforeRender -= Flush;
+            Application.onBeforeRender += Flush;
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.update -= Flush;
+            UnityEditor.EditorApplication.update += Flush;
+#endif
+        }
+
+        public static void Register(string source, ReadMessage read)
+        {
+            lock (gate)
+            {
+                foreach (var sink in sinks) if (sink.Read == read) return;
+                var next = new Sink[sinks.Length + 1];
+                Array.Copy(sinks, next, sinks.Length);
+                next[next.Length - 1] = new Sink { Source = source, Read = read };
+                sinks = next;
+            }
+        }
+
+        public static string ResolveLogPath(string defaultName, string requestedPath = null)
+        {
+            if (requestedPath == string.Empty || (requestedPath == null && !EnableFileLogging)) return null;
+            try
+            {
+                string path;
+                if (!string.IsNullOrEmpty(requestedPath) && Path.IsPathRooted(requestedPath)) path = requestedPath;
+                else
+                {
+                    if (string.IsNullOrEmpty(cacheRoot))
+                    {
+                        setupWarnings.Enqueue("[IMM_NATIVE_LOG] Diagnostic cache path is not ready; file logging disabled.");
+                        return null;
+                    }
+                    path = Path.Combine(cacheRoot, Path.GetFileName(requestedPath ?? defaultName));
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                return path;
+            }
+            catch (Exception exception)
+            {
+                setupWarnings.Enqueue($"[IMM_NATIVE_LOG] Cannot prepare diagnostic file; continuing without it: {exception.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>Drain bounded native queues on the main thread, also when explicitly called by a headless host.</summary>
+        public static void Flush()
+        {
+            if (Thread.CurrentThread.ManagedThreadId != mainThread) return;
+            for (int i = 0; i < 16 && setupWarnings.TryDequeue(out string warning); ++i)
+                Debug.LogWarning(warning);
+            foreach (var sink in sinks)
+            {
+                if (sink.Unavailable) continue;
+                try
+                {
+                    for (int i = 0; i < 16; ++i)
+                    {
+                        int size = sink.Read(sink.Buffer, sink.Buffer.Length, out int severity);
+                        if (size == 0) break;
+                        if (size < 0)
+                        {
+                            // Native messages are bounded. Grow only for an exceptional long diagnostic.
+                            if (size < -32769) break;
+                            sink.Buffer = new byte[-size];
+                            continue;
+                        }
+                        string text = $"[{sink.Source}] {Encoding.UTF8.GetString(sink.Buffer, 0, size - 1)}";
+                        if (severity == 1) Debug.LogError(text);
+                        else Debug.LogWarning(text);
+                    }
+                }
+                catch (DllNotFoundException) { sink.Unavailable = true; }
+                catch (EntryPointNotFoundException)
+                {
+                    sink.Unavailable = true;
+                    Debug.LogWarning($"[{sink.Source}] Native diagnostic forwarding needs the matching updated plugin binary.");
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// Native P/Invoke declarations for the ImmStrokeReader DLL.
     /// This plugin reads IMM files and exposes raw stroke data (positions, colors, widths, etc.)
@@ -12,6 +130,11 @@ namespace ImmPlayer
     public static class ImmStrokeReader
     {
         private const string DllName = "ImmStrokeReader";
+
+        static ImmStrokeReader() => ImmNativeLogging.Register("IMM_STROKE_READER", StrokeReader_GetLogMessage);
+
+        [DllImport(DllName)]
+        private static extern int StrokeReader_GetLogMessage([Out] byte[] buffer, int capacity, out int severity);
 
         [DllImport(DllName)]
         private static extern IntPtr StrokeReader_GetBuildId();
@@ -32,10 +155,13 @@ namespace ImmPlayer
         /// <summary>
         /// Initialize the stroke reader plugin.
         /// </summary>
-        /// <param name="logFileName">Path to log file (null for default "imm_stroke_reader_log.txt")</param>
+        /// <param name="logFileName">Optional log path. Null uses the shared opt-in policy; empty disables files. Relative names use the IMM cache directory.</param>
         /// <returns>0 on success, negative on error</returns>
-        [DllImport(DllName)]
-        public static extern int StrokeReader_Init(string logFileName);
+        [DllImport(DllName, EntryPoint = "StrokeReader_Init")]
+        private static extern int StrokeReaderInitNative([MarshalAs(UnmanagedType.LPUTF8Str)] string logFileName);
+
+        public static int StrokeReader_Init(string logFileName) => StrokeReaderInitNative(
+            ImmNativeLogging.ResolveLogPath("imm_stroke_reader_log.txt", logFileName));
 
         /// <summary>
         /// Shut down the stroke reader plugin and release all resources.

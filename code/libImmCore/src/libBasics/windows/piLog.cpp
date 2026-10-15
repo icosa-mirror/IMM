@@ -267,7 +267,7 @@ struct iLog
 {
 	int       mNumLoggers;
 	piLogger *mLoggers[8];
-	int       mMessageCounter;
+
 };
 
 piLog::piLog()
@@ -284,11 +284,11 @@ bool piLog::Init( const wchar_t *path, int loggers)
     if( !me ) return false;
     mImp = me;
 
-	piLogStartInfo info;
-    piLogStartInfo_Get( &info );
+	piLogStartInfo info{};
+    if (loggers) piLogStartInfo_Get( &info );
 
 	me->mNumLoggers = 0;
-	me->mMessageCounter = 0;
+	mMessageCounter.store(0, std::memory_order_relaxed);
 
 
 	for( int i=0; i<2; i++ )
@@ -301,8 +301,8 @@ bool piLog::Init( const wchar_t *path, int loggers)
 		if( !lo )
 			continue;
 
-		if( !lo->Init(path,&info) )
-			return false;
+        if (!lo->Init(path, &info))
+        { delete lo; End(); return false; }
 
 		me->mLoggers[me->mNumLoggers++] = lo;
 	}
@@ -313,6 +313,7 @@ bool piLog::Init( const wchar_t *path, int loggers)
 void piLog::End( void )
 {
     iLog *me = (iLog*)mImp;
+    if (!me) return;
 	for( int i=0; i<me->mNumLoggers; i++ )
 	{
 		piLogger *lo = me->mLoggers[i];
@@ -320,6 +321,7 @@ void piLog::End( void )
 		delete lo;
 	}
     free( me );
+    mImp = nullptr;
 }
 
 void piLog::Printf( const wchar_t *file, const wchar_t *func, int line, int type, const wchar_t *format, ... )
@@ -329,7 +331,7 @@ void piLog::Printf( const wchar_t *file, const wchar_t *func, int line, int type
 	#endif
 
     iLog *me = (iLog*)mImp;
-    if( me->mNumLoggers<1 ) return;
+    if ((!me || me->mNumLoggers < 1) && !Captures(type)) return;
 
     va_list arglist;
     va_list measureArglist;
@@ -347,13 +349,14 @@ void piLog::Printf( const wchar_t *file, const wchar_t *func, int line, int type
 
 	va_end( arglist );
 
-    for( int i=0; i<me->mNumLoggers; i++ )
+    Capture(type, tmpstr);
+    const int messageId = mMessageCounter.fetch_add(1, std::memory_order_relaxed);
+    for( int i=0; me && i<me->mNumLoggers; i++ )
     {
 		piLogger *lo = me->mLoggers[i];
-        lo->Printf( me->mMessageCounter, (int)(uint64_t)piThread_GetOSID(), file, func, line, type, tmpstr );
+        lo->Printf( messageId, (int)(uint64_t)piThread_GetOSID(), file, func, line, type, tmpstr );
     }
 
-    me->mMessageCounter++;
 
 	_freea( tmpstr );
 }

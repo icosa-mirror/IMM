@@ -16,6 +16,13 @@ namespace ImmPlayer
         private const string DllName = "ImmUnityPlugin";
 #endif
 
+        static ImmNativePlugin() => ImmNativeLogging.Register("IMM", GetNativeLogMessage);
+
+        internal static void InitializeDiagnostics() { }
+
+        [DllImport(DllName)]
+        private static extern int GetNativeLogMessage([Out] byte[] buffer, int capacity, out int severity);
+
         #region Unity Plugin Callbacks
 
         [DllImport(DllName)]
@@ -66,7 +73,7 @@ namespace ImmPlayer
         /// <param name="tmpFolderName">Path to temporary folder (use Application.temporaryCachePath)</param>
         /// <returns>0 on success, negative on error</returns>
         [DllImport(DllName)]
-        public static extern int Init(int colorSpace, int antialiasing, string logFileName, string tmpFolderName);
+        public static extern int Init(int colorSpace, int antialiasing, [MarshalAs(UnmanagedType.LPUTF8Str)] string logFileName, string tmpFolderName);
 
         [DllImport(DllName)]
         public static extern void End();

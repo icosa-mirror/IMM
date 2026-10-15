@@ -1,3 +1,4 @@
+#include <cstring>
 #include "imm_engine_bridge.h"
 
 #include "libImmCore/src/libBasics/piImage.h"
@@ -442,20 +443,29 @@ namespace ImmShared
 
     bool ImmEngineBridge::InitializeLog()
     {
-        const wchar_t *logFileName = (mConfig.logFileName == nullptr) ? L"imm_player_log.txt" : pistr2ws(mConfig.logFileName);
-
+        mLog.SetCallback(mConfig.captureWarnings ? ImmCore::piDiagnosticQueue::Capture : nullptr,
+            mConfig.captureWarnings ? &mDiagnostics : nullptr);
+        std::wstring path;
+        const char * filename = mConfig.logFileName;
+        if (!filename && !mConfig.captureWarnings) filename = "imm_player_log.txt";
+        const bool requested = filename && *filename;
+        const bool valid = !requested || ImmCore::DecodeUtf8(filename, std::strlen(filename), path);
+        int mode = requested && valid ? PILOG_TXT : 0;
 #ifdef _DEBUG
-        const int mode = PILOG_TXT + PILOG_CNS;
-#else
-        const int mode = PILOG_TXT;
+        if (mode && !mConfig.captureWarnings) mode |= PILOG_CNS;
 #endif
-        if (!mLog.Init(logFileName, mode))
-            return false;
-
+        if (!mLog.Init(path.empty() ? nullptr : path.c_str(), mode))
+        {
+            // Preserve standalone failure behavior; Unity diagnostics are nonfatal.
+            if (!mConfig.captureWarnings) return false;
+            // The logger releases partial initialization before returning failure.
+            mLog.Init(nullptr, 0);
+            mLog.Printf(LT_WARNING, L"[IMM_NATIVE_LOG] Cannot open diagnostic file; continuing without it: %ls", path.c_str());
+        }
         mLogInitialized = true;
+        if (!valid) mLog.Printf(LT_WARNING, L"[IMM_NATIVE_LOG] Invalid UTF-8 diagnostic path; file logging disabled.");
         mLog.Printf(LT_DEBUG, mConfig.colorSpace == 0 ? L"Linear" : L"Gamma");
         mLog.Printf(LT_DEBUG, L"Antialiasing: %d", mConfig.antialiasing);
-        mLog.Printf(LT_DEBUG, L"Log File: %s", logFileName);
         return true;
     }
 

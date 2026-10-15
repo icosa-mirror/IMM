@@ -43,6 +43,29 @@ the static library.
 
 ---
 
+## Unity native logging
+
+Both packages forward native warnings and errors to Unity's log on the main thread,
+with `[IMM]` or `[IMM_STROKE_READER]` prefixes. Native worker threads enqueue messages;
+Unity drains the bounded queue during Editor updates, before rendering, and during
+player updates. No managed callbacks run on native render or importer threads.
+
+Production initialization creates no separate log files. To enable verbose files for
+subsequent initialization, set `ImmPlayer.ImmNativeLogging.EnableFileLogging = true`.
+Default filenames are placed under `Application.temporaryCachePath/IMM`, on Windows,
+macOS, Android and iOS. The directory is temporary and the operating system may clear it.
+This policy also applies to D3D12, Vulkan and Metal RenderGraph initialization.
+
+An explicit nonempty log filename on the legacy player or stroke-reader initialization
+also enables file logging. Absolute paths are respected; relative filenames are placed
+under the same cache directory. An empty string disables that initialization's file log.
+Paths crossing the native boundary use UTF-8. Failure to create a directory or open the
+log produces a Unity warning and continues initialization without the file.
+
+Each native plugin retains up to 64 warnings/errors. Overflow drops the oldest messages
+and reports the dropped count. Messages are limited to 8192 wide characters and drained
+in batches of 16 per sink per update, so logging cannot grow without bound.
+
 ## 1. Plugin inventory
 
 | Plugin | Unity package | Platform | Binary | Format | Exports (all symbols) | Plugin API | Size | sha256 (16) |

@@ -180,6 +180,12 @@ jobs:
         --msbuild (Get-Command msbuild).Source
         --fixture exampleImmFiles/sample1.imm
 
+    - name: Verify native logging policy
+      shell: pwsh
+      run: >-
+        python code/appImmUnity/tests/native_logging_smoke.py
+        --msbuild (Get-Command msbuild).Source
+
     - name: Verify SharpQuill adapter skips spawn metadata
       shell: pwsh
       run: >-

@@ -1659,18 +1659,29 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketRe
     return 1;
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT GetNativeLogMessage(char * output, int capacity, int * severity)
+{
+    return gImmUnityPlugin.mBridge.ReadDiagnostic(output, capacity, severity);
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetRenderGraphPaths(const char* logFile, const char* tmpFolder)
 {
     IMM_UNITY_NATIVE_LOCK();
-#if defined(IMM_UNITY_VULKAN)
-    if (!logFile || !tmpFolder || gImmUnityPlugin.mBridge.IsInitialized()) return 0;
-    gImmUnityPlugin.mVulkanRenderGraph.logFileName = logFile;
-    gImmUnityPlugin.mVulkanRenderGraph.tmpFolderName = tmpFolder;
-    return 1;
-#else
-    (void)logFile; (void)tmpFolder;
-    return 0;
+    if (!tmpFolder || !*tmpFolder || gImmUnityPlugin.mBridge.IsInitialized()) return 0;
+    const char * logPath = logFile ? logFile : "";
+#if defined(WINDOWS)
+    gImmUnityPlugin.mRenderGraph.logFileName = logPath;
+    gImmUnityPlugin.mRenderGraph.tmpFolderName = tmpFolder;
 #endif
+#if defined(IMM_UNITY_VULKAN)
+    gImmUnityPlugin.mVulkanRenderGraph.logFileName = logPath;
+    gImmUnityPlugin.mVulkanRenderGraph.tmpFolderName = tmpFolder;
+#endif
+#if defined(__APPLE__)
+    gImmUnityPlugin.mMetalRenderGraph.logFileName = logPath;
+    gImmUnityPlugin.mMetalRenderGraph.tmpFolderName = tmpFolder;
+#endif
+    return 1;
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketSize()
@@ -1929,6 +1940,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     config.colorSpace = colorSpace;
     config.antialiasing = antialiasing;
     config.logFileName = logFileName;
+    config.captureWarnings = true;
     config.tmpFolderName = tmpFolferName;
 
 #if defined(__ANDROID__) || defined(ANDROID)

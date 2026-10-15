@@ -3,6 +3,8 @@
 
 #include "strokeStore.h"
 #include "libImmCore/src/libBasics/piLog.h"
+#include "libImmCore/src/libBasics/piDiagnosticQueue.h"
+#include <cstring>
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libBasics/piTArray.h"
 #include "libImmImporter/src/document/sequence.h"
@@ -38,6 +40,11 @@ extern "C" UNITY_INTERFACE_EXPORT const char* UNITY_INTERFACE_API StrokeReader_G
 {
     return kImmStrokeReaderBuildIdA;
 }
+
+static piDiagnosticQueue gStrokeDiagnostics;
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLogMessage(
+    char * output, int capacity, int * severity)
+{ return gStrokeDiagnostics.Read(output, capacity, severity); }
 
 // Global state
 static struct
@@ -114,16 +121,19 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_Init(char
     if (gStrokeReader.mInitialized)
         return 0; // Already initialized
 
-    const wchar_t* wstrLogFileName = (logFileName == nullptr) ? L"imm_stroke_reader_log.txt" : pistr2ws(logFileName);
-
-#ifdef _DEBUG
-    if (!gStrokeReader.mLog.Init(wstrLogFileName, PILOG_TXT + PILOG_CNS))
-#else
-    if (!gStrokeReader.mLog.Init(wstrLogFileName, PILOG_TXT))
-#endif
+    gStrokeReader.mLog.SetCallback(piDiagnosticQueue::Capture, &gStrokeDiagnostics);
+    std::wstring path;
+    const bool requested = logFileName && *logFileName;
+    const bool valid = !requested || DecodeUtf8(logFileName, std::strlen(logFileName), path);
+    if (!gStrokeReader.mLog.Init(path.empty() ? nullptr : path.c_str(),
+        requested && valid ? PILOG_TXT : 0))
     {
-        return -1;
+        gStrokeReader.mLog.Init(nullptr, 0);
+        gStrokeReader.mLog.Printf(LT_WARNING,
+            L"[IMM_NATIVE_LOG] Cannot open stroke-reader diagnostic file; continuing without it: %ls", path.c_str());
     }
+    if (!valid) gStrokeReader.mLog.Printf(LT_WARNING,
+        L"[IMM_NATIVE_LOG] Invalid UTF-8 diagnostic path; file logging disabled.");
 
     gStrokeReader.mLog.Printf(LT_MESSAGE, L"ImmStrokeReader initialized (%s)", kImmStrokeReaderBuildIdW);
     gStrokeReader.mInitialized = true;
