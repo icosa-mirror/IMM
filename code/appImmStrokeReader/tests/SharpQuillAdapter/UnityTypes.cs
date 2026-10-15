@@ -3,6 +3,20 @@
 // members in the native wrapper are not used by the adapter or this test.
 namespace UnityEngine
 {
+    public enum RuntimeInitializeLoadType { BeforeSceneLoad }
+
+    [System.AttributeUsage(System.AttributeTargets.Method)]
+    public sealed class RuntimeInitializeOnLoadMethodAttribute : System.Attribute
+    {
+        public RuntimeInitializeOnLoadMethodAttribute(RuntimeInitializeLoadType loadType) { }
+    }
+
+    public static class Application
+    {
+        public static string temporaryCachePath => System.IO.Path.GetTempPath();
+        public static event System.Action onBeforeRender { add { } remove { } }
+    }
+
     public static class Debug
     {
         public static void Log(object value) => System.Console.WriteLine(value);
