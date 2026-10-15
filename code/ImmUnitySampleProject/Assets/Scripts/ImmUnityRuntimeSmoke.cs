@@ -130,6 +130,10 @@ namespace ImmPlayer
             _xrProbeEnabled = IsEnabled(XrProbeArg, XrProbeEnv);
             _syntheticStereoProbeEnabled = IsEnabled(SyntheticStereoProbeArg, SyntheticStereoProbeEnv);
 #if IMM_UNITY_ANDROID_VULKAN_CI
+            // Keep diagnostics in logcat without Unity's error console obscuring
+            // the presented frames used by screenshots and physical-device video.
+            Debug.developerConsoleEnabled = false;
+            Debug.developerConsoleVisible = false;
             frameCount = 90;
             _compositionProbeEnabled = true;
             _overlayProbeEnabled = false;
