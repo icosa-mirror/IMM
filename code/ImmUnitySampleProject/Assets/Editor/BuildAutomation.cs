@@ -108,12 +108,16 @@ namespace ImmPlayer.Editor
 
             AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
             bool previousOptimizedFramePacing = PlayerSettings.Android.optimizedFramePacing;
+            UIOrientation previousOrientation = PlayerSettings.defaultInterfaceOrientation;
             XRGeneralSettings androidXrSettings =
                 XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
             bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
             try
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+                // Robo relaunches can rotate the device and overwrite landscape evidence
+                // with a portrait framebuffer resampled to the fixed capture dimensions.
+                PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
                 // Firebase may focus the activity twice during a Robo run. Unity
                 // 6.0.3's Swappy Vulkan wrapper can dereference an uninitialized
                 // mutex during that second focus transition, after valid captures
@@ -145,6 +149,7 @@ namespace ImmPlayer.Editor
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
                 PlayerSettings.Android.optimizedFramePacing = previousOptimizedFramePacing;
+                PlayerSettings.defaultInterfaceOrientation = previousOrientation;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
