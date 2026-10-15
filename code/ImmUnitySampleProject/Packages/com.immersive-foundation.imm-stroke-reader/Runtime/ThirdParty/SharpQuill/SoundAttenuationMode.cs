@@ -9,5 +9,7 @@ namespace SharpQuill
   public enum SoundAttenuationMode
   {
     None,
+    Linear,
+    Logarithmic,
   }
 }

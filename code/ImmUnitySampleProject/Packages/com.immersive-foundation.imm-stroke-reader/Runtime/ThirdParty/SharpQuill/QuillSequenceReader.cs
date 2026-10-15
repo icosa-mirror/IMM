@@ -287,6 +287,8 @@ namespace SharpQuill
     /// </summary>
     private static T ParseEnum<T>(JToken v) where T : struct
     {
+      if (v == null || v.Type == JTokenType.Null)
+        return default(T);
       Enum.TryParse((string)v.ToObject(typeof(string)), out T result);
       return result;
     }
@@ -502,7 +504,26 @@ namespace SharpQuill
               ls.DataFileOffset = ParseHexLong(impl["DataFileOffset"], ls.DataFileOffset);
               ls.Gain = ParseFloat(impl["Gain"], 1.0f);
               ls.Loop = ParseBool(impl["Loop"], false);
-              // TODO: Parse SoundType, Attenuation, Modifiers if needed
+              ls.SoundType = ParseEnum<SoundType>(impl["Type"]);
+              if (impl["Attenuation"] is JObject attenuation)
+              {
+                ls.Attenuation.Mode = ParseEnum<SoundAttenuationMode>(attenuation["Mode"]);
+                ls.Attenuation.Minimum = ParseFloat(attenuation["Minimum"]);
+                ls.Attenuation.Maximum = ParseFloat(attenuation["Maximum"]);
+              }
+              if (impl["Modifiers"] is JArray modifiers)
+              {
+                foreach (JObject modifier in modifiers)
+                {
+                  ls.Modifiers.Add(new SoundModifier
+                  {
+                    Type = ParseEnum<SoundModifierType>(modifier["Type"]),
+                    AngleIn = ParseFloat(modifier["AngleIn"]),
+                    AngleBand = ParseFloat(modifier["AngleBand"]),
+                    AttenOut = ParseFloat(modifier["AttenOut"])
+                  });
+                }
+              }
             }
             break;
           }

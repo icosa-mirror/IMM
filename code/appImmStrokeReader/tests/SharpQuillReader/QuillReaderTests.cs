@@ -9,6 +9,7 @@ internal static class QuillReaderTests
     {
         PictureTypes();
         ViewpointDefaults();
+        SpatialSoundSettings();
         Console.WriteLine("[IMM_QUILL_READER] All reader regressions passed.");
     }
 
@@ -57,6 +58,35 @@ internal static class QuillReaderTests
         Require(explicitValues.Version == 0 && explicitValues.Sphere.W == 4 && !explicitValues.Exporting
             && !explicitValues.AllowTranslationX && explicitValues.ShowingVolume
             && explicitValues.TypeStr == "EyeLevel", "Explicit viewpoint settings were replaced by defaults.");
+    }
+
+    private static void SpatialSoundSettings()
+    {
+        foreach (var mode in new[] { SoundAttenuationMode.None, SoundAttenuationMode.Linear, SoundAttenuationMode.Logarithmic })
+        {
+            var sound = ReadLayer<LayerSound>("Sound", new JObject
+            {
+                ["DataFileOffset"] = "ffffffffffffffff",
+                ["Type"] = "Positional",
+                ["Gain"] = 0.4,
+                ["Loop"] = true,
+                ["Attenuation"] = new JObject { ["Mode"] = mode.ToString(), ["Minimum"] = 0.2, ["Maximum"] = 3.3 },
+                ["Modifiers"] = new JArray(new JObject
+                {
+                    ["Type"] = "Cone", ["AngleIn"] = 0.46, ["AngleBand"] = 0.45, ["AttenOut"] = 0.1
+                })
+            });
+            Require(sound.SoundType == SoundType.Positional && sound.Loop && sound.Gain == 0.4f,
+                "Positional sound properties were lost.");
+            Require(sound.Attenuation.Mode == mode && sound.Attenuation.Minimum == 0.2f && sound.Attenuation.Maximum == 3.3f,
+                $"Sound attenuation {mode} was lost.");
+            Require(sound.Modifiers.Count == 1 && sound.Modifiers[0].Type == SoundModifierType.Cone
+                && sound.Modifiers[0].AngleIn == 0.46f && sound.Modifiers[0].AngleBand == 0.45f
+                && sound.Modifiers[0].AttenOut == 0.1f, "Sound cone parameters were lost.");
+        }
+        var flat = ReadLayer<LayerSound>("Sound", new JObject { ["DataFileOffset"] = "ffffffffffffffff" });
+        Require(flat.SoundType == SoundType.Flat && flat.Attenuation.Mode == SoundAttenuationMode.None
+            && flat.Modifiers.Count == 0 && flat.Gain == 1, "Absent sound settings do not retain safe defaults.");
     }
 
     private static T ReadLayer<T>(string type, JObject implementation) where T : Layer
