@@ -229,6 +229,15 @@ namespace ImmPlayer
                 }
 #if IMM_UNITY_ANDROID_VULKAN_CI
                 ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
+                PerformanceInfoNative performance = playerManager != null
+                    ? playerManager.GetPerformanceInfo() : default;
+                if (performance.numPaintDrawCalls <= 0 || performance.numTriangles <= 0)
+                {
+                    Debug.LogError($"{Prefix}native paint render was not ready before capture");
+                    QuitIfRequested(2);
+                    yield break;
+                }
+                Debug.Log($"{Prefix}native render ready paintDrawCalls={performance.numPaintDrawCalls} triangles={performance.numTriangles}");
                 // The native eye texture is written on IMM's dedicated queue.
                 // Reading it back directly here bypasses Unity's presentation
                 // synchronization and can capture a black/stale slot even while
