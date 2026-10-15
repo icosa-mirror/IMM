@@ -309,8 +309,10 @@ namespace SharpQuill
           return PictureType.TwoD;
         case "2DDepth":
           return PictureType.TwoDDepth;
+        case "360_Equirect_Mono":
         case "360 Equirectangular Mono":
           return PictureType.ThreeSixty_Equirect_Mono;
+        case "360_Equirect_Stereo":
         case "360 Equirectangular Stereo":
           return PictureType.ThreeSixty_Equirect_Stereo;
         default:
