@@ -58,6 +58,10 @@ namespace SharpQuill
       jSeq.Add(new JProperty("Gallery", WriteGallery(seq.Gallery)));
       jSeq.Add(new JProperty("BackgroundColor", WriteColor(seq.BackgroundColor)));
       jSeq.Add(new JProperty("DefaultViewpoint", seq.DefaultViewpoint));
+      if (seq.TrackingOrigin.HasValue)
+        jSeq.Add(new JProperty("TrackingOrigin", seq.TrackingOrigin.Value));
+      if (seq.AnimateOnStart.HasValue)
+        jSeq.Add(new JProperty("AnimateOnStart", seq.AnimateOnStart.Value));
       jSeq.Add(new JProperty("Framerate", seq.Framerate));
       jSeq.Add(new JProperty("ExportStart", seq.ExportStart));
       jSeq.Add(new JProperty("ExportEnd", seq.ExportEnd));

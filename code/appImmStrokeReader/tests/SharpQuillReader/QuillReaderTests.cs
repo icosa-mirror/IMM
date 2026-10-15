@@ -10,6 +10,7 @@ internal static class QuillReaderTests
         PictureTypes();
         ViewpointDefaults();
         SpatialSoundSettings();
+        StartupSettings();
         Console.WriteLine("[IMM_QUILL_READER] All reader regressions passed.");
     }
 
@@ -87,6 +88,44 @@ internal static class QuillReaderTests
         var flat = ReadLayer<LayerSound>("Sound", new JObject { ["DataFileOffset"] = "ffffffffffffffff" });
         Require(flat.SoundType == SoundType.Flat && flat.Attenuation.Mode == SoundAttenuationMode.None
             && flat.Modifiers.Count == 0 && flat.Gain == 1, "Absent sound settings do not retain safe defaults.");
+    }
+
+    private static void StartupSettings()
+    {
+        foreach (bool animate in new[] { false, true })
+        {
+            var sequence = ReadProject(new JObject { ["TrackingOrigin"] = 1, ["AnimateOnStart"] = animate });
+            Require(sequence.TrackingOrigin == 1 && sequence.AnimateOnStart == animate,
+                "Explicit startup metadata was lost.");
+            RoundTripStartupSettings(sequence);
+        }
+        var legacy = ReadProject(new JObject());
+        Require(legacy.TrackingOrigin == null && legacy.AnimateOnStart == null,
+            "Unspecified startup metadata acquired an invented default.");
+        RoundTripStartupSettings(legacy);
+    }
+
+    private static void RoundTripStartupSettings(Sequence sequence)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"imm-quill-startup-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            QuillSequenceWriter.Write(sequence, directory);
+            var json = JObject.Parse(File.ReadAllText(Path.Combine(directory, "Quill.json")))["Sequence"];
+            Require((json["AnimateOnStart"] != null) == sequence.AnimateOnStart.HasValue
+                && (json["TrackingOrigin"] != null) == sequence.TrackingOrigin.HasValue,
+                "Writer did not preserve optional metadata presence.");
+            var reread = QuillSequenceReader.Read(directory);
+            Require(reread != null && reread.AnimateOnStart == sequence.AnimateOnStart
+                && reread.TrackingOrigin == sequence.TrackingOrigin, "Startup settings failed to round-trip.");
+        }
+        finally
+        {
+            foreach (string name in new[] { "Quill.json", "Quill.qbin", "State.json" })
+                File.Delete(Path.Combine(directory, name));
+            Directory.Delete(directory);
+        }
     }
 
     private static T ReadLayer<T>(string type, JObject implementation) where T : Layer

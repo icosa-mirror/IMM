@@ -72,6 +72,9 @@ namespace SharpQuill
       else
         seq.DefaultViewpoint = ""; // "Root/InitialSpawnArea"
 
+      seq.TrackingOrigin = s["Sequence"]["TrackingOrigin"]?.ToObject<int?>();
+      seq.AnimateOnStart = s["Sequence"]["AnimateOnStart"]?.ToObject<bool?>();
+
       seq.Framerate = ParseInt(s["Sequence"]["Framerate"], seq.Framerate);
       seq.ExportStart = ParseInt(s["Sequence"]["ExportStart"], seq.ExportStart);
       seq.ExportEnd = ParseInt(s["Sequence"]["ExportEnd"], seq.ExportEnd);
