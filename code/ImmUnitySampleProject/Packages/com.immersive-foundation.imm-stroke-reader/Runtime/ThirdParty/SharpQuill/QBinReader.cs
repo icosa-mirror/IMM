@@ -67,26 +67,64 @@ namespace SharpQuill
     }
 
     /// <summary>
-    /// Reads the embedded audio data.
-    /// The format is expected to be: length (Int32) followed by audio file bytes (MP3/OGG/WAV).
+    /// Reads Quill's embedded 16-bit PCM sound and wraps it in a WAV file.
+    /// The qbin stores a 20-byte header followed by interleaved sample frames,
+    /// not the original imported MP3/OGG/WAV file.
     /// </summary>
     public SoundData ReadSoundData()
     {
-      SoundData data = new SoundData();
+      ReadUInt32(); // Reserved header fields.
+      ReadByte();
+      byte format = ReadByte();
+      byte channels = ReadByte();
+      byte bitsPerSample = ReadByte();
+      uint sampleRate = ReadUInt32();
+      uint frameCount = ReadUInt32();
+      ReadUInt32();
 
-      // Read the length of the audio data
-      int length = ReadInt32();
+      if (format != 0 || bitsPerSample != 16)
+        throw new NotSupportedException($"Unsupported Quill sound format {format}, {bitsPerSample} bits per sample.");
+      if (channels == 0 || sampleRate == 0)
+        throw new InvalidDataException("Quill sound must have channels and a sample rate.");
 
-      if (length <= 0 || length > int.MaxValue)
-        return data;
+      ushort blockAlign = (ushort)(channels * (bitsPerSample / 8));
+      ulong byteRate = (ulong)sampleRate * blockAlign;
+      ulong byteCount = (ulong)frameCount * blockAlign;
+      if (byteRate > uint.MaxValue || byteCount > int.MaxValue - 44)
+        throw new InvalidDataException("Quill sound is too large for a WAV byte array.");
+      if (BaseStream.CanSeek && byteCount > (ulong)(BaseStream.Length - BaseStream.Position))
+        throw new EndOfStreamException("Quill sound samples are truncated.");
 
-      // Read the audio file bytes (complete audio file with headers)
-      data.AudioBytes = ReadBytes(length);
-      data.Length = length;
+      byte[] wav = new byte[44 + (int)byteCount];
+      using (var stream = new MemoryStream(wav))
+      using (var writer = new BinaryWriter(stream))
+      {
+        writer.Write(0x46464952u); // RIFF
+        writer.Write((uint)(wav.Length - 8));
+        writer.Write(0x45564157u); // WAVE
+        writer.Write(0x20746d66u); // fmt
+        writer.Write(16u);
+        writer.Write((ushort)1); // Integer PCM.
+        writer.Write((ushort)channels);
+        writer.Write(sampleRate);
+        writer.Write((uint)byteRate);
+        writer.Write(blockAlign);
+        writer.Write((ushort)bitsPerSample);
+        writer.Write(0x61746164u); // data
+        writer.Write((uint)byteCount);
+      }
 
-      return data;
+      int copied = 0;
+      while (copied < (int)byteCount)
+      {
+        int count = Read(wav, 44 + copied, (int)byteCount - copied);
+        if (count == 0)
+          throw new EndOfStreamException("Quill sound samples are truncated.");
+        copied += count;
+      }
+      return new SoundData { AudioBytes = wav, Length = wav.Length };
     }
-    
+
     private Stroke ReadStroke()
     {
       Stroke stroke = new Stroke();

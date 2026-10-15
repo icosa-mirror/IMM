@@ -8,3 +8,9 @@ dotnet run --project code/appImmStrokeReader/tests/SharpQuillReader/SharpQuillRe
 
 The small project fixtures exercise the production SharpQuill JSON and binary
 reader. They contain no private project assets.
+
+Optionally supply a local Quill project collection as the sole argument. This
+checks real hierarchy/metadata without loading every paint point or picture, and
+reads embedded sound directly to verify PCM bytes and payload boundaries. Original
+projects are not modified. Audio support covers the observed 16-bit PCM layout;
+unsupported encodings and truncated/oversized payloads fail explicitly.

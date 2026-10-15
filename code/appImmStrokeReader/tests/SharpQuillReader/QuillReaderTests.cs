@@ -1,16 +1,21 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using Newtonsoft.Json.Linq;
 using SharpQuill;
 
 internal static class QuillReaderTests
 {
-    public static void Run()
+    public static void Run(string corpusPath = null)
     {
         PictureTypes();
         ViewpointDefaults();
         SpatialSoundSettings();
         StartupSettings();
+        EmbeddedSound();
+        if (corpusPath != null) CheckCorpus(corpusPath);
         Console.WriteLine("[IMM_QUILL_READER] All reader regressions passed.");
     }
 
@@ -128,6 +133,66 @@ internal static class QuillReaderTests
         }
     }
 
+    private static void EmbeddedSound()
+    {
+        byte[] pcm = { 0x00, 0x80, 0xff, 0x7f, 0x34, 0x12, 0xcc, 0xed };
+        foreach (byte channels in new byte[] { 1, 2 })
+        {
+            byte[] payload = SoundPayload(channels, pcm);
+            using var reader = new QBinReader(new MemoryStream(payload));
+            SoundData sound = reader.ReadSoundData();
+            byte[] wav = sound.AudioBytes;
+            Require(sound.Length == 44 + pcm.Length && wav.Length == sound.Length,
+                "Embedded PCM did not produce a complete WAV file.");
+            Require(Encoding.ASCII.GetString(wav, 0, 4) == "RIFF"
+                && Encoding.ASCII.GetString(wav, 8, 4) == "WAVE"
+                && BitConverter.ToUInt16(wav, 20) == 1
+                && BitConverter.ToUInt16(wav, 22) == channels
+                && BitConverter.ToUInt32(wav, 24) == 44100
+                && BitConverter.ToUInt16(wav, 34) == 16
+                && BitConverter.ToUInt32(wav, 40) == pcm.Length, "WAV metadata is incorrect.");
+            Require(wav.Skip(44).SequenceEqual(pcm), "PCM sample bytes changed.");
+            Require(reader.BaseStream.Position == 20 + pcm.Length && reader.ReadUInt32() == 0x12345678,
+                "Sound reader consumed data from the next asset.");
+        }
+        byte[] truncated = SoundPayload(2, pcm).Take(20 + pcm.Length - 1).ToArray();
+        ExpectSoundError<EndOfStreamException>(truncated);
+        byte[] tooLarge = SoundPayload(2, pcm);
+        Array.Copy(BitConverter.GetBytes(uint.MaxValue), 0, tooLarge, 12, 4);
+        ExpectSoundError<InvalidDataException>(tooLarge);
+        byte[] unsupported = SoundPayload(2, pcm);
+        unsupported[7] = 32;
+        ExpectSoundError<NotSupportedException>(unsupported);
+        byte[] invalidChannels = SoundPayload(2, pcm);
+        invalidChannels[6] = 0;
+        ExpectSoundError<InvalidDataException>(invalidChannels);
+    }
+
+    private static byte[] SoundPayload(byte channels, byte[] pcm)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write(0u);
+        writer.Write((byte)0);
+        writer.Write((byte)0);
+        writer.Write(channels);
+        writer.Write((byte)16);
+        writer.Write(44100u);
+        writer.Write((uint)(pcm.Length / (channels * 2)));
+        writer.Write(0u);
+        writer.Write(pcm);
+        writer.Write(0x12345678u);
+        return stream.ToArray();
+    }
+
+    private static void ExpectSoundError<T>(byte[] payload) where T : Exception
+    {
+        using var reader = new QBinReader(new MemoryStream(payload));
+        try { reader.ReadSoundData(); }
+        catch (T) { return; }
+        throw new InvalidOperationException($"Expected {typeof(T).Name} for malformed sound.");
+    }
+
     private static T ReadLayer<T>(string type, JObject implementation) where T : Layer
     {
         var layer = new JObject
@@ -141,24 +206,29 @@ internal static class QuillReaderTests
 
     private static Sequence ReadProject(JObject settings, params JObject[] children)
     {
+        var sequence = new JObject
+        {
+            ["RootLayer"] = new JObject
+            {
+                ["Name"] = "Root",
+                ["Type"] = "Group",
+                ["Implementation"] = new JObject { ["Children"] = new JArray(children) }
+            }
+        };
+        foreach (var setting in settings.Properties())
+            sequence[setting.Name] = setting.Value.DeepClone();
+        return ReadDocument(new JObject { ["Version"] = 1, ["Sequence"] = sequence });
+    }
+
+    private static Sequence ReadDocument(JObject document)
+    {
         string directory = Path.Combine(Path.GetTempPath(), $"imm-quill-reader-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         string scenePath = Path.Combine(directory, "Quill.json");
         string binaryPath = Path.Combine(directory, "Quill.qbin");
         try
         {
-            var sequence = new JObject
-            {
-                ["RootLayer"] = new JObject
-                {
-                    ["Name"] = "Root",
-                    ["Type"] = "Group",
-                    ["Implementation"] = new JObject { ["Children"] = new JArray(children) }
-                }
-            };
-            foreach (var setting in settings.Properties())
-                sequence[setting.Name] = setting.Value.DeepClone();
-            File.WriteAllText(scenePath, new JObject { ["Version"] = 1, ["Sequence"] = sequence }.ToString());
+            File.WriteAllText(scenePath, document.ToString());
             File.WriteAllBytes(binaryPath, new byte[4]);
             Sequence result = QuillSequenceReader.Read(directory);
             Require(result?.RootLayer != null, "Quill project failed to read.");
@@ -170,6 +240,101 @@ internal static class QuillReaderTests
             File.Delete(binaryPath);
             Directory.Delete(directory);
         }
+    }
+
+    private static IEnumerable<JObject> SourceLayers(JObject root)
+    {
+        yield return root;
+        if (root["Implementation"]?["Children"] is JArray children)
+            foreach (JObject child in children)
+                foreach (var layer in SourceLayers(child)) yield return layer;
+    }
+
+    private static IEnumerable<Layer> ParsedLayers(Layer root)
+    {
+        yield return root;
+        if (root is LayerGroup group)
+            foreach (var child in group.Children)
+                foreach (var layer in ParsedLayers(child)) yield return layer;
+    }
+
+    private static void CheckCorpus(string corpusPath)
+    {
+        int projects = 0, sounds = 0, pictures = 0;
+        foreach (string path in Directory.EnumerateFiles(corpusPath, "Quill.json", SearchOption.AllDirectories))
+        {
+            var original = JObject.Parse(File.ReadAllText(path));
+            var metadataOnly = (JObject)original.DeepClone();
+            foreach (var layer in SourceLayers((JObject)metadataOnly["Sequence"]["RootLayer"]))
+            {
+                var implementation = (JObject)layer["Implementation"];
+                if ((string)layer["Type"] == "Paint")
+                {
+                    implementation["Drawings"] = new JArray();
+                    implementation["Frames"] = new JArray();
+                }
+                if ((string)layer["Type"] == "Sound" || (string)layer["Type"] == "Picture")
+                    implementation["DataFileOffset"] = "ffffffffffffffff";
+            }
+            // Parse real hierarchy/metadata without allocating every paint point or image.
+            var sequence = ReadDocument(metadataOnly);
+            var expected = SourceLayers((JObject)original["Sequence"]["RootLayer"]).ToArray();
+            var parsed = ParsedLayers(sequence.RootLayer).ToArray();
+            Require(expected.Length == parsed.Length, $"Layer count changed for {Path.GetDirectoryName(path)}.");
+            Require(sequence.AnimateOnStart == original["Sequence"]["AnimateOnStart"]?.ToObject<bool?>()
+                && sequence.TrackingOrigin == original["Sequence"]["TrackingOrigin"]?.ToObject<int?>(),
+                "Corpus startup settings changed.");
+            using var binary = new QBinReader(File.OpenRead(Path.Combine(Path.GetDirectoryName(path), "Quill.qbin")));
+            for (int i = 0; i < parsed.Length; ++i)
+            {
+                var impl = expected[i]["Implementation"];
+                if (parsed[i] is LayerPicture picture)
+                {
+                    string type = (string)impl["Type"];
+                    Require((type == "2D" && picture.PictureType == PictureType.TwoD)
+                        || (type == "360_Equirect_Stereo" && picture.PictureType == PictureType.ThreeSixty_Equirect_Stereo),
+                        $"Unrecognized corpus picture {type}.");
+                    Require(picture.ViewerLocked == impl["ViewerLocked"].ToObject<bool>(), "Picture viewer lock changed.");
+                    ++pictures;
+                }
+                if (!(parsed[i] is LayerSound sound)) continue;
+                Require(sound.SoundType.ToString() == (string)impl["Type"]
+                    && sound.Attenuation.Mode.ToString() == (string)impl["Attenuation"]["Mode"]
+                    && sound.Attenuation.Minimum == impl["Attenuation"]["Minimum"].ToObject<float>()
+                    && sound.Attenuation.Maximum == impl["Attenuation"]["Maximum"].ToObject<float>(),
+                    "Corpus sound spatial properties changed.");
+                var modifiers = (JArray)impl["Modifiers"];
+                Require(sound.Modifiers.Count == modifiers.Count, "Sound modifiers were lost.");
+                for (int m = 0; m < modifiers.Count; ++m)
+                {
+                    var modifier = sound.Modifiers[m];
+                    Require(modifier.Type.ToString() == (string)modifiers[m]["Type"], "Sound modifier type changed.");
+                    if (modifier.Type == SoundModifierType.Cone)
+                        Require(modifier.AngleIn == modifiers[m]["AngleIn"].ToObject<float>()
+                            && modifier.AngleBand == modifiers[m]["AngleBand"].ToObject<float>()
+                            && modifier.AttenOut == modifiers[m]["AttenOut"].ToObject<float>(), "Sound cone changed.");
+                }
+                long offset = Convert.ToInt64((string)impl["DataFileOffset"], 16);
+                binary.BaseStream.Position = offset;
+                var audio = binary.ReadSoundData();
+                Require(audio.Length > 44 && binary.BaseStream.Position == offset + 20 + audio.Length - 44,
+                    "Corpus audio payload boundary is incorrect.");
+                binary.BaseStream.Position = offset + 20;
+                byte[] buffer = new byte[65536];
+                int copied = 0;
+                while (copied < audio.Length - 44)
+                {
+                    int count = binary.Read(buffer, 0, Math.Min(buffer.Length, audio.Length - 44 - copied));
+                    Require(count > 0 && audio.AudioBytes.AsSpan(44 + copied, count).SequenceEqual(buffer.AsSpan(0, count)),
+                        "Corpus PCM sample bytes changed.");
+                    copied += count;
+                }
+                ++sounds;
+            }
+            ++projects;
+        }
+        Require(projects > 0, "No Quill projects found in corpus directory.");
+        Console.WriteLine($"[IMM_QUILL_CORPUS] Passed {projects} project metadata trees, {sounds} PCM sounds and {pictures} picture settings.");
     }
 
     private static void Require(bool condition, string message)
