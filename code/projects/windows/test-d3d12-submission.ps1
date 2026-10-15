@@ -128,7 +128,6 @@ $evidenceFiles = @(
     'd3d12-cubemap-strip-gamma-face5.ppm',
     'd3d12-player.log',
     'd3d12-bridge.log',
-    'imm-render-graph.log',
     'd3d12-player-scene-static-linear.ppm',
     'd3d12-player-scene-static-gamma.ppm',
     'd3d12-player-scene-pretessellated-linear.ppm',
