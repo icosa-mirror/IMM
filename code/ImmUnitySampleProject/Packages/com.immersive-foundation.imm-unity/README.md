@@ -383,3 +383,40 @@ Use these to convert spawn area data into Unity world/view transforms in a reusa
 - `TryGetActiveSpawnAreaViewTargetPose(Transform documentRoot, Transform currentViewTarget, Transform currentHead, bool keepHeadHeightForFloorAreas, out Pose targetPose)`
 
 These helper methods include IMM-to-Unity coordinate conversion and upright/yaw-safe view alignment so camera-rig movement logic can be shared across scenes.
+
+### Loading an IMM reference
+
+File and memory loads accept `ImmDocumentLoadOptions`. The existing overloads keep
+normal visibility and all picture layers. For an Open Brush reference, load with:
+
+```csharp
+var document = manager.LoadDocument(path, new ImmDocumentLoadOptions
+{
+    InitiallyHidden = true,
+    Suppress360Backdrops = true
+});
+// Memory equivalent: manager.LoadDocumentFromMemory(bytes, fileName, options).
+if (document == null) yield break;
+while (document.GetStateInfo().Loading != ImmDocument.LoadingState.Loaded)
+{
+    if (document.GetStateInfo().Loading == ImmDocument.LoadingState.Failed)
+        yield break;
+    yield return null;
+}
+var bounds = document.GetBoundingBox();
+// Compute placement using bounds, then set the instance transform before showing.
+document.SetTransform(referenceRoot.localToWorldMatrix);
+document.Show();
+```
+
+The native document starts hidden before asynchronous loading begins, so it cannot
+flash into view during loading. Wait for `GetStateInfo().Loading == Loaded` before
+reading bounds or calling `Show()`; `IsLoaded` means the handle exists, not that
+asynchronous loading is complete. Bounds use the current document transform
+(identity until changed).
+
+`Suppress360Backdrops` persists for this document instance, including after `Show()`
+and timeline changes. It suppresses every non-flat picture type (mono/stereo
+panoramas and cubemaps), regardless of viewer locking. Flat pictures, including
+viewer-locked flat pictures, remain available. It does not edit layer visibility or
+the IMM file. Options require matching native binaries from the same UPM release.

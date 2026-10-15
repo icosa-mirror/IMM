@@ -21,6 +21,13 @@
 
 namespace ImmPlayer {
 
+    // Applied before a document enters the asynchronous load/render pipeline.
+    struct LoadOptions
+    {
+        bool initiallyHidden = false;
+        bool suppress360Backdrops = false;
+    };
+
     class Document
     {
     public:
@@ -105,7 +112,8 @@ namespace ImmPlayer {
             ImportType mFileType;
         };
 
-        bool Init(const wchar_t* name, uint32_t id);
+        bool Init(const wchar_t* name, uint32_t id, const LoadOptions & options = {});
+        bool GetSuppress360Backdrops() const { return mSuppress360Backdrops; }
         void End(void);
 
         ImmImporter::Sequence *GetSequence(void);
@@ -488,6 +496,7 @@ namespace ImmPlayer {
         MngrPlayer   mPlayerManager;
         float        mMasterVolume;
         bool         mHidden;
+        bool         mSuppress360Backdrops;
         bool         mWasPaused;
         bool         mHasAudio = false;
         int          mID;

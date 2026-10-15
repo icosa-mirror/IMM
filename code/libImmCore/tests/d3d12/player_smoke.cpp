@@ -177,7 +177,7 @@ static void DrawPictureProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& 
     picture.Deinit();
 }
 
-static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None, int modelColorSpace = -1, ImmCore::piLog* log = nullptr, int panorama = 0, int cubeFace = 4, UINT samples = 8, float opacity = 1.0f, bool orthographic = false)
+static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None, int modelColorSpace = -1, ImmCore::piLog* log = nullptr, int panorama = 0, int cubeFace = 4, UINT samples = 8, float opacity = 1.0f, bool orthographic = false, bool flatPictureOnly = false)
 {
     auto& renderer = host.RendererInRenderEvent();
     constexpr UINT size = 256;
@@ -251,7 +251,13 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         player.RenderMono(ImmCore::ivec2(size, size), 0);
         const auto& perf = player.GetPerformanceInfoForFrame();
         std::printf("IMM_DX12_PLAYER draws=%d paint=%d triangles=%d\n", perf.numDrawCalls, perf.numPaintDrawCalls, perf.numTriangles);
-        if (perf.numPaintDrawCalls <= 0 || perf.numTriangles <= 0) throw std::runtime_error("Scene submitted no paint geometry");
+        if (flatPictureOnly)
+        {
+            if (perf.numPicture2DDrawCalls != 1 || perf.numPicture360DrawCalls != 0 || perf.numTriangles <= 0)
+                throw std::runtime_error("Reference flat picture was not preserved");
+        }
+        else if (perf.numPaintDrawCalls <= 0 || perf.numTriangles <= 0)
+            throw std::runtime_error("Scene submitted no paint geometry");
     }
     if (probe == DepthProbe::ImmWrites)
     {
@@ -597,6 +603,7 @@ int main()
             const char* captures[2][2] = {{"d3d12-player-scene-static-linear.ppm", "d3d12-player-scene-static-gamma.ppm"},
                 {"d3d12-player-scene-pretessellated-linear.ppm", "d3d12-player-scene-pretessellated-gamma.ppm"}};
             RenderScene(host, device.Get(), player, document, captures[int(technique)][int(colorSpace)]);
+            const int expectedFlatPictures = player.GetPerformanceInfoForFrame().numPicture2DDrawCalls;
             const char* depthCaptures[2][2] = {{"d3d12-player-depth-static-linear.ppm", "d3d12-player-depth-static-gamma.ppm"},
                 {"d3d12-player-depth-pretessellated-linear.ppm", "d3d12-player-depth-pretessellated-gamma.ppm"}};
             RenderScene(host, device.Get(), player, document, depthCaptures[int(technique)][int(colorSpace)], DepthProbe::HostOcclusion);
@@ -647,6 +654,59 @@ int main()
             }
             for (UINT samples : {1u, 2u, 4u, 8u})
                 VerifyLayeredTargets(host, device.Get(), samples, nullptr, 0, &player, document, int(technique)*2+int(colorSpace));
+            if (technique == ImmImporter::Drawing::PaintRenderingTechnique::Static && int(colorSpace) == 0)
+            {
+                player.Hide(document);
+                player.GlobalWork(true, 10000);
+                // Exercise both load paths with policy installed before the first load tick.
+                const auto flatPicturePath = std::filesystem::path(IMM_D3D12_SAMPLE_FILE).parent_path() / "urp-content/picture-flat.imm";
+                std::ifstream input(flatPicturePath, std::ios::binary);
+                const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)), {});
+                for (bool fromMemory : {false, true})
+                {
+                    const ImmPlayer::LoadOptions options{true, true};
+                    const int reference = fromMemory
+                        ? player.Load(bytes.data(), bytes.size(), L"reference.imm", options)
+                        : player.Load(documentPath.c_str(), options);
+                    if (reference < 0) throw std::runtime_error("Queue reference load");
+                    const auto referenceDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+                    for (;;)
+                    {
+                        player.GlobalRender(ImmCore::trans3d::identity(), ImmCore::trans3d::identity(),
+                            ImmCore::mat4x4::identity(), ImmPlayer::StereoMode::None);
+                        player.GlobalWork(true, 10000);
+                        ImmPlayer::Player::DocumentState state;
+                        player.GetDocumentState(state, reference);
+                        if (state.mPlaybackState != ImmPlayer::Player::PlaybackState::PausedAndHidden)
+                            throw std::runtime_error("Reference became visible during load");
+                        if (state.mLoadingState == ImmPlayer::Player::LoadingState::Loaded) break;
+                        if (state.mLoadingState == ImmPlayer::Player::LoadingState::Failed ||
+                            std::chrono::steady_clock::now() >= referenceDeadline)
+                            throw std::runtime_error("Reference load failed or timed out");
+                        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    }
+                    const auto bounds = player.GetDocumentBBox(reference);
+                    if (!std::isfinite(bounds.mMinX) || bounds.mMinX > bounds.mMaxX)
+                        throw std::runtime_error("Hidden reference bounds unavailable");
+                    auto placement = ImmCore::trans3d::identity();
+                    placement.mTranslation = ImmCore::vec3d(0.01, 0.0, 0.0);
+                    player.SetDocumentToWorld(reference, placement);
+                    const auto placedBounds = player.GetDocumentBBox(reference);
+                    if (std::abs(placedBounds.mMinX - bounds.mMinX - 0.01) > 1e-6)
+                        throw std::runtime_error("Hidden reference placement failed");
+                    player.Show(reference);
+                    player.GlobalWork(true, 10000);
+                    RenderScene(host, device.Get(), player, reference,
+                        fromMemory ? "d3d12-reference-memory.ppm" : "d3d12-reference-file.ppm",
+                        DepthProbe::None, -1, nullptr, 0, 4, 8, 1.0f, false, fromMemory);
+                    const auto & perf = player.GetPerformanceInfoForFrame();
+                    if (perf.numPicture360DrawCalls != 0 || perf.numPicture2DDrawCalls != (fromMemory ? 1 : expectedFlatPictures))
+                        throw std::runtime_error("Reference picture suppression failed");
+                    player.Hide(reference);
+                    player.GlobalWork(true, 10000);
+                }
+                std::printf("IMM_REFERENCE_LOAD PASS: file/memory hidden, bounds, transform, show, picture policy\n");
+            }
             player.UnloadAllSync();
             player.Deinit();
         }

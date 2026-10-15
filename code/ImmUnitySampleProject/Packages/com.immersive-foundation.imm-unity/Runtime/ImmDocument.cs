@@ -4,8 +4,19 @@ using UnityEngine;
 namespace ImmPlayer
 {
     /// <summary>
-    /// Represents a loaded IMM document
-    /// Provides playback control and state management
+    /// Options applied before an IMM document can render. Default values preserve normal loading.
+    /// </summary>
+    public struct ImmDocumentLoadOptions
+    {
+        /// <summary>Keep the document invisible until Show() is called after loading.</summary>
+        public bool InitiallyHidden;
+
+        /// <summary>Omit all 360-degree picture layers from rendering; preserve flat pictures.</summary>
+        public bool Suppress360Backdrops;
+    }
+
+    /// <summary>
+    /// Represents a loaded IMM document and provides playback control and state management.
     /// </summary>
     public class ImmDocument
     {

@@ -161,6 +161,10 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int LoadFromFile([MarshalAs(UnmanagedType.LPUTF8Str)] string fileName);
 
+        [DllImport(DllName)]
+        public static extern int LoadFromFileWithOptions(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string fileName, int initiallyHidden, int suppress360Backdrops);
+
         /// <summary>
         /// Load an IMM document from memory
         /// </summary>
@@ -170,6 +174,10 @@ namespace ImmPlayer
         /// <returns>Document ID, or negative on error</returns>
         [DllImport(DllName)]
         public static extern int LoadFromMemory(string fileName, int size, IntPtr data);
+
+        [DllImport(DllName)]
+        public static extern int LoadFromMemoryWithOptions(string fileName, int size, IntPtr data,
+            int initiallyHidden, int suppress360Backdrops);
 
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]

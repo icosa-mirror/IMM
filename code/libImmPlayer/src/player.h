@@ -69,8 +69,8 @@ namespace ImmPlayer {
                 float mBlue;
             }mBackgrundColor;
         };
-        int  Load(const wchar_t* name);
-        int  Load(const uint8_t* data, uint64_t size, const wchar_t* name);
+        int  Load(const wchar_t* name, const LoadOptions & options = {});
+        int  Load(const uint8_t* data, uint64_t size, const wchar_t* name, const LoadOptions & options = {});
         bool IsDocumentActive(int id) const;
 
         void Unload(int id);
@@ -335,7 +335,7 @@ namespace ImmPlayer {
 
     private:
         void iGlobalWorkLayer(Layer* la, float masterVolum);
-        void iDisplayPreRenderLayer(Layer* la, const ImmCore::trans3d & parentLocation, float parentOpacity, const ImmCore::trans3d & worldToViewer);
+        void iDisplayPreRenderLayer(Layer* la, const ImmCore::trans3d & parentLocation, float parentOpacity, const ImmCore::trans3d & worldToViewer, bool suppress360Backdrops);
         void iUnloadNotInTimeline(Layer* root, ImmCore::piTick now);
         ImmCore::mat4x4 iConvertProjectionMatrix(const ImmCore::mat4x4 & mat);
 

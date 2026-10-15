@@ -1477,7 +1477,7 @@ namespace ImmPlayer
                     if (!iEnvFlagEnabled("IMM_UNITY_SKIP_DISPLAY_PRERENDER"))
                     {
                         iTraceUnityGlobalRender("before-display-prerender-layer");
-                        iDisplayPreRenderLayer(doc->GetSequence()->GetRoot(), doc->GetDocumentToWorld(), 1.0f, mViewerInfo.mWorldToHead);
+                        iDisplayPreRenderLayer(doc->GetSequence()->GetRoot(), doc->GetDocumentToWorld(), 1.0f, mViewerInfo.mWorldToHead, doc->GetSuppress360Backdrops());
                         iTraceUnityGlobalRender("after-display-prerender-layer");
                     }
                     else
@@ -1560,7 +1560,7 @@ namespace ImmPlayer
             mat[12], mat[13], mat[14], mat[15]);
     }
 
-    void Player::iDisplayPreRenderLayer(Layer* la, const trans3d & parentToWorld, float parentOpacity, const trans3d & worldToViewer)
+    void Player::iDisplayPreRenderLayer(Layer* la, const trans3d & parentToWorld, float parentOpacity, const trans3d & worldToViewer, bool suppress360Backdrops)
     {
         if (!la->GetVisible())
             return;
@@ -1587,6 +1587,8 @@ namespace ImmPlayer
         if (lt == Layer::Type::Picture)
         {
             LayerPicture * lp = (LayerPicture*) la->GetImplementation();
+            if (suppress360Backdrops && lp->GetType() != LayerPicture::Image2D)
+                return;
             if (lp->GetIsViewerLocked())
             {
                 // layer transform is in VR space
@@ -1618,7 +1620,7 @@ namespace ImmPlayer
             for (int i = 0; i < num; i++)
             {
                 Layer* lc = la->GetChild(i);
-                iDisplayPreRenderLayer(lc, layerToWorld, laOpacity, worldToViewer);
+                iDisplayPreRenderLayer(lc, layerToWorld, laOpacity, worldToViewer, suppress360Backdrops);
             }
             return;
         }
@@ -2095,7 +2097,7 @@ namespace ImmPlayer
         PopulateDisplayRenderPerfInfo();
     }
 
-    int Player::Load(const wchar_t* name)
+    int Player::Load(const wchar_t* name, const LoadOptions & options)
     {
         if (piwstrlen(name) == 0)
             return -1;
@@ -2115,7 +2117,7 @@ namespace ImmPlayer
 
         new (doc) Document();
 
-        if (!doc->Init(name, static_cast<uint32_t>(id)) )
+        if (!doc->Init(name, static_cast<uint32_t>(id), options) )
             return -1;
 
         int cmdId = static_cast<int>(mCommandList.GetLength());
@@ -2130,7 +2132,7 @@ namespace ImmPlayer
         return static_cast<int>(id);
     }
 
-    int Player::Load(const uint8_t* data, uint64_t size, const wchar_t* name)
+    int Player::Load(const uint8_t* data, uint64_t size, const wchar_t* name, const LoadOptions & options)
     {
         if (data == nullptr || size == 0 || name == nullptr || piwstrlen(name) == 0)
             return -1;
@@ -2145,7 +2147,7 @@ namespace ImmPlayer
 
         new (doc) Document();
 
-        if (!doc->Init(name, static_cast<uint32_t>(id)))
+        if (!doc->Init(name, static_cast<uint32_t>(id), options))
         {
             mDocuments.Free(id);
             return -1;

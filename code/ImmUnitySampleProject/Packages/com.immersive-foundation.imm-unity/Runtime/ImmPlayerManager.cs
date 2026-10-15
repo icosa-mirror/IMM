@@ -653,7 +653,10 @@ namespace ImmPlayer
         /// <summary>
         /// Load an IMM document from a file
         /// </summary>
-        public ImmDocument LoadDocument(string filePath)
+        public ImmDocument LoadDocument(string filePath) => LoadDocument(filePath, default);
+
+        /// <summary>Load with options applied natively before the document can render.</summary>
+        public ImmDocument LoadDocument(string filePath, ImmDocumentLoadOptions options)
         {
             if (!_isInitialized)
             {
@@ -661,7 +664,10 @@ namespace ImmPlayer
                 return null;
             }
 
-            int docId = ImmNativePlugin.LoadFromFile(filePath);
+            int docId = options.InitiallyHidden || options.Suppress360Backdrops
+                ? ImmNativePlugin.LoadFromFileWithOptions(filePath,
+                    options.InitiallyHidden ? 1 : 0, options.Suppress360Backdrops ? 1 : 0)
+                : ImmNativePlugin.LoadFromFile(filePath);
             if (docId < 0)
             {
                 LogError($"Failed to load document from: {filePath}");
@@ -681,7 +687,11 @@ namespace ImmPlayer
         /// <summary>
         /// Load an IMM document from memory
         /// </summary>
-        public ImmDocument LoadDocumentFromMemory(byte[] data, string fileName)
+        public ImmDocument LoadDocumentFromMemory(byte[] data, string fileName) =>
+            LoadDocumentFromMemory(data, fileName, default);
+
+        /// <summary>Load from memory with options applied before the document can render.</summary>
+        public ImmDocument LoadDocumentFromMemory(byte[] data, string fileName, ImmDocumentLoadOptions options)
         {
             if (!_isInitialized)
             {
@@ -692,7 +702,10 @@ namespace ImmPlayer
             IntPtr dataPtr = Marshal.AllocHGlobal(data.Length);
             Marshal.Copy(data, 0, dataPtr, data.Length);
 
-            int docId = ImmNativePlugin.LoadFromMemory(fileName, data.Length, dataPtr);
+            int docId = options.InitiallyHidden || options.Suppress360Backdrops
+                ? ImmNativePlugin.LoadFromMemoryWithOptions(fileName, data.Length, dataPtr,
+                    options.InitiallyHidden ? 1 : 0, options.Suppress360Backdrops ? 1 : 0)
+                : ImmNativePlugin.LoadFromMemory(fileName, data.Length, dataPtr);
 
             if (docId < 0)
             {

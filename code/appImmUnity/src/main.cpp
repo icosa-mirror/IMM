@@ -2073,7 +2073,7 @@ extern "C" void UNITY_INTERFACE_EXPORT End(void)
     gImmUnityPlugin.mBridge.Shutdown();
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(const char *fileName)
+static int iLoadFromFile(const char *fileName, const ImmPlayer::LoadOptions & options)
 {
     if (fileName == nullptr || fileName[0] == '\0')
     {
@@ -2102,7 +2102,7 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(const char *fileName)
             return -1;
         }
         iLog().Printf(LT_DEBUG, L"[IMM_LOAD_PATH] loading UTF-8 filename=\"%ls\"", path.c_str());
-        int result = iPlayer().Load(path.c_str());
+        int result = iPlayer().Load(path.c_str(), options);
         if (result < 0)
         {
             iLog().Printf(LT_ERROR, L"[IMM_LOAD_PATH] Player.Load rejected code=%d filename=\"%ls\"", result, path.c_str());
@@ -2120,7 +2120,17 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(const char *fileName)
     }
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, void* data) // ToDo: need to pass data from managed code to native code.
+extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(const char *fileName)
+{
+    return iLoadFromFile(fileName, {});
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT LoadFromFileWithOptions(const char *fileName, int initiallyHidden, int suppress360Backdrops)
+{
+    return iLoadFromFile(fileName, {initiallyHidden != 0, suppress360Backdrops != 0});
+}
+
+static int iLoadFromMemory(char *fileName, int size, void* data, const ImmPlayer::LoadOptions & options)
 {
 #if defined(__ANDROID__) || defined(ANDROID)
     // See LoadFromFile. Memory-backed loads still enter Player::Load and need
@@ -2145,7 +2155,17 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, v
     return iPlayer().Load(
         static_cast<const uint8_t*>(data),
         static_cast<uint64_t>(size),
-        pistr2ws(fileName));
+        pistr2ws(fileName), options);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, void* data)
+{
+    return iLoadFromMemory(fileName, size, data, {});
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemoryWithOptions(char *fileName, int size, void* data, int initiallyHidden, int suppress360Backdrops)
+{
+    return iLoadFromMemory(fileName, size, data, {initiallyHidden != 0, suppress360Backdrops != 0});
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT IsDocumentActive(int id)

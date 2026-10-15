@@ -79,7 +79,7 @@ namespace ImmPlayer
 
     Document::~Document() {}
 
-    bool Document::Init(const wchar_t* name, uint32_t id)
+    bool Document::Init(const wchar_t* name, uint32_t id, const LoadOptions & options)
     {
         //mLog = log;
 
@@ -94,7 +94,9 @@ namespace ImmPlayer
         mState.mLoadingState = LoadingState::UnloadingCompleted;
         mState.mErrorState = ErrorState::NoError;
         mState.mPlaybackState = PlaybackState::Waiting;
-        mHidden = false;
+        mHidden = options.initiallyHidden;
+        mSuppress360Backdrops = options.suppress360Backdrops;
+        mWasPaused = false;
         mDocumentToWorld = trans3d::identity();
         mMasterVolume = 1.0f;
         mCmdID = -1;
@@ -483,6 +485,12 @@ namespace ImmPlayer
             // update the viewer position in player to rencenter
             // the player needs to save this to do origin calibration when changing spawn areas
             mPlayerManager.Enter(&mSequence, now );
+            if (mHidden)
+            {
+                // Match Hide()/Show(): hold the initial pose while the host places the reference.
+                mWasPaused = mPlayerManager.GetIsPaused();
+                if (!mWasPaused) mPlayerManager.Pause(now);
+            }
             mState.mLoadingState = LoadingState::Loaded;
         }
         else if (st == LoadingState::Loaded)
