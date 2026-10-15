@@ -80,7 +80,13 @@ namespace ImmPlayer.Editor
             UnityEngine.Debug.Log($"[IMM_AUTOBUILD] Android build succeeded: {outputApk}");
         }
 
-        public static void BuildAndroidVulkanSmokePlayer()
+        public static void BuildAndroidVulkanSmokePlayer() => BuildAndroidVulkanSmokePlayers(true, true);
+
+        public static void BuildAndroidVulkanNonXrSmokePlayer() => BuildAndroidVulkanSmokePlayers(true, false);
+
+        public static void BuildAndroidVulkanUrpSmokePlayer() => BuildAndroidVulkanSmokePlayers(false, true);
+
+        private static void BuildAndroidVulkanSmokePlayers(bool buildNonXr, bool buildUrp)
         {
             EnsureBuildTargetSupported(BuildTargetGroup.Android, BuildTarget.Android, "Android");
 
@@ -120,14 +126,20 @@ namespace ImmPlayer.Editor
                     androidXrSettings.InitManagerOnStart = false;
                 }
 
-                BuildPlayer(
-                    BuildTarget.Android,
-                    outputPath,
-                    BuildOptions.Development,
-                    "Android Vulkan non-XR smoke player",
-                    new[] { "IMM_UNITY_ANDROID_VULKAN_CI" });
-                BuildUrpPlayer(BuildTarget.Android, GraphicsDeviceType.Vulkan,
-                    Path.Combine(Path.GetDirectoryName(outputPath), "urp", "ImmUnityUrpSmoke.apk"));
+                if (buildNonXr)
+                {
+                    BuildPlayer(
+                        BuildTarget.Android,
+                        outputPath,
+                        BuildOptions.Development,
+                        "Android Vulkan non-XR smoke player",
+                        new[] { "IMM_UNITY_ANDROID_VULKAN_CI" });
+                }
+                if (buildUrp)
+                {
+                    BuildUrpPlayer(BuildTarget.Android, GraphicsDeviceType.Vulkan,
+                        buildNonXr ? Path.Combine(Path.GetDirectoryName(outputPath), "urp", "ImmUnityUrpSmoke.apk") : outputPath);
+                }
             }
             finally
             {

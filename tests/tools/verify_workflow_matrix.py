@@ -52,7 +52,10 @@ REQUIRED_JOBS = {
         "unity-windows-vulkan-synthetic-stereo": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight hosted Unity Vulkan stereo runner", "Run Unity Vulkan synthetic stereo smoke", "Classify Unity Vulkan synthetic stereo runtime", "Split and verify stereo visual evidence", "Verify Unity Vulkan synthetic stereo log contract", "Classify Unity Vulkan synthetic stereo evidence", "Stage Unity Vulkan synthetic stereo capture evidence", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan synthetic stereo artifacts"],
         "unity-windows-vulkan-ordered-overlay": ["Preflight Unity Vulkan runner", "Run Unity Vulkan ordered overlay smoke", "Classify Unity Vulkan ordered overlay status", "Record Unity Vulkan ordered overlay metrics", "Classify Unity Vulkan ordered overlay visual evidence", "Write Unity Vulkan ordered overlay report", "Stage Unity Vulkan ordered overlay capture evidence", "Verify Unity Vulkan ordered overlay log contract", "Verify Unity Vulkan ordered overlay native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-full-depth": ["Preflight Unity Vulkan runner", "Run Unity Vulkan full depth smoke", "Classify Unity Vulkan full depth status", "Record Unity Vulkan full depth metrics", "Classify Unity Vulkan full depth visual evidence", "Write Unity Vulkan full depth report", "Stage Unity Vulkan full depth capture evidence", "Verify Unity Vulkan full depth log contract", "Verify Unity Vulkan full depth native render contract", "Write CI manifest", "Collect artifact summary"],
-        "unity-android-vulkan": ["Download same-commit Android Unity native plugin", "Stage same-commit Android Unity native plugin", "Prepare Unity Android OpenXR Quest project", "Build Unity Android OpenXR Quest Vulkan player", "Inject same-commit plugin into Unity Android OpenXR Quest shell APK", "Verify Unity Android OpenXR Quest APK contract", "Prepare clean non-XR Unity Android project", "Preflight Unity Android Vulkan runner", "Build Unity Android Vulkan smoke player", "Verify Unity Android APK is non-XR", "Check Firebase Test Lab configuration", "Verify Firebase Adreno device target", "Run Unity Android Vulkan smoke in Firebase Test Lab", "Record Unity Android Vulkan visual metrics", "Write Unity Android Vulkan screenshot report", "Classify Unity Android Vulkan result", "Write CI manifest", "Collect artifact summary", "Upload Unity Android Vulkan artifacts"],
+        "unity-android-quest-player-build": ["Download same-commit Android Unity native plugin", "Stage same-commit Android Unity native plugin", "Prepare Unity Android OpenXR Quest project", "Build Unity Android OpenXR Quest Vulkan player", "Inject same-commit plugin into Unity Android OpenXR Quest shell APK", "Verify Unity Android OpenXR Quest APK contract", "Upload Unity Quest player"],
+        "unity-android-player-build": ["Download same-commit Android Unity native plugin", "Stage same-commit Android Unity native plugin", "Prepare clean non-XR Unity Android project", "Preflight Unity Android Vulkan runner", "Build Unity Android Vulkan smoke player", "Verify Unity Android APK is non-XR", "Upload Android player build evidence"],
+        "unity-android-device-validation": ["Download same-commit Android player", "Check Firebase Test Lab configuration", "Verify Firebase Adreno device target", "Run Unity Android Vulkan smoke in Firebase Test Lab", "Validate Unity Android Vulkan URP in Firebase Test Lab", "Verify unity-android-vulkan/urp rendered-frame evidence", "Upload Android device evidence"],
+        "unity-android-vulkan": ["Download Android build and device evidence", "Require Android build and device validation success", "Record Unity Android Vulkan visual metrics", "Write Unity Android Vulkan screenshot report", "Classify Unity Android Vulkan result", "Write CI manifest", "Collect artifact summary", "Upload Unity Android Vulkan artifacts"],
         "unity-windows-openxr-vr": ["Download same-commit URP OpenXR player", "Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-android-openxr-quest-vr": ["Download same-commit Unity Quest APK", "Preflight Unity Quest runner", "Run Unity Quest URP hardware smoke", "Verify Unity Quest URP log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity Quest URP hardware evidence"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
@@ -501,7 +504,9 @@ def verify_self_hosted_hardware_contract(path: Path, workflow_rel: str, errors: 
         hardware_gated = "inputs.hardware" in body
         if self_hosted and not hardware_gated:
             errors.append(f"{workflow_rel} self-hosted job {job_name} must require inputs.hardware")
-        if hardware_gated and not self_hosted:
+        # A hosted APK producer has no purpose without its hardware-only consumer.
+        hardware_only_builder = workflow_rel == ".github/workflows/ci-engine.yml" and job_name == "unity-android-quest-player-build"
+        if hardware_gated and not self_hosted and not hardware_only_builder:
             errors.append(f"{workflow_rel} hosted job {job_name} must not require inputs.hardware")
 
 
@@ -751,6 +756,43 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
         )
 
 
+def verify_android_parallel_validation_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    if workflow_rel != ".github/workflows/ci-engine.yml":
+        return
+    text = path.read_text(encoding="utf-8")
+    bodies = dict(re.findall(
+        r"^  ([A-Za-z0-9_-]+):\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)", text, re.MULTILINE | re.DOTALL))
+    quest = bodies.get("unity-android-quest-player-build", "")
+    consumer = bodies.get("unity-android-openxr-quest-vr", "")
+    gate = re.search(r"^    if: (.+)$", consumer, re.MULTILINE)
+    if not gate or f"    if: {gate.group(1)}\n" not in quest:
+        errors.append("Android Quest player build must have the same hardware gate as its consumer")
+    if "needs: unity-android-quest-player-build" not in consumer or "name: Intermediate-UnityQuestPlayer" not in consumer:
+        errors.append("Quest hardware validation must consume its independent same-commit player build")
+    build = bodies.get("unity-android-player-build", "")
+    device = bodies.get("unity-android-device-validation", "")
+    aggregate = bodies.get("unity-android-vulkan", "")
+    for body, label in [(build, "build"), (device, "device")]:
+        for token in ["fail-fast: false", "matrix:"]:
+            if token not in body:
+                errors.append(f"Android {label} must run independent matrix variants without cancelling its sibling")
+    for token in ["variant: nonxr", "variant: urp", "BuildAndroidVulkanNonXrSmokePlayer", "BuildAndroidVulkanUrpSmokePlayer", "path: ${{ matrix.shell_apk }}", "name: ImmPlayerPlugin-Unity"]:
+        if token not in build:
+            errors.append(f"Android independent player build missing contract: {token}")
+    for body in [quest, build]:
+        for platform in ["x86_64", "macOS", "OSX", "iOS", "WebGL"]:
+            if f"!code/ImmUnitySampleProject/Packages/**/Plugins/{platform}/**" not in body:
+                errors.append(f"Android shell cache must exclude unrelated {platform} plugins")
+        if "!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so" not in body:
+            errors.append("Android shell cache must exclude the native plugin injected after cache restore")
+    for token in ["needs: unity-android-player-build", "variant: [nonxr, urp]", "matrix.variant == 'nonxr'", "matrix.variant == 'urp'", "if: always() && matrix.variant == 'urp'", "name: Intermediate-UnityAndroid-build-${{ matrix.variant }}"]:
+        if token not in device:
+            errors.append(f"Android device matrix missing contract: {token}")
+    for token in ["always() &&", "needs: [unity-android-player-build, unity-android-device-validation]", "pattern: Intermediate-UnityAndroid-*", "merge-multiple: true", 'test "$BUILD_RESULT" = success', 'test "$DEVICE_RESULT" = success', "name: UnityAndroidVulkan"]:
+        if token not in aggregate:
+            errors.append(f"Android evidence aggregation missing required branch gate: {token}")
+
+
 def verify_unity_editor_version_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
     if workflow_rel != ".github/workflows/ci-engine.yml":
         return
@@ -971,6 +1013,7 @@ def main() -> int:
         verify_release_assets(workflow_path, workflow_rel, errors)
         verify_unity_vulkan_full_depth_display_contract(workflow_path, workflow_rel, errors)
         verify_unity_same_commit_native_plugin_contract(workflow_path, workflow_rel, errors)
+        verify_android_parallel_validation_contract(workflow_path, workflow_rel, errors)
         verify_unity_editor_version_contract(workflow_path, workflow_rel, errors)
         verify_godot_macos_clean_source_build_contract(workflow_path, workflow_rel, errors)
         verify_full_depth_validation_report_contract(workflow_path, workflow_rel, errors)

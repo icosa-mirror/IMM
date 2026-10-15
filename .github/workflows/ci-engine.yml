@@ -2113,14 +2113,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  unity-android-vulkan:
-    name: Unity Android Vulkan
-    if: >-
-      (github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
-      contains(github.event.pull_request.labels.*.name, 'device-ci'))
+  unity-android-quest-player-build:
+    name: Unity Android Quest Player Build
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -2162,7 +2159,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
-          key: UnityAndroidOpenXRQuestShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'tests/unity/**', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+          key: UnityAndroidOpenXRQuestShell-v2-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'tests/unity/**', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so', '!code/ImmUnitySampleProject/Packages/**/Plugins/x86_64/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/macOS/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/OSX/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/iOS/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/WebGL/**', '!code/ImmUnitySampleProject/Packages/**/*.md') }}
 
       - name: Restore Unity Android OpenXR Quest Library cache
         id: cache_unity_android_quest_library
@@ -2291,6 +2288,80 @@ jobs:
           grep -q "android.hardware.vr.headtracking" "$manifest_dump"
           grep -q "com.oculus.supportedDevices" "$manifest_dump"
 
+      - name: Save Unity Android OpenXR Quest Library cache
+        if: always() && steps.unity_android_quest_build.outcome == 'success' && steps.cache_unity_android_quest_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: |
+            .ci-workspace/unity-android-openxr-quest/Library/PackageCache/
+            .ci-workspace/unity-android-openxr-quest/Library/DataStore/
+            .ci-workspace/unity-android-openxr-quest/Library/ArtifactDB
+            .ci-workspace/unity-android-openxr-quest/Library/SourceAssetDB
+            .ci-workspace/unity-android-openxr-quest/Library/ShaderCache/
+            .ci-workspace/unity-android-openxr-quest/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Unity Quest player
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Intermediate-UnityQuestPlayer
+          path: artifacts/unity-android-vulkan
+          if-no-files-found: error
+          retention-days: 14
+
+  unity-android-player-build:
+    name: Unity Android ${{ matrix.variant }} Player Build
+    if: >-
+      (github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: nonxr
+            build_method: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanNonXrSmokePlayer
+            shell_apk: .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+            apk: ImmUnitySmoke.apk
+          - variant: urp
+            build_method: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanUrpSmokePlayer
+            shell_apk: .ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk
+            apk: ImmUnityUrpSmoke.apk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK for APK re-signing
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download same-commit Android Unity native plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmPlayerPlugin-Unity
+          path: artifacts/unity-android-vulkan/native-plugin
+
+      - name: Stage same-commit Android Unity native plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          plugin="$(find artifacts/unity-android-vulkan/native-plugin -name libImmUnityPlugin.so -type f | head -n 1)"
+          if [ -z "$plugin" ]; then
+            echo "Same-commit Android Unity native plugin was not present in ImmPlayerPlugin-Unity"
+            exit 1
+          fi
+          destination="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+          cp "$plugin" "$destination"
+
       - name: Prepare clean non-XR Unity Android project
         run: >
           python tests/tools/prepare_unity_ci_project.py
@@ -2302,10 +2373,8 @@ jobs:
         id: cache_unity_android_vulkan_shell
         uses: actions/cache/restore@v4
         with:
-          path: |
-            .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
-            .ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk
-          key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'tests/unity/**', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+          path: ${{ matrix.shell_apk }}
+          key: UnityAndroidVulkanShell-v2-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'tests/unity/**', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so', '!code/ImmUnitySampleProject/Packages/**/Plugins/x86_64/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/macOS/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/OSX/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/iOS/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/WebGL/**', '!code/ImmUnitySampleProject/Packages/**/*.md') }}
 
       - name: Restore Unity Android Library cache
         id: cache_unity_android_library
@@ -2320,9 +2389,9 @@ jobs:
             .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
             .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
             .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
-          key: UnityLibrary-allowlist-v1-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-allowlist-v2-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-allowlist-v1-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
+            UnityLibrary-allowlist-v2-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
       - name: Restore Unity PackageCache cache
         id: cache_unity_android_packagecache
@@ -2336,13 +2405,13 @@ jobs:
             UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
       - name: Preflight Unity Android Vulkan runner
-        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-android-vulkan/preflight.json
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-android-vulkan/preflight-${{ matrix.variant }}.json
 
       - name: Start live Unity android memory diagnostics
         run: |
           mkdir -p artifacts/unity-android-vulkan
-          nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-android-vulkan/memory-android.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-android-vulkan/memory-android-monitor.log 2>&1 &
-          echo $! > artifacts/unity-android-vulkan/memory-android.pid
+          nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-android-vulkan/memory-${{ matrix.variant }}.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-android-vulkan/memory-${{ matrix.variant }}-monitor.log 2>&1 &
+          echo $! > artifacts/unity-android-vulkan/memory-${{ matrix.variant }}.pid
 
       - name: Build Unity Android Vulkan smoke player
         id: unity_android_vulkan_build
@@ -2358,14 +2427,14 @@ jobs:
           unityVersion: ${{ env.UNITY_ANDROID_VULKAN_VERSION }}
           targetPlatform: Android
           versioning: None
-          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
-          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/.ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+          buildMethod: ${{ matrix.build_method }}
+          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-${{ matrix.variant }}-editor.log -immSmokePlayerPath /github/workspace/${{ matrix.shell_apk }}
 
       - name: Stop live Unity android memory diagnostics
         if: always()
         continue-on-error: true
         timeout-minutes: 1
-        run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-android-vulkan/memory-android.pid --output artifacts/unity-android-vulkan/memory-android.jsonl
+        run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-android-vulkan/memory-${{ matrix.variant }}.pid --output artifacts/unity-android-vulkan/memory-${{ matrix.variant }}.jsonl
 
       - name: Collect Unity Android smoke runner memory diagnostics
         if: always()
@@ -2385,20 +2454,19 @@ jobs:
             docker events --since 30m --until "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
               --filter type=container --filter event=oom \
               --format '{{.Time}} {{.Actor.ID}} {{.Actor.Attributes.image}}' || true
-          } > artifacts/unity-android-vulkan/runner-memory-android-smoke.log 2>&1
+          } > artifacts/unity-android-vulkan/runner-memory-${{ matrix.variant }}-smoke.log 2>&1
 
       - name: Save Unity Android Vulkan shell APK cache
         if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true' && steps.unity_android_vulkan_build.outcome == 'success'
         uses: actions/cache/save@v4
         with:
-          path: |
-            .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
-            .ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk
+          path: ${{ matrix.shell_apk }}
           # Reuse the pre-build key. Unity mutates project files during a build,
           # so recomputing hashFiles here would save under an unrestorable key.
           key: ${{ steps.cache_unity_android_vulkan_shell.outputs.cache-primary-key }}
 
       - name: Inject same-commit plugin into Unity Android Vulkan shell APK
+        if: matrix.variant == 'nonxr'
         shell: bash
         run: |
           set -euo pipefail
@@ -2443,6 +2511,7 @@ jobs:
           "$build_tools/apksigner" verify --verbose "$output_apk"
 
       - name: Inject same-commit plugin into Unity Android Vulkan URP shell APK
+        if: matrix.variant == 'urp'
         shell: bash
         run: |
           set -euo pipefail
@@ -2490,15 +2559,74 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          apk="artifacts/unity-android-vulkan/ImmUnitySmoke.apk"
+          apk="artifacts/unity-android-vulkan/${{ matrix.apk }}"
           build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          manifest_dump="artifacts/unity-android-vulkan/android-manifest.txt"
+          manifest_dump="artifacts/unity-android-vulkan/android-${{ matrix.variant }}-manifest.txt"
           "$build_tools/aapt" dump xmltree "$apk" AndroidManifest.xml | tee "$manifest_dump"
           grep -q "android.intent.category.LAUNCHER" "$manifest_dump"
           if grep -Eiq "oculus|openxr|vr\.headtracking|HAND_TRACKING" "$manifest_dump"; then
             echo "Unity Android Vulkan 2D APK still contains XR manifest declarations"
             exit 1
           fi
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_unity_android_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Android Library cache
+        if: always() && steps.cache_unity_android_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: |
+            .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/DataStore/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ArtifactDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v2-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Android player build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Intermediate-UnityAndroid-build-${{ matrix.variant }}
+          path: artifacts/unity-android-vulkan
+          if-no-files-found: error
+          retention-days: 14
+
+  unity-android-device-validation:
+    name: Unity Android ${{ matrix.variant }} Firebase Validation
+    if: >-
+      (github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))
+    needs: unity-android-player-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [nonxr, urp]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download same-commit Android player
+        uses: actions/download-artifact@v4
+        with:
+          name: Intermediate-UnityAndroid-build-${{ matrix.variant }}
+          path: artifacts/unity-android-vulkan
 
       - name: Check Firebase Test Lab configuration
         env:
@@ -2551,6 +2679,7 @@ jobs:
           ffmpeg -version
 
       - name: Run Unity Android Vulkan smoke in Firebase Test Lab
+        if: matrix.variant == 'nonxr'
         timeout-minutes: 30
         continue-on-error: true
         shell: bash
@@ -2601,6 +2730,7 @@ jobs:
           --client-label "IMM Unity Android Vulkan"
 
       - name: Validate Unity Android Vulkan URP in Firebase Test Lab
+        if: matrix.variant == 'urp'
         timeout-minutes: 30
         shell: bash
         run: >
@@ -2629,13 +2759,58 @@ jobs:
           --client-label "IMM Unity Android Vulkan URP"
 
       - name: Verify unity-android-vulkan/urp rendered-frame evidence
-        if: always()
+        if: always() && matrix.variant == 'urp'
         shell: pwsh
         run: |
           $sample = Get-ChildItem -Path artifacts/unity-android-vulkan/urp -Recurse -Filter performance-measurements-raw.json -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $sample) { throw "Missing rendered-frame performance evidence" }
           python tests/tools/verify_frame_sample.py $sample.FullName --output artifacts/unity-android-vulkan/urp/performance-verdict.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload Android device evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Intermediate-UnityAndroid-device-${{ matrix.variant }}
+          path: artifacts/unity-android-vulkan
+          if-no-files-found: error
+          retention-days: 14
+
+  unity-android-vulkan:
+    name: Unity Android Vulkan
+    if: >-
+      always() && (github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))
+    needs: [unity-android-player-build, unity-android-device-validation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download Android build and device evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Intermediate-UnityAndroid-*
+          merge-multiple: true
+          path: artifacts/unity-android-vulkan
+
+      - name: Require Android build and device validation success
+        if: always()
+        env:
+          BUILD_RESULT: ${{ needs.unity-android-player-build.result }}
+          DEVICE_RESULT: ${{ needs.unity-android-device-validation.result }}
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$DEVICE_RESULT" = success
+
+      - name: Install physical-device video validator dependency
+        run: |
+          sudo timeout 120 apt-get update
+          sudo timeout 120 apt-get install --yes ffmpeg
+          ffmpeg -version
+
       - name: Record Unity Android Vulkan visual metrics
         if: always()
         continue-on-error: true
@@ -2813,48 +2988,6 @@ jobs:
         if: always()
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-android-vulkan --require-manifest --output artifacts/unity-android-vulkan/artifact-summary.json
 
-      - name: Save Unity PackageCache cache
-        if: always() && steps.cache_unity_android_packagecache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
-        with:
-          path: .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache
-          key: UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
-
-      - name: Save Unity Android Library cache
-        if: always() && steps.cache_unity_android_library.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
-        with:
-          path: |
-            .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache/
-            .ci-workspace/unity-android-vulkan-nonxr/Library/DataStore/
-            .ci-workspace/unity-android-vulkan-nonxr/Library/ArtifactDB
-            .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
-            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
-            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
-          key: UnityLibrary-allowlist-v1-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
-
-      - name: Save Unity Android OpenXR Quest Library cache
-        if: always() && steps.unity_android_quest_build.outcome == 'success' && steps.cache_unity_android_quest_library.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
-        with:
-          path: |
-            .ci-workspace/unity-android-openxr-quest/Library/PackageCache/
-            .ci-workspace/unity-android-openxr-quest/Library/DataStore/
-            .ci-workspace/unity-android-openxr-quest/Library/ArtifactDB
-            .ci-workspace/unity-android-openxr-quest/Library/SourceAssetDB
-            .ci-workspace/unity-android-openxr-quest/Library/ShaderCache/
-            .ci-workspace/unity-android-openxr-quest/Library/ShaderCache.db
-          key: UnityLibrary-allowlist-v1-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
-
       - name: Upload Unity Android Vulkan artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -2867,7 +3000,7 @@ jobs:
   unity-android-openxr-quest-vr:
     name: Unity Quest URP OpenXR VR
     if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
-    needs: unity-android-vulkan
+    needs: unity-android-quest-player-build
     runs-on: [self-hosted, quest, openxr]
     timeout-minutes: 15
     steps:
@@ -2876,7 +3009,7 @@ jobs:
       - name: Download same-commit Unity Quest APK
         uses: actions/download-artifact@v4
         with:
-          name: UnityAndroidVulkan
+          name: Intermediate-UnityQuestPlayer
           path: artifacts/unity-quest-player
 
       - name: Preflight Unity Quest runner
