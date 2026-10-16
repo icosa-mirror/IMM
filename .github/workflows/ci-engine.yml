@@ -2389,9 +2389,9 @@ jobs:
             .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
             .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
             .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
-          key: UnityLibrary-allowlist-v2-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-allowlist-v1-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-allowlist-v2-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
+            UnityLibrary-allowlist-v1-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
       - name: Restore Unity PackageCache cache
         id: cache_unity_android_packagecache
@@ -2593,7 +2593,7 @@ jobs:
             .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
             .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
             .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
-          key: UnityLibrary-allowlist-v2-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-allowlist-v1-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Android player build evidence
         if: always()
