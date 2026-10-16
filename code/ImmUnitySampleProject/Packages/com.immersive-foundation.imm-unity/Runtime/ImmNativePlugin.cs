@@ -696,7 +696,7 @@ namespace ImmPlayer
 
         public string GetName()
         {
-            return Marshal.PtrToStringUni(mName);
+            return Marshal.PtrToStringUTF8(mName);
         }
     }
 
