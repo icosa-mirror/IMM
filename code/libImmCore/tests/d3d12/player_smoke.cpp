@@ -753,6 +753,25 @@ int main()
                 }
                 player.Show(resumeReference);
                 player.GlobalWork(true, 10000);
+                // Chapter commands reuse the same argument slot as explicit clock timestamps.
+                player.SetChapter(resumeReference, 3);
+                player.GlobalWork(true, 10000);
+                ImmCore::piTick beforePause(0), afterPause(0), stopTime(0);
+                player.GetTime(resumeReference, &beforePause, &stopTime);
+                player.Pause(resumeReference);
+                player.GlobalWork(true, 10000);
+                player.GetTime(resumeReference, &afterPause, &stopTime);
+                if (std::abs(ImmCore::piTick::ToSeconds(afterPause - beforePause)) > 0.5)
+                    throw std::runtime_error("Untimed Pause reused a chapter index as its clock timestamp");
+                player.SetChapter(resumeReference, 3);
+                player.GlobalWork(true, 10000);
+                player.GetTime(resumeReference, &beforePause, &stopTime);
+                player.Resume(resumeReference);
+                player.GlobalWork(true, 10000);
+                player.GetTime(resumeReference, &afterPause, &stopTime);
+                if (std::abs(ImmCore::piTick::ToSeconds(afterPause - beforePause)) > 0.5)
+                    throw std::runtime_error("Untimed Resume reused a chapter index as its clock timestamp");
+                std::printf("IMM_UNTIMED_PLAYBACK PASS: chapter arguments cleared by Pause and Resume\n");
                 player.Pause(resumeReference);
                 player.GlobalWork(true, 10000);
                 ImmPlayer::Player::DocumentState resumeState;

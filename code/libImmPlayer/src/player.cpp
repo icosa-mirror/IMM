@@ -2297,6 +2297,7 @@ namespace ImmPlayer
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Pause;
         mCommandList[cmdId].mTarget = id;
+        mCommandList[cmdId].mCommand.mIntArg = 0;
     }
 
     void Player::Pause(int id, uint64_t stopTicks)
@@ -2348,6 +2349,7 @@ namespace ImmPlayer
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Resume;
         mCommandList[cmdId].mTarget = id;
+        mCommandList[cmdId].mCommand.mIntArg = 0;
     }
 
     void Player::Resume(int id, uint64_t startTicks)
