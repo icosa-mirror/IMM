@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 
 #include <functional>
 
@@ -13,6 +14,14 @@ namespace ImmImporter
 class Sequence
 {
 public:
+    struct ImportState
+    {
+        std::atomic<bool> continueLoading{true};
+        std::atomic<unsigned int> activeWorkers{0};
+    };
+    ImportState & GetImportState() { return mImportState; }
+    const ImportState & GetImportState() const { return mImportState; }
+
 
 	typedef enum { NoComicFeatures = 0, ComicFeatures = 1 } FileVersion;
 
@@ -69,6 +78,7 @@ public:
     void SetFrameRate(uint32_t fps); // TODO: this is only temporarily needed before we serialize global framerate at sequence level
 
 private:
+    ImportState mImportState;
     ImmCore::piTArray<Layer*> mLayers; // just a flat array. Hierarchy is captured through the child pointers in LayerGroup
 	ImmCore::piTArray<Asset>  mAssetTable;
     ImmCore::vec3             mBackgroundColor;

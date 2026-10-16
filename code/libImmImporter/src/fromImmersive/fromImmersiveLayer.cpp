@@ -157,7 +157,7 @@ namespace ImmImporter
 
             
 
-        bool Read(Layer *me, piIStream *fp, Sequence *sq, piLog* log, Drawing::PaintRenderingTechnique renderingTechnique, volatile bool *doLoad)
+        bool Read(Layer *me, piIStream *fp, Sequence *sq, piLog* log, Drawing::PaintRenderingTechnique renderingTechnique, const std::atomic<bool> *doLoad)
         {
             if (!*doLoad) return false;
 

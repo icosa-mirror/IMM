@@ -1,3 +1,4 @@
+#include "libImmImporter/src/fromImmersive/fromImmersive.h"
 // CPU-only functional test. Fixture contains groups/spawn areas, no GPU resources.
 #include <chrono>
 #include <cstdio>
@@ -17,6 +18,21 @@ static void require(bool ok, const char * message)
 int wmain(int argc, wchar_t ** argv)
 {
     require(argc == 2, "expected spawn-only IMM fixture path");
+    Sequence firstImport, secondImport;
+    {
+        ImportActivity firstWorker(&firstImport);
+        {
+            ImportActivity secondWorker(&secondImport);
+            require(IsLoadingAsync(&firstImport) && IsLoadingAsync(&secondImport),
+                "independent imports both report their active workers");
+            StopLoadingAsync(&secondImport);
+            require(IsStoppedLoading(&secondImport) && !IsStoppedLoading(&firstImport),
+                "canceling one import does not cancel another");
+        }
+        require(IsLoadingAsync(&firstImport) && !IsLoadingAsync(&secondImport),
+            "finishing one import does not release another import's sequence");
+    }
+    require(!IsLoadingAsync(&firstImport), "import completes only after its own last worker");
     piLog log;
     require(log.Init(L"artifacts/viewpoint-policy-runtime.log", PILOG_TXT), "log init");
     Document doc;

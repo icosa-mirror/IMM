@@ -1,3 +1,4 @@
+#include <memory>
 #include "libImmCore/src/libBasics/piLog.h"
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libBasics/piStreamArrayI.h"
@@ -40,8 +41,6 @@ namespace ImmImporter
             filename, openErrno, osError);
     }
 
-    static volatile bool doLoad = true;
-    static volatile bool doneLoading = true;
 
 
     static bool iReadSceneGraph(piIStream* fp, Sequence* sq, piLog* log, Sequence::Type type, uint16_t caps, Drawing::PaintRenderingTechnique  renderingTechnique)
@@ -65,7 +64,7 @@ namespace ImmImporter
 
         Layer *root = sq->GetRoot();
 
-        if (!fiLayer::Read(root, fp, sq, log, renderingTechnique, &doLoad))
+        if (!fiLayer::Read(root, fp, sq, log, renderingTechnique, &sq->GetImportState().continueLoading))
         {
             log->Printf(LT_ERROR, L"Could not deserialize root.");
             initialSpawnArea.End();
@@ -111,28 +110,28 @@ namespace ImmImporter
     constexpr uint64_t kSig_ResTable = 0x656c626174736552;
 
 
-    bool IsLoadingAsync()
+    bool IsLoadingAsync(const Sequence * sequence)
     {
-        return !doneLoading;
+        return sequence->GetImportState().activeWorkers.load() != 0;
     }
 
-    bool IsStoppedLoading()
+    bool IsStoppedLoading(const Sequence * sequence)
     {
-        return doLoad==false;
+        return !sequence->GetImportState().continueLoading.load();
     }
 
-
-    void StopLoadingAsync()
+    void StopLoadingAsync(Sequence * sequence)
     {
-        doLoad = false;
+        sequence->GetImportState().continueLoading.store(false);
     }
 
     static bool iImportStream(piIStream* fp, const wchar_t* filename, Sequence* sq, piLog* log, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique)
     {
         int numChunks = 0;
 
-        doLoad = true;
-        doneLoading = false;
+        if (sq->GetImportState().activeWorkers.load() == 0)
+            sq->GetImportState().continueLoading.store(true);
+        ImportActivity importActivity(sq);
 
         log->Printf(LT_MESSAGE, L"Importing IMM stream...");
 
@@ -142,9 +141,9 @@ namespace ImmImporter
         bool done = false;
         while (!done)
         {
-            if (doLoad == false)
+            if (sq->GetImportState().continueLoading == false)
             {
-                doneLoading = true;
+
                 return false;
             }
 
@@ -295,9 +294,9 @@ namespace ImmImporter
         // Blocking load all assets needed for first 5 seconds
         for (auto i : sortedLayers)
         {
-            if (doLoad == false)
+            if (sq->GetImportState().continueLoading == false)
             {
-                doneLoading = true;
+
                 return false;
             }
 
@@ -338,7 +337,8 @@ namespace ImmImporter
         }
 
         // Async load assets in order they are needed
-        std::thread assetLoadingThread([sortedLayers, fp, filename, sq, log, colorSpace, renderingTechnique, bufferingTime](void)->bool
+        auto pendingAssets = std::make_shared<ImportActivity>(sq);
+        std::thread assetLoadingThread([sortedLayers, fp, filename, sq, log, colorSpace, renderingTechnique, bufferingTime, pendingAssets](void)->bool
         {
 
             piFile file;
@@ -348,7 +348,7 @@ namespace ImmImporter
                 if (!file.Open(filename, L"rb"))
                 {
                     iLogFileOpenError(log, filename);
-                    doneLoading = true;
+
                     return false;
                 }
                 stream = new piIStreamFile(&file, piIStreamFile::kDefaultFileSize);
@@ -358,9 +358,9 @@ namespace ImmImporter
 
             for (auto i : sortedLayers)
             {
-            if (doLoad == false)
+            if (sq->GetImportState().continueLoading == false)
             {
-                doneLoading = true;
+
                 if (filename != nullptr)
                     {
                         file.Close();
@@ -400,7 +400,6 @@ namespace ImmImporter
 
             delete stream;
 
-            doneLoading = true;
             return true;
         }
         );
@@ -417,8 +416,9 @@ namespace ImmImporter
     {
         int numChunks = 0;
 
-        doLoad = true;
-        doneLoading = false;
+        if (sq->GetImportState().activeWorkers.load() == 0)
+            sq->GetImportState().continueLoading.store(true);
+        ImportActivity importActivity(sq);
 
         log->Printf(LT_MESSAGE, L"Importing IMM stream with collector...");
 
@@ -428,9 +428,9 @@ namespace ImmImporter
         bool done = false;
         while (!done)
         {
-            if (doLoad == false)
+            if (sq->GetImportState().continueLoading == false)
             {
-                doneLoading = true;
+
                 return false;
             }
 
@@ -637,7 +637,6 @@ namespace ImmImporter
 
         sq->Recurse(loadLayerWithCollector, false, false, false, false);
 
-        doneLoading = true;
         return true;
     }
 
@@ -736,13 +735,14 @@ namespace ImmImporter
         if (data == nullptr || sq == nullptr || log == nullptr || collector == nullptr)
             return false;
 
-        doLoad = true;
-        doneLoading = false;
+        if (sq->GetImportState().activeWorkers.load() == 0)
+            sq->GetImportState().continueLoading.store(true);
+        ImportActivity importActivity(sq);
         data->SetLength(0);
         piIStreamArray stream(data);
         if (!iReadDocumentMetadata(&stream, sq, log, renderingTechnique))
         {
-            doneLoading = true;
+
             return false;
         }
 
@@ -784,7 +784,6 @@ namespace ImmImporter
             },
             false, false, false, false);
 
-        doneLoading = true;
         return success;
     }
 

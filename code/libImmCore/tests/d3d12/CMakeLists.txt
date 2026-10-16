@@ -29,6 +29,7 @@ if(IMM_D3D12_PLAYER_SMOKE)
         ../../src/libRender/directx12/piDX12_Renderer.cpp
         ../../src/libRender/directx12/piDX12_CommandContext.cpp)
     target_compile_features(imm_d3d12_player_smoke PRIVATE cxx_std_17)
+    target_link_options(imm_d3d12_player_smoke PRIVATE /DEBUG:FULL)
     target_compile_definitions(imm_d3d12_player_smoke PRIVATE WINDOWS NOMINMAX WIN32_LEAN_AND_MEAN)
     target_include_directories(imm_d3d12_player_smoke PRIVATE "${IMM_ROOT}/code")
     target_compile_definitions(imm_d3d12_player_smoke PRIVATE IMM_D3D12_SAMPLE_FILE=L"${IMM_ROOT}/exampleImmFiles/sample1.imm")

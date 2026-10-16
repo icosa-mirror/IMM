@@ -8,10 +8,24 @@
 namespace ImmImporter
 {
 
-    bool IsLoadingAsync();
+    // One token per active importer/asset worker. The owner must retain the
+    // sequence until every token has been released, including failed imports.
+    class ImportActivity
+    {
+    public:
+        explicit ImportActivity(Sequence * sequence) : mSequence(sequence)
+        { mSequence->GetImportState().activeWorkers.fetch_add(1); }
+        ~ImportActivity() { mSequence->GetImportState().activeWorkers.fetch_sub(1); }
+        ImportActivity(const ImportActivity &) = delete;
+        ImportActivity & operator=(const ImportActivity &) = delete;
+    private:
+        Sequence * mSequence;
+    };
 
-    bool IsStoppedLoading();
-    void StopLoadingAsync();
+    bool IsLoadingAsync(const Sequence * sequence);
+
+    bool IsStoppedLoading(const Sequence * sequence);
+    void StopLoadingAsync(Sequence * sequence);
 
     bool ImportFromDisk(Sequence* sq, ImmCore::piLog* log, const wchar_t* filename, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique, IStrokeCollector* collector);
     bool ImportFromDisk(Sequence* sq, ImmCore::piLog* log, const wchar_t* filename, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique);

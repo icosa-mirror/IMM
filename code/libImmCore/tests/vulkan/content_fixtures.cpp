@@ -119,9 +119,9 @@ void VerifyImport(const std::filesystem::path& path, const Fixture& fixture, piL
         Require(ImmImporter::ImportFromDisk(&sequence, &log, filename.c_str(),
             ImmImporter::Drawing::ColorSpace::Linear, technique), "Import generated fixture");
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        while (ImmImporter::IsLoadingAsync() && std::chrono::steady_clock::now() < deadline)
+        while (ImmImporter::IsLoadingAsync(&sequence) && std::chrono::steady_clock::now() < deadline)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        Require(!ImmImporter::IsLoadingAsync(), "Fixture import timed out");
+        Require(!ImmImporter::IsLoadingAsync(&sequence), "Fixture import timed out");
         int content = 0;
         Require(sequence.Recurse([&](ImmImporter::Layer* layer, int, int, bool) {
             if (layer->GetType() == ImmImporter::Layer::Type::Group ||

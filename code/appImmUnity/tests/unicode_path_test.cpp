@@ -30,7 +30,7 @@ extern "C" __declspec(dllexport) int LoadFromFile(const char * utf8)
             ImmImporter::Drawing::PaintRenderingTechnique::Static)) return -1;
         // The normal importer returns after buffering; keep path/model/log alive
         // until its detached asset loader has finished, just as the player does.
-        while (ImmImporter::IsLoadingAsync())
+        while (ImmImporter::IsLoadingAsync(&sequence))
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         const int layers = static_cast<int>(sequence.GetLayerStorageCount());
         sequence.Deinit(&testLog);

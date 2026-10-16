@@ -1,5 +1,7 @@
 #include <windows.h>
 #include <d3d12.h>
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
 #include <d3d12sdklayers.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -540,8 +542,24 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
     image.close(); if (!image) throw std::runtime_error("Write layered capture");
 }
 
+static LONG WINAPI WriteConcurrentLoadCrashDump(EXCEPTION_POINTERS * exception)
+{
+    MINIDUMP_EXCEPTION_INFORMATION info{GetCurrentThreadId(), exception, FALSE};
+    HANDLE file = CreateFileW(L"d3d12-concurrent-load-crash.dmp", GENERIC_WRITE, 0,
+        nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file != INVALID_HANDLE_VALUE)
+    {
+        MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), file,
+            MiniDumpWithIndirectlyReferencedMemory, &info, nullptr, nullptr);
+        CloseHandle(file);
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 int main()
 {
+    if (std::getenv("IMM_D3D12_BACKGROUND_DOCUMENT"))
+        SetUnhandledExceptionFilter(WriteConcurrentLoadCrashDump);
     try
     {
         ComPtr<ID3D12Debug> debug;
@@ -604,6 +622,32 @@ int main()
                 {"d3d12-player-scene-pretessellated-linear.ppm", "d3d12-player-scene-pretessellated-gamma.ppm"}};
             RenderScene(host, device.Get(), player, document, captures[int(technique)][int(colorSpace)]);
             const int expectedFlatPictures = player.GetPerformanceInfoForFrame().numPicture2DDrawCalls;
+            const char* backgroundPath = std::getenv("IMM_D3D12_BACKGROUND_DOCUMENT");
+            if (backgroundPath && technique == ImmImporter::Drawing::PaintRenderingTechnique::Static && int(colorSpace) == 0)
+            {
+                // Local stress input: keep the first document drawing while a second
+                // importer grows the shared renderer pool on its background thread.
+                const auto backgroundName = std::filesystem::path(backgroundPath).wstring();
+                unsigned concurrentFrames = 0;
+                for (int copy = 0; copy < 2; ++copy)
+                {
+                    const int background = player.Load(backgroundName.c_str(), {true, true});
+                    if (background < 0) throw std::runtime_error("Queue background document load");
+                    const auto backgroundDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(45);
+                    for (;;)
+                    {
+                        RenderScene(host, device.Get(), player, document, "d3d12-concurrent-load.ppm");
+                        ++concurrentFrames;
+                        ImmPlayer::Player::DocumentState backgroundState;
+                        player.GetDocumentState(backgroundState, background);
+                        if (backgroundState.mLoadingState == ImmPlayer::Player::LoadingState::Loaded) break;
+                        if (backgroundState.mLoadingState == ImmPlayer::Player::LoadingState::Failed ||
+                            std::chrono::steady_clock::now() >= backgroundDeadline)
+                            throw std::runtime_error("Background document load failed or timed out");
+                    }
+                }
+                std::printf("IMM_CONCURRENT_LOAD PASS: first document rendered through two background loads (%u frames)\n", concurrentFrames);
+            }
             const char* depthCaptures[2][2] = {{"d3d12-player-depth-static-linear.ppm", "d3d12-player-depth-static-gamma.ppm"},
                 {"d3d12-player-depth-pretessellated-linear.ppm", "d3d12-player-depth-pretessellated-gamma.ppm"}};
             RenderScene(host, device.Get(), player, document, depthCaptures[int(technique)][int(colorSpace)], DepthProbe::HostOcclusion);

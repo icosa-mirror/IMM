@@ -427,9 +427,9 @@ namespace ImmPlayer
                 if (mState.mLoadingState == Document::LoadingState::Loaded)
                 {
                     iInvalidateAuthoringSession();
-                    if (IsLoadingAsync())
+                    if (IsLoadingAsync(&mSequence))
                     {
-                        StopLoadingAsync();
+                        StopLoadingAsync(&mSequence);
                         mState.mLoadingState = LoadingState::StopingLoadingAsync;
                     }
                     else
@@ -450,17 +450,15 @@ namespace ImmPlayer
         {
             mState.mLoadingState = LoadingState::LoadingCPU;
 
-            std::thread loadingThread([this, log, soundEngine, layerPaintRender, layerRenderPicture, layerRenderSound, layerRendererModel, colorSpace, renderingTechnique]()
+            mSequence.GetImportState().continueLoading.store(true);
+            auto loadActivity = std::make_shared<ImportActivity>(&mSequence);
+            std::thread loadingThread([this, log, soundEngine, layerPaintRender, layerRenderPicture, layerRenderSound, layerRendererModel, colorSpace, renderingTechnique, loadActivity = std::move(loadActivity)]() mutable
             {
-                if (!iLoadCPU(log, soundEngine, layerPaintRender, layerRenderPicture, layerRenderSound, layerRendererModel, colorSpace, renderingTechnique))
-                {
-                    mState.mLoadingState = LoadingState::UnloadingCompleted;
-                    mState.mErrorState = ErrorState::FailedCPU;
-                }
-                else
-                {
-                    mState.mLoadingState = LoadingState::LoadingSPU;
-                }
+                const bool loaded = iLoadCPU(log, soundEngine, layerPaintRender, layerRenderPicture, layerRenderSound, layerRendererModel, colorSpace, renderingTechnique);
+                if (!loaded) mState.mErrorState = ErrorState::FailedCPU;
+                loadActivity.reset();
+                // Publish completion last: unloading can reclaim this Document immediately.
+                mState.mLoadingState = loaded ? LoadingState::LoadingSPU : LoadingState::UnloadingCompleted;
             });
 
             loadingThread.detach();
@@ -506,7 +504,7 @@ namespace ImmPlayer
         else if (st == LoadingState::StopingLoadingAsync)
         {
             // wait for the loading thread to finish
-            if (!IsLoadingAsync())
+            if (!IsLoadingAsync(&mSequence))
             {
                 mPlayerManager.Exit();
                 mState.mLoadingState = LoadingState::UnloadingGPU;
@@ -2554,9 +2552,9 @@ namespace ImmPlayer
         const piTick now)
     {
         iInvalidateAuthoringSession();
-        if (IsLoadingAsync())
+        if (IsLoadingAsync(&mSequence))
         {
-            StopLoadingAsync();
+            StopLoadingAsync(&mSequence);
         }
 
         int guard = 0;
@@ -2584,7 +2582,7 @@ namespace ImmPlayer
 
         if (mState.mLoadingState != LoadingState::UnloadingCompleted && log)
         {
-            log->Printf(LT_ERROR, L"Document synchronous unload did not complete for id=%d state=%d", mID, static_cast<int>(mState.mLoadingState));
+            log->Printf(LT_ERROR, L"Document synchronous unload did not complete for id=%d state=%d", mID, static_cast<int>(mState.mLoadingState.load()));
         }
     }
 
@@ -2727,7 +2725,7 @@ namespace ImmPlayer
         if (!mSequence.Recurse(
             [this, log, layerPaintRender, layerRenderPicture, layerRenderModel](Layer* layer, int level, int child, bool instance) -> bool
             {
-                if (IsStoppedLoading()) return false;
+                if (IsStoppedLoading(&mSequence)) return false;
 
                 const Layer::Type layerType = layer->GetType();
                 bool res = true;
@@ -2905,7 +2903,7 @@ namespace ImmPlayer
 
     void Document::CancelLoading(void)
     {
-        StopLoadingAsync();
+        StopLoadingAsync(&mSequence);
     }
 
     float Document::GetVolume(void) const

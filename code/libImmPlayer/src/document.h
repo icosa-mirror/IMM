@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include "spawnAreaState.h"
 
 #include <deque>
@@ -503,8 +504,8 @@ namespace ImmPlayer {
         int          mCmdID;
         struct
         {
-            ErrorState    mErrorState;
-            LoadingState  mLoadingState;
+            std::atomic<ErrorState> mErrorState;
+            std::atomic<LoadingState> mLoadingState;
             PlaybackState mPlaybackState;
             ImmCore::piMutex       mMutex;
         }mState;
