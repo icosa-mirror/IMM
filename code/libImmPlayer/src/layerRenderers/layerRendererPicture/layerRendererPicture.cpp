@@ -187,6 +187,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
     bool LayerRendererPicture::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         if (!mLayerInfo.Init(128, sizeof(iLayerDrawInfo))) // one per layer
             return false;
 
@@ -580,6 +581,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
     void LayerRendererPicture::Deinit(piRenderer* renderer, piLog* log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         // Verify everything is freed for memory leaks
         bool notDeleted = false;
         bool stillUploaded = false;
@@ -651,6 +653,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
     bool LayerRendererPicture::LoadInCPU(piLog* log, Layer* la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         if (!la->GetLoaded()) return true;
 
         LayerPicture* lp = (LayerPicture*)la->GetImplementation();
@@ -677,6 +680,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
     }
     void LayerRendererPicture::UnloadInCPU(piLog* log, Layer* la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         const LayerPicture* lp = (LayerPicture*)la->GetImplementation();
         const uint64_t id = lp->GetGpuId();
         if (id == -1) return;
@@ -686,6 +690,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
     bool LayerRendererPicture::UnloadInGPU(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         const LayerPicture* lp = (LayerPicture*)la->GetImplementation();
         const uint64_t id = lp->GetGpuId();
         if (id == -1) return false;
@@ -704,6 +709,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
     bool LayerRendererPicture::LoadInGPU(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPicture* lp = (LayerPicture*)la->GetImplementation();
         const uint64_t id = lp->GetGpuId();
         iLayerDrawInfo* me = (iLayerDrawInfo*)mLayerInfo.GetAddress(id);
@@ -854,6 +860,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
     void LayerRendererPicture::DisplayPreRender(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la, const frustum3& frus, const trans3d & layerToViewer, float laOpacity)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPicture* lp = (LayerPicture*)la->GetImplementation();
         if (!la->GetLoaded()) return;
 
@@ -906,6 +913,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
     void LayerRendererPicture::DisplayRender(piRenderer* renderer, piLog* log, piBuffer layerStateShaderConstans, int capDelta)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         const uint64_t num = mVisibleLayerInfos.GetLength();
         if (num < 1)
             return;

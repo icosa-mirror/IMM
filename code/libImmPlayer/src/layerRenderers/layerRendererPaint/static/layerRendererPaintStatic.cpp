@@ -229,6 +229,7 @@ namespace ImmPlayer
 
 bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 #if ST_VERTEX_FORMAT == 1
         piAssert( sizeof(DrawingStatic::MyVertexFormat)==28 );
 #else
@@ -380,6 +381,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     void LayerRendererPaintStatic::Deinit(piRenderer* renderer, piLog* log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         for (RetiredDrawing & retired : mRetiredDrawings)
         {
             iSLayerDrawInfoStatic * info = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(retired.mToken);
@@ -431,6 +433,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     void LayerRendererPaintStatic::UnloadInCPU(piLog* log, Layer* la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();
 
         const int numDrawings = lp->GetNumDrawings();
@@ -450,6 +453,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     bool LayerRendererPaintStatic::IsLoadedInGPU(Layer * la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();
         const int numDrawings = lp->GetNumDrawings();
 
@@ -467,6 +471,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     bool LayerRendererPaintStatic::UnloadInGPU(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();
 
         const int numDrawings = lp->GetNumDrawings();
@@ -485,6 +490,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     bool LayerRendererPaintStatic::UnloadInGPU(ImmCore::piRenderer * renderer, ImmCore::piSoundEngine * sound, ImmCore::piLog * log, Layer * la, unsigned int drawingID)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();
         Drawing *dr = lp->GetDrawing(drawingID);
         const int id = dr->GetGpuId();
@@ -496,6 +502,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     bool LayerRendererPaintStatic::LoadInCPU( piLog* log, Layer* la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();
 
         const int numDrawings = lp->GetNumDrawings();
@@ -526,6 +533,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     bool LayerRendererPaintStatic::LoadInGPU(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         return true;
         /*
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();
@@ -557,6 +565,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     bool LayerRendererPaintStatic::PrepareDrawingReplacementInCPU(Drawing * replacement,
         uint64_t * tokenOut, piLog * log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         if (std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
         {
             log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected CPU replacement failure");
@@ -590,6 +599,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     bool LayerRendererPaintStatic::PrepareDrawingReplacementInGPU(piRenderer * renderer,
         uint64_t token, piLog * log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         if (std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_GPU") != nullptr)
         {
             log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected GPU replacement failure token=%llu",
@@ -605,6 +615,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     bool LayerRendererPaintStatic::PresentDrawingReplacement(Drawing * active,
         Drawing * replacement, uint64_t token, uint64_t revision, piLog * log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         if (std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
         {
             log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected presentation failure token=%llu",
@@ -654,6 +665,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     bool LayerRendererPaintStatic::PresentDrawingCreation(Drawing * created,
         Drawing * prepared, uint64_t token, uint64_t revision, piLog * log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         if (std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
         {
             log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected creation presentation failure token=%llu",
@@ -681,6 +693,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     bool LayerRendererPaintStatic::PrepareDrawingDeletion(Drawing * active, piLog * log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         DrawingStatic * activeStatic = dynamic_cast<DrawingStatic *>(active);
         const int token = activeStatic != nullptr ? activeStatic->GetGpuId() : -1;
         if (token < 0 || !mLayerInfo.IsUsed(static_cast<uint64_t>(token)))
@@ -705,6 +718,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     void LayerRendererPaintStatic::CancelDrawingReplacement(piRenderer * renderer,
         uint64_t token, piLog * log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         if (token >= mLayerInfo.GetMaxLength() || !mLayerInfo.IsUsed(token))
             return;
         iSLayerDrawInfoStatic * info = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(token);
@@ -718,6 +732,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     void LayerRendererPaintStatic::AdvanceDrawingRetirement(piRenderer * renderer, piLog * log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         mRetirementFrame++;
         for (size_t i = 0; i < mRetiredDrawings.size();)
         {
@@ -753,6 +768,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     void LayerRendererPaintStatic::DisplayPreRender(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la, const frustum3& frus, const trans3d & layerToViewer, float laOpacity)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();
         if (!la->GetLoaded()) return;
 
@@ -913,6 +929,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     void LayerRendererPaintStatic::DisplayRender(piRenderer* renderer, piLog* log, piBuffer layerStateShaderConstans, int capDelta)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         const uint64_t num = mVisibleLayerInfos.GetLength();
         if (num < 1) return;
 

@@ -1,4 +1,5 @@
 #pragma once
+#include <mutex>
 
 #include "libImmCore/src/libRender/piRenderer.h"
 #include "libImmImporter/src/document/layer.h"
@@ -48,6 +49,10 @@ namespace ImmPlayer
 		virtual void DisplayPreRender(ImmCore::piRenderer* renderer, ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* la, const ImmCore::frustum3& frus, const ImmCore::trans3d & layerToViewer, float opacity) = 0;
 		virtual void DisplayRender(ImmCore::piRenderer* renderer, ImmCore::piLog* log, ImmCore::piBuffer layerStateShaderConstans, int capDelta) = 0;
     protected:
+        // CPU importer threads can grow/free shared draw-info pools. Render callbacks
+        // must keep their pool pointers valid until the whole operation completes.
+        // Recursive because lazy DisplayPreRender registration calls LoadInCPU.
+        std::recursive_mutex mLayerInfoMutex;
         bool mOrthographicProjection = false;
 	};
 

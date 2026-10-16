@@ -59,6 +59,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 
 	bool LayerRendererModel::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		if (!mLayerInfo.Init(128, sizeof(iLayerDrawInfo))) // one per layer
 			return false;
 
@@ -171,6 +172,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 
 	void LayerRendererModel::Deinit(piRenderer* renderer, piLog* log)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		mVisibleLayerInfos.End();
         mLayerInfo.End();
 
@@ -190,6 +192,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 
 	bool LayerRendererModel::LoadInCPU(piLog* log, Layer* la)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		LayerModel* lp = (LayerModel*)la->GetImplementation();
 
 		bool isNew = false;
@@ -207,6 +210,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 	}
 	void LayerRendererModel::UnloadInCPU(piLog* log, Layer* la)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		const LayerModel* lp = (LayerModel*)la->GetImplementation();
 		const uint64_t id = lp->GetGpuId();
 		mLayerInfo.Free(id);
@@ -215,6 +219,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 
 	bool LayerRendererModel::UnloadInGPU(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		const LayerModel* lp = (LayerModel*)la->GetImplementation();
 		const uint64_t id = lp->GetGpuId();
 		iLayerDrawInfo* me = (iLayerDrawInfo*)mLayerInfo.GetAddress(id);
@@ -227,6 +232,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 
 	bool LayerRendererModel::LoadInGPU(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerModel* lp = (LayerModel*)la->GetImplementation();
 		const uint64_t id = lp->GetGpuId();
 		iLayerDrawInfo* me = (iLayerDrawInfo*)mLayerInfo.GetAddress(id);
@@ -258,6 +264,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 
 	void LayerRendererModel::DisplayPreRender(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la, const frustum3& frus, const trans3d & layerToViewer, float laOpacity)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerModel* lp = (LayerModel*)la->GetImplementation();
 		const uint32_t id = lp->GetGpuId();
 		iLayerDrawInfo* me = (iLayerDrawInfo*)mLayerInfo.GetAddress(id);
@@ -299,6 +306,7 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
 
 	void LayerRendererModel::DisplayRender(piRenderer* renderer, piLog* log, piBuffer layerStateShaderConstans, int capDelta)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         const uint64_t num = mVisibleLayerInfos.GetLength();
         if (num < 1)
             return;

@@ -240,6 +240,7 @@ namespace ImmPlayer
 
 	bool LayerRendererPaintPretessellated::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		//	piAssert(sizeof(MyVertexFormat) == 40);
 
 		mColorSpace = colorSpace;
@@ -366,6 +367,7 @@ namespace ImmPlayer
 
 	void LayerRendererPaintPretessellated::Deinit(piRenderer* renderer, piLog* log)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         // Verify everything is freed for memory leaks
         const uint64_t num = mLayerInfo.GetMaxLength();
         bool notDeleted = false;
@@ -402,6 +404,7 @@ namespace ImmPlayer
 
 	void LayerRendererPaintPretessellated::UnloadInCPU(piLog* log, Layer* la)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		LayerPaint* lp = (LayerPaint*)la->GetImplementation();
 
 		const int numDrawings = lp->GetNumDrawings();
@@ -419,6 +422,7 @@ namespace ImmPlayer
 
     bool LayerRendererPaintPretessellated::IsLoadedInGPU(Layer * la)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();
         const int numDrawings = lp->GetNumDrawings();
 
@@ -436,6 +440,7 @@ namespace ImmPlayer
 
 	bool LayerRendererPaintPretessellated::UnloadInGPU(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		LayerPaint* lp = (LayerPaint*)la->GetImplementation();
 
 		const int numDrawings = lp->GetNumDrawings();
@@ -454,6 +459,7 @@ namespace ImmPlayer
 
     bool LayerRendererPaintPretessellated::UnloadInGPU(ImmCore::piRenderer * renderer, ImmCore::piSoundEngine * sound, ImmCore::piLog * log, Layer * la, unsigned int drawingID)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         LayerPaint* lp = (LayerPaint*)la->GetImplementation();        
         const Drawing *dr = lp->GetDrawing(drawingID);
         const int id = dr->GetGpuId();
@@ -465,6 +471,7 @@ namespace ImmPlayer
 
 	bool LayerRendererPaintPretessellated::LoadInCPU( piLog* log, Layer* la)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		LayerPaint* lp = (LayerPaint*)la->GetImplementation();
 
 		const int numDrawings = lp->GetNumDrawings();
@@ -512,6 +519,7 @@ namespace ImmPlayer
 
 	void LayerRendererPaintPretessellated::DisplayPreRender(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la, const frustum3& frus, const trans3d & layerToViewer, float laOpacity)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		LayerPaint* lp = (LayerPaint*)la->GetImplementation();
         if (!la->GetLoaded()) return;
 
@@ -626,6 +634,7 @@ namespace ImmPlayer
 
 	void LayerRendererPaintPretessellated::DisplayRender(piRenderer* renderer, piLog* log, piBuffer layerStateShaderConstans, int capDelta)
 	{
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		const uint64_t num = mVisibleLayerInfos.GetLength();
 		if (num < 1) return;
 
