@@ -12,7 +12,7 @@ namespace SharpQuill
   public class SoundData
   {
     /// <summary>
-    /// The raw audio file bytes (typically MP3, OGG, or WAV format).
+    /// WAV file bytes containing the decoded embedded PCM samples.
     /// </summary>
     public byte[] AudioBytes { get; set; }
 

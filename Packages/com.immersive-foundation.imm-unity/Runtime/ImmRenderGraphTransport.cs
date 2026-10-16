@@ -53,6 +53,7 @@ namespace ImmPlayer
 
         internal ImmRenderGraphTransport()
         {
+            ImmNativePlugin.InitializeDiagnostics();
             if (IntPtr.Size != 8 || (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D12 &&
                 SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal &&
                 SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan))
@@ -102,10 +103,9 @@ namespace ImmPlayer
             Poll();
             if ((phase != Phase.Created && phase != Phase.Stopped) || HasPending())
                 throw new InvalidOperationException("IMM RenderGraph session is already active.");
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan &&
-                SetRenderGraphPaths(System.IO.Path.Combine(Application.temporaryCachePath, "imm-render-graph.log"),
-                    Application.temporaryCachePath) != 1)
-                throw new InvalidOperationException("IMM Vulkan initialization requires writable session paths and no active legacy session.");
+            if (SetRenderGraphPaths(ImmNativeLogging.ResolveLogPath("imm-render-graph.log"),
+                Application.temporaryCachePath) != 1)
+                throw new InvalidOperationException("IMM RenderGraph initialization requires session paths and no active legacy session.");
             Slot slot = Acquire(0);
             Marshal.WriteInt32(slot.Memory, 28, linearColor ? 0 : 1);
             Marshal.WriteInt32(slot.Memory, 32, 8); // Initial renderer configuration; borrowed attachments determine draw sample counts.

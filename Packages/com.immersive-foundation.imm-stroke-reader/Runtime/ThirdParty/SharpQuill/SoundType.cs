@@ -9,5 +9,6 @@ namespace SharpQuill
   public enum SoundType
   {
     Flat,
+    Positional,
   }
 }

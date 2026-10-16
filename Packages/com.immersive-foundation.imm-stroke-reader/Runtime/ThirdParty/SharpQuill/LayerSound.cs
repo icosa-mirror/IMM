@@ -17,7 +17,7 @@ namespace SharpQuill
     public SoundType SoundType { get; set; }
     public float Gain { get; set; }
     public bool Loop { get; set; }
-    public SoundAttenuation Attenuation { get; set; }
+    public SoundAttenuation Attenuation { get; set; } = new SoundAttenuation();
     public List<SoundModifier> Modifiers { get; set; } = new List<SoundModifier>();
     public SoundData Data { get; set; }
 

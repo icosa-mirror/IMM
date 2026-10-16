@@ -21,6 +21,12 @@ namespace SharpQuill
 
     public string DefaultViewpoint { get; set; }
 
+    /// <summary>Optional tracking-origin identifier; null means unspecified in the source.</summary>
+    public int? TrackingOrigin { get; set; }
+
+    /// <summary>Optional startup playback setting; null preserves legacy absence.</summary>
+    public bool? AnimateOnStart { get; set; }
+
     public int Framerate { get; set; } = 24;
 
     public int ExportStart { get; set; } = 0;

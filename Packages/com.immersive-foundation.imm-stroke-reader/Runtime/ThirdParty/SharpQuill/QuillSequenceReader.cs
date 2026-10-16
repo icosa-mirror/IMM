@@ -72,6 +72,9 @@ namespace SharpQuill
       else
         seq.DefaultViewpoint = ""; // "Root/InitialSpawnArea"
 
+      seq.TrackingOrigin = s["Sequence"]["TrackingOrigin"]?.ToObject<int?>();
+      seq.AnimateOnStart = s["Sequence"]["AnimateOnStart"]?.ToObject<bool?>();
+
       seq.Framerate = ParseInt(s["Sequence"]["Framerate"], seq.Framerate);
       seq.ExportStart = ParseInt(s["Sequence"]["ExportStart"], seq.ExportStart);
       seq.ExportEnd = ParseInt(s["Sequence"]["ExportEnd"], seq.ExportEnd);
@@ -287,6 +290,8 @@ namespace SharpQuill
     /// </summary>
     private static T ParseEnum<T>(JToken v) where T : struct
     {
+      if (v == null || v.Type == JTokenType.Null)
+        return default(T);
       Enum.TryParse((string)v.ToObject(typeof(string)), out T result);
       return result;
     }
@@ -309,8 +314,10 @@ namespace SharpQuill
           return PictureType.TwoD;
         case "2DDepth":
           return PictureType.TwoDDepth;
+        case "360_Equirect_Mono":
         case "360 Equirectangular Mono":
           return PictureType.ThreeSixty_Equirect_Mono;
+        case "360_Equirect_Stereo":
         case "360 Equirectangular Stereo":
           return PictureType.ThreeSixty_Equirect_Stereo;
         default:
@@ -453,17 +460,19 @@ namespace SharpQuill
           }
         case LayerType.Viewpoint:
           {
-            layer = new LayerViewpoint();
+            layer = LayerViewpoint.CreateDefault();
             LayerViewpoint lv = layer as LayerViewpoint;
-            lv.Version = l["Implementation"]["Version"].ToObject<int>();
-            lv.Color = ParseColor(l["Implementation"]["Color"] as JArray);
-            lv.Sphere = ParseVector4(l["Implementation"]["Sphere"] as JArray);
-            lv.AllowTranslationX = l["Implementation"]["AllowTranslationX"].ToObject<bool>();
-            lv.AllowTranslationY = l["Implementation"]["AllowTranslationY"].ToObject<bool>();
-            lv.AllowTranslationZ = l["Implementation"]["AllowTranslationZ"].ToObject<bool>();
-            lv.Exporting = l["Implementation"]["Exporting"].ToObject<bool>();
-            lv.ShowingVolume = l["Implementation"]["ShowingVolume"].ToObject<bool>();
-            lv.TypeStr = l["Implementation"]["TypeStr"].ToObject<string>();
+            var impl = l["Implementation"] as JObject ?? new JObject();
+            lv.Version = ParseInt(impl["Version"], lv.Version);
+            lv.Color = ParseColor(impl["Color"] as JArray, lv.Color);
+            if (impl["Sphere"] is JArray sphere)
+              lv.Sphere = ParseVector4(sphere);
+            lv.AllowTranslationX = ParseBool(impl["AllowTranslationX"], lv.AllowTranslationX);
+            lv.AllowTranslationY = ParseBool(impl["AllowTranslationY"], lv.AllowTranslationY);
+            lv.AllowTranslationZ = ParseBool(impl["AllowTranslationZ"], lv.AllowTranslationZ);
+            lv.Exporting = ParseBool(impl["Exporting"], lv.Exporting);
+            lv.ShowingVolume = ParseBool(impl["ShowingVolume"], lv.ShowingVolume);
+            lv.TypeStr = impl["TypeStr"]?.ToObject<string>() ?? lv.TypeStr;
             break;
           }
         case LayerType.Camera:
@@ -498,7 +507,26 @@ namespace SharpQuill
               ls.DataFileOffset = ParseHexLong(impl["DataFileOffset"], ls.DataFileOffset);
               ls.Gain = ParseFloat(impl["Gain"], 1.0f);
               ls.Loop = ParseBool(impl["Loop"], false);
-              // TODO: Parse SoundType, Attenuation, Modifiers if needed
+              ls.SoundType = ParseEnum<SoundType>(impl["Type"]);
+              if (impl["Attenuation"] is JObject attenuation)
+              {
+                ls.Attenuation.Mode = ParseEnum<SoundAttenuationMode>(attenuation["Mode"]);
+                ls.Attenuation.Minimum = ParseFloat(attenuation["Minimum"]);
+                ls.Attenuation.Maximum = ParseFloat(attenuation["Maximum"]);
+              }
+              if (impl["Modifiers"] is JArray modifiers)
+              {
+                foreach (JObject modifier in modifiers)
+                {
+                  ls.Modifiers.Add(new SoundModifier
+                  {
+                    Type = ParseEnum<SoundModifierType>(modifier["Type"]),
+                    AngleIn = ParseFloat(modifier["AngleIn"]),
+                    AngleBand = ParseFloat(modifier["AngleBand"]),
+                    AttenOut = ParseFloat(modifier["AttenOut"])
+                  });
+                }
+              }
             }
             break;
           }

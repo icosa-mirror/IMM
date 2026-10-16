@@ -9,5 +9,8 @@ namespace SharpQuill
   public class SoundModifier
   {
     public SoundModifierType Type { get; set; }
+    public float AngleIn { get; set; }
+    public float AngleBand { get; set; }
+    public float AttenOut { get; set; }
   }
 }
