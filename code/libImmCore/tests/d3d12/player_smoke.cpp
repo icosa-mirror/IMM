@@ -662,6 +662,7 @@ int main()
                 const auto flatPicturePath = std::filesystem::path(IMM_D3D12_SAMPLE_FILE).parent_path() / "urp-content/picture-flat.imm";
                 std::ifstream input(flatPicturePath, std::ios::binary);
                 const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)), {});
+                int resumeReference = -1;
                 for (bool fromMemory : {false, true})
                 {
                     const ImmPlayer::LoadOptions options{true, true};
@@ -669,6 +670,7 @@ int main()
                         ? player.Load(bytes.data(), bytes.size(), L"reference.imm", options)
                         : player.Load(documentPath.c_str(), options);
                     if (reference < 0) throw std::runtime_error("Queue reference load");
+                    resumeReference = reference;
                     const auto referenceDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
                     for (;;)
                     {
@@ -705,6 +707,34 @@ int main()
                     player.Hide(reference);
                     player.GlobalWork(true, 10000);
                 }
+                player.Show(resumeReference);
+                player.GlobalWork(true, 10000);
+                player.Pause(resumeReference);
+                player.GlobalWork(true, 10000);
+                ImmPlayer::Player::DocumentState resumeState;
+                player.GetDocumentState(resumeState, resumeReference);
+                if (resumeState.mPlaybackState != ImmPlayer::Player::PlaybackState::Paused)
+                    throw std::runtime_error("Resume routing fixture did not pause");
+                player.Unload(document);
+                const auto unloadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+                while (player.IsDocumentActive(document))
+                {
+                    player.GlobalRender(ImmCore::trans3d::identity(), ImmCore::trans3d::identity(),
+                        ImmCore::mat4x4::identity(), ImmPlayer::StereoMode::None);
+                    player.GlobalWork(true, 10000);
+                    if (std::chrono::steady_clock::now() >= unloadDeadline)
+                        throw std::runtime_error("Resume routing fixture unload timed out");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                // Removing the first document moves the last command into its slot.
+                // The surviving document ID now differs from its command index.
+                player.Resume(resumeReference);
+                player.GlobalWork(true, 10000);
+                player.GetDocumentState(resumeState, resumeReference);
+                if (resumeState.mPlaybackState == ImmPlayer::Player::PlaybackState::Paused ||
+                    resumeState.mPlaybackState == ImmPlayer::Player::PlaybackState::PausedAndHidden)
+                    throw std::runtime_error("Resume did not reach surviving document after command compaction");
+                std::printf("IMM_RESUME_ROUTING PASS: surviving document resumes after command compaction\n");
                 std::printf("IMM_REFERENCE_LOAD PASS: file/memory hidden, bounds, transform, show, picture policy\n");
             }
             player.UnloadAllSync();

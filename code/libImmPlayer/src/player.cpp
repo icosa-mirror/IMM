@@ -2347,7 +2347,7 @@ namespace ImmPlayer
         }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Resume;
-        mCommandList[cmdId].mTarget = cmdId;
+        mCommandList[cmdId].mTarget = id;
     }
 
     void Player::Resume(int id, uint64_t startTicks)
