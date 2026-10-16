@@ -307,6 +307,27 @@ jobs:
         if-no-files-found: error
         retention-days: 1
 
+    - name: Stage Windows Unity plugin debug symbols
+      shell: pwsh
+      run: |
+        $symbolDirectory = "artifacts/windows-unity-symbols"
+        New-Item -ItemType Directory -Force -Path $symbolDirectory | Out-Null
+        Copy-Item -LiteralPath code/appImmUnity/exe/ImmUnityPlugin.dll -Destination $symbolDirectory
+        Copy-Item -LiteralPath code/appImmUnity/exe/ImmUnityPlugin.pdb -Destination $symbolDirectory
+        [ordered]@{
+          source_commit = $env:GITHUB_SHA
+          dll_sha256 = (Get-FileHash "$symbolDirectory/ImmUnityPlugin.dll" -Algorithm SHA256).Hash
+          pdb_sha256 = (Get-FileHash "$symbolDirectory/ImmUnityPlugin.pdb" -Algorithm SHA256).Hash
+        } | ConvertTo-Json | Set-Content "$symbolDirectory/binary-fingerprint.json"
+
+    - name: Upload Unity plugin debug symbols
+      uses: actions/upload-artifact@v4
+      with:
+        name: DebugSymbols-ImmUnityPlugin-Windows
+        path: artifacts/windows-unity-symbols
+        if-no-files-found: error
+        retention-days: 14
+
     - name: Package Windows Viewer Artifact
       shell: pwsh
       run: |

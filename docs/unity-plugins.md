@@ -662,3 +662,27 @@ StrokeReader_Init StrokeReader_IsInitialized StrokeReader_LoadFromFile StrokeRea
 StrokeReader_SetChapter StrokeReader_Unload
 ```
 
+
+## Concurrent reference playback and crash symbols
+
+Each imported sequence tracks its own active loading workers and cancellation.
+Unloading waits for that sequence's workers, including its background asset
+stream, rather than another document's completion. Renderer drawing-info pools
+are synchronized across loading, unloading, and rendering so pool growth cannot
+invalidate pointers in an active render callback.
+
+Legacy `Resume(id)` targets the document ID after command compaction. Legacy
+`SetTime` while paused evaluates the requested pose and holds the root clock;
+a silent resume before seeking is no longer required.
+
+Windows CI retains a matching `ImmUnityPlugin.dll` and `ImmUnityPlugin.pdb` pair
+for 14 days in `DebugSymbols-ImmUnityPlugin-Windows`. Its `binary-fingerprint.json`
+records the source commit and both SHA-256 hashes. Download that artifact for
+crash analysis and check the PDB GUID/age against the DLL loaded by the process.
+
+Local native regressions cover resume after document unload/command compaction,
+paused seeking and resuming, and independent import completion/cancellation.
+The D3D12/WARP regression also accepts `IMM_D3D12_BACKGROUND_DOCUMENT` for a
+local large-document load/render/unload stress case and preserves a crash dump
+if that optional stress run faults. These checks do not replace Unity Editor
+integration validation in the consuming project.
