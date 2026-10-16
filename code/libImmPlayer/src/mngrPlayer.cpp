@@ -171,7 +171,7 @@ namespace ImmPlayer
                 if (layer == root && mIsWaitingForInput)
                     break;
                 // stop timelines
-                if (layer->GetIsTimeline() && layer->GetPlaying())
+                if ((layer == root || layer->GetIsTimeline()) && layer->GetPlaying())
                 {
                     layer->SetPlaying(false);
                     layer->SetStopTime(now);
@@ -221,7 +221,7 @@ namespace ImmPlayer
                 if (layer == root && mIsWaitingForInput)
                     break;
                 // restart timelines
-                if (layer->GetWorldVisible() && layer->GetIsTimeline() && ! layer->GetPlaying())
+                if (layer->GetWorldVisible() && (layer == root || layer->GetIsTimeline()) && !layer->GetPlaying())
                 {
                     layer->SetPlaying(true);
                     const piTick currentPosition = layer->GetStopTime() - layer->GetStartTime();
@@ -413,6 +413,8 @@ namespace ImmPlayer
         mLog->Printf(LT_DEBUG, L"now: %lld, SetTime %lld %lld", now, timeSinceStart,timeSinceStop);
 #endif // _DEBUG
         root->ResetActionStatesAt(timeSinceStart);
+        // Waiting belongs to the old stop position; Update recomputes it at the seek target.
+        mIsWaitingForInput = false;
 
         if (isPlaying)
         {

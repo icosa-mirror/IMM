@@ -327,6 +327,13 @@ namespace ImmPlayer
     void Document::SetTime(piTick now, piTick timeSinceStart, piTick timeSinceStop)
     {
         mPlayerManager.SetTime(now, timeSinceStart, timeSinceStop);
+        if (mPlayerManager.GetIsPaused())
+        {
+            // SetTime starts the root timeline so keys can be visited. Evaluate
+            // the new pose and reapply pause, as the tracked seek path does.
+            mPlayerManager.Update(now, true);
+            ++mEvaluationRevision;
+        }
     }
 
     //----------------------------------------------------

@@ -120,6 +120,31 @@ int wmain(int argc, wchar_t ** argv)
     tick(10, &pause);
     require(doc.GetSpawnAreaSnapshot(state, 0, nullptr) == 1 &&
         state.commandStatus == static_cast<int32_t>(PlaybackRequestStatus::Superseded), "legacy command supersedes request");
+    // Legacy SetTime must evaluate and hold a new pose even when already paused.
+    const piTick seekNow = piTick::FromSeconds(10);
+    const piTick seekPosition = piTick::FromSeconds(2.5);
+    doc.SetTime(seekNow, seekPosition, piTick(1));
+    piTick positionBefore, stoppedBefore, positionAfter, stoppedAfter;
+    doc.GetTime(seekNow, &positionBefore, &stoppedBefore);
+    tick(12, &pause);
+    doc.GetTime(piTick::FromSeconds(12), &positionAfter, &stoppedAfter);
+    require(positionBefore == seekPosition && positionAfter == positionBefore,
+        "legacy paused seek holds its requested time after a repeated Pause");
+    require(doc.GetAvailableSpawnAreaIds(0, nullptr) == 3,
+        "legacy paused seek evaluates animated viewpoint visibility");
+    doc.SetTime(piTick::FromSeconds(12), seekPosition, piTick(0));
+    doc.GetTime(piTick::FromSeconds(12), &positionBefore, &stoppedBefore);
+    tick(14, &pause);
+    doc.GetTime(piTick::FromSeconds(14), &positionAfter, &stoppedAfter);
+    require(positionAfter == positionBefore && stoppedAfter > stoppedBefore,
+        "zero-stop paused seek remains paused");
+    Document::Command resume{};
+    resume.mType = Document::Command::Type::Resume;
+    tick(16, &resume);
+    doc.GetTime(piTick::FromSeconds(16), &positionBefore, &stoppedBefore);
+    tick(18);
+    doc.GetTime(piTick::FromSeconds(18), &positionAfter, &stoppedAfter);
+    require(positionAfter > positionBefore, "resume restarts the root clock after a paused seek");
     doc.UnloadSync(nullptr, nullptr, nullptr, nullptr, Drawing::ColorSpace::Linear,
         Drawing::PaintRenderingTechnique::Static, nullptr, nullptr, &log, piTick::FromSeconds(10));
     require(!doc.IsSpawnAreaAvailable(visible), "unloaded viewpoint unavailable");
