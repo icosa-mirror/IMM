@@ -531,8 +531,14 @@ namespace ImmCore {
             piAssert(id >= 0 && id < mBk->mSounds.GetMaxLength() && mBk->mSounds.IsUsed(id));
 
             iSoundEngineAudioSDKBackend::Sound *me = (iSoundEngineAudioSDKBackend::Sound*)mBk->mSounds.GetAddress(id);
-            if (me->mAudioObject->seekToMs(float(double(microSecondOffset) / 1000.)) != EngineError::OK)
-                mLog->Printf(LT_ERROR, L"piSoundEngineAudioSDK::Play(): id = %d, offset %llu SEEK FAILED!", id, microSecondOffset);
+            const EngineError seekError = me->mAudioObject->seekToMs(float(double(microSecondOffset) / 1000.));
+            if (seekError != EngineError::OK)
+                mLog->Printf(LT_ERROR,
+                    L"IMM_AUDIO360_PLAY seek failed: soundId=%d offsetUs=%llu sdkError=%d open=%d sdkPlayState=%d backendState=%d elapsedMs=%.3f durationMs=%.3f channels=%d compressedMemory=%d",
+                    id, microSecondOffset, static_cast<int>(seekError), me->mAudioObject->isOpen() ? 1 : 0,
+                    static_cast<int>(me->mAudioObject->getPlayState()), static_cast<int>(me->mState),
+                    me->mAudioObject->getElapsedTimeInMs(), me->mAudioObject->getAssetDurationInMs(),
+                    me->mNumChannels, me->mCompressedStream != nullptr ? 1 : 0);
 
 #ifdef _DEBUG
             mLog->Printf(LT_DEBUG, L"piSoundEngineAudioSDK::Play(): id = %d, offset %llu", id, microSecondOffset);
@@ -544,8 +550,13 @@ namespace ImmCore {
 #endif
                 return false;
             }
-            if (me->mAudioObject->play() != EngineError::OK)
+            const EngineError playError = me->mAudioObject->play();
+            if (playError != EngineError::OK)
+            {
+                mLog->Printf(LT_ERROR, L"IMM_AUDIO360_PLAY play failed: soundId=%d offsetUs=%llu sdkError=%d seekError=%d",
+                    id, microSecondOffset, static_cast<int>(playError), static_cast<int>(seekError));
                 return false;
+            }
 
             me->mState = PlaybackState::PlayingStarting;
 
