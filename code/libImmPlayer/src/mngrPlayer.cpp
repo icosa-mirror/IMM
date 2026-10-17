@@ -538,7 +538,9 @@ namespace ImmPlayer
                 {
                     const Layer::AnimKey* key = root->GetAnimKey(Layer::AnimProperty::Action, i);
                     const Layer::AnimAction action = static_cast<Layer::AnimAction>(key->mValue.mInt);
-                    if (key->mTime < rootTime)
+                    // A Play marker starts its chapter at the marker itself.
+                    // Stop-only chapters still start after their Stop marker.
+                    if (key->mTime < rootTime || (mNumPlayMarkers > 0 && key->mTime == rootTime))
                     {
                         if (mNumPlayMarkers > 0)
                         {

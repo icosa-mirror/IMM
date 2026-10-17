@@ -686,3 +686,25 @@ The D3D12/WARP regression also accepts `IMM_D3D12_BACKGROUND_DOCUMENT` for a
 local large-document load/render/unload stress case and preserves a crash dump
 if that optional stress run faults. These checks do not replace Unity Editor
 integration validation in the consuming project.
+
+## Chapter marker boundaries
+
+With Play-defined chapters, a Play marker belongs to the new chapter at its
+exact timestamp. Stop-only chapter fallback still begins after each Stop.
+Chapter selection continues to honor authored Stop actions; it does not bypass
+them to force continuous playback.
+
+Bakery reproduces an important adjacent-marker case: its first Play is at tick
+524 (0.041587 seconds), followed by a Stop at tick 525 (0.041667 seconds).
+Selecting zero-based chapter 1 reaches that Stop one tick later. The stopped
+internal clock is held one tick before the Stop, exactly on the Play marker.
+The previous strict comparison therefore reported chapter 0; inclusive Play
+counting fixes the report without removing the Stop. Continue then advances
+within chapter 1. Scene-graph-only native reproduction also verified repeated
+selection of chapters 2 and 3. The CPU viewpoint policy regression covers this
+boundary, Continue, repeated selection and Stop-only chapter fallback.
+
+This reproduction loads no GPU or audio assets. Errors from a separate temporary
+preparation document's loading/cancellation/unloading require their own evidence;
+they are not a result of this chapter reproduction or proof of an audio restart
+failure.

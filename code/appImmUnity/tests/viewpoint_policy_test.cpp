@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <thread>
 #include "libImmPlayer/src/document.h"
+#include "libImmPlayer/src/mngrPlayer.h"
 using namespace ImmCore;
 using namespace ImmImporter;
 using namespace ImmPlayer;
@@ -13,6 +14,80 @@ using namespace ImmPlayer;
 static void require(bool ok, const char * message)
 {
     if (!ok) { std::fprintf(stderr, "[IMM_VIEWPOINT_POLICY_TEST] %s\n", message); std::exit(1); }
+}
+
+static void checkChapterBoundaries(piLog* log)
+{
+    Sequence sequence;
+    require(sequence.Init(Sequence::Type::Comic, 0, vec3(0.0f)), "chapter sequence init");
+    Layer* root = sequence.GetRoot();
+    require(root->Init(Layer::Type::Group, L"chapter-boundaries", true,
+        trans3d::identity(), trans3d::identity(), 1.0f, true,
+        piTick::FromSeconds(1000), 1, 0, log), "chapter root init");
+    std::vector<Layer::AnimKey> keys;
+    auto add = [&](int ticks, Layer::AnimAction action)
+    {
+        Layer::AnimKey key{};
+        key.mTime = piTick(ticks);
+        key.mValue.init();
+        key.mValue.mInt = static_cast<uint32_t>(action);
+        key.mInterpolation = Layer::InterpolationType::None;
+        keys.push_back(key);
+    };
+    // Bakery's first Play is followed by an authored Stop one tick later.
+    add(524, Layer::AnimAction::Play);
+    add(525, Layer::AnimAction::Stop);
+    add(253575, Layer::AnimAction::Play);
+    add(503475, Layer::AnimAction::Play);
+    root->ReplaceAnimKeys(Layer::AnimProperty::Action, std::move(keys));
+    MngrPlayer player;
+    require(player.Init(log), "chapter player init");
+    piTick now = piTick::FromSeconds(100);
+    player.Enter(&sequence, now);
+    for (size_t chapter : { 1, 2, 3, 1, 3, 2 })
+    {
+        now += piTick::FromSeconds(10);
+        require(player.SetChapter(now, chapter), "select chapter at Play marker");
+        player.Update(now);
+        require(player.GetCurrentChapter() == chapter, "exact Play marker belongs to selected chapter");
+        player.Update(now + piTick(1));
+        require(player.GetCurrentChapter() == chapter, "chapter remains correct beside Stop marker");
+        require(player.GetIsWaiting() == (chapter == 1), "selection respects adjacent authored Stop");
+        if (chapter == 1)
+        {
+            piTick position(0), stopped(0);
+            player.GetTime(now + piTick(1), &position, &stopped);
+            require(position == piTick(525), "held position remains the authored Stop time");
+            player.Continue(now + piTick(2));
+            player.Update(now + piTick(3));
+            require(!player.GetIsWaiting() && player.GetCurrentChapter() == 1,
+                "Continue crosses adjacent Stop without changing chapter");
+        }
+    }
+    player.Exit();
+    player.Deinit();
+    sequence.Deinit(log);
+
+    require(sequence.Init(Sequence::Type::Comic, 0, vec3(0.0f)), "stop-only sequence init");
+    root = sequence.GetRoot();
+    require(root->Init(Layer::Type::Group, L"stop-only", true,
+        trans3d::identity(), trans3d::identity(), 1.0f, true,
+        piTick::FromSeconds(1000), 1, 0, log), "stop-only root init");
+    keys.clear();
+    add(100, Layer::AnimAction::Stop);
+    add(200, Layer::AnimAction::Stop);
+    root->ReplaceAnimKeys(Layer::AnimProperty::Action, std::move(keys));
+    require(player.Init(log), "stop-only player init");
+    player.Enter(&sequence, now);
+    require(player.SetChapter(now, 1), "select stop-defined chapter");
+    player.Update(now);
+    require(!player.GetIsWaiting() && player.GetCurrentChapter() == 1, "stop-defined chapter starts after Stop");
+    player.Update(now + piTick(99));
+    require(player.GetIsWaiting() && player.GetCurrentChapter() == 1, "next Stop still ends the current chapter");
+    player.Exit();
+    player.Deinit();
+    sequence.Deinit(log);
+    std::puts("[IMM_CHAPTER_BOUNDARY_TEST] passed");
 }
 
 int wmain(int argc, wchar_t ** argv)
@@ -35,6 +110,7 @@ int wmain(int argc, wchar_t ** argv)
     require(!IsLoadingAsync(&firstImport), "import completes only after its own last worker");
     piLog log;
     require(log.Init(L"artifacts/viewpoint-policy-runtime.log", PILOG_TXT), "log init");
+    checkChapterBoundaries(&log);
     Document doc;
     require(doc.Init(L"viewpoint-policy", 0), "document init");
     auto tick = [&](double seconds, const Document::Command * command = nullptr)
