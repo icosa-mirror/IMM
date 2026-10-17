@@ -532,13 +532,10 @@ namespace ImmCore {
 
             iSoundEngineAudioSDKBackend::Sound *me = (iSoundEngineAudioSDKBackend::Sound*)mBk->mSounds.GetAddress(id);
             const EngineError seekError = me->mAudioObject->seekToMs(float(double(microSecondOffset) / 1000.));
-            if (seekError != EngineError::OK)
-                mLog->Printf(LT_ERROR,
-                    L"IMM_AUDIO360_PLAY seek failed: soundId=%d offsetUs=%llu sdkError=%d open=%d sdkPlayState=%d backendState=%d elapsedMs=%.3f durationMs=%.3f channels=%d compressedMemory=%d",
-                    id, microSecondOffset, static_cast<int>(seekError), me->mAudioObject->isOpen() ? 1 : 0,
-                    static_cast<int>(me->mAudioObject->getPlayState()), static_cast<int>(me->mState),
-                    me->mAudioObject->getElapsedTimeInMs(), me->mAudioObject->getAssetDurationInMs(),
-                    me->mNumChannels, me->mCompressedStream != nullptr ? 1 : 0);
+            // PENDING means the asynchronous decoder accepted the seek, not a failure.
+            if (seekError != EngineError::OK && seekError != EngineError::PENDING)
+                mLog->Printf(LT_ERROR, L"piSoundEngineAudioSDK::Play(): id = %d, offset %llu SEEK FAILED (sdkError=%d)",
+                    id, microSecondOffset, static_cast<int>(seekError));
 
 #ifdef _DEBUG
             mLog->Printf(LT_DEBUG, L"piSoundEngineAudioSDK::Play(): id = %d, offset %llu", id, microSecondOffset);
@@ -550,13 +547,8 @@ namespace ImmCore {
 #endif
                 return false;
             }
-            const EngineError playError = me->mAudioObject->play();
-            if (playError != EngineError::OK)
-            {
-                mLog->Printf(LT_ERROR, L"IMM_AUDIO360_PLAY play failed: soundId=%d offsetUs=%llu sdkError=%d seekError=%d",
-                    id, microSecondOffset, static_cast<int>(playError), static_cast<int>(seekError));
+            if (me->mAudioObject->play() != EngineError::OK)
                 return false;
-            }
 
             me->mState = PlaybackState::PlayingStarting;
 
