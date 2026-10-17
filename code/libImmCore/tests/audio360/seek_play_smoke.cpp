@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
@@ -113,20 +114,31 @@ int main(int argc, char** argv)
             check(sound, initialMs == 1900 ? 140 : initialMs + 120, initialMs == 800 ? 0.3 : 0.1,
                 initialMs == 1900 ? "loop wraps from seek target" : "initial playback", initialMs == 1900 ? 12 : 6);
 
-            require(sound->stop() == EngineError::OK, "stop for restart");
-            seek(sound, 0); // The plugin's Stop() queues this reset.
-            mix(2);
-            const auto restartSeek = sound->seekToMs(0);
-            std::printf("post-stop restart seek: %d\n", static_cast<int>(restartSeek));
-            // Match the backend: play still runs if the SDK rejects the restart seek.
-            require(sound->play() == EngineError::OK, "restart play");
-            check(sound, 120, 0.1, "restart at zero offset");
+            const char* restartMode = std::getenv("IMM_AUDIO360_RESTART_MODE");
+            if (!restartMode) restartMode = "pause";
+            for (float offset : { 1300.0f, 800.0f, 1600.0f, 0.0f })
+            {
+                const bool pauseInstead = std::strcmp(restartMode, "pause") == 0;
+                require((pauseInstead ? sound->pause() : sound->stop()) == EngineError::OK, "stop for restart");
+                if (!pauseInstead && std::strcmp(restartMode, "noreset") != 0)
+                    seek(sound, 0); // The plugin's Stop() queues this reset.
+                mix(2);
+                if (std::strcmp(restartMode, "wake") == 0)
+                    require(sound->play() == EngineError::OK, "wake before seek");
+                const auto restartSeek = sound->seekToMs(offset);
+                std::printf("post-stop restart %.0f ms (%s): seek=%d\n", offset, restartMode, static_cast<int>(restartSeek));
+                if (pauseInstead)
+                    require(restartSeek == EngineError::OK || restartSeek == EngineError::PENDING, "restart seek rejected");
+                require(sound->play() == EngineError::OK, "restart play");
+                check(sound, offset + 120, offset == 1300 ? 0.2 : offset == 800 ? 0.3 : offset == 1600 ? 0.4 : 0.1,
+                    "repeated restart");
+            }
             sound->close();
             engine->destroyAudioObject(sound);
         }
         require(pendingCount > 0, "test did not exercise PENDING seeks");
         TBE_DestroyAudioEngine(engine);
-        std::printf("IMM_AUDIO360_PENDING PASS: initial playback, nonzero initial seek, looping and zero restart (%d pending seeks)\n", pendingCount);
+        std::printf("IMM_AUDIO360_PENDING PASS: initial playback, looping and repeated nonzero/zero restarts (%d pending seeks)\n", pendingCount);
         return 0;
     }
     catch (const std::exception& error)

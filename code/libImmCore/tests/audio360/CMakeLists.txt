@@ -12,3 +12,21 @@ add_custom_command(TARGET imm_audio360_seek_smoke POST_BUILD
 enable_testing()
 add_test(NAME audio360_pending_seek_play COMMAND imm_audio360_seek_smoke)
 set_tests_properties(audio360_pending_seek_play PROPERTIES TIMEOUT 30)
+
+add_executable(imm_audio360_backend_smoke backend_restart_smoke.cpp)
+target_compile_features(imm_audio360_backend_smoke PRIVATE cxx_std_17)
+target_compile_definitions(imm_audio360_backend_smoke PRIVATE WINDOWS NOMINMAX)
+target_include_directories(imm_audio360_backend_smoke PRIVATE "${IMM_ROOT}/code")
+set_property(TARGET imm_audio360_backend_smoke PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+target_link_libraries(imm_audio360_backend_smoke PRIVATE
+    "${IMM_ROOT}/code/libImmCore/bin/x64/$<CONFIG>/libImmCore.lib"
+    "${SDK}/Windows/x64/Audio360.lib" winmm ws2_32)
+add_dependencies(imm_audio360_backend_smoke imm_audio360_seek_smoke)
+add_test(NAME audio360_marker_wav COMMAND imm_audio360_seek_smoke --write-wav "${CMAKE_CURRENT_BINARY_DIR}/marker.wav")
+set_tests_properties(audio360_marker_wav PROPERTIES FIXTURES_SETUP audio360_marker)
+add_test(NAME audio360_backend_restart COMMAND imm_audio360_backend_smoke "${CMAKE_CURRENT_BINARY_DIR}/marker.wav")
+set_tests_properties(audio360_backend_restart PROPERTIES FIXTURES_REQUIRED audio360_marker TIMEOUT 30)
+foreach(buffer IN ITEMS 480 1920)
+    add_test(NAME audio360_backend_restart_${buffer} COMMAND imm_audio360_backend_smoke "${CMAKE_CURRENT_BINARY_DIR}/marker.wav" ${buffer})
+    set_tests_properties(audio360_backend_restart_${buffer} PROPERTIES FIXTURES_REQUIRED audio360_marker TIMEOUT 30)
+endforeach()
