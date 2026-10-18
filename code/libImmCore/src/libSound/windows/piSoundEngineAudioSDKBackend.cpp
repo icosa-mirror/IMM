@@ -4,6 +4,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <atomic>
+#include <cmath>
 
 #include "TBE_AudioEngine.h"
 #include "TBE_AudioObject.h"
@@ -538,7 +539,20 @@ namespace ImmCore {
             piAssert(id >= 0 && id < mBk->mSounds.GetMaxLength() && mBk->mSounds.IsUsed(id));
 
             iSoundEngineAudioSDKBackend::Sound *me = (iSoundEngineAudioSDKBackend::Sound*)mBk->mSounds.GetAddress(id);
-            const EngineError seekError = me->mAudioObject->seekToMs(float(double(microSecondOffset) / 1000.));
+            float offsetMs = float(double(microSecondOffset) / 1000.);
+            const float durationMs = me->mAudioObject->getAssetDurationInMs();
+            if (durationMs > 0 && offsetMs >= durationMs)
+            {
+                if (!me->mAudioObject->loopingEnabled())
+                {
+                    // A timeline seek can land after a short sound has already ended.
+                    // Do not ask the SDK to seek beyond EOF or replay stale audio.
+                    Stop(id);
+                    return true;
+                }
+                offsetMs = std::fmod(offsetMs, durationMs);
+            }
+            const EngineError seekError = me->mAudioObject->seekToMs(offsetMs);
             // PENDING means the asynchronous decoder accepted the seek, not a failure.
             if (seekError != EngineError::OK && seekError != EngineError::PENDING)
                 mLog->Printf(LT_ERROR, L"piSoundEngineAudioSDK::Play(): id = %d, offset %llu SEEK FAILED (sdkError=%d)",

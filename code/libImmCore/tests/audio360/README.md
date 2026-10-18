@@ -33,8 +33,11 @@ both with and without looping. The first round lets stop complete; the second
 calls Stop/Play consecutively without intervening processing. It verifies the
 rendered audio, silence while stopped/paused, public playback states, Resume
 rejection during/after stop, and stopping a paused sound. Captured backend errors
-fail the check. Its marker amplitudes identify the source section; the SDK check
-separately verifies the numerical playback clock.
+fail the check. Offsets beyond the two-second asset also verify that non-looping
+sounds stay stopped and silent (including already playing sounds), looping offsets
+wrap to the expected source section, and valid offsets still work afterward.
+Its marker amplitudes identify the source section; the SDK check separately verifies
+the numerical playback clock.
 
 ## Findings and chosen sequence
 

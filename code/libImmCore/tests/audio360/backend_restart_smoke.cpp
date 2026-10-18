@@ -96,6 +96,27 @@ int main(int argc, char** argv)
             require(engine->GetPlaybackState(id) == piSoundEngine::PlaybackState::Stopped, "stop from paused state");
             require(engine->Play(id, 800000), "restart from paused then stopped");
             check(0.3, "paused-stop restart target");
+            if (!looping)
+            {
+                require(engine->Play(id, 2800000), "expire a currently playing sound");
+                require(mix(6) < 0.0001, "expiring playback stops current audio");
+                require(engine->GetPlaybackState(id) == piSoundEngine::PlaybackState::Stopped, "expired active sound reports stopped");
+                require(engine->Play(id, 800000), "valid play after expiring active audio");
+                check(0.3, "restart after expiring active audio");
+            }
+            require(engine->Stop(id), "stop before out-of-range offset");
+            mix(3);
+            require(engine->Play(id, 2800000), "play offset beyond asset duration");
+            if (looping)
+                check(0.3, "looping offset wraps to asset duration");
+            else
+            {
+                require(mix(6) < 0.0001, "expired non-looping sound stays silent");
+                require(engine->GetPlaybackState(id) == piSoundEngine::PlaybackState::Stopped, "expired non-looping sound reports stopped");
+                require(!engine->Resume(id), "expired sound cannot resume");
+                require(engine->Play(id, 800000), "valid play after expired offset");
+                check(0.3, "valid restart after expired offset");
+            }
             engine->DelSound(id);
         }
         require(errors == 0, "backend logged an audio error");
