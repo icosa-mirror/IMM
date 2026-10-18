@@ -214,11 +214,11 @@ namespace ImmPlayer
 
 		LayerSound* ls = (LayerSound*)la->GetImplementation();
         const int id = ls->GetGpuId();
-        if (id == -1) return false;
+        if (id == -1) return true;
 
 		iSound* me = (iSound*)mSounds.GetAddress(id);
 
-        if (me->mSoundID == -1) return false;
+        if (me->mSoundID == -1) return true;
       
 		sound->DelSound(me->mSoundID);
 		me->mSoundID = -1;

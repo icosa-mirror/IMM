@@ -693,7 +693,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
         std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
         const LayerPicture* lp = (LayerPicture*)la->GetImplementation();
         const uint64_t id = lp->GetGpuId();
-        if (id == -1) return false;
+        if (id == -1) return true;
         iLayerDrawInfo* me = (iLayerDrawInfo*)mLayerInfo.GetAddress(id);
         if (!me->mUploaded)
             return true;

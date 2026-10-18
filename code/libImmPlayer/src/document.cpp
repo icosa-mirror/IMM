@@ -2868,7 +2868,7 @@ namespace ImmPlayer
         };
         if (!mSequence.Recurse(unloadInGPU, false, false, false, false))
         {
-            log->Printf(LT_ERROR, L"Error loading in GPU [%d]...", mID);
+            log->Printf(LT_ERROR, L"Error unloading in GPU [%d]...", mID);
             return false;
         }
 

@@ -449,7 +449,7 @@ namespace ImmPlayer
 		{
 			const Drawing *dr = lp->GetDrawing(j);
 			const int id = dr->GetGpuId();
-            if (id == -1) return false;
+            if (id == -1) continue;
 			iSLayerDrawInfoPretessellated* me = (iSLayerDrawInfoPretessellated*)mLayerInfo.GetAddress(id);
 			me->Download(renderer);
 		}

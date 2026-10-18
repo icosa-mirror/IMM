@@ -222,11 +222,13 @@ static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 
         std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 		const LayerModel* lp = (LayerModel*)la->GetImplementation();
 		const uint64_t id = lp->GetGpuId();
+        if (id == uint64_t(-1)) return true;
 		iLayerDrawInfo* me = (iLayerDrawInfo*)mLayerInfo.GetAddress(id);
 		if (!me->mUploaded)
 			return true;
 
         me->mRenderMesh.End(renderer);
+        me->mUploaded = false;
 		return true;
 	}
 
