@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Iterator
 from pathlib import Path
 
 
@@ -70,25 +71,37 @@ def decode_text(path: Path) -> str:
         return ""
 
 
+def iter_text_lines(path: Path) -> Iterator[str]:
+    try:
+        with path.open(encoding="utf-8", errors="ignore") as stream:
+            for line in stream:
+                yield line.rstrip("\r\n")
+    except OSError:
+        return
+
+
 def find_text_with_markers(root: Path, markers: list[str]) -> tuple[dict[str, list[str]], list[str]]:
     matches = {marker: [] for marker in markers}
     searched: list[str] = []
     if not root.exists():
         return matches, searched
     for path in sorted(p for p in root.rglob("*") if p.is_file() and "logcat" in p.name.lower()):
-        if path.stat().st_size > 25 * 1024 * 1024:
-            continue
-        text = decode_text(path)
-        if not text:
-            continue
         relative = path.relative_to(root).as_posix()
-        searched.append(relative)
-        for marker in markers:
-            for line in text.splitlines():
-                lowered = line.lower()
-                if marker in line and not any(context in lowered for context in INVALID_MARKER_CONTEXTS):
-                    matches[marker].append(relative)
-                    break
+        remaining = set(markers)
+        has_text = False
+        for line in iter_text_lines(path):
+            if not has_text:
+                searched.append(relative)
+                has_text = True
+            lowered = line.lower()
+            if any(context in lowered for context in INVALID_MARKER_CONTEXTS):
+                continue
+            found = {marker for marker in remaining if marker in line}
+            for marker in found:
+                matches[marker].append(relative)
+            remaining.difference_update(found)
+            if not remaining:
+                break
     return matches, searched
 
 
@@ -156,12 +169,10 @@ def collect_diagnostic_lines(root: Path, patterns: list[str] | None = None, limi
     needles = patterns or DIAGNOSTIC_PATTERNS
     lines: list[str] = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
-        if path.stat().st_size > 25 * 1024 * 1024:
-            continue
         if path.suffix.lower() not in TEXT_SUFFIXES and "log" not in path.name.lower():
             continue
         relative = path.relative_to(root).as_posix()
-        for line in decode_text(path).splitlines():
+        for line in iter_text_lines(path):
             if any(needle in line for needle in needles):
                 lines.append(f"{relative}: {line}")
                 if len(lines) >= limit:

@@ -206,18 +206,19 @@ resolve confirmed defects and verify the result before advancing feature work.
 Do not interpret an infrastructure classifier or an unrelated passing job as
 closure of a failed gate.
 
-Status checked at 2026-10-21 13:29 UTC:
+Status updated after the original run completed on 2026-10-21:
 
 | Gate | Evidence and current disposition | Required next evidence |
 |---|---|---|
-| Android standalone GLES, run 39603480459, job 119237704546 | Failed Gradle classpath resolution for Kotlin 1.9.22/1.9.20 before compilation. The same run's separate Android build passed. Infrastructure failure is suspected, not proven. | Retry the affected job and dependents once after the parent workflow becomes terminal; investigate any repeated failure. |
-| Android standalone Vulkan, same run, job 119237705048 | Loaded successfully, then roughly 72 seconds elapsed before the first content presentation; reached player frame 38 before the 90-second capture deadline. No required frame-60 capture was produced. | One targeted retry after the parent workflow becomes terminal; retain capture, visual, live-edit and performance requirements. A repeated failure remains unresolved. |
-| Device evidence report | Failed downstream of the Android jobs. | Regenerate with the affected jobs; retain successful independent jobs. |
+| Android standalone GLES, run 39603480459, job 119237704546 | Failed Gradle classpath resolution for Kotlin 1.9.22/1.9.20 before compilation. The same run's separate Android build passed. Infrastructure failure is suspected, not proven. | Fresh full validation after the confirmed scanner source fix below; investigate any recurrence. |
+| Android standalone Vulkan, same run, job 119237705048 | Loaded successfully, then roughly 72 seconds elapsed before the first content presentation; reached player frame 38 before the 90-second capture deadline. No required frame-60 capture was produced. Reflection run 39607327739 subsequently passed this gate. | Fresh full validation after the scanner fix; retain capture, visual, live-edit and performance requirements. |
+| Unity Android URP, job 119246251194 | Confirmed CI scanner defect: its 26,465,675-byte log exceeded the 25 MiB skip threshold. All 11 required markers are present, but the scanner searched no logs and reported all missing. | Fixed streaming scanner, focused regression and real-log recheck pass locally; fresh CI acceptance pending. |
+| Device/engine evidence reports | Failed downstream of the Android jobs. | Regenerate in the fresh full run. |
 
 1. GitHub's job-rerun API explicitly rejected the Vulkan request with HTTP 403:
    "The workflow run containing this job is already running." The GLES retry
    request was also rejected. Neither request executed a retry. The parent run
-   still has active iOS and Unity Android validation jobs; preserve their work.
+   was then active; neither retry executed. It has since completed with failure.
 2. Earlier same-day run
    [39563833083](https://github.com/icosa-mirror/IMM/actions/runs/39563833083),
    Vulkan job 119106926359, passed the required frame-60 capture about 39 seconds
@@ -235,11 +236,22 @@ Status checked at 2026-10-21 13:29 UTC:
    `artifacts/quill-vulkan-prior-pass/`, with job logs and rerun responses under
    `artifacts/quill-*`. Full reflection validation
    [39607327739](https://github.com/icosa-mirror/IMM/actions/runs/39607327739)
-   is also active; no broad acceptance claim is made while it is pending.
+   passed standalone Vulkan before cancellation was requested following discovery
+   of the scanner source defect. No broad acceptance claim is made.
 4. For a confirmed source failure, cancel the remaining run, fix the cause and
    push a fresh full validation run. For an isolated infrastructure failure,
    preserve independent successes and retry only the affected job and dependents
    once. Never weaken a required gate or rerun indefinitely.
+5. The scanner now streams log lines without excluding large files, both for
+   required markers and bounded diagnostics. It retains rejection of markers
+   quoted in failure/assertion messages. A synthetic log larger than 25 MiB proves
+   markers at the start/end, negated-marker rejection and crash diagnostics near
+   the end. The test failed before the fix and passes afterward. The real URP log
+   recheck finds 11/11 required markers and no explicit test-result failures;
+   `artifacts/quill-urp-scanner-recheck.json` retains that local evidence. This is
+   a scanner repair, not permission to bypass CI or relax rendering acceptance.
+   Because this is a source failure, fresh full validation supersedes the planned
+   isolated retries of the original run.
 
 ## 7. Consolidated documents
 

@@ -117,6 +117,31 @@ def main() -> int:
         )
         diagnostics = tool.collect_diagnostic_lines(root / "ftl-results")
         assert diagnostics == ["device/logcat: 06-12 IMMAVAL renderFrame frame=60 drawCalls=12"]
+
+        # FTL URP logs can exceed 25 MiB. Success and failure evidence must still
+        # be read, including markers near the end of the file.
+        large_root = root / "large-results"
+        large_root.mkdir()
+        large_log = large_root / "logcat"
+        with large_log.open("w", encoding="utf-8") as stream:
+            stream.write("LARGE_LOG_START\n")
+            for _ in range(26 * 1024):
+                stream.write(f"{'x' * 1023}\n")
+            stream.write("Missing required log marker: LARGE_LOG_NEGATED\n")
+            stream.write("LARGE_LOG_END\nFATAL EXCEPTION: large log crash\n")
+        assert large_log.stat().st_size > 25 * 1024 * 1024
+        large_matches, large_searched = tool.find_text_with_markers(
+            large_root, ["LARGE_LOG_START", "LARGE_LOG_END", "LARGE_LOG_NEGATED"],
+        )
+        assert large_searched == ["logcat"]
+        assert large_matches == {
+            "LARGE_LOG_START": ["logcat"],
+            "LARGE_LOG_END": ["logcat"],
+            "LARGE_LOG_NEGATED": [],
+        }
+        assert tool.collect_diagnostic_lines(large_root, limit=1) == [
+            "logcat: FATAL EXCEPTION: large log crash",
+        ]
         summary_path = tool.write_summary(
             args,
             1,
