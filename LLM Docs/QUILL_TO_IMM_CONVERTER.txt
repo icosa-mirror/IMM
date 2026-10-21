@@ -274,17 +274,28 @@ C0 reference inspection and reuse decision (2026-10-21)
    these references: use the sequence rate for the initial mapping and validate
    playback before claiming timing parity.
 9. Reflections survive export. Snoopy's visible Cable1 maps source Z to native 3;
-   Alex has 87 matched reflected layers, including X->1. The current managed
-   authoring transform and Unity export transform ABI cannot express those flags.
-   This is a demonstrated shared capability gap. Preserve reflections through a
-   focused additive extension before claiming broad corpus coverage; initially
-   reject them explicitly rather than silently baking or dropping them.
+   Alex has 87 matched reflected layers, including X->1. This demonstrated a shared
+   capability gap at C0. C1b now preserves the flags through additive offline
+   exports without changing the legacy transform ABI; see its validation above.
 10. In the large animated case, some native base transforms differ from the source
     static Transform field. For example Light/NewLayer0's native transform and its
     first exported transform key equal the first source transform key, not the
     source static translation. Of 24 differing base transforms, 14 match the first
-    source transform key; the other ten remain unresolved. Investigate these C2
-    mappings rather than inferring a global unit conversion or a static-paint blocker.
+    source transform key. A subsequent key audit found that nine of the other ten
+    exactly match later source keys. One BigShip base transform matches neither
+    the static field nor an individual source key. The reason for the chosen base
+    values remains unresolved; key identity alone does not prove startup evaluation.
+    Investigate these C2 mappings rather than inferring a global unit conversion
+    or a static-paint blocker.
+    Across 403 matched animated layers, all 35,213 transform keys preserve counts,
+    timestamps, values/flip (component tolerance 1e-5) and interpolation semantics.
+    Observed source/native interpolation pairs are None 0->0 (10,003), Linear
+    1->1 (24,612), Smoothstep 4->2 (598). Do not cast enum integers directly.
+    EaseIn/EaseOut are named in both source enums but not exercised by this audit.
+    Local evidence: artifacts/quill-reference/alex-transform-key-recheck.json;
+    derived from the existing metadata pair, not a controlled re-export or playback
+    test. This narrows C2's uncertainty to base/startup evaluation rather than lost
+    transform keys in this reference pair.
 11. First C1 slice: implement SharpQuill -> ImmAuthoringDocument -> existing compiler
     for unreflected static paint/groups, using taperecorder and consul-room paint
     as initial references. Preserve local transforms/pivots and transfer native
