@@ -1,6 +1,7 @@
 # IMM content pipeline: shared roadmap
 
-Reviewed against local source revision `ee5e02f3` on 2026-10-21.
+Baseline source review: `ee5e02f3` on 2026-10-21; subsequent implementation and
+validation revisions are recorded below.
 This is the planning entry point for Quill conversion, IMM content extraction and
 runtime authoring. C0 has reference evidence. C1 has an offline static converter,
 exact native paint-subset comparisons, one identical DirectX reference capture and
@@ -10,7 +11,7 @@ The static slice's Unity package-import job has passed. Both standalone Android
 gates now pass in fresh run 39609583383 after earlier dependency/capture failures.
 Full acceptance remains unresolved. The shared reflection extension is locally verified;
 native builds and packaged exports pass on all four platforms. Broader Unity/device
-acceptance awaits fresh full validation. Regression investigation takes priority
+acceptance is limited by the unresolved full-validation result. Regression investigation takes priority
 over further feature work. Unity player/device jobs now pass; final full acceptance
 is blocked by Godot iOS hosted-runner capacity: the original job and its one
 permitted retry never started. Zero-tip fix workflow 39616195981 completed successfully.
@@ -106,8 +107,8 @@ The preferred first candidate is:
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
-| C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; full engine/device CI pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
-| C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI regressions and Windows/Android/macOS/iOS native builds and package exports pass; Unity/device acceptance pending | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
+| C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; final full CI blocked by Godot iOS capacity | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
+| C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; final full CI blocked by Godot iOS capacity | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Reference metadata audit: 35,213 transform keys in 403 layers retain count/time/value/interpolation; base/startup evaluation remains unresolved. Extend C1 for shared drawings/holds, keys, nested timing, viewpoints and root/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
@@ -188,9 +189,10 @@ The preferred first candidate is:
    check passed: 21 project trees, 34 PCM sounds and 35 picture settings. Native
    adapter regression passed against the bundled Windows DLL and `sample1.imm`:
    30 paint layers, with zero/one picture according to the requested mode.
-2. These are reader/adapter data results. Quill-to-IMM conversion, Quill reference
-   playback comparisons, visual/audio parity and new live-edit acceptance remain
-   unverified. C0 has now compared existing local candidate reference files at the
+2. These are reader/adapter data results. C1 additionally has static converter
+   comparisons and one matched DirectX capture below. Animated Quill reference
+   playback, general visual/audio parity and new live-edit acceptance remain
+   unverified. C0 compared existing local candidate reference files at the
    data level; the converter findings record scope, skipped strokes and hashes.
 3. Reproduction commands and reader logs are in the converter findings and
    `code/appImmStrokeReader/tests/SharpQuillReader/README.md` and
@@ -207,8 +209,9 @@ The preferred first candidate is:
    failed Kotlin dependency resolution before compilation; Vulkan rendered but
    timed out at player frame 38 before the required frame-60 capture. Its URP
    evidence failure exposed the scanner defect below. That run is complete;
-   fresh full validation after the scanner fix is pending. No gate or timeout
-   has been weakened.
+   fresh full validation after the scanner fix passed the affected Android and
+   Unity jobs, but remains failed on the separate Godot iOS capacity issue below.
+   No gate or timeout has been weakened.
 5. C1 native visual evidence: taperecorder reference and converted paint-only output
    rendered at 960x540, DirectX, fixed timestep and player frame 60, with matched
    eye-level camera. Captures are pixel-identical, with 4 paint draw calls and 9962
@@ -275,15 +278,17 @@ Status checked at 2026-10-21 14:36 UTC:
    isolated retries of the original run.
 6. Scanner fix `452d2629` is pushed. Fresh full-validation
    [run 39609583383](https://github.com/icosa-mirror/IMM/actions/runs/39609583383)
-   is active. Core Matrix Status passed, including the Firebase wrapper's new
+   completed its second attempt with the capacity-related failure below. Core
+   Matrix Status passed, including the Firebase wrapper's new
    large-log regression (confirmed in the job log). Baseline content and package
    source layout gates also passed. Windows, Android, macOS and iOS native builds
    have passed. Windows job 119254613009 explicitly passed the X/Y/Z
    layer/pivot/key export/import/comparison and legacy ABI checks, the four-brush
    converter and output-preservation checks, and reader/adapter regressions.
    Unity packaging/export verification also passed on all four platforms; the
-   existing iOS registration function is supplied by Objective-C glue. Unity and
-   device acceptance remain pending; feature work remains
+   existing iOS registration function is supplied by Objective-C glue. Subsequent
+   Unity player/device jobs passed; final full-run acceptance remains blocked by
+   Godot iOS capacity. Feature work remains
    paused until regression gates are resolved. These native build results do not
    establish device rendering or Unity integration acceptance.
 7. Both standalone Android jobs in the fresh run are now complete and successful.
@@ -303,11 +308,11 @@ Status checked at 2026-10-21 14:36 UTC:
 9. Fresh full validation completed with only Godot iOS capacity cancellation and
    consequent final evidence aggregation failure. Windows DirectX/Vulkan, macOS
    Metal, Unity iOS, Android non-XR/URP device validation and the independent
-   core/device/engine/GPU reports passed. The permitted isolated retry targets
-   Godot iOS job 119254613104 and dependents, not all passing jobs. Diagnostic
+   core/device/engine/GPU reports passed. The permitted isolated retry targeted
+   Godot iOS and dependents, preserving independent passing jobs. Diagnostic
    evidence: `artifacts/quill-godot-ios-cancelled-annotations.json` and
    `artifacts/quill-scanner-fix-validation-evidence.log`. Full-run acceptance
-   remains open until this retry and final aggregation are complete.
+   remains open after that retry also failed to acquire a runner.
 10. Attempt 2 is now terminal with failure. Godot iOS retry job 119275413801 was
     again cancelled without acquiring a runner (zero steps); its annotation repeats
     the hosted macOS ARM64 capacity constraint. The final evidence job failed on
