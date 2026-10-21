@@ -61,11 +61,50 @@ static class ViewpointConverterChecks
         finally { if (doc > 0) Reader.StrokeReader_Unload(doc); Reader.StrokeReader_End(); }
 
         var preview = JObject.Parse(original);
-        Children(preview)[0]!["Implementation"]!["DataFileOffset"] = "8";
+        string binaryPath = Path.Combine(project, "Quill.qbin");
+        byte[] originalBinary = File.ReadAllBytes(binaryPath);
+        using (var binary = new BinaryWriter(File.Create(binaryPath)))
+        {
+            binary.Write(originalBinary);
+            while (binary.BaseStream.Position < 8) binary.Write((byte)0);
+            for (int index = 0; index < 2; index++)
+            {
+                Children(preview)[index]!["Implementation"]!["DataFileOffset"] = $"0x{binary.BaseStream.Position:X}";
+                binary.Write(new byte[5]); binary.Write((byte)(index == 0 ? 7 : 6)); binary.Write((ushort)0);
+                binary.Write(8u); binary.Write(8u); binary.Write(0u);
+                for (int pixel = 0; pixel < 64; pixel++)
+                {
+                    binary.Write((byte)220); binary.Write((byte)40); binary.Write((byte)90);
+                    if (index == 0) binary.Write((byte)255);
+                }
+            }
+        }
         File.WriteAllText(jsonPath, preview.ToString());
-        Reject("OmittedViewpointPreview");
-        var partial = QuillToImmConverter.ConvertProject(project, output, allowOmittedContent: true);
-        Require(partial.Succeeded && partial.IsPartial && partial.Issues.Any(x => x.Code == "OmittedViewpointPreview"), "Preview omission was not explicit.");
+        var withPreview = QuillToImmConverter.ConvertProject(project, output);
+        Require(withPreview.Succeeded && !withPreview.IsPartial, Describe(withPreview));
+        Require(Reader.StrokeReader_Init(Path.Combine(directory, "viewpoint-preview.log")) == 0, "Reader init failed.");
+        doc = Reader.StrokeReader_LoadFromFile(output);
+        try
+        {
+            for (int index = 1; index <= 2; index++)
+                Require(doc > 0 && Reader.StrokeReader_GetSpawnAreaPreviewInfo(doc, index, out var info) &&
+                    info.width == 8 && info.height == 8 && info.channels == 3 && info.encoding == 3 && info.sourceVersion == 2,
+                    "RGB/RGBA Quill preview did not reach native output.");
+            Require(!Reader.StrokeReader_GetSpawnAreaPreviewInfo(doc, 3, out _), "Absent preview became explicit.");
+        }
+        finally { if (doc > 0) Reader.StrokeReader_Unload(doc); Reader.StrokeReader_End(); }
+        byte[] validBinary = File.ReadAllBytes(binaryPath);
+        File.WriteAllBytes(binaryPath, validBinary.Take(validBinary.Length - 1).ToArray());
+        Reject("ConversionFailed");
+        var allowedMalformed = QuillToImmConverter.ConvertProject(project, output, allowOmittedContent: true);
+        Require(!allowedMalformed.Succeeded, "Omission permission hid a malformed preview.");
+        validBinary[13] = 99; // Preview format byte, offset 8 + 5.
+        File.WriteAllBytes(binaryPath, validBinary);
+        Reject("ConversionFailed");
+        File.WriteAllBytes(binaryPath, originalBinary);
+        Children(preview)[0]!["Implementation"]!["DataFileOffset"] = "FFFFFFFFFFFFFFFF";
+        File.WriteAllText(jsonPath, preview.ToString());
+        Reject("ConversionFailed");
         var missingDefault = JObject.Parse(original);
         missingDefault["Sequence"]!["DefaultViewpoint"] = "Root/Spawns/Excluded";
         File.WriteAllText(jsonPath, missingDefault.ToString());
@@ -77,7 +116,7 @@ static class ViewpointConverterChecks
         File.WriteAllText(jsonPath, unknown.ToString());
         Reject("ConversionFailed");
         File.WriteAllText(jsonPath, original);
-        Console.WriteLine("[IMM_QUILL_VIEWPOINT_TEST] Passed native export flags/gizmo visibility/tracking/sphere/mask/hierarchy/non-first default checks and explicit preview/default fallback diagnostics.");
+        Console.WriteLine("[IMM_QUILL_VIEWPOINT_TEST] Passed native viewpoint/default mapping, RGB/RGBA preview payloads, malformed image guards and explicit default fallback diagnostics.");
 
         void Reject(string code)
         {

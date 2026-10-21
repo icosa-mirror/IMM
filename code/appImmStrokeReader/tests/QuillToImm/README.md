@@ -14,7 +14,10 @@ The suite also exercises immutable viewpoint preview bytes, native RGBA-to-JPEG
 encoding, unchanged encoded JPEG export, structural comparison, and malformed-image
 and image-budget output guards. Reader checks cover file/memory encoded JPEG/PNG,
 version-1 BGR metadata, absent previews, query bounds and exact import/re-export
-payloads. Quill preview payload mapping remains outstanding.
+payloads. Stored Quill RGB/RGBA previews and malformed offset/format/pixel guards
+are covered. `--compare-project` includes preview presence/dimensions/encoding/
+color order, but does not compare decoded JPEG pixels. Fishgym's paired IMM has
+a preview absent from its source project, so it currently fails that stricter check.
 
 1. Run the synthetic native regression suite from the repository root. Use a fresh
    artifact directory for each local run; Windows CI runs this with freshly built DLLs:

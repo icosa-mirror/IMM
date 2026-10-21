@@ -32,7 +32,7 @@ namespace ImmPlayer.Authoring
     {
         public bool Succeeded => Export != null && Export.Succeeded;
         public bool IsPartial => Issues.Any(x => x.Code == "OmittedLayer" || x.Code == "OmittedStartupMetadata" ||
-            x.Code == "OmittedViewpointPreview" || x.Code == "OmittedDefaultViewpoint");
+            x.Code == "OmittedDefaultViewpoint");
         public IReadOnlyList<QuillToImmIssue> Issues { get; }
         public ImmAuthoringExportResult Export { get; }
 
@@ -180,11 +180,8 @@ namespace ImmPlayer.Authoring
                 {
                     string offset = ((string)viewSettings["DataFileOffset"]).Trim();
                     if (offset.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) offset = offset.Substring(2);
-                    if (!ulong.TryParse(offset, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong value))
+                    if (!ulong.TryParse(offset, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong value) || value > long.MaxValue)
                         throw new InvalidDataException($"Invalid viewpoint preview offset at {path}.");
-                    if (value != 0)
-                        Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
-                            "OmittedViewpointPreview", path, "Embedded viewpoint preview images are not yet supported.");
                 }
             }
             if (type == "Paint" && !visible)
@@ -365,6 +362,7 @@ namespace ImmPlayer.Authoring
                 properties.SpawnAreaAllowTranslationX = viewpoint.AllowTranslationX;
                 properties.SpawnAreaAllowTranslationY = viewpoint.AllowTranslationY;
                 properties.SpawnAreaAllowTranslationZ = viewpoint.AllowTranslationZ;
+                properties.SpawnAreaPreview = ReadViewpointPreview(reader, viewpoint.DataFileOffset, path);
                 properties.SpawnAreaIsDefault = path.Trim('/') == viewpoints.DefaultPath;
                 if (properties.SpawnAreaIsDefault) viewpoints.DefaultMatches++;
                 long viewpointId = Require(document.CreateSpawnAreaLayer(parentId, properties), path);
@@ -416,6 +414,25 @@ namespace ImmPlayer.Authoring
             if (double.IsNaN(value) || double.IsInfinity(value) || value < 0 || value != Math.Truncate(value))
                 throw new InvalidDataException($"Expected nonnegative integer timing at {path}.");
             return checked((long)value);
+        }
+
+        private static ImmAuthoringImage ReadViewpointPreview(QBinReader reader, long offset, string path)
+        {
+            if (offset == 0) return null;
+            if (offset < 4 || offset > reader.BaseStream.Length - 20)
+                throw new InvalidDataException($"Viewpoint preview offset is outside qbin at {path}.");
+            reader.BaseStream.Position = offset;
+            byte[] header = reader.ReadBytes(20);
+            int channels = header[5] == 6 ? 3 : header[5] == 7 ? 4 : 0;
+            uint width = BitConverter.ToUInt32(header, 8), height = BitConverter.ToUInt32(header, 12);
+            if (channels == 0 || width == 0 || height == 0 || width > int.MaxValue || height > int.MaxValue ||
+                (long)width * height > int.MaxValue / channels)
+                throw new InvalidDataException($"Unsupported viewpoint preview format or dimensions at {path}.");
+            int count = checked((int)((long)width * height * channels));
+            if (count > reader.BaseStream.Length - reader.BaseStream.Position)
+                throw new InvalidDataException($"Truncated viewpoint preview pixels at {path}.");
+            return Require(ImmAuthoringImage.Create((int)width, (int)height, channels,
+                channels == 3 ? ImmAuthoringImageEncoding.Rgb8 : ImmAuthoringImageEncoding.Rgba8, reader.ReadBytes(count)), path);
         }
 
         private static void MapAnimation(ImmAuthoringDocument document, long layerId, Keyframes keys, JObject source, string path)

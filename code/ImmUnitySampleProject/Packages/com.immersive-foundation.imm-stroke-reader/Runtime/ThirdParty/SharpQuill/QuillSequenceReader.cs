@@ -147,6 +147,8 @@ namespace SharpQuill
       string value = v.Type == JTokenType.String ? v.ToObject<string>() : v.ToString();
       if (string.IsNullOrEmpty(value))
         return def;
+      if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        value = value.Substring(2);
 
       long parsed;
       return long.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out parsed) ? parsed : def;
@@ -483,6 +485,7 @@ namespace SharpQuill
             lv.AllowTranslationZ = ParseBool(impl["AllowTranslationZ"], lv.AllowTranslationZ);
             lv.Exporting = ParseBool(impl["Exporting"], lv.Exporting);
             lv.ShowingVolume = ParseBool(impl["ShowingVolume"], lv.ShowingVolume);
+            lv.DataFileOffset = ParseHexLong(impl["DataFileOffset"]);
             // Legacy colour-only viewpoints export at eye level (Fishgym pair).
             // Versioned viewpoints retain the newer floor-level default.
             lv.TypeStr = impl["TypeStr"]?.ToObject<string>() ?? (impl["Version"] == null ? "EyeLevel" : lv.TypeStr);

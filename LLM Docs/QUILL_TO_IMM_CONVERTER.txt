@@ -170,11 +170,21 @@ C2 animated paint implementation checkpoint (2026-10-21)
     legacy colour-only Fishgym form defaults to EyeLevel; versioned/new viewpoints
     retain their FloorLevel default. Native taperecorder's automatic default camera
     capture is pixel-identical to the reference with no camera lock.
-11. Previews remain unsupported shared image assets: strict conversion rejects
-    them, explicit omission produces partial output. Missing/ambiguous declared
-    defaults require explicit fallback permission. Unknown tracking or unrepresented
-    viewpoint pivot/opacity/timeline values fail. Broader navigation, thumbnails,
-    startup/chapter source mapping and current full CI remain open (roadmap 6.14).
+11. ConvertProject now maps stored RGB/RGBA viewpoint previews through immutable
+    shared image assets and the native JPEG encoder. Invalid offsets, dimensions,
+    formats and short pixel data fail conversion without replacing existing output.
+    Omission permission does not suppress malformed previews. Native IMM import
+    preserves original JPEG/PNG bytes and v1 BGR/v2 RGB metadata for re-export.
+12. Taperecorder, consul-room and Snoopy match exposed preview presence, dimensions,
+    encoding and color order. Fishgym has no stored source preview but its reference
+    IMM contains one; the stricter project comparator fails that acceptance gap.
+    Taperecorder's generated JPEG has the same quantization tables as the reference
+    but decoded mean RGB differences of 0.42/0.23/0.41 on the 0-255 scale. Exact
+    generated preview parity is not established. Missing/ambiguous declared
+    defaults still require explicit fallback permission. Unknown tracking or
+    unrepresented viewpoint pivot/opacity/timeline values fail. Broader navigation,
+    generated thumbnails, startup/chapter source mapping and full CI remain open
+    (roadmap sections 6.14-6.17).
 
 C1 static profile implementation and validation (2026-10-21)
 

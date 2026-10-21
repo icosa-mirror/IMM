@@ -218,10 +218,20 @@ static class ConverterChecks
                     layer.Info.pivotRotW == other.Info.pivotRotW && layer.Info.pivotScale == other.Info.pivotScale &&
                     layer.Info.pivotFlip == other.Info.pivotFlip, $"Pivot differs at {path}.");
                 if (compareViewpoints && layer.Info.type == 8)
+                {
                     Require(layer.Info.isDefaultSpawn == other.Info.isDefaultSpawn &&
                         Reader.StrokeReader_GetLayerSpawnAreaInfo(a, layer.Index, out var spawnA) &&
                         Reader.StrokeReader_GetLayerSpawnAreaInfo(b, other.Index, out var spawnB) && spawnA.Equals(spawnB),
                         $"Viewpoint tracking/volume/locomotion/default differs at {path}.");
+                    bool previewA = Reader.StrokeReader_GetSpawnAreaPreviewInfo(a, layer.Index, out var imageA);
+                    bool previewB = Reader.StrokeReader_GetSpawnAreaPreviewInfo(b, other.Index, out var imageB);
+                    Require(previewA == previewB && (!previewA ||
+                        (imageA.width == imageB.width && imageA.height == imageB.height && imageA.channels == imageB.channels &&
+                         imageA.encoding == imageB.encoding && imageA.sourceVersion == imageB.sourceVersion)),
+                        $"Viewpoint preview presence/dimensions/encoding/color order differs at {path}.");
+                    // Raw Quill previews are JPEG-encoded by the compiler. Byte/pixel fidelity
+                    // needs a separate codec comparison; import/re-export checks require exact bytes.
+                }
                 if (compareAnimation)
                 {
                     Require(layer.Info.isTimeline == other.Info.isTimeline && layer.Info.durationTicks == other.Info.durationTicks &&
@@ -272,7 +282,7 @@ static class ConverterChecks
             }
             Console.WriteLine($"[IMM_QUILL_CONVERTER_COMPARE] Exact paint subset match: {sourcePaint.Length} layers, {strokes} strokes, {points} points, hierarchy/transforms/pivots/frame buffers.");
             if (compareAnimation) Console.WriteLine("[IMM_QUILL_ANIMATION_COMPARE] Exact reader-exposed root metadata, root/layer keys and nested timing match; evaluated playback not checked.");
-            if (compareViewpoints) Console.WriteLine($"[IMM_QUILL_VIEWPOINT_COMPARE] Exact reader-exposed viewpoint transforms/tracking/volumes/locomotion/defaults match for {source.Count(x => x.Value.Info.type == 8)} viewpoints; previews/navigation not checked.");
+            if (compareViewpoints) Console.WriteLine($"[IMM_QUILL_VIEWPOINT_COMPARE] Exact reader-exposed viewpoint transforms/tracking/volumes/locomotion/defaults and preview presence/dimensions/encoding/color order match for {source.Count(x => x.Value.Info.type == 8)} viewpoints; preview pixels/navigation not checked.");
         }
         finally { if (a > 0) Reader.StrokeReader_Unload(a); if (b > 0) Reader.StrokeReader_Unload(b); Reader.StrokeReader_End(); }
     }

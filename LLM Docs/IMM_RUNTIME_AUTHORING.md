@@ -15,10 +15,11 @@ This review was static; it did not rerun builds, benchmarks, devices, or CI.
 
 2026-10-21 incremental update: the offline graph/compiler supports immutable
 `ImmAuthoringImage` viewpoint previews, with raw RGB/RGBA encoding and unchanged
-JPEG/PNG payload export and import. Quill payload mapping remains open;
+JPEG/PNG payload export and import. Stored Quill preview payloads are mapped;
 this does not extend live editing. The content pipeline plan section 6.15 records
 the export foundation; section 6.16 records encoded preview import and its local
-validation. Platform evidence remains pending.
+validation. Section 6.17 records source conversion and remaining generated-preview
+and pixel-parity gaps. Platform evidence remains pending.
 
 The original managed paint-authoring engine is implemented, including transactions, import,
 memory/file export, and compile-and-reload preview. Spawn areas and native exporter builds for

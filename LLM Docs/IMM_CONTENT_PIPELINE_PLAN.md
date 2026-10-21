@@ -56,7 +56,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
-| Viewpoints / spawn areas | Legacy eye-level and versioned defaults parsed | Spawn metadata exposed; SharpQuill adapter skips spawn layers | Existing spawn graph/import/export/default selection | Spawn edits within limits | Export flags/tracking/volume/default mapping implemented and locally matched; previews and broader navigation acceptance open |
+| Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; SharpQuill adapter skips spawn layers | Spawn graph/import/export/default selection and immutable preview assets | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | No picture construction in current graph/Unity exporter ABI | Outside live scope | Add construction and map projection/viewer locking/assets |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
@@ -761,6 +761,35 @@ Status checked at 2026-10-21 14:36 UTC:
    114 player/exporter and 43 reader declarations. Platform CI remains pending.
 5. Quill qbin preview mapping is still the next step. This does not close C3
    media support, runtime thumbnail display acceptance or cross-platform gates.
+
+### 6.17. Stored Quill viewpoint previews (2026-10-21)
+
+1. `ConvertProject` reads declared viewpoint qbin previews as raw RGB8/RGBA8
+   assets and exports them through the shared graph/compiler. Offsets, image
+   format, dimensions and full pixel bounds are checked before allocation. Invalid
+   previews fail even with omission permission and preserve existing output.
+   Non-exported viewpoints remain excluded without reading their payloads.
+2. SharpQuill metadata retains viewpoint preview offsets, including `0x`-prefixed
+   values. The local corpus still passes 21 metadata-tree, 34 PCM-sound and 35
+   picture-setting regressions. Its 15 stored viewpoint previews are all exported:
+   five RGBA and ten RGB; observed RGBA alpha values are all 255. This milestone
+   does not add preview payload support to SharpQuill's project writer/full reader.
+3. Synthetic native checks cover RGB/RGBA payloads, absent previews, truncated
+   pixels, invalid formats and overflowing offsets. Existing paint/root/animation/
+   reflection checks pass. Taperecorder now converts with no omissions; three
+   paired projects (taperecorder, consul-room, Snoopy) pass the stricter exposed
+   preview metadata comparison as well as prior paint/root/viewpoint checks.
+4. The new preview comparison **fails Fishgym**: its source HomeViewpoint has no
+   preview offset, while the paired IMM has a 512x512 JPEG. The source directory
+   has only Quill JSON/qbin/state and its IMM reference; no separate preview was
+   found. Generating export-time previews from scene content remains open; the
+   comparator retains this failure rather than ignoring preview presence.
+5. Generated JPEGs are not proven pixel-identical to Quill exports. Taperecorder
+   has identical quantization tables but mean decoded RGB differences of
+   0.4183/0.2288/0.4140 (0-255), maximum per-channel differences 24/12/34. Native
+   IMM import/re-export byte identity is separately established in section 6.16.
+   Native runtime thumbnail display, other preview pairs and full platform CI
+   remain unaccepted. Local evidence is under ignored `artifacts/quill-preview-*`.
 
 ## 7. Consolidated documents
 
