@@ -13,6 +13,12 @@ incomplete; its Android SDK CMake installation failed before compilation. The
 isolated retry is deferred because GitHub rejects retries while the parent is
 running. New APIs still require platform acceptance. See shared plan 6.26/6.28.
 
+Integrated sound/scene check (shared plan 6.30): complete Snoopy source conversion
+requires explicit Camera omission. Its candidate preserves the paired paint/root/
+animation subset and all three sound settings/keys. Independent FFmpeg decoding
+passes for the three emitted Opus streams, with expected rounded 48 kHz frame
+counts. Native audio playback/loop/seek and full source coverage remain unaccepted.
+
 Current review scope
 
 1. Rechecked the reader, writer, managed/native exporter entry points, authoring

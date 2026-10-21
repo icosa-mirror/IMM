@@ -1126,6 +1126,38 @@ replacement-run closure in section 6.26 (20:23 UTC):
    paired summary is artifacts/quill-sound-paired-summary.json. Latest prior sound
    API CI still has the deferred SDK-install retry described in section 6.28.
 
+### 6.30. Integrated Snoopy conversion and independent audio decode (2026-10-21)
+
+1. Converted the complete original Snoopy source with the project profile. Strict
+   conversion correctly rejects its unsupported Camera layer; explicit omission
+   permission produces an 8,516,733-byte partial IMM. This is not complete source
+   coverage. Statically hidden paint/pictures follow their recorded exclusions;
+   sound layers remain present. Native counts are 12 paint, 33 groups, 3 viewpoints
+   and 3 sounds. No synthetic media subset is used for this integration check.
+2. Reference comparison passes exactly for 68,733 strokes and 928,609 points across
+   all 12 paint layers, hierarchy/transforms/pivots/frame buffers and reader-exposed
+   root/layer animation and nested timing. All 3 integrated sounds match the
+   reference's spatial settings and animation keys. This establishes coexistence
+   with paint/animation/viewpoints at serialized-data scope; it is not evaluated
+   playback, full image/navigation or audible acceptance.
+3. Extracted the integrated candidate's original encoded sound bytes through the
+   reader C API and decoded each independently with FFmpeg. All 3 stereo Opus
+   streams decode successfully at 48 kHz with the expected channel count. Decoded
+   frame counts exactly equal source PCM frame counts rescaled and rounded to
+   48 kHz. Source durations are approximately 35.683265, 127.843265 and 30.798367
+   seconds. Subsample duration rounding is recorded in the ignored report; Opus
+   container duration is separately recorded and includes encoder timing metadata.
+4. Evidence is in ignored artifacts/quill-sound-Snoopy-full-* logs/IMM,
+   artifacts/quill-reference/snoopy-sound-full-candidate.json and
+   artifacts/quill-sound-independent-decode/report.json. The reusable machine-local
+   check script is artifacts/check-quill-sound-decoding.py. File decoding does not
+   establish native-player gapless looping, seek/restart, spatial gain/attenuation
+   or waveform identity after lossy encoding. These remain sound acceptance work.
+5. Converter run 39671797855 (9b619ca5) is queued with no reported failure at this
+   check. Prior sound-API run 39669262483 remains active with the SDK CMake archive
+   failure from section 6.28; its isolated retry is still deferred until that run
+   finishes. No new source failure was observed and no required gate was changed.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
