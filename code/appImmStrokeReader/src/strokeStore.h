@@ -146,6 +146,25 @@ struct StrokePictureAssetInfoC
 };
 static_assert(sizeof(StrokePictureAssetInfoC) == 32, "StrokePictureAssetInfoC layout changed");
 
+struct StrokeSoundPropertiesC
+{
+    int spatialType;
+    float gain;
+    int loop, attenuation;
+    float distanceMin, distanceMax;
+    int modifier;
+    float angleInX, angleInY, angleBand, attenuationOutside;
+};
+struct StrokeSoundAssetInfoC
+{
+    StrokeSoundPropertiesC properties;
+    int encoding, sampleRate, channels, byteCount;
+    float sourceDuration;
+    int initiallyPlaying;
+};
+static_assert(sizeof(StrokeSoundPropertiesC) == 44, "StrokeSoundPropertiesC layout changed");
+static_assert(sizeof(StrokeSoundAssetInfoC) == 68, "StrokeSoundAssetInfoC layout changed");
+
 // Internal storage structures
 struct StoredStroke
 {
@@ -191,6 +210,8 @@ struct StoredLayer
     std::vector<uint8_t> spawnPreviewBytes;
     StrokePictureAssetInfoC pictureAssetInfo{};
     std::vector<uint8_t> pictureAssetBytes;
+    StrokeSoundAssetInfoC soundAssetInfo{};
+    std::vector<uint8_t> soundAssetBytes;
     int32_t parentId = 0;
     int32_t childIndex = 0;
     bool isTimeline = false;
@@ -288,6 +309,8 @@ public:
     int GetSpawnAreaPreviewData(int layerIdx, uint8_t* bytes, int maxBytes) const;
     bool GetPictureAssetInfo(int layerIdx, StrokePictureAssetInfoC* info) const;
     int GetPictureAssetData(int layerIdx, uint8_t* bytes, int maxBytes) const;
+    bool GetSoundAssetInfo(int layerIdx, StrokeSoundAssetInfoC* info) const;
+    int GetSoundAssetData(int layerIdx, uint8_t* bytes, int maxBytes) const;
     bool GetRootLayerProperties(StrokeAuthoringLayerInfoC* info, StrokeLayerTransformC* transform) const;
     bool GetDocumentInfo(StrokeDocumentInfoC* info) const;
     bool GetRootAnimationKey(int keyIdx, StrokeAnimationKeyC* key) const;

@@ -398,8 +398,13 @@ namespace ImmPlayer.Authoring
                             layer.Properties.IsTimeline ? 1 : 0, layer.Properties.DurationTicks, layer.Properties.MaxRepeatCount, ref sound);
                         var audio = layer.Properties.SoundAudio;
                         byte[] bytes = audio.CopyData();
-                        if (handle == IntPtr.Zero || !Native.ImmExporter_SoundSetPcm16(handle, audio.SampleRate, audio.Channels, bytes, (ulong)bytes.LongLength))
-                            return CompileFailure(sequence, "Native sound creation or PCM setup failed.", layer.Id);
+                        bool assigned = handle != IntPtr.Zero && (audio.Encoding == ImmAuthoringAudioEncoding.Pcm16
+                            ? Native.ImmExporter_SoundSetPcm16(handle, audio.SampleRate, audio.Channels, bytes, (ulong)bytes.LongLength)
+                            : Native.ImmExporter_SoundSetEncoded(handle, (int)audio.Encoding, audio.SampleRate, audio.Channels, bytes, (ulong)bytes.LongLength));
+                        if (!assigned) return CompileFailure(sequence, "Native sound creation or asset setup failed.", layer.Id);
+                        if ((layer.Properties.SoundSourceDuration != 0 || layer.Properties.SoundInitiallyPlaying) &&
+                            !Native.ImmExporter_SoundSetSourceMetadata(handle, layer.Properties.SoundSourceDuration, layer.Properties.SoundInitiallyPlaying ? 1 : 0))
+                            return CompileFailure(sequence, "Native source sound metadata setup failed.", layer.Id);
                     }
                     else if (layer.Type == ImmAuthoringLayerType.Picture)
                     {

@@ -720,6 +720,14 @@ namespace ImmPlayer.Exporter
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool ImmExporter_SoundSetPcm16(IntPtr layerHandle, int sampleRate, int channels, [In] byte[] bytes, ulong size);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SoundSetEncoded(IntPtr layerHandle, int format, int sampleRate, int channels, [In] byte[] bytes, ulong size);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SoundSetSourceMetadata(IntPtr layerHandle, float duration, int playing);
+
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr ImmExporter_CreateSpawnAreaLayer(
             IntPtr sequenceHandle,

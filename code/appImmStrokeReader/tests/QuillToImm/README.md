@@ -36,7 +36,7 @@ input rejection and image-budget output guards. They do not establish projection
 appearance or viewer-lock behavior in playback. Picture asset checks cover file
 and memory queries, ABI/index/buffer/lifetime guards, exact encoded PNG/JPEG import/
 export/import, hidden pictures and decoded 8-bit/1-bit grayscale. The real sample
-picture also passes; its three sound layers remain diagnosed omissions. Quill
+picture and all three encoded sounds also pass exact import round trips. Quill
 2D source checks cover picture-only RGB/RGBA/alpha, hidden exclusion, viewer-lock
 metadata, import round trips, unsupported projections, invalid/truncated image
 data, configured resource budgets and cancellation/output preservation.
@@ -45,8 +45,11 @@ data, configured resource budgets and cancellation/output preservation.
 Sound construction checks cover immutable PCM16 ownership, spatial-setting ABI,
 graph transactions/comparison, native mono/stereo/four-channel Opus and Ogg
 serialization, encoded headers, common layer properties and failure/output guards.
-These do not establish audible playback, gapless timing, native sound import or
-Quill source conversion. Independent local decode results and codec sample-count
+Sound import checks cover file/memory queries, the 44/68-byte ABI, exact encoded
+WAV/Vorbis/Opus passthrough, all spatial settings and legacy source duration/playing
+fields, malformed-stream diagnostics, protected-page truncation and Ogg checksum
+rejection. These do not establish audible playback, gapless timing or Quill source
+conversion. Independent local decode results and codec sample-count
 limits are recorded in content pipeline section 6.24.
 
 1. Run the synthetic native regression suite from the repository root. Use a fresh

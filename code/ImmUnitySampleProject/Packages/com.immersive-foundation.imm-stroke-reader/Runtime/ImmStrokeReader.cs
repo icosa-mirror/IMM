@@ -361,6 +361,13 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int StrokeReader_GetPictureAssetData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetSoundAssetInfo(int docId, int layerIdx, out StrokeSoundAssetInfo info);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetSoundAssetData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
+
         /// <summary>
         /// Largest single-element bounding-box extent in a drawing, in document units.
         /// </summary>
@@ -713,6 +720,27 @@ namespace ImmPlayer
         public StrokeImageAssetInfo image;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeSoundProperties
+    {
+        public int spatialType;
+        public float gain;
+        public int loop, attenuation;
+        public float distanceMin, distanceMax;
+        public int modifier;
+        public float angleInX, angleInY, angleBand, attenuationOutside;
+    }
+
+    /// <summary>Authoring-indexed encoded sound. Sample rate is zero for unsupported/malformed framing; Opus uses its 48 kHz decode rate.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeSoundAssetInfo
+    {
+        public StrokeSoundProperties properties;
+        public int encoding, sampleRate, channels, byteCount;
+        public float sourceDuration;
+        public int initiallyPlaying;
+    }
+
     #endregion
 
     /// <summary>
@@ -919,6 +947,17 @@ namespace ImmPlayer
         {
             return _docId > 0 && bytes != null
                 ? ImmStrokeReader.StrokeReader_GetPictureAssetData(_docId, layerIdx, bytes, bytes.Length) : 0;
+        }
+
+        public bool GetSoundAssetInfo(int layerIdx, out StrokeSoundAssetInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetSoundAssetInfo(_docId, layerIdx, out info);
+        }
+
+        public int GetSoundAssetData(int layerIdx, byte[] bytes)
+        {
+            return _docId > 0 && bytes != null ? ImmStrokeReader.StrokeReader_GetSoundAssetData(_docId, layerIdx, bytes, bytes.Length) : 0;
         }
 
         /// <summary>

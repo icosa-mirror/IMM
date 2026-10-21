@@ -66,3 +66,10 @@ float precision, consistent with existing layer APIs.
 - `Runtime/ThirdParty/SharpQuill/`: vendored SharpQuill C# source (temporary, will be replaced by NuGet package)
 - `Editor/ImmToQuillConverterEditor.cs`: menu commands `IMM/Convert IMM To Quill...`, `IMM/Convert Selected IMM To Quill`, and `IMM/Convert All Selected IMM To Quill` (selection is from Unity Project view; all write to `~/Documents/Quill/<imm-file-name>/`)
 - `Samples~/Examples`: sample scripts and scenes
+
+Encoded sound authoring/import supports WAV, Ogg Vorbis and Ogg Opus assets.
+The reader exposes authoring-indexed sound metadata and copied encoded bytes.
+Import/export preserves these bytes, spatial settings and legacy duration/playing
+fields. Encoded frame count is -1; Opus sample rate is its 48 kHz decode rate.
+Container validation does not establish packet decoding or audible playback.
+See content pipeline section 6.25 for validation scope and remaining source mapping.

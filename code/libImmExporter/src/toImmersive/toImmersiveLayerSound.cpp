@@ -42,10 +42,10 @@ namespace ImmExporter
                 fp->WriteUInt32(1); // version
 
                 fp->WriteUInt8(static_cast<uint8_t>(lp->GetType()));
-                fp->WriteFloat(0.0f);
+                fp->WriteFloat(lp->GetSourceDuration());
                 fp->WriteFloat(lp->GetGain());
                 fp->WriteUInt8(lp->GetLooping() ? 1 : 0);
-                fp->WriteUInt8(0);
+                fp->WriteUInt8(lp->GetInitialPlaying() ? 1 : 0);
 
                 fp->WriteUInt8(static_cast<uint8_t>(atten.mType));
                 fp->WriteFloat(atten.mMin);
@@ -74,6 +74,14 @@ namespace ImmExporter
 		{
 			LayerSound* lp = (LayerSound*)imp;
             if (!lp->HasAsset()) return false;
+            const auto& encoded = lp->GetEncodedAsset();
+            if (!encoded.empty())
+            {
+                fp->WriteUInt32(lp->GetEncodedFormat());
+                if (lp->GetEncodedFormat() == static_cast<uint32_t>(AssetFormat::OPUS)) fp->WriteUInt32(lp->GetEncodedChannels());
+                iWriteBlob(fp, const_cast<uint8_t*>(encoded.data()), encoded.size());
+                return true;
+            }
 
             const piWav *sound = lp->GetSound();
 

@@ -420,3 +420,10 @@ and timeline changes. It suppresses every non-flat picture type (mono/stereo
 panoramas and cubemaps), regardless of viewer locking. Flat pictures, including
 viewer-locked flat pictures, remain available. It does not edit layer visibility or
 the IMM file. Options require matching native binaries from the same UPM release.
+
+Encoded sound authoring/import supports WAV, Ogg Vorbis and Ogg Opus assets.
+The reader exposes authoring-indexed sound metadata and copied encoded bytes.
+Import/export preserves these bytes, spatial settings and legacy duration/playing
+fields. Encoded frame count is -1; Opus sample rate is its 48 kHz decode rate.
+Container validation does not establish packet decoding or audible playback.
+See content pipeline section 6.25 for validation scope and remaining source mapping.

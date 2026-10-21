@@ -222,6 +222,8 @@ namespace ImmPlayer.Authoring
         public ImmAuthoringImage PictureImage;
         public ExportSoundProperties Sound;
         public ImmAuthoringAudio SoundAudio;
+        public float SoundSourceDuration;
+        public bool SoundInitiallyPlaying;
 
         public static ImmAuthoringLayerProperties Default(string name) => new ImmAuthoringLayerProperties
         {

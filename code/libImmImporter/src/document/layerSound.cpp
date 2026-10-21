@@ -28,6 +28,8 @@ namespace ImmImporter
 		//mDuration = duration;
 		mVolume = 0.0f;
         mGain = gain;
+        mSourceDuration = duration;
+        mSourcePlaying = play;
         mAttenuation = attenParams;
         mModifier = modifParams;
 		mPlay = play;

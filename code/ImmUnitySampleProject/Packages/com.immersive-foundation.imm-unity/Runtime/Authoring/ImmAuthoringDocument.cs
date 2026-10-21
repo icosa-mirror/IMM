@@ -985,7 +985,8 @@ namespace ImmPlayer.Authoring
             if (type == ImmAuthoringLayerType.Sound)
             {
                 var sound = properties.Sound;
-                if (properties.SoundAudio == null || !Enum.IsDefined(typeof(ExportSoundSpatialType), sound.SpatialType) ||
+                if (properties.SoundAudio == null || !IsFinite(properties.SoundSourceDuration) || properties.SoundSourceDuration < 0 ||
+                    !Enum.IsDefined(typeof(ExportSoundSpatialType), sound.SpatialType) ||
                     !Enum.IsDefined(typeof(ExportSoundAttenuationType), sound.Attenuation) ||
                     !Enum.IsDefined(typeof(ExportSoundModifierType), sound.Modifier) || (sound.Loop != 0 && sound.Loop != 1) ||
                     !IsFinite(sound.Gain) || sound.Gain < 0 || !IsFinite(sound.DistanceMin) || !IsFinite(sound.DistanceMax) ||

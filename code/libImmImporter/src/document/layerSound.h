@@ -84,6 +84,8 @@ namespace ImmImporter
         void SetForceRestart(bool force);
             
         float GetGain(void) const { return mGain; }
+        float GetSourceDuration() const { return mSourceDuration; }
+        bool GetSourcePlaying() const { return mSourcePlaying; }
         float GetVolume(void)const;
         Type GetType(void) const;
         void GetAttenuation(AttenuationParameters *res) const;
@@ -118,6 +120,8 @@ namespace ImmImporter
         AttenuationParameters mAttenuation;
         ModifierParameters mModifier;
         float    mGain;
+        float mSourceDuration = 0;
+        bool mSourcePlaying = false;
 		float    mDuration;
 		bool     mLoop;
         bool     mForceRestart;

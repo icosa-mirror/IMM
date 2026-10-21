@@ -3,6 +3,7 @@
 #include "libImmCore/src/libBasics/piString.h"
 #include "libImmCore/src/libWave/piWave.h"
 #include "layer.h"
+#include <vector>
 
 #define DEFAULT_LAYER_SOUND_VERSION 1
 
@@ -94,7 +95,14 @@ namespace ImmExporter
         inline ImmCore::piWav * GetSound() { return &mSound; }
 
         bool AssignAsset(const ImmCore::piWav* wav, bool move);
-        bool HasAsset() const { return mHasAsset; }
+        bool HasAsset() const { return mHasAsset || !mEncodedAsset.empty(); }
+        void AssignEncodedAsset(uint32_t format, uint32_t channels, const uint8_t* bytes, size_t size);
+        const std::vector<uint8_t>& GetEncodedAsset() const { return mEncodedAsset; }
+        uint32_t GetEncodedFormat() const { return mEncodedFormat; }
+        uint32_t GetEncodedChannels() const { return mEncodedChannels; }
+        void SetSourceMetadata(float duration, bool playing) { mDuration = duration; mInitialPlaying = playing; }
+        float GetSourceDuration() const { return mDuration; }
+        bool GetInitialPlaying() const { return mInitialPlaying; }
 	private:
         // Serialization Data
         SpatialType     mType;
@@ -109,6 +117,9 @@ namespace ImmExporter
         ImmCore::piWav    mSound;
         uint32_t mVersion;
         bool mHasAsset;
+        bool mInitialPlaying = false;
+        uint32_t mEncodedFormat = 0, mEncodedChannels = 0;
+        std::vector<uint8_t> mEncodedAsset;
 
 	};
 

@@ -140,13 +140,15 @@ namespace ImmPlayer.Authoring
             if (expected.SoundAudio != null || actual.SoundAudio != null)
             {
                 Equal(differences, $"{path}.sound", expected.Sound, actual.Sound);
+                Equal(differences, $"{path}.soundSourceDuration", expected.SoundSourceDuration, actual.SoundSourceDuration);
+                Equal(differences, $"{path}.soundInitiallyPlaying", expected.SoundInitiallyPlaying, actual.SoundInitiallyPlaying);
                 var a = expected.SoundAudio;
                 var b = actual.SoundAudio;
                 if (a == null || b == null)
                 {
                     if (a != b) Difference(differences, $"{path}.soundAudio", "Audio presence differs.");
                 }
-                else if (a.SampleRate != b.SampleRate || a.Channels != b.Channels || !a.CopyData().SequenceEqual(b.CopyData()))
+                else if (a.Encoding != b.Encoding || a.SampleRate != b.SampleRate || a.Channels != b.Channels || !a.CopyData().SequenceEqual(b.CopyData()))
                     Difference(differences, $"{path}.soundAudio", "Audio format or sample bytes differ.");
             }
         }

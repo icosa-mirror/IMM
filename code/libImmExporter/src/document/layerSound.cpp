@@ -24,6 +24,9 @@ namespace ImmExporter
 		mLoop = false;
         mVersion = version;
         mHasAsset = false;
+        mDuration = 0;
+        mInitialPlaying = false;
+        mEncodedAsset.clear();
         //mSound.Init();
 		return true;
 	}
@@ -89,12 +92,22 @@ namespace ImmExporter
         if (!wav || !wav->mData || wav->mDataSize == 0) return false;
         if (mHasAsset) mSound.Deinit();
         mHasAsset = false;
+        mEncodedAsset.clear();
         if (move)
             mSound.InitMove(wav);
         else if (!mSound.InitCopy(wav))
             return false;
         mHasAsset = true;
         return true;
+    }
+
+    void LayerSound::AssignEncodedAsset(uint32_t format, uint32_t channels, const uint8_t* bytes, size_t size)
+    {
+        mEncodedAsset.assign(bytes, bytes + size);
+        mEncodedFormat = format;
+        mEncodedChannels = channels;
+        if (mHasAsset) mSound.Deinit();
+        mHasAsset = false;
     }
 
 }

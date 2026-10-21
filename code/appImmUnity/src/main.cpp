@@ -105,6 +105,7 @@
 #include "libImmExporter/src/document/layerSpawnArea.h"
 #include "libImmExporter/src/document/layerPicture.h"
 #include "libImmExporter/src/document/layerSound.h"
+#include "libImmCore/src/libWave/piEncodedAudio.h"
 #include "libImmExporter/src/toImmersive/toImmersive.h"
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
 #if defined(WINDOWS)
@@ -3919,6 +3920,30 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SoundSetP
     ImmCore::piWav wave;
     wave.Make(sampleRate, channels, 16, const_cast<uint8_t*>(bytes), size);
     return sound->AssignAsset(&wave, false);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SoundSetEncoded(
+    void* layerHandle, int format, int sampleRate, int channels, const uint8_t* bytes, uint64_t size)
+{
+    auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (!layer || layer->GetType() != ImmExporter::Layer::Type::Sound || size == 0 || size > INT32_MAX) return false;
+    int actualChannels = 0, actualRate = 0;
+    if (!ImmCore::InspectEncodedAudio(bytes, size, static_cast<uint32_t>(format), actualChannels, actualRate) ||
+        channels != actualChannels || sampleRate != actualRate) return false;
+    auto* sound = reinterpret_cast<ImmExporter::LayerSound*>(layer->GetImplementation());
+    if (!sound || ((sound->GetType() == ImmExporter::LayerSound::SpatialType::Ambisonic) != (channels == 4))) return false;
+    sound->AssignEncodedAsset(static_cast<uint32_t>(format), static_cast<uint32_t>(channels), bytes, static_cast<size_t>(size));
+    return true;
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SoundSetSourceMetadata(void* layerHandle, float duration, int playing)
+{
+    auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (!layer || layer->GetType() != ImmExporter::Layer::Type::Sound || !std::isfinite(duration) || duration < 0 || (playing != 0 && playing != 1)) return false;
+    auto* sound = reinterpret_cast<ImmExporter::LayerSound*>(layer->GetImplementation());
+    if (!sound) return false;
+    sound->SetSourceMetadata(duration, playing != 0);
+    return true;
 }
 
 extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreatePictureLayer(

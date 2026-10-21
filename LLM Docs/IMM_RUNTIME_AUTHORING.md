@@ -29,7 +29,8 @@ authoring-indexed asset queries (content pipeline section 6.20). Quill 2D source
 conversion is implemented with isolated reference pixel matches (section 6.22).
 Offline PCM16 sound construction now supports spatial settings and native Opus/Ogg
 encoding; section 6.24 records local file/decoder checks and the unresolved timing
-acceptance. Sound import/source mapping, stereo/panorama conversion and playback
+acceptance. Encoded WAV/Vorbis/Opus sound import and exact passthrough are implemented
+(section 6.25). Sound source mapping, stereo/panorama conversion and playback
 acceptance remain outstanding. This
 does not add picture mutation to the native live path.
 

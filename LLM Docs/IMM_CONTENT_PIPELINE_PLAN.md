@@ -58,7 +58,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; SharpQuill adapter skips spawn layers | Spawn graph/import/export/default selection and immutable preview assets | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
-| Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | Offline PCM16 sound construction with spatial settings and native Opus/Ogg encoding | Outside live scope | Add encoded asset queries/import and source mapping; validate timing, gain, looping and spatial playback |
+| Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | Encoded WAV/Vorbis/Opus queries and metadata import | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | Add source mapping; validate timing, gain, looping and spatial playback |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
 | File/memory output | SharpQuill writer supports a limited Quill-project subset | IMM-to-Quill entry point exists with losses below | Existing native IMM writer/compiler | Presented-revision save outstanding | Static converter reuses atomic file export; default rejects unsupported layers, explicit paint-only omission reports partial output |
 
@@ -114,7 +114,7 @@ The preferred first candidate is:
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; final full CI blocked by Godot iOS capacity | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; final full CI blocked by Godot iOS capacity | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata comparisons and default-camera capture pass within recorded scope. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
-| C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Sound queries/import/source mapping, stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
+| C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import implemented. Sound source mapping, stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Address SharpQuill adapter hierarchy/keys and Quill writer media limits when full IMM-to-Quill delivery is selected | Quill-project read-back and application checks for the declared subset; no silent media omission |
@@ -986,6 +986,34 @@ Status checked at 2026-10-21 14:36 UTC:
    (`39662841936`, job `119440076064`). Sound construction revision `4dd37545`
    is pushed; full validation run `39664513588` is queued. These do not establish
    full platform/device or audible playback acceptance.
+
+### 6.25. Encoded sound extraction, import and passthrough (2026-10-21)
+
+1. Added authoring-indexed sound metadata and byte queries (44-byte settings,
+   68-byte asset info), with file/memory parity and guarded buffer/lifetime behavior.
+   The graph imports WAV, Ogg Vorbis and Ogg Opus without recompression, preserving
+   spatial settings, legacy source duration and initially-playing fields. Encoded
+   assets report frame count -1; Opus reports its 48 kHz decode rate. Original
+   encoded bytes retain the source header. Global export codec selection affects
+   PCM construction only.
+2. Added bounded WAV/Ogg container validation, including Ogg page CRC, serial,
+   sequence, continuation and end-of-stream checks. This checks framing and headers,
+   not complete packet decoding. Unsupported sound assets receive an explicit
+   import diagnostic and are omitted from the partial graph. Validation runs during
+   offline import/export and adds no per-frame playback work.
+3. Fresh Windows reader/player builds and the full local converter/authoring suite
+   pass. Generated mono/stereo/four-channel Vorbis/Opus, WAV, hidden sound and all
+   three sounds in sample1 pass exact encoded-byte and graph round trips. Protected
+   page truncation, corrupt checksums and failed-export output preservation pass.
+   Windows exports match all 120 player/exporter and 47 reader declarations.
+   The existing Emscripten Web decoder also rebuilds successfully with the shared
+   reader validation code; this establishes compilation, not browser playback.
+4. Quill sound source mapping is the next C3 dependency. Audible playback, exact
+   timing/gapless behavior, source gain/loop/spatial reference comparison, live sound
+   mutation and full platform/device CI acceptance remain open. Evidence is in
+   ignored artifacts/sound-import-portable-* logs. The preceding sound-construction
+   run 39664513588 passed native Windows job 119445872854; its remaining gates are
+   pending. This milestone's full CI run has not yet been queued.
 
 ## 7. Consolidated documents
 

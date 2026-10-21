@@ -75,10 +75,13 @@ static class SoundAuthoringChecks
         var result = ImmAuthoringCompiler.ExportToFile(document, output);
         Require(result.Succeeded, result.Message);
         Inspect(output, directory, expected, 5);
+        SoundImportChecks.Run(output, directory);
         string ogg = Path.Combine(directory, "sound-ogg.imm");
         result = ImmAuthoringCompiler.ExportToFile(document, ogg, audioType: ExportAudioType.Ogg);
         Require(result.Succeeded, result.Message);
         Inspect(ogg, directory, expected, 4);
+        SoundImportChecks.Run(ogg, directory);
+        SoundImportChecks.AdditionalFixtures(directory);
         Require(Reader.StrokeReader_Init(null) == 0, "Reader init failed.");
         int doc = Reader.StrokeReader_LoadFromFile(output);
         try

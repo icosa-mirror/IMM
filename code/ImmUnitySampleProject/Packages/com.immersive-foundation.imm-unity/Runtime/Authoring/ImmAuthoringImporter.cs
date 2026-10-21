@@ -25,7 +25,8 @@ namespace ImmPlayer.Authoring
         InvalidSourceValue,
         ReparentedLayer,
         FrameRateChanged,
-        UnsupportedRootProperties
+        UnsupportedRootProperties,
+        UnsupportedSoundAsset
     }
 
     public sealed class ImmAuthoringImportIssue
@@ -89,6 +90,7 @@ namespace ImmPlayer.Authoring
         private const int SourceGroupLayerType = 0;
         private const int SourcePaintLayerType = 1;
         private const int SourcePictureLayerType = 4;
+        private const int SourceSoundLayerType = 5;
         private const int SourceSpawnAreaLayerType = 8;
 
         public static ImmAuthoringImportResult ImportFromFile(string filePath, string nativeLogPath = null)
@@ -261,7 +263,8 @@ namespace ImmPlayer.Authoring
                         if (sourceLayer.Info.type != SourceGroupLayerType &&
                             sourceLayer.Info.type != SourcePaintLayerType &&
                             sourceLayer.Info.type != SourceSpawnAreaLayerType &&
-                            sourceLayer.Info.type != SourcePictureLayerType)
+                            sourceLayer.Info.type != SourcePictureLayerType &&
+                            sourceLayer.Info.type != SourceSoundLayerType)
                         {
                             issues.Add(new ImmAuthoringImportIssue(
                                 ImmAuthoringImportIssueCode.UnsupportedLayerType,
@@ -270,12 +273,33 @@ namespace ImmPlayer.Authoring
                             continue;
                         }
 
+                        ImmAuthoringAudio soundAudio = null;
+                        if (sourceLayer.Info.type == SourceSoundLayerType)
+                        {
+                            if (!source.GetSoundAssetInfo(sourceLayer.Index, out var sound) || sound.byteCount <= 0 || sound.sampleRate <= 0)
+                            {
+                                issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedSoundAsset,
+                                    $"Sound '{sourceLayer.Info.name}' has missing, malformed or unsupported encoded audio and was omitted.", sourceLayer.Info.id));
+                                continue;
+                            }
+                            byte[] bytes = new byte[sound.byteCount];
+                            if (source.GetSoundAssetData(sourceLayer.Index, bytes) != bytes.Length)
+                                throw new InvalidDataException($"Sound '{sourceLayer.Info.name}' asset bytes could not be read.");
+                            var audio = ImmAuthoringAudio.CreateEncoded(sound.sampleRate, sound.channels, (ImmAuthoringAudioEncoding)sound.encoding, bytes);
+                            if (!audio.Succeeded)
+                            {
+                                issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedSoundAsset, audio.Message, sourceLayer.Info.id));
+                                continue;
+                            }
+                            soundAudio = audio.Value;
+                        }
                         long parentId = ResolveImportedParent(
                             sourceLayer,
                             layersBySourceId,
                             importedLayers,
                             issues);
                         ImmAuthoringLayerProperties properties = ConvertLayerProperties(source, sourceLayer, issues);
+                        properties.SoundAudio = soundAudio;
                         ImmAuthoringResult<long> addLayer;
                         if (sourceLayer.Info.type == SourceGroupLayerType)
                             addLayer = editable.CreateGroupLayer(parentId, properties, sourceLayer.Info.childIndex);
@@ -283,10 +307,20 @@ namespace ImmPlayer.Authoring
                             addLayer = editable.CreatePaintLayer(parentId, properties, sourceLayer.Info.childIndex);
                         else if (sourceLayer.Info.type == SourcePictureLayerType)
                             addLayer = editable.CreatePictureLayer(parentId, properties, sourceLayer.Info.childIndex);
+                        else if (sourceLayer.Info.type == SourceSoundLayerType)
+                            addLayer = editable.CreateSoundLayer(parentId, properties, sourceLayer.Info.childIndex);
                         else
                             addLayer = editable.CreateSpawnAreaLayer(parentId, properties, sourceLayer.Info.childIndex);
                         if (!addLayer.Succeeded)
+                        {
+                            if (sourceLayer.Info.type == SourceSoundLayerType && addLayer.ErrorCode == ImmAuthoringErrorCode.InvalidArgument)
+                            {
+                                issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedSoundAsset,
+                                    $"Sound '{sourceLayer.Info.name}' settings are unsupported: {addLayer.Message}", sourceLayer.Info.id));
+                                continue;
+                            }
                             return DisposeAndFail(document, addLayer.ErrorCode, addLayer.Message, statistics, transaction);
+                        }
 
                         long importedLayerId = addLayer.Value;
                         importedLayers[sourceLayer.Info.id] = importedLayerId;
@@ -642,6 +676,21 @@ namespace ImmPlayer.Authoring
             properties.DurationTicks = Math.Max(0, sourceLayer.Info.durationTicks);
             properties.MaxRepeatCount = sourceLayer.Info.maxRepeatCount;
 
+            if (sourceLayer.Info.type == SourceSoundLayerType)
+            {
+                if (!source.GetSoundAssetInfo(sourceLayer.Index, out var sound))
+                    throw new InvalidDataException($"Sound '{properties.Name}' metadata could not be read.");
+                var settings = sound.properties;
+                properties.Sound = new ExportSoundProperties
+                {
+                    SpatialType = (ExportSoundSpatialType)settings.spatialType, Gain = settings.gain, Loop = settings.loop,
+                    Attenuation = (ExportSoundAttenuationType)settings.attenuation, DistanceMin = settings.distanceMin, DistanceMax = settings.distanceMax,
+                    Modifier = (ExportSoundModifierType)settings.modifier, AngleInX = settings.angleInX, AngleInY = settings.angleInY,
+                    AngleBand = settings.angleBand, AttenuationOutside = settings.attenuationOutside
+                };
+                properties.SoundSourceDuration = sound.sourceDuration;
+                properties.SoundInitiallyPlaying = sound.initiallyPlaying != 0;
+            }
             if (sourceLayer.Info.type == SourcePictureLayerType)
             {
                 if (!ImmStrokeReader.StrokeReader_GetPictureAssetInfo(source.DocId, sourceLayer.Index, out StrokePictureAssetInfo picture) ||

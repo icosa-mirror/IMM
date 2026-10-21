@@ -9,6 +9,8 @@
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
 #include "libImmImporter/src/document/layerPicture.h"
+#include "libImmImporter/src/document/layerSound.h"
+#include "libImmCore/src/libWave/piEncodedAudio.h"
 
 namespace ImmStrokeReader
 {
@@ -944,6 +946,62 @@ bool StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence, const
                     format == 1 ? 2 : 3, 0, static_cast<int>(encoded.size() - 12) };
                 captured.pictureAssetBytes.assign(encoded.begin() + 12, encoded.end());
             }
+            if (layer->GetType() == ImmImporter::Layer::Type::Sound)
+            {
+                const auto* sound = reinterpret_cast<const ImmImporter::LayerSound*>(layer->GetImplementation());
+                if (!sound) { assetsValid = false; return false; }
+                auto& info = captured.soundAssetInfo;
+                info.properties.spatialType = static_cast<int>(sound->GetType());
+                info.properties.gain = sound->GetGain();
+                info.properties.loop = sound->GetLooping() ? 1 : 0;
+                info.sourceDuration = sound->GetSourceDuration();
+                info.initiallyPlaying = sound->GetSourcePlaying() ? 1 : 0;
+                ImmImporter::LayerSound::AttenuationParameters attenuation{};
+                sound->GetAttenuation(&attenuation);
+                info.properties.attenuation = static_cast<int>(attenuation.mType);
+                info.properties.distanceMin = attenuation.mMin;
+                info.properties.distanceMax = attenuation.mMax;
+                ImmImporter::LayerSound::ModifierParameters modifier{};
+                sound->GetModifier(&modifier);
+                info.properties.modifier = static_cast<int>(modifier.mType);
+                if (modifier.mType == ImmImporter::LayerSound::ModifierType::DirectionalCone)
+                {
+                    info.properties.angleInX = modifier.mParams.mDirectionalCone.mAngleIn;
+                    info.properties.angleBand = modifier.mParams.mDirectionalCone.mAngleBand;
+                    info.properties.attenuationOutside = modifier.mParams.mDirectionalCone.mAttenOut;
+                }
+                else if (modifier.mType == ImmImporter::LayerSound::ModifierType::DirectionalFrus)
+                {
+                    info.properties.angleInX = modifier.mParams.mDirectionalFrus.mAngleInX;
+                    info.properties.angleInY = modifier.mParams.mDirectionalFrus.mAngleInY;
+                    info.properties.angleBand = modifier.mParams.mDirectionalFrus.mAngleBand;
+                    info.properties.attenuationOutside = modifier.mParams.mDirectionalFrus.mAttenOut;
+                }
+                if (layer->GetAssetID() != 0xffffffff)
+                {
+                    const auto* asset = sequence.GetAsset(layer->GetAssetID());
+                    std::vector<uint8_t> encoded;
+                    if (!asset || asset->mSize < 4 || asset->mSize > INT32_MAX || !readAsset ||
+                        !readAsset(asset->mFileOffset, asset->mSize, encoded) || encoded.size() != asset->mSize)
+                    { assetsValid = false; return false; }
+                    const auto u32 = [](const uint8_t* p) { return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24); };
+                    info.encoding = static_cast<int>(u32(encoded.data()));
+                    const int header = info.encoding == 5 ? 16 : 12;
+                    if ((info.encoding == 3 || info.encoding == 4 || info.encoding == 5) && encoded.size() > static_cast<size_t>(header))
+                    {
+                        if (info.encoding == 5) info.channels = static_cast<int>(u32(encoded.data() + 4));
+                        const uint64_t declared = uint64_t(u32(encoded.data() + header - 8)) |
+                            (uint64_t(u32(encoded.data() + header - 4)) << 32);
+                        captured.soundAssetBytes.assign(encoded.begin() + header, encoded.end());
+                        info.byteCount = static_cast<int>(captured.soundAssetBytes.size());
+                        int channels = 0, rate = 0;
+                        if (declared == captured.soundAssetBytes.size() &&
+                            ImmCore::InspectEncodedAudio(captured.soundAssetBytes.data(), captured.soundAssetBytes.size(), info.encoding, channels, rate) &&
+                            (info.encoding != 5 || info.channels == channels))
+                        { info.channels = channels; info.sampleRate = rate; }
+                    }
+                }
+            }
             captured.name = layer->GetName().GetS();
             captured.visible = layer->GetVisible();
             captured.opacity = layer->GetOpacity();
@@ -1025,6 +1083,24 @@ int StrokeStore::GetPictureAssetData(int layerIdx, uint8_t* bytes, int maxBytes)
 {
     if (!bytes || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size())) return 0;
     const auto& data = mDocument.authoringLayers[layerIdx].pictureAssetBytes;
+    if (data.empty() || maxBytes < static_cast<int>(data.size())) return 0;
+    std::memcpy(bytes, data.data(), data.size());
+    return static_cast<int>(data.size());
+}
+
+bool StrokeStore::GetSoundAssetInfo(int layerIdx, StrokeSoundAssetInfoC* info) const
+{
+    if (!info || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size())) return false;
+    const auto& layer = mDocument.authoringLayers[layerIdx];
+    if (layer.layerType != static_cast<uint32_t>(ImmImporter::Layer::Type::Sound)) return false;
+    *info = layer.soundAssetInfo;
+    return true;
+}
+
+int StrokeStore::GetSoundAssetData(int layerIdx, uint8_t* bytes, int maxBytes) const
+{
+    if (!bytes || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size())) return 0;
+    const auto& data = mDocument.authoringLayers[layerIdx].soundAssetBytes;
     if (data.empty() || maxBytes < static_cast<int>(data.size())) return 0;
     std::memcpy(bytes, data.data(), data.size());
     return static_cast<int>(data.size());
