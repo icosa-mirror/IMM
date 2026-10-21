@@ -1669,6 +1669,36 @@ replacement-run closure in section 6.26 (20:23 UTC):
    These are snapshots, not a claim that full CI has passed. Fresh full CI is
    required for this panorama milestone.
 
+### 6.46. Final chapter-stop completion correction (2026-10-22)
+
+1. Chapter/startup audit found a native completion defect independently of source
+   mapping: an authored Stop stores `stopTime = startTime + keyTime - 1`, but
+   `MngrPlayer::GetIsFinished` compared the uncorrected relative stop time with
+   the last Stop key. Reaching that key therefore remained Waiting instead of
+   Finished. The new final-stop assertion fails on the previous implementation.
+2. Corrected the comparison by the same one tick used by `GetTime`. The existing
+   waiting gate and last-Stop policy are unchanged. Regression checks pass for
+   final completion, held completion, restart clearing completion, intermediate
+   stops waiting without completion, exact Play/chapter boundaries and Continue.
+   Required Windows CI now runs the CPU-only chapter/viewpoint policy harness.
+   This does not prove Quill chapter semantics or application/device behavior.
+3. Windows player/reader build, existing full converter/native .NET suite and
+   export verification pass. Evidence: ignored artifacts/chapter-final-stop-before.log,
+   chapter-final-stop-after.log, chapter-final-stop-native-build.log,
+   chapter-final-stop-suite.log and chapter-final-stop-exports.json. No ABI added.
+4. Source mapping remains open: native Play is a chapter marker, Loop restarts
+   through the manager, and MakeDefault affects spawn areas only. The local
+   Chapters source includes root MakeDefault, so equivalent enum labels are
+   insufficient evidence. A further native startup issue remains unresolved:
+   Stop at tick 0 or 1 cannot satisfy the current `stopTime > startTime` waiting
+   condition. Chapters begins with Stop 0; startup parity must not be claimed.
+   Next investigate these early stops with explicit restart/Continue/seek cases.
+5. Latest panorama run 39694228185 and playback run 39693358402 reported no source
+   failures at this turn's audit but remain incomplete. Old run 39669262483 has
+   now passed Unity iOS; Godot iOS remains active and the Android SDK archive
+   infrastructure failure still awaits its eligible targeted retry. Fresh full
+   validation is required for this native correction.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

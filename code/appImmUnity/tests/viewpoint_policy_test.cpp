@@ -82,8 +82,18 @@ static void checkChapterBoundaries(piLog* log)
     require(player.SetChapter(now, 1), "select stop-defined chapter");
     player.Update(now);
     require(!player.GetIsWaiting() && player.GetCurrentChapter() == 1, "stop-defined chapter starts after Stop");
+    require(!player.GetIsFinished(), "chapter before final Stop is not finished");
     player.Update(now + piTick(99));
     require(player.GetIsWaiting() && player.GetCurrentChapter() == 1, "next Stop still ends the current chapter");
+    require(player.GetIsFinished(), "authored final Stop finishes the story");
+    player.Update(now + piTick(500));
+    require(player.GetIsFinished(), "final Stop remains finished while held");
+    now += piTick(1000);
+    player.Restart(now);
+    player.Update(now);
+    require(!player.GetIsFinished(), "restart clears final Stop completion");
+    player.Update(now + piTick(100));
+    require(player.GetIsWaiting() && !player.GetIsFinished(), "intermediate Stop waits without finishing");
     player.Exit();
     player.Deinit();
     sequence.Deinit(log);

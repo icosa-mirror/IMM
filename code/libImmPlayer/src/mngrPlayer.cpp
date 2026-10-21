@@ -459,7 +459,7 @@ namespace ImmPlayer
                 Layer* root = mDocument->GetRoot();
 				//  when we set stop time we do "SetStopTime(GetStartTime() + lastKey->mTime + piTick(-1));"
 
-                piTick rootTime = root->GetStopTime() - root->GetStartTime();
+                piTick rootTime = root->GetStopTime() - root->GetStartTime() + piTick(1);
                 const int numKeys = root->GetNumAnimKeys(Layer::AnimProperty::Action);
                 for (int i = 0; i < numKeys; i++)
                 {
