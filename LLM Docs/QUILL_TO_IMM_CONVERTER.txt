@@ -261,6 +261,19 @@ C2 evaluation contract: source review, playback acceptance outstanding
    reference's serialized layout: acceptance concerns behavior, not binary identity.
    Local evidence: artifacts/quill-reference/alex-other-key-recheck.json. Root
    actions and playback behavior are outside this audit.
+6. The reference inspector excludes the native root from ordinary layer queries.
+   StrokeDocumentInfo.rootAnimationKeyCount sums keys across root properties,
+   excluding only an implicit single visible/None key at time zero. It does not
+   identify actions or count chapters. Existing public reader APIs expose chapter
+   selection/count but no root-key value query; C2 root mapping needs that data
+   before structural or playback parity can be assessed.
+   The local Chapters project contains Stop keys at ticks 0, 3675 and 26775, plus
+   MakeDefault at 50400. Its folder contains source JSON/qbin/state only. Recursive
+   IMM filename search in the source collection and external IMM collection found only unrelated
+   Soda Island chapter titles, so no matched export is established by that search.
+   A possible matching-export path has been requested from the user; this does not
+   block independent paint/key/timing investigation or establish that no export
+   exists elsewhere. Do not infer root behavior from the non-root key audit.
 
 C0 reference inspection and reuse decision (2026-10-21)
 

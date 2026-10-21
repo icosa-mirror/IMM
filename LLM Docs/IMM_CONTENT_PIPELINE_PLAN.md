@@ -50,7 +50,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
-| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Chapter queries exist; authoring import reports root keys unsupported | Complete root/comic/chapter authoring absent; comic compilation rejected | No complete chapter authoring claim | Determine actual Quill export behavior, then extend only required shared APIs |
+| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Chapter queries and aggregate root-key count exist; root-key values are not queryable; authoring import reports root keys unsupported | Complete root/comic/chapter authoring absent; comic compilation rejected | No complete chapter authoring claim | Inspect actual root keys and Quill export behavior, then extend only required shared APIs |
 | Viewpoints / spawn areas | Existing defaults and properties | Spawn metadata exposed; SharpQuill adapter skips spawn layers | Existing spawn graph/import/export/default selection | Spawn edits within limits | Map export flags, tracking, volume and defaults |
 | Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | No picture construction in current graph/Unity exporter ABI | Outside live scope | Add construction and map projection/viewer locking/assets |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
@@ -138,6 +138,12 @@ The preferred first candidate is:
    midpoint, seek/restart and nested timing behavior before declaring animation
    parity. The converter findings record the source-level contract and remaining
    reference questions. This investigation adds no production animation support.
+7. C2 root/startup reference inspection needs root-key values, not just the current
+   aggregate count and chapter selection API. The count excludes implicit default
+   visibility but includes other properties; it is not an action/chapter count.
+   The local Chapters source supplies Stop/MakeDefault cases. A matching Quill IMM
+   export has not been located by project/name search; the user has been asked for
+   a possible path. Continue other C2 work independently of that optional lookup.
 
 ## 5. Reader and reverse-conversion reference
 
