@@ -23,8 +23,9 @@ hosted success does not establish skipped hardware gates or full content fidelit
 Confirmed regressions take priority over new feature work. See section 6.26.
 
 Latest Windows source regression: shared Opus test staging failed in decoder
-validation; correction 4ec3f148 is under fresh validation (section 6.38). The local
-smoke checks pass, but hosted replacement acceptance remains pending. The hierarchy
+validation; correction 4ec3f148 passed that staging check but its Windows run reached
+an outdated sound-excluding adapter expectation (section 6.40). The local corrected
+adapter checks pass, but hosted replacement acceptance remains pending. The hierarchy
 sound path and reviewed editor menus are recorded in sections 6.37 and 6.39.
 
 ## 1. Objective and document ownership
@@ -1447,6 +1448,26 @@ replacement-run closure in section 6.26 (20:23 UTC):
 5. Windows smoke regression correction 4ec3f148 needs replacement hosted acceptance
    (section 6.38). This editor milestone also requires fresh full CI. Pending gates
    and the earlier Android SDK infrastructure failure are not passing results.
+
+### 6.40. Sound-aware independent adapter regression check (2026-10-21)
+
+1. Run 39687422704 passed the corrected shared DLL staging and reached the separate
+   SharpQuillAdapter suite. Windows job 119524924234 failed its hierarchy child
+   count check: the expected list still excluded sounds after section 6.37 added
+   them. The QuillToImm suite did not cover this independent harness expectation.
+2. The independent adapter check now includes all three supported sample1 sounds
+   in ordered child comparisons. It verifies their common properties/keys, exact
+   decoded PCM/rate/channels and gain/loop/attenuation/modifier settings rather
+   than removing the child-count gate. Legacy flat omission tests remain unchanged.
+3. The failing suite passes against the committed pre-viewpoint adapter source:
+   36 groups, 30 paint layers, three sounds and 58,405 points. Its existing
+   AdapterSource override selected an ignored copy of the committed Git object;
+   no temporary dependency reference is committed. SharpQuillReader regressions
+   and the reader authoring API smoke check also pass. Evidence: ignored
+   artifacts/sound-adapter-regression.log, sound-adapter-reader-regressions.log
+   and sound-adapter-authoring-smoke.log.
+4. Cancelled remaining work in runs 39687422704 and 39687578973 for this source/test
+   contract failure. Push a fresh full validation; hosted acceptance remains open.
 
 ## 7. Consolidated documents
 
