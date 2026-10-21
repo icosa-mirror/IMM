@@ -8,7 +8,7 @@ passing Windows converter regressions. Unity compilation and full CI remain pend
 The static slice's Unity package-import job has passed. Full acceptance is unresolved:
 one Android GLES job failed dependency resolution and Vulkan timed out before the
 required capture frame. The shared reflection extension is now locally verified;
-its broader platform/Unity validation is running. Regression investigation takes
+its broader platform/Unity acceptance awaits fresh full validation. Regression investigation takes
 priority over further feature work; neither Android failure is closed.
 
 ## 1. Objective and document ownership
@@ -184,12 +184,13 @@ The preferred first candidate is:
    [run 39600334760](https://github.com/icosa-mirror/IMM/actions/runs/39600334760).
    The static converter and reader/adapter gates passed in
    [run 39602508539](https://github.com/icosa-mirror/IMM/actions/runs/39602508539),
-   along with the Windows IMM content baseline. The full pipeline is still running.
+   along with the Windows IMM content baseline.
    Full-validation run 39603480459 also passed Unity package import. Its GLES job
    failed Kotlin dependency resolution before compilation; Vulkan rendered but
-   timed out at player frame 38 before the required frame-60 capture. Other jobs
-   remain active. One targeted retry is pending: GitHub rejected rerunning the GLES
-   job while the overall run was active. No gate or timeout has been weakened.
+   timed out at player frame 38 before the required frame-60 capture. Its URP
+   evidence failure exposed the scanner defect below. That run is complete;
+   fresh full validation after the scanner fix is pending. No gate or timeout
+   has been weakened.
 5. C1 native visual evidence: taperecorder reference and converted paint-only output
    rendered at 960x540, DirectX, fixed timestep and player frame 60, with matched
    eye-level camera. Captures are pixel-identical, with 4 paint draw calls and 9962
@@ -206,7 +207,7 @@ resolve confirmed defects and verify the result before advancing feature work.
 Do not interpret an infrastructure classifier or an unrelated passing job as
 closure of a failed gate.
 
-Status updated after the original run completed on 2026-10-21:
+Status checked at 2026-10-21 13:41 UTC:
 
 | Gate | Evidence and current disposition | Required next evidence |
 |---|---|---|
@@ -236,8 +237,9 @@ Status updated after the original run completed on 2026-10-21:
    `artifacts/quill-vulkan-prior-pass/`, with job logs and rerun responses under
    `artifacts/quill-*`. Full reflection validation
    [39607327739](https://github.com/icosa-mirror/IMM/actions/runs/39607327739)
-   passed standalone Vulkan before cancellation was requested following discovery
-   of the scanner source defect. No broad acceptance claim is made.
+   passed standalone Vulkan before cancellation following discovery of the scanner
+   source defect. Cancellation is now confirmed complete. No broad acceptance
+   claim is made.
 4. For a confirmed source failure, cancel the remaining run, fix the cause and
    push a fresh full validation run. For an isolated infrastructure failure,
    preserve independent successes and retry only the affected job and dependents
@@ -252,6 +254,12 @@ Status updated after the original run completed on 2026-10-21:
    a scanner repair, not permission to bypass CI or relax rendering acceptance.
    Because this is a source failure, fresh full validation supersedes the planned
    isolated retries of the original run.
+6. Scanner fix `452d2629` is pushed. Fresh full-validation
+   [run 39609583383](https://github.com/icosa-mirror/IMM/actions/runs/39609583383)
+   is active. Core Matrix Status passed, including the Firebase wrapper's new
+   large-log regression (confirmed in the job log). Baseline content and package
+   source layout gates also passed. Platform builds, Unity and device acceptance
+   remain pending; feature work remains paused until regression gates are resolved.
 
 ## 7. Consolidated documents
 
