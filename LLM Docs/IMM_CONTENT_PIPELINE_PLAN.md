@@ -790,6 +790,12 @@ Status checked at 2026-10-21 14:36 UTC:
    IMM import/re-export byte identity is separately established in section 6.16.
    Native runtime thumbnail display, other preview pairs and full platform CI
    remain unaccepted. Local evidence is under ignored `artifacts/quill-preview-*`.
+6. CI update: `39646549914` (viewpoint revision `740eec8a`) passed Unity iOS
+   Metal validation, providing fresh evidence for the LINQ compiler correction
+   on that platform. Native Windows jobs also passed in `39649419977` (preview
+   export) and `39650746564` (encoded preview import). These do not close Android
+   or remaining platform/device gates. Stored Quill preview conversion revision
+   `7c4d90a0` is pushed and full validation run `39651826435` is queued.
 
 ## 7. Consolidated documents
 
