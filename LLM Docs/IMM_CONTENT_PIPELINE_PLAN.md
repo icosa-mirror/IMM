@@ -982,6 +982,10 @@ Status checked at 2026-10-21 14:36 UTC:
    compressed asset passthrough/import is the next dependency. Source sound layers
    remain diagnosed omissions. Full CI/platform/device validation is pending.
    Local evidence is in ignored `artifacts/sound-authoring-*` reports and streams.
+7. CI update: the loader correction `5ea66d57` passed native Windows validation
+   (`39662841936`, job `119440076064`). Sound construction revision `4dd37545`
+   is pushed; full validation run `39664513588` is queued. These do not establish
+   full platform/device or audible playback acceptance.
 
 ## 7. Consolidated documents
 
