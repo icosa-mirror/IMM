@@ -90,3 +90,14 @@ be written with Flat/Positional, gain/loop, attenuation and one None/Cone modifi
 encoded audio, ambisonic and Model writing remain unsupported. This does
 not recover content already omitted by the legacy adapter. See content pipeline
 sections 6.31-6.33.
+
+`SharpQuillCompat.ReadImmAsHierarchyWithReport(path, includePictures: true)` uses
+current authoring queries to retain ordered groups, local transforms/pivots/flips,
+root properties, paint drawing/frame reuse and supported visibility/opacity/offset/
+transform keys. It returns the same result/report types. Unsupported content and
+unmapped key channels are reported. Unrepresentable integer/float timing fails
+explicitly. A zero document frame rate selects a reported 24 fps sequence default;
+paint rates remain unchanged. Check `Succeeded` and `Issues` before using the subset.
+This mode does not change legacy flat reads. It does not certify codec identity,
+full root/startup/navigation reconstruction, native audio or application acceptance;
+re-encoding decoded geometry can change quantization (content pipeline section 6.34).

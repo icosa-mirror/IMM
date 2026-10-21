@@ -66,3 +66,9 @@ reporting. The included native picture also passes project write/read-back with 
 and picture metadata. These checks do not establish full reverse conversion or
 Quill application acceptance. The diagnostic path requires the current authoring reader APIs;
 use the bundled source-matched reader library.
+
+Hierarchy-mode checks compare the real sample's ordered groups, local transforms/
+pivots, supported keys, paint rates/repeats/frame maps and decoded point attributes
+against authoring-indexed native queries. This is extraction evidence, not native
+re-encoding or application fidelity. Test stand-ins include UnityEngine.Animation
+to catch name collisions with SharpQuill.Animation before Unity compilation.

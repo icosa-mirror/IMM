@@ -150,3 +150,10 @@ static-opacity keys and preservation of differing keys. Truncated/invalid qbin a
 unknown settings reject without replacing output. Project comparisons include
 sound settings/channels/legacy metadata and keys; codec/rate may differ and decoded
 audio samples/playback are not compared. See shared plan section 6.29.
+
+Hierarchy-reader checks cover a controlled native -> Quill project data round trip
+with nested groups, local pivots/reflections, held frames, supported keys and five
+interpolations, plus unmapped-channel and exact timing guards. Native re-encoding
+succeeds, but strict codec equality is not accepted: the fixture's drawing scale
+changes from 3 to 3.0000916 with both legacy and hierarchy readers. Existing exact
+forward comparison gates remain unchanged. See shared plan section 6.34.

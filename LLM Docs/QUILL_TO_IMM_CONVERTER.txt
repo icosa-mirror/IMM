@@ -19,6 +19,12 @@ animation subset and all three sound settings/keys. Independent FFmpeg decoding
 passes for the three emitted Opus streams, with expected rounded 48 kHz frame
 counts. Native audio playback/loop/seek and full source coverage remain unaccepted.
 
+Reverse-reader update (shared plan 6.34): ReadImmAsHierarchyWithReport retains
+local hierarchy and supported key channels without changing legacy flat reads.
+Extraction/project data checks pass; native re-encoding can requantize decoded
+widths (the controlled scale changes from 3 to 3.0000916 with both reader modes).
+This is not strict codec identity or full reverse/application acceptance.
+
 Current review scope
 
 1. Rechecked the reader, writer, managed/native exporter entry points, authoring

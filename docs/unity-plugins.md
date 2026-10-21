@@ -368,6 +368,11 @@ WAV SoundData can be serialized with its supported spatial settings. Native soun
 decoding into SharpQuill, Model writing and Quill application acceptance remain
 open (content pipeline sections 6.32-6.33).
 
+`ReadImmAsHierarchyWithReport` separately retains ordered groups, local properties,
+paint drawing/frame reuse and verified key channels. It reports unsupported content
+and native requantization limitations and rejects unrepresentable timing. It leaves
+legacy flat import behavior unchanged; see content pipeline section 6.34.
+
 | Group | Entry points |
 |---|---|
 | Build/init | `StrokeReader_GetBuildId`, `Init`, `IsInitialized`, `End` (â€”), `GetDocumentCount` |

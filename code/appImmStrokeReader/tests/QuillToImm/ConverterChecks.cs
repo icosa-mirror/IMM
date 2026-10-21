@@ -280,8 +280,10 @@ static class ConverterChecks
                 for (int d = 0; d < drawings; d++)
                 {
                     if (compareAnimation)
-                        Require(DrawingScale(a, layer.Info.id, d) == DrawingScale(b, other.Info.id, d),
-                            $"Drawing quantization scale differs at {path}/{d}.");
+                    {
+                        float scaleA = DrawingScale(a, layer.Info.id, d), scaleB = DrawingScale(b, other.Info.id, d);
+                        Require(scaleA == scaleB, $"Drawing quantization scale differs at {path}/{d}: {scaleA:R} versus {scaleB:R}.");
+                    }
                     int count = Reader.StrokeReader_GetAuthoringStrokeCount(a, layer.Index, d);
                     Require(count == Reader.StrokeReader_GetAuthoringStrokeCount(b, other.Index, d), "Stroke count differs.");
                     for (int s = 0; s < count; s++)

@@ -2,6 +2,9 @@
 // converter, compiler and P/Invoke declarations are compiled unchanged.
 namespace UnityEngine
 {
+    // Real Unity exposes this name alongside SharpQuill.Animation.
+    public sealed class Animation { }
+
     public enum RuntimeInitializeLoadType { BeforeSceneLoad }
     [System.AttributeUsage(System.AttributeTargets.Method)]
     public sealed class RuntimeInitializeOnLoadMethodAttribute : System.Attribute

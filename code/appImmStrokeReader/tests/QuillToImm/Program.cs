@@ -30,6 +30,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     PictureConverterChecks.Run(args[3]);
     SoundConverterChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
+    HierarchyReadChecks.Run(args[3]);
     return 0;
 }
 if (args.Length < 4 || args.Length > 8)

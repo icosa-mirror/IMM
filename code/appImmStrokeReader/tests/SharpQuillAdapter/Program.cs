@@ -84,6 +84,7 @@ foreach (bool includePictures in new[] { false, true })
         Reader.StrokeReader_Unload(document);
     }
 }
+HierarchyAdapterChecks.Run(samplePath);
 var allFrames = global::ImmStrokeReader.SharpQuillCompat.ReadImmAsSequenceWithReport(samplePath);
 Require(allFrames.Succeeded && !allFrames.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.ChapterSubset),
     "Unselected chapter was reported as a selected subset.");

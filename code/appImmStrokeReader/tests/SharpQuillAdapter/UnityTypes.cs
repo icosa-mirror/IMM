@@ -3,6 +3,9 @@
 // members in the native wrapper are not used by the adapter or this test.
 namespace UnityEngine
 {
+    // Real Unity exposes this name alongside SharpQuill.Animation.
+    public sealed class Animation { }
+
     public enum RuntimeInitializeLoadType { BeforeSceneLoad }
 
     [System.AttributeUsage(System.AttributeTargets.Method)]

@@ -54,10 +54,10 @@ These are source-level assessments, not new platform or visual acceptance result
 | Capability | Quill source reader | IMM reader / adapter | Managed offline authoring / export | Native live editing | Quill-to-IMM work |
 |---|---|---|---|---|---|
 | Paint and four brush sections | Existing | Existing point/brush extraction and SharpQuill mapping | Existing; zero-width tips accepted with nonzero stroke extent | Geometry replacement exists | Static mapping implemented; two local reference paint subsets match exactly after decode |
-| Groups and hierarchy | Existing | Authoring reader exposes hierarchy; SharpQuill adapter flattens | Existing group/paint graph | Group hierarchy operations within limits | Map local structure without flattening |
+| Groups and hierarchy | Existing | Authoring reader exposes hierarchy; legacy adapter flattens, opt-in hierarchy mode retains local groups/pivots | Existing group/paint graph | Group hierarchy operations within limits | Map local structure without flattening |
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
-| Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
+| Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; SharpQuill adapter skips spawn layers | Spawn graph/import/export/default selection and immutable preview assets | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
@@ -119,8 +119,8 @@ The preferred first candidate is:
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata comparisons and default-camera capture pass within recorded scope. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in SharpQuill loss reporting implemented; hierarchy/key reconstruction and remaining consumer coverage stay open | Reader extraction and selected adapter output preserve intended content or report loss |
-| R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Adapter hierarchy/keys/native sound decoding, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
+| R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
+| R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys implemented; native sound decoding, codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
 | A2: live breadth and save | Authoring M2 then M3 | Resource-owning layer lifecycle and revision-selected save accepted |
 | A3: managed live cutover/platforms | Authoring M4/M5 after required native contracts | Managed preview uses accepted live path; per-operation/backend evidence |
@@ -175,6 +175,9 @@ The preferred first candidate is:
    unsupported mappings rather than silently treating that fallback as fidelity.
    `ReadImmAsSequenceWithReport` now returns this same legacy subset plus explicit
    source-layer omissions and hierarchy/key/root/chapter limitations (section 6.31).
+   `ReadImmAsHierarchyWithReport` is a separate authoring-indexed mode retaining
+   groups/local properties and verified key channels (section 6.34). Legacy callers
+   keep the flattened behavior.
 5. `WriteImmAsQuillProject` invokes the bundled Quill writer. The writer now
    serializes RGB/RGBA picture children with supported projection metadata and
    rejects unsupported layer types or Gallery pictures before touching output
@@ -1252,6 +1255,50 @@ replacement-run closure in section 6.26 (20:23 UTC):
    report identifies. Decoding encoded native audio into Quill PCM, hierarchy/key
    reconstruction, Quill application acceptance, evaluated/native playback and the
    other full-roadmap requirements remain open. Full CI for this change is pending.
+
+### 6.34. Hierarchy-aware SharpQuill reading and fidelity baseline (2026-10-21)
+
+1. Added ReadImmAsHierarchyWithReport as a separate mode. It rebuilds ordered
+   groups/paint/supported pictures using authoring layer IDs and parent/child indices,
+   copies local transforms/pivots/flips, root properties, background color, stored
+   paint rates/repeats/drawing reuse/held frames and decoded point attributes. It
+   does not bake world transforms or insert a synthetic default viewpoint. Legacy
+   flattened read APIs and consumers retain their behavior. No native ABI changed.
+2. Copies visibility, opacity, offset and combined-transform keys with explicit
+   native-to-SharpQuill interpolation mapping for None/Linear/Smoothstep/EaseIn/
+   EaseOut. Unverified channels (including actions/components/draw-in timing) and
+   Spline/Auto keys are reported, not silently reinterpreted. Keys/offsets outside
+   SharpQuill's integer fields and duration/repeat/start-offset values that cannot
+   fit its float fields exactly cause a failed result with ValueNotRepresentable.
+3. Missing original export range/startup/default navigation stays reported. A native
+   document frame rate of zero selects an explicitly reported 24 fps Quill sequence
+   default while retaining paint rates. Native root flags are retained in memory;
+   a false timeline root is reported because Quill project reading normalizes it.
+   Unsupported sound/spawn/model layers, picture projections and branches under
+   unsupported parents remain explicit omissions. Stroke IDs are reconstructed;
+   native quantization scale and per-point length/time are not explicit Quill fields.
+4. Real sample1.imm checks pass for 36 groups, 30 paint layers and 58,405 points:
+   ordered hierarchy, local transforms/pivots, supported root/layer keys, stored
+   paint rates/repeats/frame maps and all decoded point attributes match native
+   queries. A controlled nested-group/picture fixture passes project read-back for
+   holds, pivots/X/Y/Z flips and all five interpolations. Unsupported key/channel
+   diagnostics and exact float/integer timing guards pass. A Unity Animation name
+   collision was caught with improved stand-ins and corrected before publication;
+   local adapter and full converter/authoring suites pass.
+5. Strict native -> Quill -> native codec equality remains unaccepted: a controlled
+   drawing's stored scale is 3, while re-export computes 3.0000916 from decoded
+   widths. The legacy adapter produces the identical drift, proving this is not
+   introduced by hierarchy reconstruction. Reader-reported stroke bounds already
+   span about 3.0000917, so copying those bounds cannot recover the original scale.
+   The new report exposes potential requantization; existing C1 exact comparison
+   gates remain intact (their failure message now includes both scale values).
+   Data read-back success is not native re-encoding identity or visual acceptance.
+6. Evidence is in ignored artifacts/hierarchy-mode-* and hierarchy-adapter-* logs
+   and fixture projects. The profile suite records the legacy/hierarchy codec
+   baseline instead of claiming strict native equality. R2 still needs native audio
+   decoding, broader field/model coverage, codec/fidelity decisions, Quill application
+   and playback acceptance. Current managed changes need full CI; prior sound API
+   run 39669262483 is still active with its SDK-install failure and deferred retry.
 
 ## 7. Consolidated documents
 
