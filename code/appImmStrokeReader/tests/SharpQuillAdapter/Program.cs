@@ -36,6 +36,30 @@ foreach (bool includePictures in new[] { false, true })
         int importedPictures = sequence.RootLayer.Children.OfType<SharpQuill.LayerPicture>().Count();
         Require(importedPaint == paintCount, $"Expected {paintCount} paint layers; got {importedPaint}.");
         Require(importedPictures == (includePictures ? pictureCount : 0), "Picture inclusion changed.");
+        var reported = global::ImmStrokeReader.SharpQuillCompat.ReadImmAsSequenceWithReport(samplePath, includePictures, 0);
+        Require(reported.Succeeded && reported.IsPartial && reported.Sequence.RootLayer.Children.OfType<SharpQuill.LayerPaint>().Count() == importedPaint &&
+            reported.Sequence.RootLayer.Children.OfType<SharpQuill.LayerPicture>().Count() == importedPictures, "Reporting changed legacy conversion output.");
+        Require(reported.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.RootMetadataNotPreserved) &&
+            reported.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.ChapterSubset), "Root/chapter limitations were not reported.");
+        int sounds = 0;
+        for (int index = 0; index < Reader.StrokeReader_GetAuthoringLayerCount(document); index++)
+        {
+            Require(Reader.StrokeReader_GetAuthoringLayerInfo(document, index, out var layer), "Cannot inspect source authoring layer.");
+            if (layer.type == 5) sounds++;
+            if (layer.type == 5 || layer.type == 8)
+                Require(reported.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.LayerOmitted &&
+                    x.SourceLayerId == layer.id && x.SourceLayerName == layer.name && x.SourceLayerType == layer.type), "Omitted sound/spawn layer not identified.");
+            if (layer.type == 4)
+                Require(reported.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.PictureExcluded && x.SourceLayerId == layer.id) == !includePictures,
+                    "Picture-exclusion diagnostic did not match selection.");
+            if (Reader.StrokeReader_GetLayerAnimationKeyCount(document, index) > 0 || layer.isTimeline != 0 || layer.durationTicks != 0 || layer.maxRepeatCount != 0)
+                Require(reported.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.AnimationNotPreserved && x.SourceLayerId == layer.id),
+                    "Uncopied animation/timing not identified.");
+            if (layer.type == 0 || layer.parentId != 0)
+                Require(reported.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.FlattenedHierarchy && x.SourceLayerId == layer.id), "Flattened hierarchy not identified.");
+        }
+        Require(sounds == 3 && !reported.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.DiagnosticUnavailable ||
+            x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.DataReadFailed), "Fixture/report coverage incomplete.");
         Console.WriteLine($"[IMM_SHARPQUILL_ADAPTER] includePictures={includePictures}: passed ({importedPaint} paint, {importedPictures} pictures).");
     }
     finally
@@ -43,6 +67,13 @@ foreach (bool includePictures in new[] { false, true })
         Reader.StrokeReader_Unload(document);
     }
 }
+var allFrames = global::ImmStrokeReader.SharpQuillCompat.ReadImmAsSequenceWithReport(samplePath);
+Require(allFrames.Succeeded && !allFrames.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.ChapterSubset),
+    "Unselected chapter was reported as a selected subset.");
+Console.WriteLine("[IMM_SHARPQUILL_REPORT] Passed source-layer omission, hierarchy/key, picture-option, chapter and failed-load diagnostics with legacy subset parity.");
+var failed = global::ImmStrokeReader.SharpQuillCompat.ReadImmAsSequenceWithReport($"{samplePath}.missing");
+Require(!failed.Succeeded && failed.Sequence == null && failed.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.LoadFailed),
+    "Failed load was not reported.");
 Reader.StrokeReader_End();
 
 static void Require(bool condition, string message)

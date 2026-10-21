@@ -20,9 +20,11 @@ settings must preserve the native paint count; spawn areas must not become empty
 paint layers. Before the correction, the test reports 34 paint layers instead of
 30. With the correction it reports 30 paint layers and either zero or one picture.
 
-`AdapterSource` can point to a previous adapter source file when checking that
-the regression detects the original behavior. Keep the managed declarations and
-native library paired; this check does not require an older native ABI.
+`AdapterSource` can point to an alternate adapter implementing the tested API.
+Older adapters without the reporting API require the corresponding historical
+harness from Git history to test the original spawn-layer regression. Keep the
+managed declarations and native library paired; those legacy checks do not require
+an older native ABI.
 
 ## Package update comparison (2026-09-07)
 
@@ -55,3 +57,11 @@ Native DLL SHA-256 values:
 
 1. Installed: `cf65a82dabe0ad33866c114902738ebb3ba51d070645814c120d60d75aa4b2b3`
 2. Candidate: `fd232c242a46bf42b8bb48d0006e814520ea2a8d06e17a0f4a88f004fdd35ed4`
+
+The regression also exercises `ReadImmAsSequenceWithReport` against the same
+fixture. It verifies legacy paint/picture count parity, source identities for all
+three omitted sounds and spawn layers, picture-selection diagnostics, hierarchy
+flattening and uncopied key/timeline reports, chapter selection and failed-load
+reporting. These checks do not establish full reverse conversion or Quill writer
+media support. The diagnostic path requires the current authoring reader APIs;
+use the bundled source-matched reader library.

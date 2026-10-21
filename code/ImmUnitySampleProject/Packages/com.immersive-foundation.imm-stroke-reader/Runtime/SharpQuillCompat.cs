@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using ImmPlayer;
 using SharpQuill;
@@ -11,11 +12,54 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace ImmStrokeReader
 {
+    public enum SharpQuillConversionIssueCode
+    {
+        LoadFailed, DiagnosticUnavailable, RootMetadataNotPreserved, FlattenedHierarchy,
+        AnimationNotPreserved, LayerOmitted, PictureExcluded, UnsupportedPictureType,
+        ChapterSubset, DataReadFailed, UnsupportedBrush
+    }
+
+    public sealed class SharpQuillConversionIssue
+    {
+        public SharpQuillConversionIssueCode Code { get; }
+        public int SourceLayerId { get; }
+        public string SourceLayerName { get; }
+        public int SourceLayerType { get; }
+        public string Message { get; }
+        internal SharpQuillConversionIssue(SharpQuillConversionIssueCode code, int id, string name, string message, int sourceLayerType = -1)
+        { Code = code; SourceLayerId = id; SourceLayerName = name; SourceLayerType = sourceLayerType; Message = message; }
+    }
+
+    /// <summary>A legacy adapter subset plus explicit omissions; not a full reverse-conversion certificate.</summary>
+    public sealed class SharpQuillReadResult
+    {
+        public Sequence Sequence { get; }
+        public IReadOnlyList<SharpQuillConversionIssue> Issues { get; }
+        public bool Succeeded => Sequence != null;
+        public bool IsPartial => Succeeded && Issues.Count != 0;
+        internal SharpQuillReadResult(Sequence sequence, List<SharpQuillConversionIssue> issues)
+        { Sequence = sequence; Issues = issues.AsReadOnly(); }
+    }
+
     public static class SharpQuillCompat
     {
         private const string LogPrefix = "[IMM2QUILL_20260209A] ";
 
         public static Sequence ReadImmAsSequence(string path, bool includePictures = false, int chapterIndex = -1)
+            => ReadImmAsSequenceCore(path, includePictures, chapterIndex, null);
+
+        /// <summary>Returns the existing paint/picture subset with source-layer loss diagnostics. Requires current reader APIs.</summary>
+        public static SharpQuillReadResult ReadImmAsSequenceWithReport(string path, bool includePictures = false, int chapterIndex = -1)
+        {
+            var issues = new List<SharpQuillConversionIssue>();
+            var sequence = ReadImmAsSequenceCore(path, includePictures, chapterIndex, issues);
+            if (sequence == null)
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.LoadFailed, -1, "", "IMM loading or initialization failed."));
+            return new SharpQuillReadResult(sequence, issues);
+        }
+
+        private static Sequence ReadImmAsSequenceCore(string path, bool includePictures, int chapterIndex,
+            List<SharpQuillConversionIssue> issues)
         {
             if (string.IsNullOrEmpty(path))
             {
@@ -47,7 +91,8 @@ namespace ImmStrokeReader
                         Debug.LogWarning($"{LogPrefix}StrokeReader_SetChapter({chapterIndex}) failed, using default chapter");
                     }
                 }
-                return ConvertDocument(docId, includePictures, chapterIndex);
+                if (issues != null) CaptureLossReport(docId, includePictures, chapterIndex, issues);
+                return ConvertDocument(docId, includePictures, chapterIndex, issues);
             }
             finally
             {
@@ -137,7 +182,58 @@ namespace ImmStrokeReader
             return true;
         }
 
-        private static Sequence ConvertDocument(int docId, bool includePictures, int chapterIndex = -1)
+        private static void CaptureLossReport(int docId, bool includePictures, int chapterIndex,
+            List<SharpQuillConversionIssue> issues)
+        {
+            issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.RootMetadataNotPreserved, 0, "",
+                "Sequence/root properties, root keys and default viewpoint are not reconstructed; SharpQuill defaults are used."));
+            if (chapterIndex >= 0)
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ChapterSubset, 0, "",
+                    $"Paint frame selection is restricted to chapter {chapterIndex}; this is not the full animation."));
+            try
+            {
+                int count = ImmPlayer.ImmStrokeReader.StrokeReader_GetAuthoringLayerCount(docId);
+                for (int index = 0; index < count; index++)
+                {
+                    if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetAuthoringLayerInfo(docId, index, out var layer))
+                    {
+                        issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DiagnosticUnavailable, -1, "",
+                            $"Authoring layer {index} could not be inspected; the report is incomplete."));
+                        continue;
+                    }
+                    if (layer.type == 0 || layer.parentId != 0)
+                        issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.FlattenedHierarchy, layer.id, layer.name,
+                            "Groups are not reconstructed; converted paint/picture layers are placed directly under the output root.", layer.type));
+                    if (ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerAnimationKeyCount(docId, index) > 0 ||
+                        layer.isTimeline != 0 || layer.durationTicks != 0 || layer.maxRepeatCount != 0)
+                        issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.AnimationNotPreserved, layer.id, layer.name,
+                            "Layer key channels and nested timeline properties are not copied; paint frame buffers use the legacy adapter path.", layer.type));
+                    if (layer.type == 4)
+                    {
+                        if (!includePictures)
+                            issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.PictureExcluded, layer.id, layer.name,
+                                "Picture content was excluded by includePictures=false.", layer.type));
+                        else if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetPictureAssetInfo(docId, index, out var picture))
+                            issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DiagnosticUnavailable, layer.id, layer.name,
+                                "Picture projection could not be inspected; the report is incomplete.", layer.type));
+                        else if (picture.contentType < 0 || picture.contentType > 2)
+                            issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.UnsupportedPictureType, layer.id, layer.name,
+                                "The adapter cannot map this native picture projection to a SharpQuill picture type.", layer.type));
+                    }
+                    else if (layer.type != 0 && layer.type != 1)
+                        issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.LayerOmitted, layer.id, layer.name,
+                            $"Native layer type {layer.type} is not converted (including sound and spawn metadata).", layer.type));
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DiagnosticUnavailable, -1, "",
+                    "This reader binary lacks the authoring APIs required for a complete loss report."));
+            }
+        }
+
+        private static Sequence ConvertDocument(int docId, bool includePictures, int chapterIndex = -1,
+            List<SharpQuillConversionIssue> issues = null)
         {
             Sequence sequence = Sequence.CreateDefault();
             if (sequence.RootLayer == null)
@@ -151,6 +247,8 @@ namespace ImmStrokeReader
             {
                 if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerInfo(docId, layerIdx, out StrokeLayerInfo info))
                 {
+                    issues?.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, -1, "",
+                        $"Legacy layer {layerIdx} could not be read."));
                     continue;
                 }
 
@@ -168,23 +266,26 @@ namespace ImmStrokeReader
                 }
 
                 Layer layer = isPicture
-                    ? ConvertPictureLayer(docId, layerIdx, info)
-                    : ConvertPaintLayer(docId, layerIdx, info, ref maxStrokeId, chapterIndex);
+                    ? ConvertPictureLayer(docId, layerIdx, info, issues)
+                    : ConvertPaintLayer(docId, layerIdx, info, ref maxStrokeId, chapterIndex, issues);
 
                 if (layer != null)
                 {
                     sequence.RootLayer.Children.Add(layer);
                 }
+                else
+                    issues?.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, info.id, info.name,
+                        "The legacy layer could not be converted."));
             }
 
             sequence.LastStrokeId = maxStrokeId;
             return sequence;
         }
 
-        private static LayerPaint ConvertPaintLayer(int docId, int layerIdx, StrokeLayerInfo info, ref uint maxStrokeId, int chapterIndex = -1)
+        private static LayerPaint ConvertPaintLayer(int docId, int layerIdx, StrokeLayerInfo info, ref uint maxStrokeId, int chapterIndex = -1, List<SharpQuillConversionIssue> issues = null)
         {
             LayerPaint layer = new LayerPaint(info.name);
-            ApplyCommonLayerProperties(layer, docId, layerIdx, info);
+            ApplyCommonLayerProperties(layer, docId, layerIdx, info, issues);
 
             // Get animation info
             int frameRate = 24;
@@ -198,6 +299,10 @@ namespace ImmStrokeReader
                 layer.MaxRepeatCount = maxRepeatCount;
             }
 
+            if (!hasAnimationInfo)
+                issues?.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, info.id, info.name,
+                    "Legacy paint animation metadata could not be read.", info.type));
+
             // Get frame buffer (maps timeline frames to drawing indices)
             int[] frameBuffer = null;
             if (numFrames > 0)
@@ -207,6 +312,8 @@ namespace ImmStrokeReader
                 if (framesRead != numFrames)
                 {
                     Debug.LogWarning($"{LogPrefix}Frame buffer mismatch: expected {numFrames}, got {framesRead}");
+                    issues?.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, info.id, info.name,
+                        $"Paint frame buffer read {framesRead} of {numFrames} entries; fallback frame mapping is used.", info.type));
                     frameBuffer = null;
                 }
             }
@@ -222,8 +329,14 @@ namespace ImmStrokeReader
                 {
                     if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeInfo(docId, layerIdx, drawingIdx, strokeIdx, out StrokeInfo strokeInfo))
                     {
+                        issues?.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, info.id, info.name,
+                            $"Stroke metadata could not be read at drawing {drawingIdx}, stroke {strokeIdx}.", info.type));
                         continue;
                     }
+
+                    if (strokeInfo.brushType < 1 || strokeInfo.brushType > 4)
+                        issues?.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.UnsupportedBrush, info.id, info.name,
+                            $"Native brush {strokeInfo.brushType} uses the legacy Cylinder fallback at drawing {drawingIdx}, stroke {strokeIdx}.", info.type));
 
                     if (strokeInfo.numPoints <= 0)
                     {
@@ -233,6 +346,8 @@ namespace ImmStrokeReader
                     StrokePoint[] points = new StrokePoint[strokeInfo.numPoints];
                     if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokePoints(docId, layerIdx, drawingIdx, strokeIdx, points, points.Length))
                     {
+                        issues?.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, info.id, info.name,
+                            $"Stroke points could not be read at drawing {drawingIdx}, stroke {strokeIdx}.", info.type));
                         continue;
                     }
 
@@ -318,7 +433,7 @@ namespace ImmStrokeReader
             return layer;
         }
 
-        private static LayerPicture ConvertPictureLayer(int docId, int layerIdx, StrokeLayerInfo info)
+        private static LayerPicture ConvertPictureLayer(int docId, int layerIdx, StrokeLayerInfo info, List<SharpQuillConversionIssue> issues = null)
         {
             if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetPictureInfo(docId, layerIdx, out StrokePictureInfo pictureInfo))
             {
@@ -360,11 +475,11 @@ namespace ImmStrokeReader
                 }
             };
 
-            ApplyCommonLayerProperties(layer, docId, layerIdx, info);
+            ApplyCommonLayerProperties(layer, docId, layerIdx, info, issues);
             return layer;
         }
 
-        private static void ApplyCommonLayerProperties(Layer layer, int docId, int layerIdx, StrokeLayerInfo info)
+        private static void ApplyCommonLayerProperties(Layer layer, int docId, int layerIdx, StrokeLayerInfo info, List<SharpQuillConversionIssue> issues = null)
         {
             layer.Visible = info.visible != 0;
             layer.Opacity = info.opacity;
@@ -379,6 +494,8 @@ namespace ImmStrokeReader
             else
             {
                 layer.Transform = Transform.Identity;
+                issues?.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, info.id, info.name,
+                    "World transform could not be read; identity fallback was used.", info.type));
             }
         }
 

@@ -357,6 +357,12 @@ platforms.
 
 All are declared in `Runtime/ImmStrokeReader.cs`.
 
+`SharpQuillCompat.ReadImmAsSequenceWithReport` adds an opt-in structured loss
+report to the legacy flattened paint/picture import. It identifies omitted source
+layers and uncopied hierarchy/keys/root/chapter semantics. Existing APIs remain
+unchanged. The report requires current authoring reader entry points and does not
+change the Quill writer's unsupported media behavior.
+
 | Group | Entry points |
 |---|---|
 | Build/init | `StrokeReader_GetBuildId`, `Init`, `IsInitialized`, `End` (â€”), `GetDocumentCount` |

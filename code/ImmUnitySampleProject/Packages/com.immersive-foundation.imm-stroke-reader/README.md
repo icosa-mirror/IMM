@@ -73,3 +73,15 @@ Import/export preserves these bytes, spatial settings and legacy duration/playin
 fields. Encoded frame count is -1; Opus sample rate is its 48 kHz decode rate.
 Container validation does not establish packet decoding or audible playback.
 See content pipeline section 6.25 for validation scope and remaining source mapping.
+
+`SharpQuillCompat.ReadImmAsSequenceWithReport(path, includePictures, chapterIndex)`
+returns the same flattened paint/picture subset as the legacy read method, with
+`Sequence`, `Succeeded`, `IsPartial` and read-only `Issues`. Each issue includes a
+code, source layer ID/name/type and message. Inspect the issues before treating a
+result as adequate for a consumer: sound/spawn omissions, hierarchy, keys, root
+metadata and chapter selection are reported. Root reconstruction remains incomplete,
+so this API does not certify lossless conversion. It requires current authoring
+reader queries; missing entry points are reported as `DiagnosticUnavailable`.
+Existing read/write methods retain their behavior. This report concerns adapter
+reading; the bundled Quill writer still does not serialize picture/sound/model
+children. See content pipeline section 6.31.

@@ -119,7 +119,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata comparisons and default-camera capture pass within recorded scope. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
+| R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in SharpQuill loss reporting implemented; hierarchy/key reconstruction and remaining consumer coverage stay open | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Address SharpQuill adapter hierarchy/keys and Quill writer media limits when full IMM-to-Quill delivery is selected | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
 | A2: live breadth and save | Authoring M2 then M3 | Resource-owning layer lifecycle and revision-selected save accepted |
@@ -173,6 +173,8 @@ The preferred first candidate is:
    original group/timeline structure are not reconstructed by this adapter. Its
    current brush conversion has a Cylinder fallback; full conversion must report
    unsupported mappings rather than silently treating that fallback as fidelity.
+   `ReadImmAsSequenceWithReport` now returns this same legacy subset plus explicit
+   source-layer omissions and hierarchy/key/root/chapter limitations (section 6.31).
 5. `WriteImmAsQuillProject` invokes the bundled Quill writer. That writer filters
    Picture/Sound/Model children, despite picture data being available in memory,
    and throws for nonempty Gallery pictures. Do not promise picture/media project
@@ -1157,6 +1159,35 @@ replacement-run closure in section 6.26 (20:23 UTC):
    check. Prior sound-API run 39669262483 remains active with the SDK CMake archive
    failure from section 6.28; its isolated retry is still deferred until that run
    finishes. No new source failure was observed and no required gate was changed.
+
+### 6.31. SharpQuill adapter loss-report contract (2026-10-21)
+
+1. Added opt-in ReadImmAsSequenceWithReport returning SharpQuillReadResult with
+   Sequence, Succeeded, IsPartial and a read-only Issues collection. Issues identify
+   code, source layer ID/name/type and message. Existing ReadImmAsSequence and
+   WriteImmAsQuillProject signatures/output remain unchanged; no new authoring API
+   calls are made by the legacy read path. The report path uses current authoring
+   queries on the already loaded document, without decoding the file a second time.
+2. Reports explicitly identify omitted sound/spawn/unsupported layers, picture
+   exclusion, flattened groups/nesting, uncopied key channels/timeline properties,
+   chapter-only frame selection and default sequence/root/viewpoint reconstruction.
+   Source root metadata is conservatively marked not reconstructed, so successful
+   reported reads remain partial; this is not a lossless-conversion certificate.
+   Missing diagnostic entry points produce DiagnosticUnavailable rather than an
+   empty success report. Unknown brushes using the existing Cylinder fallback and
+   failed layer/frame/stroke/transform reads are identified on the reporting path.
+3. The Windows native adapter regression passes against sample1.imm for both
+   picture options: legacy output remains 30 paint layers, zero/one pictures.
+   Reporting identifies all 3 omitted sounds and spawn layers by native identity,
+   every observed flattened group/nesting and uncopied key/timeline case. Picture
+   exclusion follows the option; chapter-subset reporting follows selection. A
+   missing input returns a failed result with LoadFailed. The valid fixture has no
+   unexpected read failures or unavailable diagnostic APIs. Logs are ignored
+   artifacts/adapter-loss-report-accepted*.log. Native source/binaries are unchanged.
+4. This advances R1's explicit consumer contract. It does not reconstruct hierarchy,
+   copy keys, decode sound for SharpQuill, map spawn areas or fix the Quill writer's
+   picture/sound/model filtering. R2 and live authoring acceptance remain open.
+   Managed Unity/platform validation of this additive API still requires CI.
 
 ## 7. Consolidated documents
 
