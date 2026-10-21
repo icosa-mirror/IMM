@@ -8,7 +8,8 @@ passing Windows converter regressions. Unity compilation and full CI remain pend
 The static slice's Unity package-import job has passed. Full acceptance is unresolved:
 one Android GLES job failed dependency resolution and Vulkan timed out before the
 required capture frame. The shared reflection extension is now locally verified;
-its broader platform/Unity validation has not run yet.
+its broader platform/Unity validation is running. Regression investigation takes
+priority over further feature work; neither Android failure is closed.
 
 ## 1. Objective and document ownership
 
@@ -194,9 +195,51 @@ The preferred first candidate is:
    eye-level camera. Captures are pixel-identical, with 4 paint draw calls and 9962
    triangles. The existing local standalone viewer was used, not a fresh viewer
    build. Hashes, logs, settings and scope are recorded in the converter findings.
-4. Preserve existing player regression and package/export gates when code changes.
+6. Preserve existing player regression and package/export gates when code changes.
    Live work must retain the authoring document's timing/failure/platform criteria
    and the web performance investigation procedure where applicable.
+
+### 6.1 Open CI failures and regression priority
+
+Regressions always take priority over roadmap features. Diagnose failed gates,
+resolve confirmed defects and verify the result before advancing feature work.
+Do not interpret an infrastructure classifier or an unrelated passing job as
+closure of a failed gate.
+
+Status checked at 2026-10-21 13:29 UTC:
+
+| Gate | Evidence and current disposition | Required next evidence |
+|---|---|---|
+| Android standalone GLES, run 39603480459, job 119237704546 | Failed Gradle classpath resolution for Kotlin 1.9.22/1.9.20 before compilation. The same run's separate Android build passed. Infrastructure failure is suspected, not proven. | Retry the affected job and dependents once after the parent workflow becomes terminal; investigate any repeated failure. |
+| Android standalone Vulkan, same run, job 119237705048 | Loaded successfully, then roughly 72 seconds elapsed before the first content presentation; reached player frame 38 before the 90-second capture deadline. No required frame-60 capture was produced. | One targeted retry after the parent workflow becomes terminal; retain capture, visual, live-edit and performance requirements. A repeated failure remains unresolved. |
+| Device evidence report | Failed downstream of the Android jobs. | Regenerate with the affected jobs; retain successful independent jobs. |
+
+1. GitHub's job-rerun API explicitly rejected the Vulkan request with HTTP 403:
+   "The workflow run containing this job is already running." The GLES retry
+   request was also rejected. Neither request executed a retry. The parent run
+   still has active iOS and Unity Android validation jobs; preserve their work.
+2. Earlier same-day run
+   [39563833083](https://github.com/icosa-mirror/IMM/actions/runs/39563833083),
+   Vulkan job 119106926359, passed the required frame-60 capture about 39 seconds
+   after loading. Its native player library and sample are byte-identical to the
+   failed run: `libappImmPlayer.so` SHA256
+   `5cbf4909d5e541a1a91cda44fa3eb0d9ebfc11f1102c90b51a8060d229889f31`,
+   `sample1.imm` SHA256
+   `baa05c125ed0ca130760f1b76a8cde39a475f66a60e5b4e96644a1839b0b2095`.
+   `libc++_shared.so` also matches. APK files and some DEX entries differ, so this
+   establishes native-library/content identity, not whole-APK identity. No viewer,
+   core/player, Android project or device-workflow source changed between
+   `ee5e02f3` and `c339541b`. This supports timing variability rather than a new
+   native-player code regression; it does not close the failure.
+3. Local evidence is under ignored `artifacts/quill-c1-vulkan-device/` and
+   `artifacts/quill-vulkan-prior-pass/`, with job logs and rerun responses under
+   `artifacts/quill-*`. Full reflection validation
+   [39607327739](https://github.com/icosa-mirror/IMM/actions/runs/39607327739)
+   is also active; no broad acceptance claim is made while it is pending.
+4. For a confirmed source failure, cancel the remaining run, fix the cause and
+   push a fresh full validation run. For an isolated infrastructure failure,
+   preserve independent successes and retry only the affected job and dependents
+   once. Never weaken a required gate or rerun indefinitely.
 
 ## 7. Consolidated documents
 
