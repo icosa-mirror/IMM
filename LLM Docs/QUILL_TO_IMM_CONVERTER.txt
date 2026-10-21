@@ -628,9 +628,11 @@ Unverified content and non-playback metadata
 5. For unrepresented cases, follow the native exporter when suitable examples are
    available, and report unsupported data clearly. Do not delay ordinary corpus
    coverage to implement speculative behavior or silently discard unknown layers.
-6. SharpQuill's project writer currently filters out Sound, Picture and Model
-   children, and has no implementation writers for them. Reading their data does
-   not imply complete Quill-project round-trip support. A direct Quill-to-IMM
+6. SharpQuill's project writer now serializes decoded RGB/RGBA picture children
+   with 2D/equirectangular mono/stereo metadata. It rejects unsupported layer types
+   (including Sound/Model) before replacing output; depth/Gallery support remains
+   absent. Reader/application round-trip scope is recorded in shared plan 6.32.
+   Reading media does not imply complete Quill-project round-trip support. A direct Quill-to-IMM
    converter should consume the parsed source, rather than round-tripping through
    this writer. Detect unsupported layer types before the reader drops them.
 

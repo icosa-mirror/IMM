@@ -11,6 +11,7 @@ internal static class QuillReaderTests
     public static void Run(string corpusPath = null)
     {
         PictureTypes();
+        QuillPictureWriterChecks.Run();
         ViewpointDefaults();
         SpatialSoundSettings();
         StartupSettings();

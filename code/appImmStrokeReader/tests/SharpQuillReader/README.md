@@ -14,3 +14,8 @@ checks real hierarchy/metadata without loading every paint point or picture, and
 reads embedded sound directly to verify PCM bytes and payload boundaries. Original
 projects are not modified. Audio support covers the observed 16-bit PCM layout;
 unsupported encodings and truncated/oversized payloads fail explicitly.
+
+Picture writer checks cover nested RGB/RGBA project write/read-back for 2D and
+mono/stereo equirectangular metadata, raw header/payload bytes and rewritten offsets.
+Malformed/unsupported media must reject before replacing existing project files.
+These checks do not validate Quill application loading or stereo appearance.

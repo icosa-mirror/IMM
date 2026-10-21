@@ -353,7 +353,7 @@ Source: `code/appImmStrokeReader/src/main.cpp` + `strokeStore.cpp/.h`. It links 
 file into a plain in-memory stroke/layer graph. All 38 entry points exist on all four
 platforms.
 
-### 3.1 Native API (40 entry points)
+### 3.1 Native API (47 declared entry points)
 
 All are declared in `Runtime/ImmStrokeReader.cs`.
 
@@ -361,7 +361,10 @@ All are declared in `Runtime/ImmStrokeReader.cs`.
 report to the legacy flattened paint/picture import. It identifies omitted source
 layers and uncopied hierarchy/keys/root/chapter semantics. Existing APIs remain
 unchanged. The report requires current authoring reader entry points and does not
-change the Quill writer's unsupported media behavior.
+reconstruct content omitted before writing. The bundled writer now serializes
+RGB/RGBA pictures with 2D/equirectangular mono/stereo metadata; unsupported layer
+and depth/Gallery cases reject before replacing files. Sound/Model writing and
+Quill application acceptance remain open (content pipeline section 6.32).
 
 | Group | Entry points |
 |---|---|

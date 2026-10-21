@@ -83,5 +83,8 @@ metadata and chapter selection are reported. Root reconstruction remains incompl
 so this API does not certify lossless conversion. It requires current authoring
 reader queries; missing entry points are reported as `DiagnosticUnavailable`.
 Existing read/write methods retain their behavior. This report concerns adapter
-reading; the bundled Quill writer still does not serialize picture/sound/model
-children. See content pipeline section 6.31.
+reading; the bundled Quill writer now serializes decoded RGB/RGBA picture children with
+2D/equirectangular mono/stereo metadata. Unsupported/depth/Gallery media is rejected
+before replacing project files; Sound/Model writing remains unsupported. This does
+not recover content already omitted by the legacy adapter. See content pipeline
+sections 6.31-6.32.

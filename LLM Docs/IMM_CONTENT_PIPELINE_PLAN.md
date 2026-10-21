@@ -120,7 +120,7 @@ The preferred first candidate is:
 | C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in SharpQuill loss reporting implemented; hierarchy/key reconstruction and remaining consumer coverage stay open | Reader extraction and selected adapter output preserve intended content or report loss |
-| R2: reverse conversion | Address SharpQuill adapter hierarchy/keys and Quill writer media limits when full IMM-to-Quill delivery is selected | Quill-project read-back and application checks for the declared subset; no silent media omission |
+| R2: reverse conversion | Picture project serialization/read-back implemented; unsupported media rejected before writing. Adapter hierarchy/keys, sound/model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
 | A2: live breadth and save | Authoring M2 then M3 | Resource-owning layer lifecycle and revision-selected save accepted |
 | A3: managed live cutover/platforms | Authoring M4/M5 after required native contracts | Managed preview uses accepted live path; per-operation/backend evidence |
@@ -175,10 +175,11 @@ The preferred first candidate is:
    unsupported mappings rather than silently treating that fallback as fidelity.
    `ReadImmAsSequenceWithReport` now returns this same legacy subset plus explicit
    source-layer omissions and hierarchy/key/root/chapter limitations (section 6.31).
-5. `WriteImmAsQuillProject` invokes the bundled Quill writer. That writer filters
-   Picture/Sound/Model children, despite picture data being available in memory,
-   and throws for nonempty Gallery pictures. Do not promise picture/media project
-   export based on adapter construction alone.
+5. `WriteImmAsQuillProject` invokes the bundled Quill writer. The writer now
+   serializes RGB/RGBA picture children with supported projection metadata and
+   rejects unsupported layer types or Gallery pictures before touching output
+   (section 6.32). Legacy adapter reading still omits sound/hierarchy/key content;
+   picture writing alone does not establish full reverse conversion.
 6. The adapter includes file-load fallback through memory for paths that native
    file loading cannot open. Unity editor conversion commands and output location
    remain documented in the stroke-reader package README.
@@ -1188,6 +1189,37 @@ replacement-run closure in section 6.26 (20:23 UTC):
    copy keys, decode sound for SharpQuill, map spawn areas or fix the Quill writer's
    picture/sound/model filtering. R2 and live authoring acceptance remain open.
    Managed Unity/platform validation of this additive API still requires CI.
+
+### 6.32. Quill project picture serialization (2026-10-21)
+
+1. QBinWriter and QuillSequenceWriter now write Picture payloads and implementation
+   metadata instead of filtering them from group children. RGB8/RGBA8 dimensions,
+   alpha, raw pixels, ViewerLocked, projection, import path and rewritten data
+   offsets are retained. The emitted 20-byte header follows fixed bytes observed
+   in local Quill 2D and stereo source images. Supported picture metadata covers
+   2D, equirectangular mono and stereo; no eye-layout interpretation is introduced.
+2. Preflight checks picture dimensions/exact byte count and supported projection
+   before creating directories or replacing project files. Depth/Unknown pictures,
+   Sound/Model/unknown layer types and nonempty Gallery pictures are explicitly
+   rejected instead of silently filtered. This is validation of the provided
+   sequence; legacy IMM adapter reading still omits sound before the writer sees
+   it. This change does not make that legacy combined path lossless.
+3. Synthetic project read-back passes for nested RGB/RGBA pictures in all three
+   projection types, including alpha, viewer lock and static metadata. Observed
+   header bytes and rewritten payload offsets are checked. Invalid/missing/oversized
+   image buffers, unsupported projections and model children preserve existing
+   Quill.json, Quill.qbin and State.json. Invalid direct QBinWriter picture calls
+   emit no partial header. These are data-format checks, not application proof.
+4. Real sample1.imm picture pixels and picture metadata survive native adapter ->
+   Quill project -> production reader exactly. Reader/adapter and complete local
+   Quill-to-IMM/authoring suites pass; paint/sound construction remains unaffected.
+   Evidence is in ignored artifacts/quill-picture-writer-* logs and the adapter's
+   generated read-back project beside its log. No native ABI/binary changed.
+5. Quill application acceptance, depth, Gallery pictures, sound/model project
+   writing, adapter hierarchy/key reconstruction and broader reverse conversion
+   remain open. Mono/stereo metadata round trips do not establish native IMM stereo
+   appearance or source stereo conversion; the missing paired Pano export remains
+   a separate evidence gap. Full CI for this managed writer change is pending.
 
 ## 7. Consolidated documents
 

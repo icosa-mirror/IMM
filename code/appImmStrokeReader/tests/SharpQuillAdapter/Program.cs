@@ -36,6 +36,23 @@ foreach (bool includePictures in new[] { false, true })
         int importedPictures = sequence.RootLayer.Children.OfType<SharpQuill.LayerPicture>().Count();
         Require(importedPaint == paintCount, $"Expected {paintCount} paint layers; got {importedPaint}.");
         Require(importedPictures == (includePictures ? pictureCount : 0), "Picture inclusion changed.");
+        if (includePictures)
+        {
+            string project = Path.Combine(Path.GetDirectoryName(logPath), $"quill-picture-readback-{Guid.NewGuid():N}");
+            SharpQuill.QuillSequenceWriter.Write(sequence, project);
+            var readback = SharpQuill.QuillSequenceReader.Read(project);
+            var expectedPictures = sequence.RootLayer.Children.OfType<SharpQuill.LayerPicture>().ToArray();
+            var actualPictures = readback.RootLayer.Children.OfType<SharpQuill.LayerPicture>().ToArray();
+            Require(actualPictures.Length == expectedPictures.Length, "Writer silently omitted adapter pictures.");
+            for (int index = 0; index < expectedPictures.Length; index++)
+            {
+                var expected = expectedPictures[index]; var actual = actualPictures[index];
+                Require(actual.PictureType == expected.PictureType && actual.ViewerLocked == expected.ViewerLocked &&
+                    actual.Data.Width == expected.Data.Width && actual.Data.Height == expected.Data.Height &&
+                    actual.Data.HasAlpha == expected.Data.HasAlpha && actual.Data.Pixels.SequenceEqual(expected.Data.Pixels),
+                    "Native adapter picture changed during project write/read-back.");
+            }
+        }
         var reported = global::ImmStrokeReader.SharpQuillCompat.ReadImmAsSequenceWithReport(samplePath, includePictures, 0);
         Require(reported.Succeeded && reported.IsPartial && reported.Sequence.RootLayer.Children.OfType<SharpQuill.LayerPaint>().Count() == importedPaint &&
             reported.Sequence.RootLayer.Children.OfType<SharpQuill.LayerPicture>().Count() == importedPictures, "Reporting changed legacy conversion output.");

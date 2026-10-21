@@ -19,6 +19,12 @@ namespace SharpQuill
       if (string.IsNullOrEmpty(path))
         throw new InvalidOperationException();
 
+      if (seq == null || seq.RootLayer == null)
+        throw new InvalidDataException("A Quill project requires a root layer.");
+      if (seq.Gallery != null && seq.Gallery.Pictures.Count != 0)
+        throw new NotSupportedException("Writing Gallery pictures is not supported.");
+      ValidateLayerData(seq.RootLayer);
+
       if (!Directory.Exists(path))
         Directory.CreateDirectory(path);
 
@@ -31,7 +37,7 @@ namespace SharpQuill
       {
         QBinWriter qbinWriter = new QBinWriter(qbinStream);
         WriteLastStrokeId(seq, qbinWriter);
-        WriteDrawingData(seq.RootLayer, qbinWriter);
+        WriteLayerData(seq.RootLayer, qbinWriter);
         qbinWriter.Flush();
       }
 
@@ -134,12 +140,14 @@ namespace SharpQuill
         case LayerType.Camera:
           return WriteLayerImplementationCamera(layer as LayerCamera);
 
+        case LayerType.Picture:
+          return WriteLayerImplementationPicture(layer as LayerPicture);
+
         case LayerType.Model:
         case LayerType.Sound:
-        case LayerType.Picture:
         case LayerType.Unknown:
         default:
-          return null;
+          throw new NotSupportedException($"Writing layer type {layer.Type} is not supported.");
       }
     }
 
@@ -151,7 +159,8 @@ namespace SharpQuill
       return layer.Type == LayerType.Group ||
              layer.Type == LayerType.Paint ||
              layer.Type == LayerType.Camera ||
-             layer.Type == LayerType.Viewpoint;
+             layer.Type == LayerType.Viewpoint ||
+             layer.Type == LayerType.Picture;
     }
 
     private static JObject WriteLayerImplementationGroup(LayerGroup layer)
@@ -161,8 +170,7 @@ namespace SharpQuill
 
       foreach (Layer child in layer.Children)
       {
-        if (IsSupported(child))
-          jChildren.Add(WriteLayer(child));
+        jChildren.Add(WriteLayer(child));
       }
 
       jLayer.Add(new JProperty("Children", jChildren));
@@ -190,6 +198,43 @@ namespace SharpQuill
       jLayer.Add(new JProperty("Frames", jFrames));
       
       return jLayer;
+    }
+
+    private static string WritePictureType(PictureType type)
+    {
+      switch (type)
+      {
+        case PictureType.TwoD: return "2D";
+        case PictureType.ThreeSixty_Equirect_Mono: return "360_Equirect_Mono";
+        case PictureType.ThreeSixty_Equirect_Stereo: return "360_Equirect_Stereo";
+        default: throw new NotSupportedException($"Writing picture projection {type} is not supported.");
+      }
+    }
+
+    private static JObject WriteLayerImplementationPicture(LayerPicture layer)
+    {
+      return new JObject
+      {
+        ["Type"] = WritePictureType(layer.PictureType),
+        ["ViewerLocked"] = layer.ViewerLocked,
+        ["DataFileOffset"] = layer.DataFileOffset.ToString("X"),
+        ["ImportFilePath"] = layer.ImportFilePath ?? ""
+      };
+    }
+
+    private static void ValidateLayerData(Layer layer)
+    {
+      if (!IsSupported(layer))
+        throw new NotSupportedException($"Writing layer type {layer?.Type.ToString() ?? "null"} is not supported.");
+      if (layer is LayerGroup group)
+      {
+        foreach (Layer child in group.Children) ValidateLayerData(child);
+      }
+      else if (layer is LayerPicture picture)
+      {
+        WritePictureType(picture.PictureType);
+        QBinWriter.ValidatePictureData(picture.Data);
+      }
     }
 
     private static JObject WriteLayerImplementationCamera(LayerCamera layer)
@@ -367,18 +412,23 @@ namespace SharpQuill
     }
 
     /// <summary>
-    /// Recursive function to write the paint data to file and update the layers offsets.
+    /// Recursive function to write paint/picture data to file and update the layers offsets.
     /// This is called with the root layer and will write all the data for the sequence.
     /// </summary>
-    private static void WriteDrawingData(Layer layer, QBinWriter qbinWriter)
+    private static void WriteLayerData(Layer layer, QBinWriter qbinWriter)
     {
       if (layer.Type == LayerType.Group)
       {
         foreach (Layer l in ((LayerGroup)layer).Children)
         {
           if (l != null)
-            WriteDrawingData(l, qbinWriter);
+            WriteLayerData(l, qbinWriter);
         }
+      }
+      else if (layer is LayerPicture picture)
+      {
+        picture.DataFileOffset = qbinWriter.BaseStream.Position;
+        qbinWriter.Write(picture.Data);
       }
       else if (layer.Type == LayerType.Paint)
       {

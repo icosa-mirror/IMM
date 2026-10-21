@@ -62,6 +62,7 @@ The regression also exercises `ReadImmAsSequenceWithReport` against the same
 fixture. It verifies legacy paint/picture count parity, source identities for all
 three omitted sounds and spawn layers, picture-selection diagnostics, hierarchy
 flattening and uncopied key/timeline reports, chapter selection and failed-load
-reporting. These checks do not establish full reverse conversion or Quill writer
-media support. The diagnostic path requires the current authoring reader APIs;
+reporting. The included native picture also passes project write/read-back with exact pixels
+and picture metadata. These checks do not establish full reverse conversion or
+Quill application acceptance. The diagnostic path requires the current authoring reader APIs;
 use the bundled source-matched reader library.

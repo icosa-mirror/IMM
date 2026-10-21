@@ -17,6 +17,31 @@ namespace SharpQuill
     {
     }
     
+    internal static void ValidatePictureData(PictureData value)
+    {
+      if (value == null || value.Width <= 0 || value.Height <= 0 || value.Pixels == null)
+        throw new InvalidDataException("Picture data requires positive dimensions and decoded pixels.");
+      int channels = value.HasAlpha ? 4 : 3;
+      long pixels = (long)value.Width * value.Height;
+      if (pixels > int.MaxValue / channels || pixels * channels != value.Pixels.Length)
+        throw new InvalidDataException("Picture pixel bytes do not match RGB/RGBA dimensions.");
+    }
+
+    public void Write(PictureData value)
+    {
+      ValidatePictureData(value);
+      // Observed Quill picture header prefix, RGB8=6 or RGBA8=7,
+      // dimensions and trailing value 1, followed by unmodified pixel bytes.
+      Write(0x01000000u);
+      Write((byte)2);
+      Write((byte)(value.HasAlpha ? 7 : 6));
+      Write((ushort)0);
+      Write((uint)value.Width);
+      Write((uint)value.Height);
+      Write(1u);
+      Write(value.Pixels);
+    }
+
     public void Write(DrawingData value)
     {
       Write(value.Strokes.Count);
