@@ -11,7 +11,8 @@ gates now pass in fresh run 39609583383 after earlier dependency/capture failure
 Full acceptance remains unresolved. The shared reflection extension is locally verified;
 native builds and packaged exports pass on all four platforms. Broader Unity/device
 acceptance awaits fresh full validation. Regression investigation takes priority
-over further feature work; Unity player integration and URP device evidence remain pending.
+over further feature work. Unity player/device jobs now pass; final full acceptance
+awaits a single retry of Godot iOS after hosted-runner capacity prevented it starting.
 
 ## 1. Objective and document ownership
 
@@ -217,14 +218,15 @@ resolve confirmed defects and verify the result before advancing feature work.
 Do not interpret an infrastructure classifier or an unrelated passing job as
 closure of a failed gate.
 
-Status checked at 2026-10-21 13:53 UTC:
+Status checked at 2026-10-21 14:17 UTC:
 
 | Gate | Evidence and current disposition | Required next evidence |
 |---|---|---|
 | Android standalone GLES, run 39603480459, job 119237704546 | Earlier Kotlin dependency-resolution failure is superseded by successful fresh job 119258531518 in run 39609583383: APK build, Firebase smoke, face-orientation and result gates pass. No dependency version or gate was changed. | Standalone gate verified; keep full engine/device acceptance separate. |
 | Android standalone Vulkan, same run, job 119237705048 | Earlier frame-60 capture timeout is superseded by successful fresh job 119258531746 in run 39609583383. Firebase smoke, required capture, frame-sample validity, face-orientation and result gates pass. The 90-second deadline remains unchanged. | Standalone gate verified; keep Unity Vulkan/URP acceptance separate. |
-| Unity Android URP, job 119246251194 | Confirmed CI scanner defect: its 26,465,675-byte log exceeded the 25 MiB skip threshold. All 11 required markers are present, but the scanner searched no logs and reported all missing. | Fixed streaming scanner, focused regression and real-log recheck pass locally; fresh CI acceptance pending. |
-| Device/engine evidence reports | Failed downstream of the Android jobs. | Regenerate in the fresh full run. |
+| Unity Android URP, job 119246251194 | Confirmed scanner defect: the 26,465,675-byte log exceeded the old 25 MiB skip threshold despite all 11 markers being present. Fixed scanner regression and real-log recheck pass; fresh URP Firebase job 119265832698 and its frame-sample gate now pass. | Scanner repair verified in fresh CI. |
+| Device/engine evidence reports | Both regenerated successfully in run 39609583383. | Verified; preserve independent successes. |
+| Godot iOS, fresh run job 119254613104 | Cancelled with zero steps and no runner assigned. GitHub annotation: job was not acquired by a hosted runner after multiple attempts; macOS ARM64 capacity constraints. Missing GodotIOSMetal artifact then failed final Validation Evidence job 119273880522. | One targeted job/dependent retry accepted at 14:17 UTC. No source fix or gate relaxation; a repeated capacity failure remains unresolved. |
 
 1. GitHub's job-rerun API explicitly rejected the Vulkan request with HTTP 403:
    "The workflow run containing this job is already running." The GLES retry
@@ -290,7 +292,15 @@ Status checked at 2026-10-21 13:53 UTC:
    opted-in URP camera rendering, and shutdown/recreation session tests. These
    skips do not establish D3D12 runtime acceptance. The saved job log at
    `artifacts/quill-reflection-unity-import.log` contains the exact test results;
-   Unity player/device jobs remain pending.
+   subsequent Unity player/device jobs also passed.
+9. Fresh full validation completed with only Godot iOS capacity cancellation and
+   consequent final evidence aggregation failure. Windows DirectX/Vulkan, macOS
+   Metal, Unity iOS, Android non-XR/URP device validation and the independent
+   core/device/engine/GPU reports passed. The permitted isolated retry targets
+   Godot iOS job 119254613104 and dependents, not all passing jobs. Diagnostic
+   evidence: `artifacts/quill-godot-ios-cancelled-annotations.json` and
+   `artifacts/quill-scanner-fix-validation-evidence.log`. Full-run acceptance
+   remains open until this retry and final aggregation are complete.
 
 ## 7. Consolidated documents
 

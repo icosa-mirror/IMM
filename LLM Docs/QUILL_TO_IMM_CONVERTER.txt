@@ -207,7 +207,9 @@ C1b shared reflection preservation (2026-10-21)
    452d2629 streams large logs and passes its regression in fresh full-validation
    run 39609583383. Both standalone GLES and Vulkan gates now pass in that fresh
    run, including Vulkan's required capture and frame-sample checks. Unity package
-   import also passed; Unity player and URP/device acceptance remain pending.
+   import, Unity player jobs and URP/device validation also passed. Final full-run
+   acceptance awaits one targeted retry of Godot iOS, which never acquired a
+   hosted runner, and its dependent evidence aggregation.
    The main roadmap owns current failure
    disposition and full acceptance; feature work remains paused pending resolution
    of the remaining regression gates.
