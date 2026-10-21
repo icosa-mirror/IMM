@@ -160,12 +160,16 @@ namespace ImmPlayer.Authoring
         };
     }
 
+    /// <summary>Local reflection applied before scale and rotation, matching native flip3.</summary>
+    public enum ImmAuthoringFlip { None = 0, X = 1, Y = 2, Z = 3 }
+
     [Serializable]
     public struct ImmAuthoringTransform
     {
         public Vector3 Position;
         public Quaternion Rotation;
         public float Scale;
+        public ImmAuthoringFlip Flip;
 
         public static ImmAuthoringTransform Identity => new ImmAuthoringTransform
         {
@@ -178,7 +182,7 @@ namespace ImmPlayer.Authoring
         {
             return IsFinite(Position.x) && IsFinite(Position.y) && IsFinite(Position.z) &&
                    IsFinite(Rotation.x) && IsFinite(Rotation.y) && IsFinite(Rotation.z) && IsFinite(Rotation.w) &&
-                   IsFinite(Scale) && Scale > 0f;
+                   IsFinite(Scale) && Scale > 0f && (uint)Flip <= (uint)ImmAuthoringFlip.Z;
         }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);

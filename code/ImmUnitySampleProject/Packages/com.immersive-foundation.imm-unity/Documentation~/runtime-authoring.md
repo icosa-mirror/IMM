@@ -24,8 +24,9 @@ is wanted; inspect `IsPartial` and every `Issues` entry before accepting the out
 1. Preserves four native brush sections, rotational-opacity flags, local transforms,
    pivots, static properties and held references to a single drawing. Hidden paint
    is excluded through static ancestor visibility, with a diagnostic.
-2. Reflections, animated timing/keys, active keep-alive and nonidentity root properties
-   are unsupported. Navigation and media conversion are not part of this profile.
+2. X/Y/Z layer and pivot reflections are preserved with matching native binaries.
+   Animated timing/keys, active keep-alive and nonidentity root properties remain
+   unsupported by this conversion profile. Navigation and media conversion are separate.
 3. Zero-width tips are valid. Widths must be nonnegative and a stroke must have
    nonzero spatial or width extent. The native codec computes bounds and quantizes
    values; the converter does not clamp widths or add another simplifier.
@@ -34,6 +35,11 @@ is wanted; inspect `IsPartial` and every `Issues` entry before accepting the out
 
 The native .NET regression harness is under `code/appImmStrokeReader/tests/QuillToImm`
 in the repository. Data comparison does not replace Unity/visual playback acceptance.
+
+`ImmAuthoringTransform.Flip` also preserves reflections in supported offline
+transform-key authoring/import. The compiler uses additive reflection exports when
+needed; the legacy native transform structure and no-flip entry points are unchanged.
+This does not extend the current native live mutation ABI.
 
 ## Ownership and lifetime
 

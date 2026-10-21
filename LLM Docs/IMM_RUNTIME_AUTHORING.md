@@ -96,6 +96,12 @@ sections and visibility modes; and supported layer animation keys. Legacy compon
 position/rotation/scale keys are not a substitute for supported transform-key authoring.
 Managed/exporter key breadth is greater than the live ABI's visibility/opacity/transform subset.
 
+The offline graph/exporter now has explicit `ImmAuthoringFlip` values for layer,
+pivot and transform-key reflections. Import and structural comparison retain them.
+Two additive native exporter calls preserve the legacy transform ABI. Windows native
+regressions pass; cross-platform/Unity acceptance for this extension is pending.
+This does not expand the current live mutation ABI's transform contract.
+
 Paint round trips preserve the codec's representation, not arbitrary source floats: alpha and
 width are quantised, always-visible direction is omitted by the codec, and point length/time
 are derived. Unsupported or reinterpreted content must remain explicit in import diagnostics.

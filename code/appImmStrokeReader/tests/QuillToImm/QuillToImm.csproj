@@ -16,6 +16,8 @@
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringDocument.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringTransaction.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringCompiler.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringImporter.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringStructuralComparer.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringRuntime.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/QuillToImmConverter.cs" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

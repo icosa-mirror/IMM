@@ -376,6 +376,9 @@ namespace ImmPlayer.Authoring
                     }
                     if (handle == IntPtr.Zero)
                         return CompileFailure(sequence, "Native layer creation failed.", layer.Id);
+                    if ((layer.Properties.Transform.Flip != ImmAuthoringFlip.None || layer.Properties.Pivot.Flip != ImmAuthoringFlip.None) &&
+                        !Native.ImmExporter_LayerSetTransformFlips(handle, (int)layer.Properties.Transform.Flip, (int)layer.Properties.Pivot.Flip))
+                        return CompileFailure(sequence, "Native layer reflection setup failed.", layer.Id);
                     layerHandles.Add(layer.Id, handle);
                     statistics.LayerCount++;
                     options.Report(ImmAuthoringProgressStage.CompilingGraph, ++completedUnits, totalUnits, $"Compiled layer '{layer.Properties.Name}'.");
@@ -383,7 +386,14 @@ namespace ImmPlayer.Authoring
                     foreach (ImmAuthoringAnimationKeySnapshot key in layer.AnimationKeys)
                     {
                         TransformNative keyTransform = ToNative(key.Value.TransformValue);
-                        if (!Native.ImmExporter_LayerAddAnimationKey(
+                        bool added;
+                        if (key.Property == ImmAuthoringAnimationProperty.Transform && key.Value.TransformValue.Flip != ImmAuthoringFlip.None)
+                            added = Native.ImmExporter_LayerAddAnimationKeyWithFlip(
+                                handle, (int)key.Property, key.TimeTicks, (int)key.Interpolation,
+                                key.Value.BoolValue ? 1 : 0, key.Value.UIntValue, key.Value.FloatValue,
+                                key.Value.DoubleValue, ref keyTransform, (int)key.Value.TransformValue.Flip);
+                        else
+                            added = Native.ImmExporter_LayerAddAnimationKey(
                                 handle,
                                 (int)key.Property,
                                 key.TimeTicks,
@@ -392,7 +402,8 @@ namespace ImmPlayer.Authoring
                                 key.Value.UIntValue,
                                 key.Value.FloatValue,
                                 key.Value.DoubleValue,
-                                ref keyTransform))
+                                ref keyTransform);
+                        if (!added)
                         {
                             return CompileFailure(sequence, "Native animation key creation failed.", key.Id);
                         }

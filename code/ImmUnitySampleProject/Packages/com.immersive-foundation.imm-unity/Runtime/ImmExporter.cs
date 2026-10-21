@@ -697,6 +697,18 @@ namespace ImmPlayer.Exporter
             double doubleValue,
             ref TransformNative transformValue);
 
+        // Additive reflection APIs leave the legacy 32-byte transform ABI unchanged.
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_LayerSetTransformFlips(IntPtr layerHandle, int transformFlip, int pivotFlip);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_LayerAddAnimationKeyWithFlip(
+            IntPtr layerHandle, int property, long timeTicks, int interpolation,
+            int boolValue, uint intValue, float floatValue, double doubleValue,
+            ref TransformNative transformValue, int transformFlip);
+
         [DllImport(DllName)]
         public static extern IntPtr ImmExporter_CreateDrawing(IntPtr paintLayerHandle);
 

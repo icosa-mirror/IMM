@@ -85,14 +85,15 @@ iOS and macOS the plugins are built without an export map or `-fvisibility=hidde
 every C++ symbol of the statically linked `libImmCore` / `libImmImporter` / `libImmPlayer`
 is exported as well. Only the `extern "C"` names are a supported interface.
 
-Every platform now builds the full API: the 21 `ImmExporter_*` entry points are part of
-the Android, iOS and macOS binaries as well, since `libImmExporter` (with the vendored
-libopusenc for Opus audio) is wired into all four build systems. The table above is from
-the binary sync in commit `32e99926`, the first one to carry the exporter on all four
-platforms, so every row's "Plugin API" column is the same 97 (or 38) entry points.
+All four build systems include `libImmExporter` and vendored libopusenc. The shared
+implementation now has 23 `ImmExporter_*` entry points: the original 21 plus two
+additive reflection calls. The new calls are verified in the local Windows binary;
+other-platform binary refresh and acceptance are pending CI. The table above is a
+historical snapshot from sync commit `32e99926`, not a current API-count assertion.
+Use the export verifier's generated report for the current declaration/binary match.
 
-Local build outputs under the `exe/` folders (not shipped; only the stroke reader DLL here
-is tracked in git):
+Local build outputs under the `exe/` folders in that historical snapshot (not shipped;
+only the stroke reader DLL here is tracked in git):
 
 | Path | Exports | Note |
 |---|---|---|
@@ -130,7 +131,8 @@ Godot plugin, so plugin-side changes affect both engines.
 3. Playback: document load/unload, playback state, time, chapters, volume, bounding box.
 4. Scene-graph editing: per-layer visibility/opacity/transform overrides and diagnostics.
 5. Spawn areas / viewpoints: enumeration, active area, pose, screenshot, "needs update" signal.
-6. Paint authoring and export (`ImmExporter_*`), Windows only.
+6. Offline paint authoring and export (`ImmExporter_*`), built on all four platforms;
+   check matching binaries for newly added exports.
 7. Runtime flag plumbing (`SetRuntimeFlag`) so raw `getenv` toggles work on Android.
 
 ### 2.2 Native API
@@ -239,7 +241,7 @@ behavior. See [runtime viewpoint policy and evaluation](runtime-viewpoints.md) f
 completion, buffer/ABI contracts, and validation. Source additions require rebuilt native
 binaries; availability is not inferred from legacy capability flags.
 
-#### Exporter (Windows only)
+#### Offline exporter
 
 | Export | C# | callers |
 |---|---|---|
@@ -253,6 +255,7 @@ binaries; availability is not inferred from legacy capability flags.
 | `ImmExporter_ComputeElementBounds` / `ComputeDrawingBounds` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_PaintAddFrame` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_LayerAddAnimationKey` | Export | `ImmAuthoringCompiler` |
+| `ImmExporter_LayerSetTransformFlips` / `ImmExporter_LayerAddAnimationKeyWithFlip` | Export, additive reflection support | `ImmAuthoringCompiler`; requires matching native binaries, other-platform acceptance pending |
 | `ImmExporter_PaintSetMaxRepeatCount` | Export | `ImmAuthoringCompiler` |
 | `ImmExporter_ExportToFile` / `ExportToMemory` | Export | `ImmExporter` |
 | `ImmExporter_GetMemoryData` / `GetMemorySize` / `DestroyMemory` | Export | `ImmExporter` |

@@ -53,9 +53,22 @@ static class ConverterChecks
         byte[] binary = File.ReadAllBytes(binaryFile);
         var parsed = JObject.Parse(json);
         var sourceGroup = (JObject)parsed["Sequence"]!["RootLayer"]!["Implementation"]!["Children"]![0]!;
-        sourceGroup["Transform"]!["Flip"] = "X";
+        sourceGroup["Transform"]!["Flip"] = "UnknownAxis";
         File.WriteAllText(jsonFile, parsed.ToString());
         RejectPreservingOutput("UnsupportedReflection");
+
+        foreach (string axis in new[] { "X", "Y", "Z" })
+        {
+            parsed = JObject.Parse(json);
+            sourceGroup = (JObject)parsed["Sequence"]!["RootLayer"]!["Implementation"]!["Children"]![0]!;
+            sourceGroup["Transform"]!["Flip"] = axis;
+            sourceGroup["Pivot"]!["Flip"] = axis;
+            File.WriteAllText(jsonFile, parsed.ToString());
+            string reflectedOutput = Path.Combine(root, $"quill-flip-{axis}.imm");
+            var reflected = QuillToImmConverter.ConvertStaticPaintProject(project, reflectedOutput);
+            Require(reflected.Succeeded && !reflected.IsPartial, Describe(reflected));
+            ReflectionChecks.AssertFirstLayerFlip(reflectedOutput, (int)Enum.Parse<ImmAuthoringFlip>(axis));
+        }
 
         parsed = JObject.Parse(json);
         sourceGroup = (JObject)parsed["Sequence"]!["RootLayer"]!["Implementation"]!["Children"]![0]!;
@@ -96,6 +109,7 @@ static class ConverterChecks
             point.Width = 0;
             Require(!document.CreateStroke(d, BrushSectionType.Circle, VisibilityType.Always, new[] { point, point }).Succeeded, "Zero-extent stroke was accepted.");
         }
+        ReflectionChecks.Run(root);
         Console.WriteLine("[IMM_QUILL_CONVERTER_TEST] Passed native four-brush/zero-tip/hierarchy/pivot checks and rejection/output-preservation cases.");
 
         void RejectPreservingOutput(string code)

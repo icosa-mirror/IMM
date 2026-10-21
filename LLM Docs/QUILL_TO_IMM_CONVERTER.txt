@@ -10,7 +10,8 @@ Current review scope
 1. Rechecked the reader, writer, managed/native exporter entry points, authoring
    compiler and local regression harnesses. A direct static paint/group entry point
    now exists through QuillToImmConverter and the existing authoring compiler.
-   Animation, reflection preservation, navigation and media remain outstanding.
+   Animation, navigation and media remain outstanding. Shared reflection support
+   is now locally implemented/verified; platform and Unity CI acceptance is pending.
 2. Reran reader regressions and the 21-project metadata/media corpus check, plus
    the native IMM-to-Quill adapter regression against the bundled Windows DLL.
    These passed. Subsequent C0 work inspected five local candidate reference pairs;
@@ -76,9 +77,9 @@ What exists
    and SpawnArea, rather than picture/sound/model construction. Reuse that work
    where appropriate instead of treating all managed animation support as absent.
 7. The first implementation candidate is SharpQuill -> ImmAuthoringDocument ->
-   ImmAuthoringCompiler. Validate its no-flip transform representation, single
-   document frame rate and root/chapter limitations against references before
-   extending that path. The initial mapping now uses this graph and compiler.
+   ImmAuthoringCompiler. The graph now preserves reflection flags through additive
+   offline APIs. Its single document frame rate and root/chapter limitations still
+   require reference-backed mappings. The initial converter uses this graph/compiler.
 
 Remaining work for a basic converter
 
@@ -115,8 +116,9 @@ C1 static profile implementation and validation (2026-10-21)
    paint drawings, builds the existing authoring graph, and reuses atomic file export.
 2. Default mode rejects non-paint/group content. Explicit allowOmittedLayers=true
    diagnoses every omitted layer and marks output partial. Hidden paint is filtered
-   through static ancestor visibility, with an informational diagnostic. Reflections,
-   animated keys/timing, active keep-alive and nonidentity root properties fail.
+   through static ancestor visibility, with an informational diagnostic. X/Y/Z layer
+   and pivot flips are preserved by the C1b extension. Unknown flips, animated
+   keys/timing, active keep-alive and nonidentity root properties fail.
    Supported static paint has one drawing and held references to drawing zero;
    Quill's string-valued frame indices are accepted. Root default visibility/offset
    scaffolding is accepted, not interpreted as animated content.
@@ -151,6 +153,46 @@ C1 static profile implementation and validation (2026-10-21)
    Existing local appImmViewer_Release.exe SHA-256:
    0c894521817a8576bb04602392785875f8ce394ac78b920a19322774f3ea1064.
    No viewer rebuild or Unity Editor launch/refresh was performed.
+
+C1b shared reflection preservation (2026-10-21)
+
+1. Added ImmAuthoringFlip None/X/Y/Z to managed transforms. Snapshots retain it,
+   validation rejects unknown values, and the structural comparer distinguishes it.
+   The importer preserves valid layer, pivot and transform-key flip values instead
+   of marking all reflected content unsupported. Unknown values remain diagnosed.
+2. Kept the existing 32-byte TransformNative layout and legacy exports. Added
+   ImmExporter_LayerSetTransformFlips and ImmExporter_LayerAddAnimationKeyWithFlip.
+   Both validate enum values before mutation. The compiler uses these calls only
+   when a reflection is present; ordinary layers and no-flip keys keep legacy paths.
+   These are offline exporter additions, not new native live-edit operations.
+3. The Quill static converter maps N/X/Y/Z explicitly and rejects unknown strings.
+   Windows native solution target appImmUnity built successfully, refreshing the
+   package Windows DLL. Other-platform binaries still require CI rebuild. Windows
+   DLL SHA-256: 05eeba927afc0bd4cbfcafffc35794a592503692209105e2d2e73236cbcb7579.
+4. Extended the existing native converter gate with all three axes, layer/pivot
+   and transform-key export/read-back, real importer/comparer checks, invalid enum
+   rejection without partial mutation, and direct reflected-Quill conversion.
+   The legacy transform ABI size and ordinary key entry point are checked. Tests
+   pass locally with production source and native DLLs; Unity types remain stand-ins
+   in this .NET harness. A Unity NUnit graph/comparison test is also added, unrun locally.
+5. Windows export verification passes: 111 declared player-plugin P/Invokes and 39
+   reader P/Invokes are present in the checked Windows binaries. This is not an
+   all-platform result. Both original native paint-subset comparisons still match
+   exactly (taperecorder 114 strokes/2068 points; consul-room 2495/57187).
+6. Broader source coverage remains gated by animation. The existing Stone Racer
+   source includes reflected static paint alongside multi-drawing animated layers;
+   the static profile correctly rejects that whole project rather than flattening
+   or silently dropping animation. These are available local C2 reference candidates.
+7. C1 full-validation run 39603480459 passed Unity package import but remains active
+   with GLES dependency-resolution failure and a separate Vulkan capture timeout.
+   GLES could not resolve Kotlin artifacts before compiling. Vulkan reached player
+   frame 38 at the 90-second deadline while rendering 37 paint calls/645802 triangles,
+   short of required frame 60. Targeted retry was rejected while the run was active;
+   no successful retry is claimed and required gates remain unchanged.
+8. R1 follow-up found during importer coverage: zero-width tips are valid in the
+   graph/exporter, but importer SanitizePositive still substitutes them. Fix and
+   validate that separately; reflection tests use positive widths and do not claim
+   to close zero-tip import fidelity.
 
 C0 reference inspection and reuse decision (2026-10-21)
 

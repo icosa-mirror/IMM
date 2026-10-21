@@ -5,6 +5,10 @@ This is the planning entry point for Quill conversion, IMM content extraction an
 runtime authoring. C0 has reference evidence. C1 has an offline static converter,
 exact native paint-subset comparisons, one identical DirectX reference capture and
 passing Windows converter regressions. Unity compilation and full CI remain pending.
+The static slice's Unity package-import job has passed. Full acceptance is unresolved:
+one Android GLES job failed dependency resolution and Vulkan timed out before the
+required capture frame. The shared reflection extension is now locally verified;
+its broader platform/Unity validation has not run yet.
 
 ## 1. Objective and document ownership
 
@@ -39,9 +43,9 @@ These are source-level assessments, not new platform or visual acceptance result
 |---|---|---|---|---|---|
 | Paint and four brush sections | Existing | Existing point/brush extraction and SharpQuill mapping | Existing; zero-width tips accepted with nonzero stroke extent | Geometry replacement exists | Static mapping implemented; two local reference paint subsets match exactly after decode |
 | Groups and hierarchy | Existing | Authoring reader exposes hierarchy; SharpQuill adapter flattens | Existing group/paint graph | Group hierarchy operations within limits | Map local structure without flattening |
-| Static properties and pivots | Existing, including flip | Local/world properties exposed | Existing pivots; transform has positive uniform scale and no flip field | Canonical properties within ABI limits | Establish flip/coordinate strategy from references |
+| Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
-| Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys and timeline properties exist | Visibility/opacity/transform key subset | Map offsets, duration, repeats and interpolation against references |
+| Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Chapter queries exist; authoring import reports root keys unsupported | Complete root/comic/chapter authoring absent; comic compilation rejected | No complete chapter authoring claim | Determine actual Quill export behavior, then extend only required shared APIs |
 | Viewpoints / spawn areas | Existing defaults and properties | Spawn metadata exposed; SharpQuill adapter skips spawn layers | Existing spawn graph/import/export/default selection | Spawn edits within limits | Map export flags, tracking, volume and defaults |
 | Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | No picture construction in current graph/Unity exporter ABI | Outside live scope | Add construction and map projection/viewer locking/assets |
@@ -67,10 +71,12 @@ The preferred first candidate is:
 2. Keep Quill semantics in the mapping layer. Extend the shared graph/exporter only
    when a demonstrated source case needs a reusable capability. Do not introduce
    another full document model or route conversion through Open Brush strokes.
-3. The graph's `ImmAuthoringTransform` has no flip flag and accepts positive scale.
-   The reader exposes source flip state, but the current export `TransformNative`
-   also lacks an explicit flip field. Establish a reference-backed mapping or a
-   focused shared extension; do not silently remove a reflection.
+3. Reflection preservation is implemented through an explicit graph flip enum and
+   additive offline layer/pivot and transform-key exports. The legacy 32-byte native
+   transform structure and exports are unchanged. Windows native build, X/Y/Z
+   export/import/comparison checks and the existing two reference subsets pass.
+   Other-platform binaries/CI and Unity acceptance remain pending; this does not
+   extend the live mutation ABI's scope.
 4. `ImmAuthoringCompiler` uses the snapshot's document frame rate. The existing
    importer reports mismatched layer rates. C0 references normalize paint rates to
    the sequence rate while preserving frame buffers (748 mixed-rate paint layers
@@ -95,10 +101,11 @@ The preferred first candidate is:
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows CI gate passed; Unity/full CI pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
+| C1b: shared reflection preservation | Implemented locally for layer/pivot and offline transform keys, including importer/comparer; Windows native and converter regressions pass; other-platform/Unity CI pending | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Extend C1 for shared drawings/holds, keys, nested timing, viewpoints, root/startup/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| R1: reader and consumer contract | Reconcile authoring-view versus legacy reader access; specify consumer coverage; extend only concrete gaps | Reader extraction and selected adapter output preserve intended content or report loss |
+| R1: reader and consumer contract | Reconcile authoring/legacy views and consumer coverage; follow up on importer still sanitizing valid zero-width tips | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Address SharpQuill adapter hierarchy/keys and Quill writer media limits when full IMM-to-Quill delivery is selected | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
 | A2: live breadth and save | Authoring M2 then M3 | Resource-owning layer lifecycle and revision-selected save accepted |
@@ -117,8 +124,8 @@ The preferred first candidate is:
 5. C0 selected an unreflected static paint/group C1 slice through the existing graph
    and compiler. Use taperecorder and consul-room as the first data references;
    report out-of-profile content explicitly. No new graph type or rate API is
-   required for that slice. Reflections need an additive shared capability extension
-   before broad corpus coverage. See the converter findings for measured limits.
+   required for that slice. C1b now supplies the additive reflection extension;
+   its full platform acceptance is pending. See the converter findings for limits.
 
 ## 5. Reader and reverse-conversion reference
 
@@ -177,6 +184,11 @@ The preferred first candidate is:
    The static converter and reader/adapter gates passed in
    [run 39602508539](https://github.com/icosa-mirror/IMM/actions/runs/39602508539),
    along with the Windows IMM content baseline. The full pipeline is still running.
+   Full-validation run 39603480459 also passed Unity package import. Its GLES job
+   failed Kotlin dependency resolution before compilation; Vulkan rendered but
+   timed out at player frame 38 before the required frame-60 capture. Other jobs
+   remain active. One targeted retry is pending: GitHub rejected rerunning the GLES
+   job while the overall run was active. No gate or timeout has been weakened.
 5. C1 native visual evidence: taperecorder reference and converted paint-only output
    rendered at 960x540, DirectX, fixed timestep and player frame 60, with matched
    eye-level camera. Captures are pixel-identical, with 4 paint draw calls and 9962

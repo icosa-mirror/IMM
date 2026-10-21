@@ -30,10 +30,16 @@ does not replace Unity compilation or visual playback acceptance.
 The suite covers native brush/visibility mapping, nonidentity group transform/pivot,
 hierarchy, zero-width stroke tips, invalid zero-extent/negative-width strokes,
 string-valued held frames,
-reflection and animation rejection, unknown source layers/brushes, explicit partial
+X/Y/Z reflection preservation, unknown reflection/animation rejection, unknown source layers/brushes, explicit partial
 output, source-file overwrite protection and preservation of existing output on failure.
 The no-argument `QBinReader.ReadDrawingData()` brush fallback remains unchanged;
 conversion explicitly requests strict brush validation.
+
+Reflection checks additionally cover native layer/pivot and transform-key flips,
+known-flip import, structural comparison, invalid native enum rejection without
+partial mutation, and the unchanged 32-byte legacy transform ABI. No-flip keys
+continue through the original export entry point. The local Windows DLL must be
+built from source containing the two additive reflection exports.
 
 Private projects and generated artifacts remain local. Console prefixes are
 `[IMM_QUILL_CONVERTER]`, `[IMM_QUILL_CONVERTER_TEST]` and

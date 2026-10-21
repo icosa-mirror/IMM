@@ -16,6 +16,28 @@ namespace ImmPlayer.Tests
         private const long MaxRetainedManagedBytes = 8L * 1024L * 1024L;
         private const long MaxRetainedWorkingSetBytes = 64L * 1024L * 1024L;
         [Test]
+        public void TransformReflectionsAreValidatedAndCompared()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                var properties = ImmAuthoringLayerProperties.Default("Mirrored");
+                properties.Transform.Flip = ImmAuthoringFlip.X;
+                properties.Pivot.Flip = ImmAuthoringFlip.Z;
+                long layer = Require(document.CreateGroupLayer(0, properties));
+                ImmAuthoringSnapshot before = Require(document.CreateSnapshot());
+                Assert.That(before.Layers[0].Properties.Transform.Flip, Is.EqualTo(ImmAuthoringFlip.X));
+                Assert.That(before.Layers[0].Properties.Pivot.Flip, Is.EqualTo(ImmAuthoringFlip.Z));
+                properties.Transform.Flip = ImmAuthoringFlip.None;
+                Require(document.SetLayerProperties(layer, properties));
+                var comparison = ImmAuthoringStructuralComparer.Compare(before, Require(document.CreateSnapshot()));
+                Assert.That(comparison.Equivalent, Is.False);
+                Assert.That(comparison.Differences, Has.Some.Property("Path").EqualTo("layers[0].transform.flip"));
+                properties.Transform.Flip = (ImmAuthoringFlip)4;
+                Assert.That(document.SetLayerProperties(layer, properties).Succeeded, Is.False);
+            }
+        }
+
+        [Test]
         public void ZeroWidthTipsAreSupportedWithoutAllowingDegenerateStrokes()
         {
             using (ImmAuthoringDocument document = CreateDocument())

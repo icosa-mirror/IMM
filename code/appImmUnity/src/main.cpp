@@ -4000,7 +4000,7 @@ extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_PaintAddF
     paint->AddFrame(drawingIndex);
 }
 
-extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_LayerAddAnimationKey(
+static bool ImmExporterAddAnimationKey(
     void* layerHandle,
     int property,
     int64_t timeTicks,
@@ -4009,7 +4009,8 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_LayerAddA
     uint32_t intValue,
     float floatValue,
     double doubleValue,
-    const ImmExporterTransformC* transformValue)
+    const ImmExporterTransformC* transformValue,
+    int transformFlip)
 {
     ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
     if (layer == nullptr)
@@ -4017,6 +4018,9 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_LayerAddA
     if (property < 0 || property >= static_cast<int>(ImmExporter::Layer::AnimProperty::MAX))
         return false;
     if (interpolation < 0 || interpolation >= static_cast<int>(ImmExporter::Layer::InterpolationType::MAX))
+        return false;
+    if (transformFlip < 0 || transformFlip > 3 ||
+        (transformFlip != 0 && property != static_cast<int>(ImmExporter::Layer::AnimProperty::Transform)))
         return false;
 
     // Every field is filled from its own argument so the stored key carries
@@ -4028,12 +4032,46 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_LayerAddA
     value.mFloat = floatValue;
     value.mDouble = doubleValue;
     value.mTransform = ImmExporterMakeTransform(transformValue);
+    value.mTransform.mFlip = static_cast<ImmCore::flip3>(transformFlip);
 
     return layer->AddKey(
         static_cast<ImmCore::piTick>(timeTicks),
         static_cast<ImmExporter::Layer::AnimProperty>(property),
         value,
         static_cast<ImmExporter::Layer::InterpolationType>(interpolation));
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_LayerAddAnimationKey(
+    void* layerHandle, int property, int64_t timeTicks, int interpolation,
+    int boolValue, uint32_t intValue, float floatValue, double doubleValue,
+    const ImmExporterTransformC* transformValue)
+{
+    return ImmExporterAddAnimationKey(layerHandle, property, timeTicks, interpolation,
+        boolValue, intValue, floatValue, doubleValue, transformValue, 0);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_LayerAddAnimationKeyWithFlip(
+    void* layerHandle, int property, int64_t timeTicks, int interpolation,
+    int boolValue, uint32_t intValue, float floatValue, double doubleValue,
+    const ImmExporterTransformC* transformValue, int transformFlip)
+{
+    return ImmExporterAddAnimationKey(layerHandle, property, timeTicks, interpolation,
+        boolValue, intValue, floatValue, doubleValue, transformValue, transformFlip);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_LayerSetTransformFlips(
+    void* layerHandle, int transformFlip, int pivotFlip)
+{
+    auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (!layer || transformFlip < 0 || transformFlip > 3 || pivotFlip < 0 || pivotFlip > 3)
+        return false;
+    auto transform = layer->GetTransform();
+    auto pivot = layer->GetPivot();
+    transform.mFlip = static_cast<ImmCore::flip3>(transformFlip);
+    pivot.mFlip = static_cast<ImmCore::flip3>(pivotFlip);
+    layer->SetTransform(transform);
+    layer->SetPivot(pivot);
+    return true;
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_PaintSetMaxRepeatCount(void* paintLayerHandle, uint32_t maxRepeatCount)

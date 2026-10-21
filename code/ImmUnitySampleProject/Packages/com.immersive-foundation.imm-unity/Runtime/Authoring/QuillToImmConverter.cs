@@ -43,7 +43,8 @@ namespace ImmPlayer.Authoring
     }
 
     /// <summary>
-    /// Initial offline static-paint profile. Animation and reflections are errors.
+    /// Initial offline static-paint profile. Animation is an error; layer/pivot
+    /// reflections are preserved through the additive offline exporter APIs.
     /// Viewpoints/media/unknown layers require explicit omission permission and
     /// produce partial-output diagnostics. No existing output is touched on failure.
     /// </summary>
@@ -137,9 +138,9 @@ namespace ImmPlayer.Authoring
             foreach (string property in new[] { "Transform", "Pivot" })
             {
                 string flip = (string)layer[property]?["Flip"];
-                if (flip != null && flip != "N")
+                if (flip != null && flip != "N" && flip != "X" && flip != "Y" && flip != "Z")
                     Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedReflection", path,
-                        $"{property} flip {flip} cannot be preserved by the current authoring API.");
+                        $"Unknown {property} flip {flip}.");
             }
             var animation = layer["Animation"];
             if (animation != null)
@@ -259,8 +260,20 @@ namespace ImmPlayer.Authoring
 
         private static ImmAuthoringTransform Transform(SharpQuill.Transform t) => new ImmAuthoringTransform
         {
-            Position = Vector(t.Translation), Rotation = new UnityEngine.Quaternion(t.Rotation.X, t.Rotation.Y, t.Rotation.Z, t.Rotation.W), Scale = t.Scale
+            Position = Vector(t.Translation), Rotation = new UnityEngine.Quaternion(t.Rotation.X, t.Rotation.Y, t.Rotation.Z, t.Rotation.W),
+            Scale = t.Scale, Flip = Flip(t.Flip)
         };
+        private static ImmAuthoringFlip Flip(string flip)
+        {
+            switch (flip)
+            {
+                case "N": return ImmAuthoringFlip.None;
+                case "X": return ImmAuthoringFlip.X;
+                case "Y": return ImmAuthoringFlip.Y;
+                case "Z": return ImmAuthoringFlip.Z;
+                default: throw new InvalidDataException($"Unknown transform flip {flip}.");
+            }
+        }
         private static UnityEngine.Vector3 Vector(SharpQuill.Vector3 v) => new UnityEngine.Vector3(v.X, v.Y, v.Z);
         private static T Require<T>(ImmAuthoringResult<T> result, string path)
         {

@@ -23,6 +23,8 @@ and input policy are intentionally absent.
 - Visibility, opacity, transform, draw-in-time, action, loop, and offset layer
   animation keys. Legacy position, rotation, and scale keys are rejected in
   favour of the IMM v2 transform key.
+- Explicit X/Y/Z layer, pivot and transform-key reflections through the offline
+  graph/exporter. This does not change the native live mutation ABI's scope.
 
 Pictures, sound, models, effects, references, instances, spawn areas, comic
 chapters, root/comic animation, and cross-platform authoring are outside the

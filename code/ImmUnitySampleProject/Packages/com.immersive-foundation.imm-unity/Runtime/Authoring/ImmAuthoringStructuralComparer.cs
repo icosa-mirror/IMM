@@ -235,6 +235,8 @@ namespace ImmPlayer.Authoring
             if (1f - rotationDot > tolerance)
                 Difference(differences, $"{path}.rotation", $"Quaternion dot was {rotationDot}.");
             Near(differences, $"{path}.scale", expected.Scale, actual.Scale, tolerance);
+            if (expected.Flip != actual.Flip)
+                Difference(differences, $"{path}.flip", $"Expected {expected.Flip}, got {actual.Flip}.");
         }
 
         private static Dictionary<long, int> IndexLayers(ImmAuthoringSnapshot snapshot)

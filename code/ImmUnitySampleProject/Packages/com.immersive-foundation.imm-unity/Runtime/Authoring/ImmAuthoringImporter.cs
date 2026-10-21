@@ -679,13 +679,15 @@ namespace ImmPlayer.Authoring
             string description,
             List<ImmAuthoringImportIssue> issues)
         {
-            if (source.flip != 0)
+            ImmAuthoringFlip flip = ImmAuthoringFlip.None;
+            if ((uint)source.flip > (uint)ImmAuthoringFlip.Z)
             {
                 issues.Add(new ImmAuthoringImportIssue(
                     ImmAuthoringImportIssueCode.UnsupportedFlip,
-                    $"Layer {sourceLayerId} uses a flipped {description}; flip state is not represented by the current authoring transform.",
+                    $"Layer {sourceLayerId} has an unknown {description} flip {source.flip}; no reflection was substituted.",
                     sourceLayerId));
             }
+            else flip = (ImmAuthoringFlip)source.flip;
             Quaternion rotation = new Quaternion(source.rotX, source.rotY, source.rotZ, source.rotW);
             float rotationMagnitudeSquared =
                 rotation.x * rotation.x + rotation.y * rotation.y +
@@ -720,7 +722,8 @@ namespace ImmPlayer.Authoring
             {
                 Position = new Vector3(source.transX, source.transY, source.transZ),
                 Rotation = rotation,
-                Scale = scale
+                Scale = scale,
+                Flip = flip
             };
         }
 
