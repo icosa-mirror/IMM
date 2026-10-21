@@ -29,6 +29,12 @@ static class AnimatedConverterChecks
         paint.Animation.Keys.Transform.Clear();
         for (int i = 0; i < modes.Length; i++)
             paint.Animation.Keys.Transform.Add(new(i * 525, new SharpQuill.Transform(new(0, 0, 0, 1), 1, "X", new(i, 0, 0)), modes[i]));
+        var hiddenGroup = new LayerGroup("HiddenDefaultChannel") { Visible = false };
+        var hiddenPaint = new LayerPaint("ExcludedPaint");
+        hiddenPaint.Drawings.Add(paint.Drawings[0]);
+        hiddenPaint.Frames.Add(0);
+        hiddenGroup.Children.Add(hiddenPaint);
+        sequence.RootLayer.Children.Add(hiddenGroup);
         QuillSequenceWriter.Write(sequence, project);
         string output = Path.Combine(root, "animated.imm");
         var result = QuillToImmConverter.ConvertAnimatedPaintProject(project, output);
@@ -42,7 +48,8 @@ static class AnimatedConverterChecks
         int doc = Reader.StrokeReader_LoadFromFile(output);
         try
         {
-            Require(doc > 0 && Reader.StrokeReader_GetAuthoringLayerCount(doc) == 2, "Animated hierarchy missing.");
+            Require(doc > 0 && Reader.StrokeReader_GetAuthoringLayerCount(doc) == 3,
+                "Animated hierarchy changed or a default visibility channel resurrected hidden paint.");
             Require(Reader.StrokeReader_GetDocumentInfo(doc, out var documentInfo) && documentInfo.rootAnimationKeyCount == 1 &&
                 Reader.StrokeReader_GetRootAnimationKey(doc, 0, out var rootKey) && rootKey.property == 8 && rootKey.timeTicks == 0 && rootKey.intValue == 0,
                 "Declared default root offset was omitted.");

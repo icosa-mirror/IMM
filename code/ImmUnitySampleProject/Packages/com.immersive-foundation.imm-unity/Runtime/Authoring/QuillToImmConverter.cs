@@ -259,9 +259,16 @@ namespace ImmPlayer.Authoring
             t.Translation.X == 0f && t.Translation.Y == 0f && t.Translation.Z == 0f &&
             t.Rotation.X == 0f && t.Rotation.Y == 0f && t.Rotation.Z == 0f && Math.Abs(t.Rotation.W) == 1f;
 
-        private static bool PotentiallyVisible(JObject source, bool animated) =>
-            ((bool?)source["Visible"] ?? true) || (animated && source["Animation"]?["Keys"]?["Visibility"] is JArray keys &&
-                keys.Any(x => (bool?)x["Value"] == true));
+        private static bool PotentiallyVisible(JObject source, bool animated)
+        {
+            if ((bool?)source["Visible"] ?? true) return true;
+            if (!animated || !(source["Animation"]?["Keys"]?["Visibility"] is JArray keys)) return false;
+            // A default channel is not evidence that a statically hidden branch
+            // becomes visible. Quill omits those paint branches from export.
+            bool defaultChannel = keys.Count == 1 && (double?)keys[0]["Time"] == 0 &&
+                (string)keys[0]["Interpolation"] == "None" && (bool?)keys[0]["Value"] == true;
+            return !defaultChannel && keys.Any(x => (bool?)x["Value"] == true);
+        }
 
         private static void MapChildren(ImmAuthoringDocument document, LayerGroup group, JObject source, long parentId,
             string path, bool visible, QBinReader reader, bool animated)

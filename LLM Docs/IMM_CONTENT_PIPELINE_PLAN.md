@@ -642,6 +642,25 @@ Status checked at 2026-10-21 14:36 UTC:
    and all 21 source metadata trees, 34 PCM sounds and 35 picture settings pass.
    Mapping/navigation acceptance remains in progress.
 
+### 6.12 C2 default-visibility export regression (2026-10-21)
+
+1. Snoopy's broader project comparison exposed an animated-converter bug: a default
+   true/None visibility key at tick zero was treated as evidence that a statically
+   hidden branch might animate into view. This included paint the paired Quill
+   export omits. The mapper now distinguishes that constant default from genuine
+   timed/multiple visibility keys and excludes the hidden paint branch.
+2. Snoopy has 12 effectively visible paints present in the reference and 41 hidden
+   paints absent from it. Across all 21 source projects, the 98 individually hidden
+   paint/group declarations have only absent/default visibility channels. Nondefault
+   keyed visibility on a statically hidden source flag remains a synthetic case,
+   not Quill-reference acceptance; do not infer that unrepresented source behavior.
+3. The synthetic native suite now includes a hidden ancestor carrying a default
+   visibility channel and requires its paint to stay excluded. Existing genuine
+   timed visibility remains covered. The suite passes; Snoopy's strict exposed-field
+   project comparison now matches 12 paints, 68,733 strokes, 928,609 points, root/
+   layer keys, drawing scales, point timing and three viewpoint settings. Viewpoint
+   implementation and preview/navigation acceptance are recorded separately.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
