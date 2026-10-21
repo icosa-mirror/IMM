@@ -4,13 +4,14 @@ Reviewed against local source revision `ee5e02f3` on 2026-10-21.
 This is the planning entry point for Quill conversion, IMM content extraction and
 runtime authoring. C0 has reference evidence. C1 has an offline static converter,
 exact native paint-subset comparisons, one identical DirectX reference capture and
-passing Windows converter regressions. Unity compilation and full CI remain pending.
+passing Windows converter regressions. Unity package compilation/tests pass;
+full engine/device CI remains pending.
 The static slice's Unity package-import job has passed. Both standalone Android
 gates now pass in fresh run 39609583383 after earlier dependency/capture failures.
 Full acceptance remains unresolved. The shared reflection extension is locally verified;
 native builds and packaged exports pass on all four platforms. Broader Unity/device
 acceptance awaits fresh full validation. Regression investigation takes priority
-over further feature work; Unity integration and URP device evidence remain pending.
+over further feature work; Unity player integration and URP device evidence remain pending.
 
 ## 1. Objective and document ownership
 
@@ -103,7 +104,7 @@ The preferred first candidate is:
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
-| C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows CI gate passed; Unity/full CI pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
+| C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; full engine/device CI pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI regressions and Windows/Android/macOS/iOS native builds and package exports pass; Unity/device acceptance pending | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Extend C1 for shared drawings/holds, keys, nested timing, viewpoints, root/startup/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
@@ -275,6 +276,14 @@ Status checked at 2026-10-21 13:53 UTC:
    acceptance failures with new successful evidence; it does not rewrite the
    original failed run or prove full Unity/device acceptance. No timeout,
    dependency version or required rendering check was relaxed.
+8. Unity Package Import job 119258531602 passed: 40 tests passed, zero failed,
+   three skipped. `TransformReflectionsAreValidatedAndCompared` passed, as did all
+   15 authoring document tests. The three skips explicitly require a Windows
+   D3D12 graphics device and ran on the Linux host: configured-sample rendering,
+   opted-in URP camera rendering, and shutdown/recreation session tests. These
+   skips do not establish D3D12 runtime acceptance. The saved job log at
+   `artifacts/quill-reflection-unity-import.log` contains the exact test results;
+   Unity player/device jobs remain pending.
 
 ## 7. Consolidated documents
 

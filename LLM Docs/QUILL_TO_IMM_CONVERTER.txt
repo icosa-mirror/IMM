@@ -12,7 +12,8 @@ Current review scope
    now exists through QuillToImmConverter and the existing authoring compiler.
    Animation, navigation and media remain outstanding. Shared reflection support
    passes native builds and export checks on all four platforms, plus Windows
-   regression CI. Unity integration and full device acceptance remain pending.
+   regression CI and Unity package compilation/tests. Unity player integration
+   and full device acceptance remain pending.
 2. Reran reader regressions and the 21-project metadata/media corpus check, plus
    the native IMM-to-Quill adapter regression against the bundled Windows DLL.
    These passed. Subsequent C0 work inspected five local candidate reference pairs;
@@ -35,7 +36,8 @@ Current review scope
    2495 strokes, 57187 points. These include codec-reduced strokes skipped in C0's
    source-index comparison. Viewpoints are explicitly omitted in paint-only mode.
    Native synthetic regression and Windows CI checks pass; the taperecorder DirectX
-   capture is pixel-identical. Unity compilation and full CI acceptance are pending.
+   capture is pixel-identical. Unity package compilation/tests also pass;
+   full engine/device CI acceptance remains pending.
 
 Purpose and reference behavior
 
@@ -176,13 +178,17 @@ C1b shared reflection preservation (2026-10-21)
    rejection without partial mutation, and direct reflected-Quill conversion.
    The legacy transform ABI size and ordinary key entry point are checked. Tests
    pass locally with production source and native DLLs; Unity types remain stand-ins
-   in this .NET harness. A Unity NUnit graph/comparison test is also added, unrun locally.
+   in this .NET harness. The Unity NUnit graph/comparison test
+   TransformReflectionsAreValidatedAndCompared passed in run 39609583383, along
+   with all 15 authoring document tests. Package validation totals: 40 passed,
+   zero failed, three Windows-D3D12-only tests skipped on the Linux host.
 5. Full-validation run 39609583383 passed Windows, Android, macOS and iOS native
    builds and Unity package export verification: 111 declared player-plugin
    P/Invokes and 39 reader P/Invokes are accounted for on all four platforms.
    The existing iOS registration function is supplied by Objective-C glue rather
    than the archive. Windows reflection and converter regression CI also passed.
-   These are build/export/data checks; Unity/device acceptance remains pending.
+   These build/export/data checks and Unity graph tests do not establish Unity
+   player/device acceptance, which remains pending.
    Both original native paint-subset comparisons still match
    exactly (taperecorder 114 strokes/2068 points; consul-room 2495/57187).
 6. Broader source coverage remains gated by animation. The existing Stone Racer
@@ -200,8 +206,9 @@ C1b shared reflection preservation (2026-10-21)
    25 MiB were skipped, despite all 11 required markers being present. Scanner fix
    452d2629 streams large logs and passes its regression in fresh full-validation
    run 39609583383. Both standalone GLES and Vulkan gates now pass in that fresh
-   run, including Vulkan's required capture and frame-sample checks. Unity import
-   and URP/device acceptance remain pending. The main roadmap owns current failure
+   run, including Vulkan's required capture and frame-sample checks. Unity package
+   import also passed; Unity player and URP/device acceptance remain pending.
+   The main roadmap owns current failure
    disposition and full acceptance; feature work remains paused pending resolution
    of the remaining regression gates.
 8. R1 follow-up found during importer coverage: zero-width tips are valid in the

@@ -100,8 +100,10 @@ The offline graph/exporter now has explicit `ImmAuthoringFlip` values for layer,
 pivot and transform-key reflections. Import and structural comparison retain them.
 Two additive native exporter calls preserve the legacy transform ABI. Windows native
 regression CI and Windows/Android/macOS/iOS builds and package export checks pass in
-run 39609583383. Unity integration and device acceptance remain pending; the shared
-roadmap tracks current failures and validation status.
+run 39609583383. Unity package compilation/tests also pass, including the reflection
+graph/comparison test and all 15 authoring document tests. Three D3D12 runtime tests
+were skipped on the Linux host. Unity player integration and device acceptance
+remain pending; the shared roadmap tracks current failures and validation status.
 This does not expand the current live mutation ABI's transform contract.
 
 Paint round trips preserve the codec's representation, not arbitrary source floats: alpha and
