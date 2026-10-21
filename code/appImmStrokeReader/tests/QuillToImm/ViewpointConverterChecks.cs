@@ -33,6 +33,8 @@ static class ViewpointConverterChecks
         QuillSequenceWriter.Write(sequence, project);
         string jsonPath = Path.Combine(project, "Quill.json");
         var source = JObject.Parse(File.ReadAllText(jsonPath));
+        source["Sequence"]!["RootLayer"]!["Animation"]!["Keys"]!["Opacity"] = new JArray(
+            new JObject { ["Time"] = "0", ["Value"] = 1.0, ["Interpolation"] = "None" });
         JArray Children(JObject document) => (JArray)document["Sequence"]!["RootLayer"]!["Implementation"]!["Children"]![0]!["Implementation"]!["Children"]!;
         Children(source)[2]!["Implementation"]!["TypeStr"] = "ExcludedUnknownType";
         Children(source)[2]!["Implementation"]!["DataFileOffset"] = "not-a-preview-offset";
@@ -46,6 +48,10 @@ static class ViewpointConverterChecks
         try
         {
             Require(doc > 0 && Reader.StrokeReader_GetAuthoringLayerCount(doc) == 4, "Export flags or viewpoint-only output changed.");
+            Require(Reader.StrokeReader_GetDocumentInfo(doc, out var document), "Document info unavailable.");
+            for (int key = 0; key < document.rootAnimationKeyCount; key++)
+                Require(Reader.StrokeReader_GetRootAnimationKey(doc, key, out var rootKey) && rootKey.property != 1,
+                    "Identity source root opacity became an extra native channel.");
             Require(Reader.StrokeReader_GetAuthoringLayerInfo(doc, 0, out var parent), "Spawn group missing.");
             for (int index = 1; index < 4; index++)
             {
@@ -115,6 +121,10 @@ static class ViewpointConverterChecks
         Children(unknown)[0]!["Implementation"]!["TypeStr"] = "UnknownTracking";
         File.WriteAllText(jsonPath, unknown.ToString());
         Reject("ConversionFailed");
+        var rootOpacity = JObject.Parse(original);
+        rootOpacity["Sequence"]!["RootLayer"]!["Animation"]!["Keys"]!["Opacity"]![0]!["Value"] = 0.5;
+        File.WriteAllText(jsonPath, rootOpacity.ToString());
+        Reject("UnsupportedAnimation");
         File.WriteAllText(jsonPath, original);
         Console.WriteLine("[IMM_QUILL_VIEWPOINT_TEST] Passed native viewpoint/default mapping, RGB/RGBA preview payloads, malformed image guards and explicit default fallback diagnostics.");
 

@@ -871,6 +871,23 @@ Status checked at 2026-10-21 14:36 UTC:
    Source picture conversion, projection/stereo/viewer-lock visual acceptance and
    sound construction/import are the remaining C3 work.
 
+### 6.21. Declared identity root opacity default (2026-10-21)
+
+1. The Alex reference project declares one root opacity key: time zero, value 1,
+   interpolation None, with static root opacity 1. Binary inspection of its paired
+   Quill export shows no root opacity channel. The converter previously rejected
+   this otherwise valid identity default.
+2. Preflight now accepts that exact case, and root mapping omits the identity
+   channel to match the inspected export. Nonidentity static root opacity combined
+   with that channel, nondefault values, additional keys and other interpolation
+   still require separate reference evidence; genuine root opacity animation is
+   not newly accepted.
+3. Local native regressions pass, including default acceptance, absence of an
+   extra native root opacity key, nondefault rejection and the existing picture,
+   PNG bounds, paint, root, animation and viewpoint checks. Windows platform CI
+   passed the preceding picture-construction milestone; newer import/full-platform
+   gates remain pending. Source 2D picture wiring is still in progress separately.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

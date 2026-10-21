@@ -227,7 +227,8 @@ namespace ImmPlayer.Authoring
                             throw new InvalidDataException($"Invalid key channel at {path}.");
                         bool defaults = values.Count == 0 || (values.Count == 1 && (double?)values[0]["Time"] == 0 &&
                             ((channel.Name == "Visibility" && (bool?)values[0]["Value"] == true) ||
-                             (channel.Name == "Offset" && (double?)values[0]["Value"] == 0)));
+                             (channel.Name == "Offset" && (double?)values[0]["Value"] == 0))) ||
+                            (isRoot && channel.Name == "Opacity" && IsIdentityRootOpacity(values, layer));
                         bool supported = animated && !isRoot &&
                             (channel.Name == "Visibility" || channel.Name == "Opacity" || channel.Name == "Transform" || channel.Name == "Offset");
                         if (supported)
@@ -435,13 +436,18 @@ namespace ImmPlayer.Authoring
                 channels == 3 ? ImmAuthoringImageEncoding.Rgb8 : ImmAuthoringImageEncoding.Rgba8, reader.ReadBytes(count)), path);
         }
 
+        private static bool IsIdentityRootOpacity(JArray values, JObject source) =>
+            values != null && values.Count == 1 && (double?)values[0]["Time"] == 0 &&
+            (double?)values[0]["Value"] == 1 && (string)values[0]["Interpolation"] == "None" &&
+            ((double?)source["Opacity"] ?? 1) == 1;
+
         private static void MapAnimation(ImmAuthoringDocument document, long layerId, Keyframes keys, JObject source, string path)
         {
             var channels = source["Animation"]?["Keys"];
             if (channels?["Visibility"] != null)
                 foreach (var key in keys.Visibility)
                     Add(ImmAuthoringAnimationProperty.Visibility, key.Time, ImmAuthoringAnimationValue.FromBool(key.Value), key.Interpolation);
-            if (channels?["Opacity"] != null)
+            if (channels?["Opacity"] != null && !(layerId == 0 && IsIdentityRootOpacity(channels["Opacity"] as JArray, source)))
                 foreach (var key in keys.Opacity)
                     Add(ImmAuthoringAnimationProperty.Opacity, key.Time, ImmAuthoringAnimationValue.FromFloat(key.Value), key.Interpolation);
             if (channels?["Transform"] != null)
