@@ -204,6 +204,9 @@ namespace
 
             LoadLibraryW(fullPath.c_str());
         }
+        // Delay-load resolution does not search the calling DLL's directory.
+        const std::wstring encoderPath = unityPluginDir + L"\\vorbisenc.dll";
+        if (iFileExists(encoderPath)) LoadLibraryW(encoderPath.c_str());
     }
 }
 

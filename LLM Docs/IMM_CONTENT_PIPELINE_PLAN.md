@@ -927,6 +927,25 @@ Status checked at 2026-10-21 14:36 UTC:
    has been requested; the repository stereo IMM is a synthetic fixture.
    Private corpus paths/reports remain in ignored `artifacts/quill-picture-*`.
 
+### 6.23. Windows Vorbis encoder dependency loading (2026-10-21)
+
+1. Sound construction testing exposed a Windows delay-load failure before Vorbis
+   encoder initialization. The packaged `vorbisenc.dll` was not found from a
+   standalone .NET host using the normal DLL search path. Adding only the player
+   plugin directory to that test process's PATH made all Ogg cases pass, isolating
+   dependency loading from codec/PCM correctness.
+2. The existing native Windows preload helper now loads the encoder from the
+   player plugin's own directory after its shared reader-package dependencies.
+   This is a one-time module-load operation; no per-frame path was added. It does
+   not alter the process PATH or change codec settings.
+3. A regression test reproduces missing encoder preload with the previous plugin
+   and passes with the rebuilt plugin without a search-path workaround. The full
+   existing local PNG/picture/paint/root/animation/viewpoint/converter suite passes.
+   The preceding 2D converter revision `8a242062` passed native Windows CI
+   (`39659838195`, job `119429666287`); full platform/device gates remain pending.
+4. Sound graph implementation remains a separate in-progress milestone. Encoding
+   success is not audible playback or source-to-Quill fidelity acceptance.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

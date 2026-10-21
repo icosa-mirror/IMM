@@ -5,6 +5,10 @@ compiler and native declarations. Small Unity data stand-ins replace engine type
 the real Windows exporter and stroke-reader DLLs perform encode/read-back. This
 does not replace Unity compilation or visual playback acceptance.
 
+Windows checks also verify that loading the player plugin loads its packaged
+Vorbis encoder without changing PATH. This covers delay-load resolution that
+tests which preload dependency DLLs themselves can mask.
+
 Implicit global imports are disabled. Test files declare their own namespaces so
 production files must provide the imports required in Unity. This catches missing
 imports such as the comic-export LINQ regression; Unity package/player CI remains
