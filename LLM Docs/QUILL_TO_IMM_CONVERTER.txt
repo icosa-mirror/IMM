@@ -216,6 +216,34 @@ C1b shared reflection preservation (2026-10-21)
    validate that separately; reflection tests use positive widths and do not claim
    to close zero-tip import fidelity.
 
+C2 evaluation contract: source review, playback acceptance outstanding
+
+1. Metadata inspection reads the serialized base transform, not an evaluated
+   playback frame. fiLayer::Read reads laTran from the layer descriptor and passes
+   it to Layer::Init. StrokeReader_LoadFromFile imports, then captures metadata;
+   StrokeStore::CaptureSequenceMetadata records Layer::GetTransform separately
+   from the complete animation-key list. Do not use a base-field mismatch alone
+   as proof that the transform channel was lost or playback will differ.
+2. Layer::SetStateAt in code/libImmImporter/src/document/layer.cpp replaces the
+   effective transform from its keys. Before the first transform key it selects
+   that first value without interpolation; after the last it holds the last value.
+   Between interpolated transform keys it mixes key*pivot and then multiplies by
+   inverse(pivot). Before the first visibility key it instead sets visibility
+   false. Thus visibility and transform channels cannot share a generic fallback
+   rule inferred only from their enum names.
+3. Native easing uses t^3 for EaseIn, 1-(1-t)^3 for EaseOut and t^2*(3-2*t) for
+   Smoothstep. Quill enum integers differ from native integers: map named values
+   explicitly. The observed reference audit verifies None/Linear/Smoothstep only;
+   matching enum names/formulas does not replace Quill playback evidence for the
+   other two modes.
+4. C2 acceptance must evaluate pre-first-key, exact-key, interpolation midpoint
+   and post-last-key times, including pivots, nested offsets/repeats and held
+   drawings. Also compare first presentation, pause/start, seek and restart so
+   serialized base fields do not mask a startup difference. The reason Quill
+   exported particular base values remains unknown. Preserve source static
+   fields and keys as separate data pending those checks; do not bake arbitrary
+   later-key values into the converter to make metadata fields match.
+
 C0 reference inspection and reuse decision (2026-10-21)
 
 1. Searched the 21-project source collection, co-located IMM files and the separate

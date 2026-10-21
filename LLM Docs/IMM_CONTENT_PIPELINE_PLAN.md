@@ -130,6 +130,13 @@ The preferred first candidate is:
    report out-of-profile content explicitly. No new graph type or rate API is
    required for that slice. C1b now supplies the additive reflection extension;
    its full platform acceptance is pending. See the converter findings for limits.
+6. C2 distinguishes serialized base metadata from evaluated animation. The native
+   evaluator uses the first transform key before its time, but hides a layer before
+   its first visibility key, and interpolates transforms around their pivots.
+   Preserve source base fields and keys separately; validate startup, key-boundary,
+   midpoint, seek/restart and nested timing behavior before declaring animation
+   parity. The converter findings record the source-level contract and remaining
+   reference questions. This investigation adds no production animation support.
 
 ## 5. Reader and reverse-conversion reference
 
