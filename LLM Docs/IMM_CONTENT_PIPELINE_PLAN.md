@@ -1045,6 +1045,31 @@ replacement-run closure in section 6.26 (20:23 UTC):
    generated previews and animation fidelity are remaining acceptance gaps, not
    newly observed CI source failures.
 
+### 6.27. Paired Quill sound mapping evidence (2026-10-21)
+
+1. Extended the read-only reference inspector with source sound settings, native
+   encoded-sound metadata and explicit sound-setting comparisons. Correspondence
+   requires unique hierarchy paths excluding the source root. Reports retain input
+   and reader hashes; they do not establish export provenance or audible parity.
+2. Fresh metadata-only inspections match all 3 Snoopy and 28 Alex source sounds
+   to their reference IMM layers. All 31 sound settings match exactly at the
+   reader's float precision. Flat maps to native 0 and Positional to native 2;
+   gains 0.47-1 are copied directly, without a decibel conversion. Both loop values
+   occur (26 looped, 5 nonlooped). Attenuation None/Linear/Logarithmic maps to native
+   0/1/2 (3/20/8 cases), preserving minimum/maximum directly. The one observed Cone
+   maps to native modifier 1 with unchanged radian angle/band and outside gain;
+   the other 30 use None. No source ambisonic/frustum mapping is established.
+3. The references retain 30 effectively hidden sounds (2 Snoopy, all 28 Alex).
+   Sound conversion must retain those layers and their serialized visibility;
+   paint/picture hidden-content exclusion must not be applied to sounds. Common
+   timing/keys still need candidate comparison; setting equality does not prove
+   evaluated startup, playback duration, audio phase, seeking or gapless looping.
+4. Ignored reports are artifacts/quill-reference/snoopy-sound-mapping.json and
+   alex-sound-mapping.json. Both inspector runs pass and all 31 unique-path,
+   supported-mapping and settings-equality checks pass. Next implement source PCM
+   loading and graph mapping with those settings, retaining hidden layers and
+   validating malformed input/output preservation before paired candidate checks.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

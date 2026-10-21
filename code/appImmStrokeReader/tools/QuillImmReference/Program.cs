@@ -93,6 +93,10 @@ try
                     brushes = metadataOnly ? null : p.Drawings.SelectMany(d => d.Data.Strokes).GroupBy(s => s.BrushType.ToString()).ToDictionary(g => g.Key, g => g.Count()),
                     strokes = metadataOnly ? (int?)null : p.Drawings.Sum(d => d.Data.Strokes.Count),
                     points = metadataOnly ? (int?)null : p.Drawings.Sum(d => d.Data.Strokes.Sum(s => s.Vertices.Count))
+                } : null,
+                sound = x.Layer is LayerSound sound ? new
+                {
+                    sound.SoundType, sound.Gain, sound.Loop, sound.Attenuation, sound.Modifiers
                 } : null
             })
         },
@@ -103,7 +107,8 @@ try
             chapterCount = Reader.StrokeReader_GetChapterCount(document),
             counts = nativeLayers.GroupBy(x => x.Info.type).ToDictionary(x => x.Key, x => x.Count()),
             layers = nativeLayers.Select(x => new { x.Index, x.Path, info = x.Info, transform = x.Transform,
-                animationKeys = NativeKeys(document, x.Index), spawnArea = NativeSpawnInfo(document, x.Index, x.Info.type) })
+                animationKeys = NativeKeys(document, x.Index), spawnArea = NativeSpawnInfo(document, x.Index, x.Info.type),
+                sound = NativeSoundInfo(document, x.Index, x.Info.type) })
         },
         layerComparisons = sourceLayers.Where(x => x.Layer != sequence.RootLayer).Select(x =>
         {
@@ -116,6 +121,12 @@ try
                     ? (double?)TransformError(x.Layer.Animation.Keys.Transform[0].Value, match.Transform) : null,
                 sourceFlip = x.Layer.Transform.Flip, nativeFlip = match?.Transform.flip,
                 sourcePivot = x.Layer.Pivot, nativeInfo = match?.Info };
+        }),
+        soundComparisons = sourceLayers.Where(x => x.Layer is LayerSound).Select(x =>
+        {
+            var matches = nativeLayers.Where(n => n.Info.type == 5 && n.Path == x.Path[rootPath.Length..]).ToArray();
+            bool uniqueSource = sourceLayers.Count(s => s.Path == x.Path) == 1;
+            return CompareSound(document, x, matches.Length == 1 && uniqueSource ? matches[0] : null);
         }),
         paintComparisons = comparisons
     };
@@ -173,6 +184,41 @@ static void ValidateReportPaths(string reportPath, params string[] inputs)
     foreach (string output in new[] { reportPath, Path.ChangeExtension(reportPath, ".native.log") })
         if (inputs.Any(input => string.Equals(Path.GetFullPath(input), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Report and native log paths must not replace input files or the native library.");
+}
+
+static object CompareSound(int document, SourceLayer source, NativeLayer native)
+{
+    var sound = (LayerSound)source.Layer;
+    int spatialType = sound.SoundType switch { SoundType.Flat => 0, SoundType.Positional => 2, _ => -1 };
+    int attenuation = sound.Attenuation.Mode switch
+    {
+        SoundAttenuationMode.None => 0, SoundAttenuationMode.Linear => 1,
+        SoundAttenuationMode.Logarithmic => 2, _ => -1
+    };
+    bool supported = spatialType >= 0 && attenuation >= 0 && sound.Modifiers.Count == 1 &&
+        (sound.Modifiers[0].Type == SoundModifierType.None || sound.Modifiers[0].Type == SoundModifierType.Cone);
+    var expected = new StrokeSoundProperties
+    {
+        spatialType = spatialType, gain = sound.Gain, loop = sound.Loop ? 1 : 0,
+        attenuation = attenuation, distanceMin = sound.Attenuation.Minimum, distanceMax = sound.Attenuation.Maximum
+    };
+    if (supported && sound.Modifiers[0].Type == SoundModifierType.Cone)
+    {
+        expected.modifier = 1;
+        expected.angleInX = sound.Modifiers[0].AngleIn;
+        expected.angleBand = sound.Modifiers[0].AngleBand;
+        expected.attenuationOutside = sound.Modifiers[0].AttenOut;
+    }
+    StrokeSoundAssetInfo? actual = native == null ? null : NativeSoundInfo(document, native.Index, native.Info.type);
+    return new { source.Path, source.EffectivelyVisible, matched = native != null, supportedMapping = supported,
+        settingsEqual = supported && actual.HasValue && expected.Equals(actual.Value.properties), expected, actual };
+}
+
+static StrokeSoundAssetInfo? NativeSoundInfo(int document, int index, int type)
+{
+    if (type != 5) return null;
+    Require(Reader.StrokeReader_GetSoundAssetInfo(document, index, out var info), "Sound asset query failed.");
+    return info;
 }
 
 static StrokeSpawnAreaInfo? NativeSpawnInfo(int document, int index, int type)

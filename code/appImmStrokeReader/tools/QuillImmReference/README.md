@@ -8,6 +8,12 @@ Reports include native root animation keys and chapter count separately from
 ordinary layers. Use a reader binary with `StrokeReader_GetRootAnimationKey`.
 Spawn layers also report tracking level, locomotion volume and translation mask
 through `StrokeReader_GetLayerSpawnAreaInfo` for viewpoint mapping comparisons.
+Sound layers report source settings, native encoded asset metadata and unique-path
+`soundComparisons`. Comparisons explicitly map Flat/Positional and attenuation
+modes; None/Cone settings are compared at reader float precision. Missing or
+ambiguous matches remain unmatched. This does not decode/compare audio samples,
+prove export provenance or establish evaluated playback/timing parity. Use a
+reader binary with `StrokeReader_GetSoundAssetInfo` (2026-10-21 sound assets).
 The root-key count/query excludes implicit default visibility and does not imply
 that each retained key is an action or chapter marker.
 
