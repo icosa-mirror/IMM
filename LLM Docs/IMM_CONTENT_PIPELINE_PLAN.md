@@ -12,7 +12,8 @@ Full acceptance remains unresolved. The shared reflection extension is locally v
 native builds and packaged exports pass on all four platforms. Broader Unity/device
 acceptance awaits fresh full validation. Regression investigation takes priority
 over further feature work. Unity player/device jobs now pass; final full acceptance
-awaits a single retry of Godot iOS after hosted-runner capacity prevented it starting.
+is blocked by Godot iOS hosted-runner capacity: the original job and its one
+permitted retry never started. Zero-tip fix workflow 39616195981 completed successfully.
 
 ## 1. Objective and document ownership
 
@@ -224,7 +225,7 @@ resolve confirmed defects and verify the result before advancing feature work.
 Do not interpret an infrastructure classifier or an unrelated passing job as
 closure of a failed gate.
 
-Status checked at 2026-10-21 14:17 UTC:
+Status checked at 2026-10-21 14:36 UTC:
 
 | Gate | Evidence and current disposition | Required next evidence |
 |---|---|---|
@@ -232,7 +233,7 @@ Status checked at 2026-10-21 14:17 UTC:
 | Android standalone Vulkan, same run, job 119237705048 | Earlier frame-60 capture timeout is superseded by successful fresh job 119258531746 in run 39609583383. Firebase smoke, required capture, frame-sample validity, face-orientation and result gates pass. The 90-second deadline remains unchanged. | Standalone gate verified; keep Unity Vulkan/URP acceptance separate. |
 | Unity Android URP, job 119246251194 | Confirmed scanner defect: the 26,465,675-byte log exceeded the old 25 MiB skip threshold despite all 11 markers being present. Fixed scanner regression and real-log recheck pass; fresh URP Firebase job 119265832698 and its frame-sample gate now pass. | Scanner repair verified in fresh CI. |
 | Device/engine evidence reports | Both regenerated successfully in run 39609583383. | Verified; preserve independent successes. |
-| Godot iOS, fresh run job 119254613104 | Cancelled with zero steps and no runner assigned. GitHub annotation: job was not acquired by a hosted runner after multiple attempts; macOS ARM64 capacity constraints. Missing GodotIOSMetal artifact then failed final Validation Evidence job 119273880522. | One targeted job/dependent retry accepted at 14:17 UTC. No source fix or gate relaxation; a repeated capacity failure remains unresolved. |
+| Godot iOS, fresh run job 119254613104 | Original job and retry 119275413801 both cancelled with zero steps and no runner assigned. Both cite hosted macOS ARM64 capacity. Missing GodotIOSMetal then failed final aggregation, including retry report job 119282652963. | Automatic retry allowance exhausted. Full-run acceptance remains unresolved; needs an available suitable runner or explicit user direction for any further retry. No source fix or gate relaxation. |
 
 1. GitHub's job-rerun API explicitly rejected the Vulkan request with HTTP 403:
    "The workflow run containing this job is already running." The GLES retry
@@ -307,6 +308,12 @@ Status checked at 2026-10-21 14:17 UTC:
    evidence: `artifacts/quill-godot-ios-cancelled-annotations.json` and
    `artifacts/quill-scanner-fix-validation-evidence.log`. Full-run acceptance
    remains open until this retry and final aggregation are complete.
+10. Attempt 2 is now terminal with failure. Godot iOS retry job 119275413801 was
+    again cancelled without acquiring a runner (zero steps); its annotation repeats
+    the hosted macOS ARM64 capacity constraint. The final evidence job failed on
+    the absent GodotIOSMetal artifact. No second automatic retry is permitted by
+    the repository policy. Keep the original independent successes and unresolved
+    full-run result distinct. Evidence: `artifacts/quill-godot-ios-retry-annotations.json`.
 
 ### 6.2 R1 zero-width importer fidelity checkpoint
 
@@ -324,7 +331,9 @@ Status checked at 2026-10-21 14:17 UTC:
    build CI. This managed importer fix is subsequent to run 39609583383's source
    revision; that full run does not validate this new change. Its Windows job
    119277784654 in run 39616195981 passed the new import round-trip check plus
-   existing reflection/converter regressions. The rest of that pipeline is pending.
+   existing reflection/converter regressions. Workflow 39616195981 subsequently
+   completed successfully; that normal validation run does not replace the full
+   run's still-missing Godot iOS evidence.
 4. This closes one R1 data-loss defect locally, not the broader reader/consumer or
    reverse-conversion tracks. No player/rendering code or native binary changed.
 

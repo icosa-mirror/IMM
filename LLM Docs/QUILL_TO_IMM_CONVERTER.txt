@@ -208,8 +208,9 @@ C1b shared reflection preservation (2026-10-21)
    run 39609583383. Both standalone GLES and Vulkan gates now pass in that fresh
    run, including Vulkan's required capture and frame-sample checks. Unity package
    import, Unity player jobs and URP/device validation also passed. Final full-run
-   acceptance awaits one targeted retry of Godot iOS, which never acquired a
-   hosted runner, and its dependent evidence aggregation.
+   acceptance remains unresolved: Godot iOS and its one permitted targeted retry
+   both failed to acquire a hosted macOS ARM64 runner, leaving their required
+   evidence absent. Automatic retry allowance is exhausted.
    The main roadmap owns current failure
    disposition and full acceptance; feature work remains paused pending resolution
    of the remaining regression gates.
@@ -219,7 +220,8 @@ C1b shared reflection preservation (2026-10-21)
    passes afterward alongside the existing converter/reflection suite. Negative
    and nonfinite fallback behavior is unchanged. Windows job 119277784654 in run
    39616195981 passed this new check and existing converter/reflection regressions.
-   The broader pipeline is pending; full run 39609583383 predates this fix.
+   That workflow completed successfully; full run 39609583383 predates this fix
+   and its Godot iOS capacity failure remains separate.
    Broader R1 remains outstanding.
 
 C2 evaluation contract: source review, playback acceptance outstanding
