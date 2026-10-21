@@ -1,5 +1,5 @@
 Quill to IMM converter status and findings
-Updated 2026-10-21 against local source revision ee5e02f3
+Updated 2026-10-21; C0 baseline ee5e02f3, C1 metadata prerequisite 72592ff8
 
 Planning entry point: LLM Docs/IMM_CONTENT_PIPELINE_PLAN.md. It owns shared
 capabilities, dependencies and milestones; this document retains converter-specific
@@ -8,8 +8,9 @@ findings and evidence. Runtime authoring contracts remain in IMM_RUNTIME_AUTHORI
 Current review scope
 
 1. Rechecked the reader, writer, managed/native exporter entry points, authoring
-   compiler and local regression harnesses. No direct Quill-to-IMM entry point
-   exists in this checkout. Converter implementation remains the next work.
+   compiler and local regression harnesses. A direct static paint/group entry point
+   now exists through QuillToImmConverter and the existing authoring compiler.
+   Animation, reflection preservation, navigation and media remain outstanding.
 2. Reran reader regressions and the 21-project metadata/media corpus check, plus
    the native IMM-to-Quill adapter regression against the bundled Windows DLL.
    These passed. Subsequent C0 work inspected five local candidate reference pairs;
@@ -22,7 +23,15 @@ Current review scope
    prove the metadata path does not open it, and verifies that full Read still
    rejects truncated data. Corpus mode and the reference inspector use this API.
    Synthetic regressions and all 21 metadata/media corpus checks passed locally;
-   Windows CI now invokes the synthetic reader checks. CI results remain pending.
+   Windows CI invokes the synthetic reader checks. That gate and the adapter gate
+   passed in run 39600334760; the overall pipeline was still running at this check.
+5. C1 static mapping now exports taperecorder and consul-room paint subsets. Exact
+   decoded native comparisons pass for all paint/group paths, transforms/pivots,
+   brush/visibility modes, frame metadata/buffers and stored point attributes:
+   taperecorder 1 paint layer, 114 strokes, 2068 points; consul-room 14 paint layers,
+   2495 strokes, 57187 points. These include codec-reduced strokes skipped in C0's
+   source-index comparison. Viewpoints are explicitly omitted in paint-only mode.
+   Native synthetic regression checks pass; CI and Unity/visual acceptance pending.
 
 Purpose and reference behavior
 
@@ -57,8 +66,8 @@ What exists
    (ca905f4b); model input is still skipped by SharpQuill. Native format support
    alone is not proof of Quill mapping or renderer parity.
 5. The checked repository has IMM-to-Quill conversion through SharpQuillCompat and
-   ImmToQuillConverterEditor, but no direct Quill-to-IMM conversion entry point
-   was found. Existing native paint/group export can be reused; further managed
+   ImmToQuillConverterEditor, plus the initial QuillToImmConverter static entry point.
+   Existing native paint/group export is reused; further managed
    and native API work depends on the mappings required below. Do not assume
    every media/model capability is exposed through the Unity export ABI.
 6. ImmAuthoringCompiler already forwards actual group/paint pivots and animation
@@ -68,18 +77,19 @@ What exists
 7. The first implementation candidate is SharpQuill -> ImmAuthoringDocument ->
    ImmAuthoringCompiler. Validate its no-flip transform representation, single
    document frame rate and root/chapter limitations against references before
-   committing to that path. No converter mapping through this graph exists yet.
+   extending that path. The initial mapping now uses this graph and compiler.
 
-Missing work for a basic converter
+Remaining work for a basic converter
 
-1. Conversion entry point: read a Quill project, build an IMM export document,
-   report errors/unsupported data and write the output safely.
-2. Native stroke transfer: map the four sections and copy positions, orientation
+1. Static entry point and safe output are implemented. Broader conversion remains
+   outstanding; do not treat successful explicit paint-only output as full parity.
+2. Static native stroke transfer is implemented: four sections, positions, orientation
    normals, drawing-view directions, widths, colours, opacity and rotational-opacity
-   behavior with correct units/conventions; compute required bounds. Match Quill's
-   own exported values rather than routing through Open Brush or Tilt strokes.
-3. Scene transfer: preserve groups, names, local transforms, pivots, visibility,
-   opacity, background and default viewpoint. The convenience group/paint methods
+   behavior and computed bounds. Local reference paint subsets match exactly after
+   native decoding. Native visual acceptance remains outstanding.
+3. Static scene transfer preserves groups, names, local transforms, pivots, visibility,
+   opacity and background. Default viewpoint/navigation remain outstanding.
+   The convenience group/paint methods
    in ImmExporter.cs still supply identity pivots; the authoring compiler already
    passes actual pivots. Choose a path that preserves actual source values.
 4. Animation transfer: connect source drawings and hold-frame references, frame
@@ -93,8 +103,37 @@ Missing work for a basic converter
    The reader fixes below address input, not this output/conversion work.
 6. Reference checks: compare representative source projects with IMM files produced
    by Quill, then check appearance, timing, media and playback in the native player.
-   The bridge is not implemented. C0 data comparisons have begun; end-to-end
-   conversion and reference playback acceptance remain outstanding.
+   Static conversion and native data comparisons exist; full conversion and
+   reference playback acceptance remain outstanding.
+
+C1 static profile implementation and validation (2026-10-21)
+
+1. Runtime API: ImmPlayer.Authoring.QuillToImmConverter.ConvertStaticPaintProject(
+   projectFolder, outputPath, allowOmittedLayers: false). It preflights original JSON
+   before the reader can discard unknown layers, reads metadata, loads only included
+   paint drawings, builds the existing authoring graph, and reuses atomic file export.
+2. Default mode rejects non-paint/group content. Explicit allowOmittedLayers=true
+   diagnoses every omitted layer and marks output partial. Hidden paint is filtered
+   through static ancestor visibility, with an informational diagnostic. Reflections,
+   animated keys/timing, active keep-alive and nonidentity root properties fail.
+   Supported static paint has one drawing and held references to drawing zero;
+   Quill's string-valued frame indices are accepted. Root default visibility/offset
+   scaffolding is accepted, not interpreted as animated content.
+3. Conversion uses strict qbin brush validation. The existing no-argument reader's
+   legacy fallback remains unchanged. Source-file overwrite attempts and malformed
+   inputs fail; preflight/mapping failures leave an existing output untouched.
+4. Real source strokes have zero-width tips. The shared graph now accepts nonnegative
+   widths, while rejecting negative widths and strokes with no spatial/width extent.
+   Native export preserves zero tips; no width clamp or custom simplifier was added.
+5. code/appImmStrokeReader/tests/QuillToImm supplies a .NET/native regression and
+   local CLI harness. Its README records commands and exact coverage. Windows CI
+   invokes --self-test with synthetic fixtures and native DLLs; private source/reference
+   files are not CI inputs. Native synthetic checks and the two complete decoded
+   paint-subset comparisons above passed locally. The new Unity NUnit width test
+   has not been run in the Editor; no Editor refresh or launch was triggered.
+6. C1 is not fully accepted: Unity compilation, visual/native playback comparison
+   and the new converter CI gate remain pending. Broader mappings keep their own
+   C2/C3/C4 milestones; success of this static profile does not close them.
 
 C0 reference inspection and reuse decision (2026-10-21)
 
@@ -250,8 +289,8 @@ Validation and local test usage
 4. Passed again on 2026-10-21: all 21 metadata hierarchies, 35 picture settings
    and 34 embedded sounds, along with the synthetic regressions.
    Every returned PCM byte matched the source payload, with correct boundaries.
-5. No Unity refresh/compilation, audio listening, visual playback or Quill-to-IMM
-   conversion was performed. C0 reference data inspection is recorded separately.
+5. No Unity refresh/compilation, audio listening or visual playback was performed.
+   C0 inspection and C1 static conversion/data comparisons are recorded separately.
    Passing reader data checks is
    not a claim of complete scene/playback or converter parity.
 6. The C1 reader prerequisite adds synthetic SharpQuillReader regressions to the

@@ -16,6 +16,22 @@ namespace ImmPlayer.Tests
         private const long MaxRetainedManagedBytes = 8L * 1024L * 1024L;
         private const long MaxRetainedWorkingSetBytes = 64L * 1024L * 1024L;
         [Test]
+        public void ZeroWidthTipsAreSupportedWithoutAllowingDegenerateStrokes()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                long layer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
+                long drawing = Require(document.CreateDrawing(layer));
+                PaintPoint tip = Point(0f);
+                tip.Width = 0f;
+                Require(document.CreateStroke(drawing, BrushSectionType.Circle, VisibilityType.Always, new[] { tip, Point(1f), tip }));
+                Assert.That(document.CreateStroke(drawing, BrushSectionType.Circle, VisibilityType.Always,
+                    new[] { tip, tip }).Succeeded, Is.False);
+                Assert.That(Require(document.CreateSnapshot()).Layers[0].Drawings[0].Strokes[0].Points[0].Width, Is.Zero);
+            }
+        }
+
+        [Test]
         public void LayerHierarchyUsesStableIdsAndRejectsCycles()
         {
             using (ImmAuthoringDocument document = CreateDocument())
@@ -167,7 +183,7 @@ namespace ImmPlayer.Tests
                 long validLayer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
                 long drawing = Require(document.CreateDrawing(validLayer));
                 PaintPoint invalidPoint = Point(0f);
-                invalidPoint.Width = 0f;
+                invalidPoint.Width = -0.01f;
                 ImmAuthoringResult<long> stroke = document.CreateStroke(
                     drawing,
                     BrushSectionType.Circle,

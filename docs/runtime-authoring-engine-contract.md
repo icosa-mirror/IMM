@@ -97,7 +97,8 @@ Validation checks at least:
 - Acyclic hierarchy with one root-owned path per layer.
 - Finite transforms and point attributes.
 - Opacity and alpha in the range 0-1.
-- Positive frame rate, width, and point counts where required.
+- Positive frame rate and point counts where required; nonnegative widths with
+  nonzero spatial or width extent per stroke (zero-width tips are supported).
 - Frame mappings that reference drawings in the same paint layer.
 - Non-empty names and valid enum values.
 

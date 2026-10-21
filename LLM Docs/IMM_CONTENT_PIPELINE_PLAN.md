@@ -2,8 +2,8 @@
 
 Reviewed against local source revision `ee5e02f3` on 2026-10-21.
 This is the planning entry point for Quill conversion, IMM content extraction and
-runtime authoring. C0 now has read-only investigation tooling and initial reference
-evidence; converter/runtime implementation has not started.
+runtime authoring. C0 has reference evidence. C1 now has an offline static converter
+with local native data checks; visual and CI acceptance remain outstanding.
 
 ## 1. Objective and document ownership
 
@@ -36,7 +36,7 @@ These are source-level assessments, not new platform or visual acceptance result
 
 | Capability | Quill source reader | IMM reader / adapter | Managed offline authoring / export | Native live editing | Quill-to-IMM work |
 |---|---|---|---|---|---|
-| Paint and four brush sections | Existing | Existing point/brush extraction and SharpQuill mapping | Existing | Geometry replacement exists | Map conventions and compare Quill output |
+| Paint and four brush sections | Existing | Existing point/brush extraction and SharpQuill mapping | Existing; zero-width tips accepted with nonzero stroke extent | Geometry replacement exists | Static mapping implemented; two local reference paint subsets match exactly after decode |
 | Groups and hierarchy | Existing | Authoring reader exposes hierarchy; SharpQuill adapter flattens | Existing group/paint graph | Group hierarchy operations within limits | Map local structure without flattening |
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Existing pivots; transform has positive uniform scale and no flip field | Canonical properties within ABI limits | Establish flip/coordinate strategy from references |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
@@ -46,7 +46,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | No picture construction in current graph/Unity exporter ABI | Outside live scope | Add construction and map projection/viewer locking/assets |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
-| File/memory output | SharpQuill writer supports a limited Quill-project subset | IMM-to-Quill entry point exists with losses below | Existing native IMM writer/compiler | Presented-revision save outstanding | Implement safe direct conversion entry point and diagnostics |
+| File/memory output | SharpQuill writer supports a limited Quill-project subset | IMM-to-Quill entry point exists with losses below | Existing native IMM writer/compiler | Presented-revision save outstanding | Static converter reuses atomic file export; default rejects unsupported layers, explicit paint-only omission reports partial output |
 
 Native IMM picture/sound structures and model mesh serialization are broader than
 the managed graph and Unity `ImmExporter_*` ABI. Do not interpret the empty managed
@@ -61,8 +61,8 @@ The preferred first candidate is:
 `Quill project -> SharpQuill source -> explicit mapping -> ImmAuthoringDocument -> ImmAuthoringCompiler -> IMM`
 
 1. Reuse graph transactions, validation, hierarchy, drawings, frames, keys, bounds
-   compilation and export diagnostics where their contracts fit. No converter or
-   mapping through this graph has been implemented yet.
+   compilation and export diagnostics where their contracts fit. The first static
+   mapping now uses this graph/compiler; animation/navigation/media remain outstanding.
 2. Keep Quill semantics in the mapping layer. Extend the shared graph/exporter only
    when a demonstrated source case needs a reusable capability. Do not introduce
    another full document model or route conversion through Open Brush strokes.
@@ -93,7 +93,7 @@ The preferred first candidate is:
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
-| C1: static paint conversion | In progress: metadata-only source reading added for preflight/selected payload loading; entry point and mapping remain outstanding | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
+| C1: static paint conversion | Static entry point implemented; local native regressions pass; exact decoded paint-subset matches for taperecorder and consul-room; CI and visual acceptance pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C2: animation and navigation | Extend C1 for shared drawings/holds, keys, nested timing, viewpoints, root/startup/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
@@ -171,7 +171,9 @@ The preferred first candidate is:
    runs in Windows build CI. C1 adds synthetic reader regressions to the same job;
    the reader corpus remains a local check, not a CI fixture. Metadata-only reading
    is implemented and its local locked-qbin, full-read and corpus regressions pass;
-   CI acceptance for that change is pending.
+   its Windows reader and adapter gates passed in
+   [run 39600334760](https://github.com/icosa-mirror/IMM/actions/runs/39600334760).
+   That pipeline is still in progress; the newer static converter gate has not run.
 4. Preserve existing player regression and package/export gates when code changes.
    Live work must retain the authoring document's timing/failure/platform criteria
    and the web performance investigation procedure where applicable.

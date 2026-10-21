@@ -20,14 +20,16 @@ namespace SharpQuill
     /// <summary>
     /// Reads the paint stroke data for one drawing.
     /// </summary>
-    public DrawingData ReadDrawingData()
+    public DrawingData ReadDrawingData() => ReadDrawingData(false);
+
+    public DrawingData ReadDrawingData(bool rejectUnknownBrushes)
     {
       DrawingData pl = new DrawingData();
 
       int count = ReadInt32();
       pl.Strokes = new List<Stroke>();
       for (int i = 0; i < count; i++)
-        pl.Strokes.Add(ReadStroke());
+        pl.Strokes.Add(ReadStroke(rejectUnknownBrushes));
       
       return pl;
     }
@@ -125,7 +127,7 @@ namespace SharpQuill
       return new SoundData { AudioBytes = wav, Length = wav.Length };
     }
 
-    private Stroke ReadStroke()
+    private Stroke ReadStroke(bool rejectUnknownBrushes)
     {
       Stroke stroke = new Stroke();
 
@@ -133,6 +135,8 @@ namespace SharpQuill
       stroke.u2 = ReadInt32();
       stroke.BoundingBox = ReadBoundingBox();
       short brushType = ReadInt16();
+      if (rejectUnknownBrushes && !Enum.IsDefined(typeof(BrushType), brushType))
+        throw new NotSupportedException($"Unsupported Quill brush section {brushType}.");
       stroke.BrushType = (Enum.IsDefined(typeof(BrushType), brushType)) ? (BrushType)brushType : BrushType.Cylinder;
       stroke.DisableRotationalOpacity = ReadBoolean();
       stroke.u3 = ReadByte();

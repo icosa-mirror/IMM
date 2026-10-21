@@ -7,11 +7,33 @@ UI policy.
 ## Platform capabilities
 
 Read `ImmAuthoringRuntime.Capabilities` before exposing an operation. The first
-authoring release supports Windows x64 Editor and standalone player. Playback
-plugins are packaged for the existing additional targets, but their presence
-does not imply that authoring is supported there. `Supports` accepts combined
+authoring release began on Windows; native offline exporters are now built for
+Windows, macOS, Android arm64 and iOS. Capability flags alone do not establish
+live editing or backend acceptance. `Supports` accepts combined
 `ImmAuthoringFeature` flags and returns true only when every requested feature
 is present.
+
+## Quill static paint conversion
+
+`QuillToImmConverter.ConvertStaticPaintProject(projectFolder, outputPath)` maps
+static paint/groups through the authoring graph and compiler. The output directory
+must exist. Default mode rejects viewpoints, media and unknown source layers.
+Call with `allowOmittedLayers: true` only when an explicitly partial paint subset
+is wanted; inspect `IsPartial` and every `Issues` entry before accepting the output.
+
+1. Preserves four native brush sections, rotational-opacity flags, local transforms,
+   pivots, static properties and held references to a single drawing. Hidden paint
+   is excluded through static ancestor visibility, with a diagnostic.
+2. Reflections, animated timing/keys, active keep-alive and nonidentity root properties
+   are unsupported. Navigation and media conversion are not part of this profile.
+3. Zero-width tips are valid. Widths must be nonnegative and a stroke must have
+   nonzero spatial or width extent. The native codec computes bounds and quantizes
+   values; the converter does not clamp widths or add another simplifier.
+4. Reuses atomic file export. Preflight/mapping failure leaves existing output
+   unchanged and source files cannot be selected as the output.
+
+The native .NET regression harness is under `code/appImmStrokeReader/tests/QuillToImm`
+in the repository. Data comparison does not replace Unity/visual playback acceptance.
 
 ## Ownership and lifetime
 

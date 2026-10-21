@@ -987,17 +987,22 @@ namespace ImmPlayer.Authoring
             }
             if (points == null || points.Length < 2)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must contain at least two points.", objectId);
+            bool hasBounds = false;
             for (int i = 0; i < points.Length; i++)
             {
                 PaintPoint point = points[i];
                 if (!IsFinite(point.Position) || !IsFinite(point.Normal) || !IsFinite(point.Direction) ||
                     !IsFinite(point.Color.r) || !IsFinite(point.Color.g) || !IsFinite(point.Color.b) ||
                     !IsFinite(point.Alpha) || !IsFinite(point.Width) || !IsFinite(point.Length) || !IsFinite(point.Time) ||
-                    point.Alpha < 0f || point.Alpha > 1f || point.Width <= 0f)
+                    point.Alpha < 0f || point.Alpha > 1f || point.Width < 0f)
                 {
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, $"Stroke point {i} contains invalid values.", objectId);
                 }
+                hasBounds |= point.Width > 0f || point.Position.x != points[0].Position.x ||
+                    point.Position.y != points[0].Position.y || point.Position.z != points[0].Position.z;
             }
+            if (!hasBounds)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must have nonzero spatial or width extent.", objectId);
             return ImmAuthoringResult.Success();
         }
 

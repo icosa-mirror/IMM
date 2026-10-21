@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefineConstants>$(DefineConstants);UNITY_STANDALONE_WIN</DefineConstants>
+    <ReaderRuntime>../../../ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime</ReaderRuntime>
+    <PlayerRuntime>../../../ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime</PlayerRuntime>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ReaderRuntime)/ThirdParty/SharpQuill/**/*.cs" />
+    <Compile Include="$(ReaderRuntime)/ImmStrokeReader.cs" />
+    <Compile Include="$(PlayerRuntime)/ImmExporter.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringTypes.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringState.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringDocument.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringTransaction.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringCompiler.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringRuntime.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/QuillToImmConverter.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

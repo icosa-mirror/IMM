@@ -18,7 +18,7 @@ under ignored `artifacts/`, not in public fixtures or CI.
    dotnet run --project code/appImmStrokeReader/tools/QuillImmReference -- $projectFolder $referenceImm code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll artifacts/quill-reference/pair.json
    ```
 
-3. Append `--metadata-only` for large sources. This parses source metadata through a
+3. Append `--metadata-only` for large sources. This parses source metadata using the
    production `QuillSequenceReader.ReadMetadata` API, retaining drawing declarations
    and frame references without loading vertices or media. Native IMM
    loading still decodes the reference's assets; this is not a streaming native
