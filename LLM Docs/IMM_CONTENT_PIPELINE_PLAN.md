@@ -5,12 +5,12 @@ This is the planning entry point for Quill conversion, IMM content extraction an
 runtime authoring. C0 has reference evidence. C1 has an offline static converter,
 exact native paint-subset comparisons, one identical DirectX reference capture and
 passing Windows converter regressions. Unity compilation and full CI remain pending.
-The static slice's Unity package-import job has passed. Full acceptance is unresolved:
-one Android GLES job failed dependency resolution and Vulkan timed out before the
-required capture frame. The shared reflection extension is now locally verified;
+The static slice's Unity package-import job has passed. Both standalone Android
+gates now pass in fresh run 39609583383 after earlier dependency/capture failures.
+Full acceptance remains unresolved. The shared reflection extension is locally verified;
 native builds and packaged exports pass on all four platforms. Broader Unity/device
 acceptance awaits fresh full validation. Regression investigation takes priority
-over further feature work; neither original Android failure is closed.
+over further feature work; Unity integration and URP device evidence remain pending.
 
 ## 1. Objective and document ownership
 
@@ -202,19 +202,19 @@ The preferred first candidate is:
    Live work must retain the authoring document's timing/failure/platform criteria
    and the web performance investigation procedure where applicable.
 
-### 6.1 Open CI failures and regression priority
+### 6.1 CI failure investigation and regression priority
 
 Regressions always take priority over roadmap features. Diagnose failed gates,
 resolve confirmed defects and verify the result before advancing feature work.
 Do not interpret an infrastructure classifier or an unrelated passing job as
 closure of a failed gate.
 
-Status checked at 2026-10-21 13:41 UTC:
+Status checked at 2026-10-21 13:53 UTC:
 
 | Gate | Evidence and current disposition | Required next evidence |
 |---|---|---|
-| Android standalone GLES, run 39603480459, job 119237704546 | Failed Gradle classpath resolution for Kotlin 1.9.22/1.9.20 before compilation. The same run's separate Android build passed. Infrastructure failure is suspected, not proven. | Fresh full validation after the confirmed scanner source fix below; investigate any recurrence. |
-| Android standalone Vulkan, same run, job 119237705048 | Loaded successfully, then roughly 72 seconds elapsed before the first content presentation; reached player frame 38 before the 90-second capture deadline. No required frame-60 capture was produced. Reflection run 39607327739 subsequently passed this gate. | Fresh full validation after the scanner fix; retain capture, visual, live-edit and performance requirements. |
+| Android standalone GLES, run 39603480459, job 119237704546 | Earlier Kotlin dependency-resolution failure is superseded by successful fresh job 119258531518 in run 39609583383: APK build, Firebase smoke, face-orientation and result gates pass. No dependency version or gate was changed. | Standalone gate verified; keep full engine/device acceptance separate. |
+| Android standalone Vulkan, same run, job 119237705048 | Earlier frame-60 capture timeout is superseded by successful fresh job 119258531746 in run 39609583383. Firebase smoke, required capture, frame-sample validity, face-orientation and result gates pass. The 90-second deadline remains unchanged. | Standalone gate verified; keep Unity Vulkan/URP acceptance separate. |
 | Unity Android URP, job 119246251194 | Confirmed CI scanner defect: its 26,465,675-byte log exceeded the 25 MiB skip threshold. All 11 required markers are present, but the scanner searched no logs and reported all missing. | Fixed streaming scanner, focused regression and real-log recheck pass locally; fresh CI acceptance pending. |
 | Device/engine evidence reports | Failed downstream of the Android jobs. | Regenerate in the fresh full run. |
 
@@ -269,6 +269,12 @@ Status checked at 2026-10-21 13:41 UTC:
    device acceptance remain pending; feature work remains
    paused until regression gates are resolved. These native build results do not
    establish device rendering or Unity integration acceptance.
+7. Both standalone Android jobs in the fresh run are now complete and successful.
+   Their job logs are retained locally as `artifacts/quill-scanner-fix-gles.log`
+   and `artifacts/quill-scanner-fix-vulkan.log`. This closes the earlier standalone
+   acceptance failures with new successful evidence; it does not rewrite the
+   original failed run or prove full Unity/device acceptance. No timeout,
+   dependency version or required rendering check was relaxed.
 
 ## 7. Consolidated documents
 
