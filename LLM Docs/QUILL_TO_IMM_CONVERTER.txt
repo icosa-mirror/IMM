@@ -12,7 +12,8 @@ Current review scope
    exists in this checkout. Converter implementation remains the next work.
 2. Reran reader regressions and the 21-project metadata/media corpus check, plus
    the native IMM-to-Quill adapter regression against the bundled Windows DLL.
-   These passed; no Quill reference-export or visual/playback comparison was run.
+   These passed. Subsequent C0 work inspected five local candidate reference pairs;
+   no controlled Quill re-export or visual/playback comparison was run.
 3. Detailed corpus statistics below describe the 2026-10-15 inventory. This review
    reconfirmed the test coverage totals, not every historical inventory count.
 
@@ -28,7 +29,9 @@ Purpose and reference behavior
    IMM feature set for the user to design. Investigate apparent gaps against
    Quill's actual IMM output before proposing native format or player changes.
 4. Behavioral agreement is required; binary byte identity is not assumed.
-   Quill reference exports have not yet been compared as part of this work.
+   Existing local candidate reference exports have now been inspected as described
+   in the C0 findings below; no controlled Quill re-export or visual parity check
+   has been performed.
 
 What exists
 
@@ -83,7 +86,98 @@ Missing work for a basic converter
    The reader fixes below address input, not this output/conversion work.
 6. Reference checks: compare representative source projects with IMM files produced
    by Quill, then check appearance, timing, media and playback in the native player.
-   This bridge and those comparisons have not been implemented/run in this work.
+   The bridge is not implemented. C0 data comparisons have begun; end-to-end
+   conversion and reference playback acceptance remain outstanding.
+
+C0 reference inspection and reuse decision (2026-10-21)
+
+1. Searched the 21-project source collection, co-located IMM files and the separate
+   F:/Imm collection (2444 top-level IMM files). Asset-ID matches also exist for
+   seven source folders named after published works. Matching names are candidate
+   provenance only; these files were not freshly exported from Quill in this run.
+2. Added read-only investigation tools under
+   code/appImmStrokeReader/tools/QuillImmReference/. The Python inventory reads
+   JSON and qbin stroke headers without loading vertices. The .NET inspector uses
+   the production readers and compares unique hierarchy paths, then stored indices.
+   It records SHA-256 hashes and reports skipped/mismatching shapes explicitly.
+3. Inventory covered all 21 projects and 1231092 stroke-header occurrences across
+   drawing declarations, including hidden content. None enabled rotational opacity.
+   Visible mixed-rate content DOES exist: AlexsSciFiWorld_Phase4 contains paint at
+   15, 24, 30, 56 and 60 fps. Fishgym2Example has visible 12 fps paint. These were
+   already local resources; new mixed-rate fixtures are not required to begin.
+4. Compared decoded paint in four candidate pairs. Point totals below exclude
+   strokes skipped because their point counts differ:
+
+   Case                Matched paint layers   Compared points   Shape issues
+   taperecorder        1                      2048              1
+   Fishgym2Example      1                      143833            0
+   consul-room         14                     56706             21
+   Snoopy              12                     921518            187
+
+   These are data comparisons, not pass/fail or rendering results. The source
+   taperecorder has 114 strokes/2069 points; one stroke has 21 source points versus
+   20 reference points, leaving 113 strokes in the point comparison. The two IMM
+   filenames in that folder have identical hashes.
+5. taperecorder covers all four sections: Ribbon->1 (70 strokes), Cylinder->2 (6),
+   Ellipse->3 (12), Cube->4 (26). Visibility modes agree for all 114 strokes. For
+   compared points, maximum position component difference is 1.3411e-5 metres;
+   normal difference 0.003065; direct colour difference 0.000893; alpha difference
+   zero; width difference 2.2731e-5. Extra sRGB-to-linear conversion gives a much
+   larger colour difference (0.28635). This supports direct attribute transfer for
+   these decoded values, rather than introducing another colour transform.
+6. Native paint export removes consecutive equal quantized positions while retaining
+   endpoints. See toImmersiveLayerPaint.cpp's verticesToExport loop. It also quantizes
+   positions/normals/colours/alpha/width. Differing point counts can therefore be
+   codec behavior; the current inspector does not align or certify skipped strokes.
+   Do not change geometry or introduce a custom simplifier merely to equalize counts.
+7. All non-root hierarchy paths match in taperecorder (4 layers) and consul-room
+   (25 layers). Compared paint transforms and pivots match exactly; consul-room
+   provides substantial nonidentity transform/pivot coverage. In Fishgym and Snoopy,
+   absent paint paths are statically hidden through the layer or its ancestors.
+   Group structure remains present, including empty groups. Snoopy's visible camera
+   is absent. This is evidence for export filtering, not proof of a universal rule
+   for animated visibility or every non-paint type.
+8. AlexsSciFiWorld_Phase4 was inspected in metadata-only source mode, avoiding
+   allocation of its 1.48 GB source paint/media payloads. The native reference was
+   still decoded normally. All 748 exported paint paths retain identical drawing
+   counts and frame buffers, but every exported paint rate is 60 fps, matching the
+   sequence rate. Its source rates were 60 (649 layers), 24 (94), 15 (3), 30 (1)
+   and 56 (1). Fishgym likewise maps a 12 fps source paint layer to 24 fps with
+   unchanged frame indices. A new per-layer authoring rate is not justified by
+   these references: use the sequence rate for the initial mapping and validate
+   playback before claiming timing parity.
+9. Reflections survive export. Snoopy's visible Cable1 maps source Z to native 3;
+   Alex has 87 matched reflected layers, including X->1. The current managed
+   authoring transform and Unity export transform ABI cannot express those flags.
+   This is a demonstrated shared capability gap. Preserve reflections through a
+   focused additive extension before claiming broad corpus coverage; initially
+   reject them explicitly rather than silently baking or dropping them.
+10. In the large animated case, some native base transforms differ from the source
+    static Transform field. For example Light/NewLayer0's native transform and its
+    first exported transform key equal the first source transform key, not the
+    source static translation. Of 24 differing base transforms, 14 match the first
+    source transform key; the other ten remain unresolved. Investigate these C2
+    mappings rather than inferring a global unit conversion or a static-paint blocker.
+11. First C1 slice: implement SharpQuill -> ImmAuthoringDocument -> existing compiler
+    for unreflected static paint/groups, using taperecorder and consul-room paint
+    as initial references. Preserve local transforms/pivots and transfer native
+    attributes directly; compute bounds with the existing compiler. Preflight raw
+    layer types before SharpQuill can drop Model/Unknown. Explicitly reject or
+    diagnose out-of-profile media, viewpoints, animation and reflection; output must
+    identify any partial subset. No new graph type or frame-rate API is needed for
+    this first slice. Navigation, animated mappings and media retain their own exits.
+12. Place the runtime mapping in the imm-unity authoring assembly (or a consumer
+    assembly referencing both packages), not in the lower-level stroke-reader
+    assembly. An editor command can call that runtime mapping. Add safe output and
+    structured conversion diagnostics rather than another scene representation.
+13. Reports are under ignored artifacts/quill-reference/: source-inventory.json,
+    taperecorder.json, fishgym.json, consul.json, snoopy.json and alex-metadata.json.
+    They contain input hashes and private scene details; do not publish them as CI
+    fixtures. Reader DLL SHA-256:
+    4ae9862a3e338b1b54c94678408065ee4d0e29cd88618ffdcf1b178ee0401f11.
+    The inspector built without warnings; four full source comparisons and the
+    large metadata inspection ran successfully. No Unity launch, source modification,
+    reference regeneration or visual/audio playback validation was performed.
 
 Local source corpus and coverage
 
@@ -150,7 +244,8 @@ Validation and local test usage
    and 34 embedded sounds, along with the synthetic regressions.
    Every returned PCM byte matched the source payload, with correct boundaries.
 5. No Unity refresh/compilation, audio listening, visual playback or Quill-to-IMM
-   conversion/reference comparison was performed. Passing reader data checks is
+   conversion was performed. C0 reference data inspection is recorded separately.
+   Passing reader data checks is
    not a claim of complete scene/playback or converter parity.
 6. This documentation review makes no CI changes. The SharpQuillReader regressions
    are available locally and are not currently invoked by build.yml; the private

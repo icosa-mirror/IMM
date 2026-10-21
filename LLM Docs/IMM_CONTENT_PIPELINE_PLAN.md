@@ -2,7 +2,8 @@
 
 Reviewed against local source revision `ee5e02f3` on 2026-10-21.
 This is the planning entry point for Quill conversion, IMM content extraction and
-runtime authoring. This consolidation changes documentation only.
+runtime authoring. C0 now has read-only investigation tooling and initial reference
+evidence; converter/runtime implementation has not started.
 
 ## 1. Objective and document ownership
 
@@ -70,8 +71,11 @@ The preferred first candidate is:
    also lacks an explicit flip field. Establish a reference-backed mapping or a
    focused shared extension; do not silently remove a reflection.
 4. `ImmAuthoringCompiler` uses the snapshot's document frame rate. The existing
-   importer reports mismatched layer rates. Inspect Quill export behavior before
-   resampling frames or widening this contract; preserve hold references.
+   importer reports mismatched layer rates. C0 references normalize paint rates to
+   the sequence rate while preserving frame buffers (748 mixed-rate paint layers
+   in the large case, plus Fishgym's 12-to-24 fps mapping). Retain the single-rate
+   graph for the initial converter; do not add resampling or another rate API on
+   the strength of the source rates alone. Playback acceptance remains pending.
 5. Root actions are not equivalent to ordinary layer keys merely because enum names
    match. Complete chapter authoring and startup semantics need separate acceptance.
 6. IMM paint encoding quantizes alpha/width, omits direction in always-visible mode,
@@ -88,7 +92,7 @@ The preferred first candidate is:
 
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
-| C0: reference and reuse decision | Find paired source/Quill-exported IMM cases; inspect four brushes, transforms/pivots, flip and frame-rate behavior; decide which graph gaps matter | Recorded mappings, explicit unsupported cases and a scoped static implementation plan |
+| C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
 | C1: static paint conversion | Build entry point and SharpQuill-to-authoring mapping; reuse compiler; resolve only C0-required graph gaps | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C2: animation and navigation | Extend C1 for shared drawings/holds, keys, nested timing, viewpoints, root/startup/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
@@ -109,8 +113,11 @@ The preferred first candidate is:
    acceptance. Extend tests for real mapping boundaries, not another parallel framework.
 4. C1 can proceed through existing offline export while A1-A3 remain separate.
    C3 does not change the declared live media exclusions.
-5. Implementing this roadmap has not started in this consolidation. The next coding
-   milestone is selected after C0 establishes the reference behavior and graph fit.
+5. C0 selected an unreflected static paint/group C1 slice through the existing graph
+   and compiler. Use taperecorder and consul-room as the first data references;
+   report out-of-profile content explicitly. No new graph type or rate API is
+   required for that slice. Reflections need an additive shared capability extension
+   before broad corpus coverage. See the converter findings for measured limits.
 
 ## 5. Reader and reverse-conversion reference
 
@@ -155,8 +162,9 @@ The preferred first candidate is:
    adapter regression passed against the bundled Windows DLL and `sample1.imm`:
    30 paint layers, with zero/one picture according to the requested mode.
 2. These are reader/adapter data results. Quill-to-IMM conversion, Quill reference
-   export comparisons, visual/audio parity and new live-edit acceptance remain
-   unverified. This documentation consolidation adds no runtime acceptance claims.
+   playback comparisons, visual/audio parity and new live-edit acceptance remain
+   unverified. C0 has now compared existing local candidate reference files at the
+   data level; the converter findings record scope, skipped strokes and hashes.
 3. Reproduction commands and reader logs are in the converter findings and
    `code/appImmStrokeReader/tests/SharpQuillReader/README.md` and
    `tests/SharpQuillAdapter/README.md` under the same directory. The adapter check
