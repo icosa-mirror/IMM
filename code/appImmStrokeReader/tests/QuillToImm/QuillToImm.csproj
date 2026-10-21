@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <ImplicitUsings>disable</ImplicitUsings>
     <DefineConstants>$(DefineConstants);UNITY_STANDALONE_WIN</DefineConstants>
     <ReaderRuntime>../../../ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime</ReaderRuntime>
     <PlayerRuntime>../../../ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime</PlayerRuntime>

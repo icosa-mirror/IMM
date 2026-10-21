@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using ImmPlayer;
 using Reader = ImmPlayer.ImmStrokeReader;

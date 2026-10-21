@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Linq;
 using ImmPlayer.Authoring;
 using Newtonsoft.Json.Linq;
 using SharpQuill;

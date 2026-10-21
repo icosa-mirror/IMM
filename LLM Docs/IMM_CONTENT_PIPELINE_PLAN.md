@@ -661,6 +661,29 @@ Status checked at 2026-10-21 14:36 UTC:
    layer keys, drawing scales, point timing and three viewpoint settings. Viewpoint
    implementation and preview/navigation acceptance are recorded separately.
 
+### 6.13 Unity compiler regression and harness correction (2026-10-21)
+
+1. Run 39641429920 reported a source regression introduced with root-key comic
+   export: `ImmAuthoringCompiler` used LINQ `Any` without `using System.Linq`.
+   Unity reports CS1061 in iOS simulator, Android URP and both Windows graphics
+   builds. Non-XR Android also aborts for script compilation errors; its captured
+   console does not retain the exact compiler diagnostic. Android Vulkan then
+   fails its required build/device evidence gate. These gates are unresolved until
+   fresh Unity/device validation passes; missing captures are not rendering proof.
+2. The remaining latest run and the preceding known-affected root-key run 39640885319
+   were cancelled under the source-failure policy. No required gate, deadline or
+   assertion was weakened. The compiler now imports System.Linq explicitly.
+3. The .NET harness's implicit global imports masked this error. They are now
+   disabled; test files declare their own required namespaces, so production files
+   must compile with their own imports. An ignored copy of the compiler with the
+   import removed reproduces CS1061 in `artifacts/unity-import-guard/before-build.log`.
+   The corrected production sources build without warnings/errors and the native
+   suite passes (`artifacts/unity-import-fixed-suite.log`). This does not substitute
+   for Unity compilation; a fresh full validation run is required.
+4. Viewpoint mapping remains uncommitted while this regression fix is prioritized.
+   Its local native/reference evidence is retained; it will be committed as a
+   separate milestone after the compiler correction.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using ImmPlayer;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;

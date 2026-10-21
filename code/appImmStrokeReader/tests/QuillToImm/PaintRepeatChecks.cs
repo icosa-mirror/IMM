@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using ImmPlayer;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
