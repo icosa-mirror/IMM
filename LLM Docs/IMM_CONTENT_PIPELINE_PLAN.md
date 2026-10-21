@@ -2,8 +2,9 @@
 
 Reviewed against local source revision `ee5e02f3` on 2026-10-21.
 This is the planning entry point for Quill conversion, IMM content extraction and
-runtime authoring. C0 has reference evidence. C1 now has an offline static converter
-with local native data checks; visual and CI acceptance remain outstanding.
+runtime authoring. C0 has reference evidence. C1 has an offline static converter,
+exact native paint-subset comparisons, one identical DirectX reference capture and
+passing Windows converter regressions. Unity compilation and full CI remain pending.
 
 ## 1. Objective and document ownership
 
@@ -93,7 +94,7 @@ The preferred first candidate is:
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
-| C1: static paint conversion | Static entry point implemented; local native regressions pass; exact decoded paint-subset matches for taperecorder and consul-room; CI and visual acceptance pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
+| C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows CI gate passed; Unity/full CI pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C2: animation and navigation | Extend C1 for shared drawings/holds, keys, nested timing, viewpoints, root/startup/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
@@ -173,7 +174,14 @@ The preferred first candidate is:
    is implemented and its local locked-qbin, full-read and corpus regressions pass;
    its Windows reader and adapter gates passed in
    [run 39600334760](https://github.com/icosa-mirror/IMM/actions/runs/39600334760).
-   That pipeline is still in progress; the newer static converter gate has not run.
+   The static converter and reader/adapter gates passed in
+   [run 39602508539](https://github.com/icosa-mirror/IMM/actions/runs/39602508539),
+   along with the Windows IMM content baseline. The full pipeline is still running.
+5. C1 native visual evidence: taperecorder reference and converted paint-only output
+   rendered at 960x540, DirectX, fixed timestep and player frame 60, with matched
+   eye-level camera. Captures are pixel-identical, with 4 paint draw calls and 9962
+   triangles. The existing local standalone viewer was used, not a fresh viewer
+   build. Hashes, logs, settings and scope are recorded in the converter findings.
 4. Preserve existing player regression and package/export gates when code changes.
    Live work must retain the authoring document's timing/failure/platform criteria
    and the web performance investigation procedure where applicable.

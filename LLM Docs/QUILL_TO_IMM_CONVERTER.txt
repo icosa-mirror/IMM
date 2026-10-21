@@ -31,7 +31,8 @@ Current review scope
    taperecorder 1 paint layer, 114 strokes, 2068 points; consul-room 14 paint layers,
    2495 strokes, 57187 points. These include codec-reduced strokes skipped in C0's
    source-index comparison. Viewpoints are explicitly omitted in paint-only mode.
-   Native synthetic regression checks pass; CI and Unity/visual acceptance pending.
+   Native synthetic regression and Windows CI checks pass; the taperecorder DirectX
+   capture is pixel-identical. Unity compilation and full CI acceptance are pending.
 
 Purpose and reference behavior
 
@@ -131,9 +132,25 @@ C1 static profile implementation and validation (2026-10-21)
    files are not CI inputs. Native synthetic checks and the two complete decoded
    paint-subset comparisons above passed locally. The new Unity NUnit width test
    has not been run in the Editor; no Editor refresh or launch was triggered.
-6. C1 is not fully accepted: Unity compilation, visual/native playback comparison
-   and the new converter CI gate remain pending. Broader mappings keep their own
-   C2/C3/C4 milestones; success of this static profile does not close them.
+6. Windows converter, reader and adapter gates plus the IMM content baseline passed
+   in pipeline run 39602508539 for d0e7ea31. The full pipeline is still running;
+   passing .NET checks with Unity data stand-ins is not Unity Editor compilation.
+   Broader mappings keep their own C2/C3/C4 milestones.
+7. Native visual comparison passed for taperecorder at 960x540, DirectX Static,
+   fixed delta 1/30 second and player frame 60. Reference uses its EyeLevel Sp4
+   viewpoint; paint-only output uses the same transform as a custom camera, without
+   adding floor-level head height. Both captures show the recorder, blue ground
+   and shadows, with 4 paint draw calls and 9962 triangles. PPM bytes are identical:
+   92e422b899bd32de1f758110550d20b808eab9fcb1937d64078a109f08611455.
+   This checks one static camera/frame, not navigation, animation or other backends.
+8. Reused code/appImmViewer/scripts/capture_windows_directx_baseline.ps1 with
+   -SkipBuild, -PlayerFrame 60, and all three minimum picture-draw-call arguments
+   set to 0 because this is a paint-only case. Normal paint/triangle gates remained
+   enabled. Compare_render_metrics.py passed and the candidate PNG was inspected.
+   Settings, captures and logs are under ignored artifacts/quill-reference/visual/.
+   Existing local appImmViewer_Release.exe SHA-256:
+   0c894521817a8576bb04602392785875f8ce394ac78b920a19322774f3ea1064.
+   No viewer rebuild or Unity Editor launch/refresh was performed.
 
 C0 reference inspection and reuse decision (2026-10-21)
 
