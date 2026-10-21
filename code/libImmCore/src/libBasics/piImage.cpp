@@ -253,6 +253,16 @@ static void iConvertBytes(void *dstBuffer, piImage::Format dstFormat,
             ori += 3;
         }
     }
+    else if (dstFormat == piImage::FORMAT_I_RGBA && srcFormat == piImage::FORMAT_I_GREY)
+    {
+        const uint8_t* source = static_cast<const uint8_t*>(srcBuffer);
+        uint8_t* destination = static_cast<uint8_t*>(dstBuffer);
+        for (uint64_t i = 0; i < srcNumPixels; i++)
+        {
+            destination[4 * i] = destination[4 * i + 1] = destination[4 * i + 2] = source[i];
+            destination[4 * i + 3] = 255;
+        }
+    }
     else if (dstFormat == piImage::FORMAT_I_RGB && srcFormat == piImage::FORMAT_F_RGB)
     {
         const uint64_t l = 3 * srcNumPixels;
@@ -319,7 +329,8 @@ static void iConvertBytes(void *dstBuffer, piImage::Format dstFormat,
 
 void * piImage::iConvertSelf(int ch, Format format, bool swapRB) const
 {
-	if( format==piImage::FORMAT_I_RGBA && mChannel[ch].mFormat==piImage::FORMAT_I_RGB )
+	if (format == piImage::FORMAT_I_RGBA &&
+        (mChannel[ch].mFormat == piImage::FORMAT_I_RGB || mChannel[ch].mFormat == piImage::FORMAT_I_GREY))
     {
 		const uint64_t l = static_cast<uint64_t>(mXres)*static_cast<uint64_t>(mYres)*static_cast<uint64_t>(mZres);
 
@@ -960,6 +971,8 @@ bool piImage::ReadFromMemory( const piTArray<uint8_t> * data, const wchar_t *ext
 
         if (bit_depth > 8) // currently do not support higher bit depth.
             png_error(png_ptr, "[IMM_IMAGE_READ] Unsupported PNG bit depth");
+        if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8)
+            png_set_expand_gray_1_2_4_to_8(png_ptr);
 
 		piImage::Format format = piImage::Format::FORMAT_I_GREY;
 		if (color_type == PNG_COLOR_TYPE_GRAY) format = piImage::Format::FORMAT_I_GREY;

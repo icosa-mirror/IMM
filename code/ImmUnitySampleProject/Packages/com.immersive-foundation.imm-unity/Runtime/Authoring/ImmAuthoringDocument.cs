@@ -981,6 +981,8 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer duration cannot be negative.", objectId);
             if (properties.SpawnAreaPreview != null && type != ImmAuthoringLayerType.SpawnArea)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only spawn-area layers can own a viewpoint preview.", objectId);
+            if (properties.SpawnAreaPreview != null && properties.SpawnAreaPreview.Channels == 1)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Viewpoint previews require RGB or RGBA channels.", objectId);
             if (type == ImmAuthoringLayerType.Picture)
             {
                 if (properties.PictureImage == null || properties.PictureImage.EncodedBgr ||

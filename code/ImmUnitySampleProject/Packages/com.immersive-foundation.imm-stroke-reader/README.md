@@ -10,6 +10,15 @@ zero for invalid indices or a buffer smaller than the complete payload. The
 document wrapper provides the same queries. These bytes are encoded assets,
 distinct from decoded picture-layer pixels.
 
+`StrokeReader_GetPictureAssetInfo` / `StrokeReader_GetPictureAssetData` copy the
+original PNG/JPEG picture asset using an **authoring-layer index**. Metadata includes
+projection, viewer locking, dimensions, original grayscale/RGB/RGBA channels,
+encoding and byte count. Picture source version is zero. The document wrapper
+exposes the same queries. A missing asset or invalid index returns false/zero;
+data copying requires a buffer large enough for the complete payload. Existing
+`GetPictureInfo` / `GetPicturePixelData` queries keep their legacy indices and
+decoded RGBA pixels; encoded asset queries do not change those APIs.
+
 ## Install in a new Unity project
 
 1. Install the package:

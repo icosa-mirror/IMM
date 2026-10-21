@@ -24,7 +24,9 @@ and pixel-parity gaps. Platform evidence remains pending.
 The offline graph/compiler also constructs picture layers with immutable raw or
 encoded image assets, projection/viewer-lock settings and common layer properties.
 Local export/read-back tests are recorded in content pipeline section 6.19.
-Picture import, Quill conversion and visual acceptance remain outstanding. This
+Encoded picture import now preserves source PNG/JPEG bytes through the reader's
+authoring-indexed asset queries (content pipeline section 6.20). Quill conversion,
+sound support and visual acceptance remain outstanding. This
 does not add picture mutation to the native live path.
 
 The original managed paint-authoring engine is implemented, including transactions, import,

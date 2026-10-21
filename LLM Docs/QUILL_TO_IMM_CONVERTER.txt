@@ -105,8 +105,9 @@ Remaining work for a basic converter
    actions to existing IMM mechanisms. Avoid duplicate drawings for hold frames
    or baking animated layer transforms into every stroke point.
 5. Media transfer: offline picture graph/compiler construction and additive Unity
-   exporter ABI entry points now exist. Picture import and source-converter wiring
-   remain incomplete; sound/model construction is still absent. Preserve projection/viewer locking,
+   exporter ABI entry points now exist. Picture import preserves original encoded
+   assets; source-converter wiring remains incomplete. Sound/model construction
+   is still absent. Preserve projection/viewer locking,
    embedded data, audio gain/loop/spatial properties and timing as Quill exports them.
    The reader fixes below address input, not this output/conversion work.
 6. Reference checks: compare representative source projects with IMM files produced

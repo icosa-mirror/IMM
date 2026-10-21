@@ -26,17 +26,19 @@ namespace ImmPlayer.Authoring
         public static ImmAuthoringResult<ImmAuthoringImage> Create(int width, int height, int channels,
             ImmAuthoringImageEncoding encoding, byte[] data, bool encodedBgr = false)
         {
-            if (width <= 0 || height <= 0 || (channels != 3 && channels != 4) || data == null || data.Length == 0 ||
+            if (width <= 0 || height <= 0 || (channels != 1 && channels != 3 && channels != 4) || data == null || data.Length == 0 ||
                 !Enum.IsDefined(typeof(ImmAuthoringImageEncoding), encoding))
                 return ImmAuthoringResult<ImmAuthoringImage>.Failure(ImmAuthoringErrorCode.InvalidArgument, "Image dimensions, channels, encoding and bytes must be valid.");
             long pixels = (long)width * height;
             if (pixels > int.MaxValue / channels)
                 return ImmAuthoringResult<ImmAuthoringImage>.Failure(ImmAuthoringErrorCode.ResourceLimitExceeded, "Decoded image exceeds the supported byte range.");
             bool raw = encoding == ImmAuthoringImageEncoding.Rgb8 || encoding == ImmAuthoringImageEncoding.Rgba8;
+            if (encodedBgr && channels == 1)
+                return ImmAuthoringResult<ImmAuthoringImage>.Failure(ImmAuthoringErrorCode.InvalidArgument, "Grayscale assets have no BGR color order.");
             if (raw && (encodedBgr || channels != (encoding == ImmAuthoringImageEncoding.Rgb8 ? 3 : 4) || data.LongLength != pixels * channels))
                 return ImmAuthoringResult<ImmAuthoringImage>.Failure(ImmAuthoringErrorCode.InvalidArgument, "Raw image bytes must match RGB/RGBA dimensions exactly.");
             if (encoding == ImmAuthoringImageEncoding.Jpeg &&
-                (channels != 3 || data.Length < 3 || data[0] != 255 || data[1] != 216 || data[2] != 255))
+                ((channels != 1 && channels != 3) || data.Length < 3 || data[0] != 255 || data[1] != 216 || data[2] != 255))
                 return ImmAuthoringResult<ImmAuthoringImage>.Failure(ImmAuthoringErrorCode.InvalidArgument, "Invalid JPEG image signature/channels.");
             if (encoding == ImmAuthoringImageEncoding.Png &&
                 (data.Length < 8 || data[0] != 137 || data[1] != 80 || data[2] != 78 || data[3] != 71 ||

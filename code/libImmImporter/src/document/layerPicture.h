@@ -31,6 +31,7 @@ namespace ImmImporter
 
 		ContentType GetType(void) const;
 		ImmCore::piImage  * GetImage(void);
+        int GetSourceChannels() const { return mSourceChannels; }
 		const ImmCore::bound3 & GetBBox(void) const;
 		const bool HasBBox(void) const;
 
@@ -48,6 +49,7 @@ namespace ImmImporter
 		bool mIsViewerLocked;
         ImmCore::bound3 mBBox; // for frustum culling, mono rendering (if too small), LOD, fast selection, etc
 		int mGpuId;
+        int mSourceChannels = 0;
 	};
 
 }

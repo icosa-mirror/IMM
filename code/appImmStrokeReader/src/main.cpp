@@ -34,8 +34,8 @@ using namespace ImmStrokeReader;
 #endif
 
 // Bump this when you need to confirm Unity loaded the new dylib.
-static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-10-21-PREVIEW-ASSETS";
-static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-10-21-PREVIEW-ASSETS";
+static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-10-21-PICTURE-ASSETS";
+static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-10-21-PICTURE-ASSETS";
 
 extern "C" UNITY_INTERFACE_EXPORT const char* UNITY_INTERFACE_API StrokeReader_GetBuildId()
 {
@@ -228,7 +228,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromF
     if (assetFileOpen) assetFile.Close();
     if (!captured)
     {
-        gStrokeReader.mLog.Printf(LT_ERROR, L"[IMM_PREVIEW_READ] Failed to preserve declared preview asset");
+        gStrokeReader.mLog.Printf(LT_ERROR, L"[IMM_ASSET_CAPTURE] Failed to preserve encoded image assets");
         seq.Deinit(&gStrokeReader.mLog);
         delete store;
         return -3;
@@ -303,7 +303,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromM
             return true;
         }))
     {
-        gStrokeReader.mLog.Printf(LT_ERROR, L"[IMM_PREVIEW_READ] Failed to preserve declared preview asset");
+        gStrokeReader.mLog.Printf(LT_ERROR, L"[IMM_ASSET_CAPTURE] Failed to preserve encoded image assets");
         seq.Deinit(&gStrokeReader.mLog);
         delete store;
         return -3;
@@ -448,6 +448,24 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetSpawnA
     if (!gStrokeReader.mInitialized || !bytes || maxBytes <= 0) return 0;
     auto it = gStrokeReader.mDocuments.find(docId);
     return it == gStrokeReader.mDocuments.end() ? 0 : it->second->GetSpawnAreaPreviewData(layerIdx, bytes, maxBytes);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetPictureAssetInfo(
+    int docId, int layerIdx, StrokePictureAssetInfoC* info)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || !info) return false;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() && it->second->GetPictureAssetInfo(layerIdx, info);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetPictureAssetData(
+    int docId, int layerIdx, uint8_t* bytes, int maxBytes)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || !bytes || maxBytes <= 0) return 0;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it == gStrokeReader.mDocuments.end() ? 0 : it->second->GetPictureAssetData(layerIdx, bytes, maxBytes);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringLayerTransform(

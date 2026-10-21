@@ -8,6 +8,7 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
+#include "libImmImporter/src/document/layerPicture.h"
 
 namespace ImmStrokeReader
 {
@@ -923,6 +924,26 @@ bool StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence, const
                         ((volume.mAllowTranslationZ ? 1 : 0) << 0);
                 }
             }
+            if (layer->GetType() == ImmImporter::Layer::Type::Picture)
+            {
+                auto* picture = reinterpret_cast<ImmImporter::LayerPicture*>(layer->GetImplementation());
+                const auto* asset = layer->GetAssetID() == 0xffffffff ? nullptr : sequence.GetAsset(layer->GetAssetID());
+                auto* image = picture ? picture->GetImage() : nullptr;
+                std::vector<uint8_t> encoded;
+                if (!image || !asset || asset->mSize <= 12 || asset->mSize > INT32_MAX ||
+                    !readAsset || !readAsset(asset->mFileOffset, asset->mSize, encoded) || encoded.size() != asset->mSize)
+                { assetsValid = false; return false; }
+                const uint32_t format = uint32_t(encoded[0]) | (uint32_t(encoded[1]) << 8) |
+                    (uint32_t(encoded[2]) << 16) | (uint32_t(encoded[3]) << 24);
+                const int channels = picture->GetSourceChannels();
+                if ((format != 1 && format != 2) || (channels != 1 && channels != 3 && channels != 4))
+                { assetsValid = false; return false; }
+                captured.pictureAssetInfo.contentType = static_cast<int>(picture->GetType());
+                captured.pictureAssetInfo.isViewerLocked = picture->GetIsViewerLocked() ? 1 : 0;
+                captured.pictureAssetInfo.image = { image->GetXRes(), image->GetYRes(), channels,
+                    format == 1 ? 2 : 3, 0, static_cast<int>(encoded.size() - 12) };
+                captured.pictureAssetBytes.assign(encoded.begin() + 12, encoded.end());
+            }
             captured.name = layer->GetName().GetS();
             captured.visible = layer->GetVisible();
             captured.opacity = layer->GetOpacity();
@@ -986,6 +1007,24 @@ int StrokeStore::GetSpawnAreaPreviewData(int layerIdx, uint8_t* bytes, int maxBy
 {
     if (!bytes || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size())) return 0;
     const auto& data = mDocument.authoringLayers[layerIdx].spawnPreviewBytes;
+    if (data.empty() || maxBytes < static_cast<int>(data.size())) return 0;
+    std::memcpy(bytes, data.data(), data.size());
+    return static_cast<int>(data.size());
+}
+
+bool StrokeStore::GetPictureAssetInfo(int layerIdx, StrokePictureAssetInfoC* info) const
+{
+    if (!info || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size())) return false;
+    const auto& layer = mDocument.authoringLayers[layerIdx];
+    if (layer.pictureAssetBytes.empty()) return false;
+    *info = layer.pictureAssetInfo;
+    return true;
+}
+
+int StrokeStore::GetPictureAssetData(int layerIdx, uint8_t* bytes, int maxBytes) const
+{
+    if (!bytes || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size())) return 0;
+    const auto& data = mDocument.authoringLayers[layerIdx].pictureAssetBytes;
     if (data.empty() || maxBytes < static_cast<int>(data.size())) return 0;
     std::memcpy(bytes, data.data(), data.size());
     return static_cast<int>(data.size());

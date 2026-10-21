@@ -20,6 +20,7 @@ namespace ImmImporter
 		mType = type;
 		mIsViewerLocked = isViewerLocked;
 		mImage.Init();
+        mSourceChannels = 0;
 
 		return true;
 	}
@@ -29,7 +30,10 @@ namespace ImmImporter
         if( !mImage.ReadFromMemory(&data, ext) )
             return false;
 
-        mImage.Convert( 0, piImage::Format::FORMAT_I_RGBA, false );
+        mSourceChannels = mImage.GetBpp(0);
+        if (mImage.GetFormat(0) != piImage::Format::FORMAT_I_RGBA &&
+            !mImage.Convert(0, piImage::Format::FORMAT_I_RGBA, false))
+            return false;
         
         iComputeBBox();
         return true;

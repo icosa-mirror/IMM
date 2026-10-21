@@ -353,6 +353,14 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int StrokeReader_GetSpawnAreaPreviewData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
 
+        /// <summary>Original encoded picture asset, indexed by authoring layer; independent of the legacy decoded-pixel array.</summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetPictureAssetInfo(int docId, int layerIdx, out StrokePictureAssetInfo info);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetPictureAssetData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
+
         /// <summary>
         /// Largest single-element bounding-box extent in a drawing, in document units.
         /// </summary>
@@ -697,6 +705,14 @@ namespace ImmPlayer
         public int dataSize;
     }
 
+    /// <summary>Encoded PNG/JPEG picture metadata; source image version is zero.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokePictureAssetInfo
+    {
+        public int contentType, isViewerLocked;
+        public StrokeImageAssetInfo image;
+    }
+
     #endregion
 
     /// <summary>
@@ -891,6 +907,18 @@ namespace ImmPlayer
         {
             return _docId > 0 && bytes != null
                 ? ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewData(_docId, layerIdx, bytes, bytes.Length) : 0;
+        }
+
+        public bool GetPictureAssetInfo(int layerIdx, out StrokePictureAssetInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetPictureAssetInfo(_docId, layerIdx, out info);
+        }
+
+        public int GetPictureAssetData(int layerIdx, byte[] bytes)
+        {
+            return _docId > 0 && bytes != null
+                ? ImmStrokeReader.StrokeReader_GetPictureAssetData(_docId, layerIdx, bytes, bytes.Length) : 0;
         }
 
         /// <summary>

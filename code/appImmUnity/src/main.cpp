@@ -3635,7 +3635,7 @@ static bool ImmExporterDecodeImage(ImmCore::piImage& image,
     int width, int height, int channels, int encoding, const uint8_t* bytes, uint64_t size)
 {
     if (!bytes || size == 0 || size > INT32_MAX || width <= 0 || height <= 0 ||
-        (channels != 3 && channels != 4) || uint64_t(width) * uint64_t(height) > uint64_t(INT32_MAX) / uint64_t(channels)) return false;
+        (channels != 1 && channels != 3 && channels != 4) || uint64_t(width) * uint64_t(height) > uint64_t(INT32_MAX) / uint64_t(channels)) return false;
     if (encoding == 0 || encoding == 1)
     {
         if (channels != (encoding == 0 ? 3 : 4) || size != uint64_t(width) * uint64_t(height) * uint64_t(channels)) return false;
@@ -3652,7 +3652,8 @@ static bool ImmExporterDecodeImage(ImmCore::piImage& image,
     if (!image.ReadFromMemory(&borrowed, encoding == 2 ? L"png" : L"jpg")) return false;
     const auto format = image.GetFormat(0);
     return image.GetXRes() == width && image.GetYRes() == height &&
-        ((channels == 3 && format == ImmCore::piImage::FORMAT_I_RGB) || (channels == 4 && format == ImmCore::piImage::FORMAT_I_RGBA));
+        ((channels == 1 && format == ImmCore::piImage::FORMAT_I_GREY) ||
+         (channels == 3 && format == ImmCore::piImage::FORMAT_I_RGB) || (channels == 4 && format == ImmCore::piImage::FORMAT_I_RGBA));
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SpawnAreaSetPreview(
@@ -3660,7 +3661,7 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SpawnArea
 {
     auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
     if (!layer || layer->GetType() != ImmExporter::Layer::Type::SpawnArea ||
-        (version != 1 && version != 2) || ((encoding == 0 || encoding == 1) && version != 2)) return false;
+        (channels != 3 && channels != 4) || (version != 1 && version != 2) || ((encoding == 0 || encoding == 1) && version != 2)) return false;
     auto* spawn = reinterpret_cast<ImmExporter::LayerSpawnArea*>(layer->GetImplementation());
     if (!spawn) return false;
     ImmCore::piImage image;

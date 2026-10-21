@@ -88,6 +88,7 @@ namespace ImmPlayer.Authoring
     {
         private const int SourceGroupLayerType = 0;
         private const int SourcePaintLayerType = 1;
+        private const int SourcePictureLayerType = 4;
         private const int SourceSpawnAreaLayerType = 8;
 
         public static ImmAuthoringImportResult ImportFromFile(string filePath, string nativeLogPath = null)
@@ -259,7 +260,8 @@ namespace ImmPlayer.Authoring
                         options.CancellationToken.ThrowIfCancellationRequested();
                         if (sourceLayer.Info.type != SourceGroupLayerType &&
                             sourceLayer.Info.type != SourcePaintLayerType &&
-                            sourceLayer.Info.type != SourceSpawnAreaLayerType)
+                            sourceLayer.Info.type != SourceSpawnAreaLayerType &&
+                            sourceLayer.Info.type != SourcePictureLayerType)
                         {
                             issues.Add(new ImmAuthoringImportIssue(
                                 ImmAuthoringImportIssueCode.UnsupportedLayerType,
@@ -279,6 +281,8 @@ namespace ImmPlayer.Authoring
                             addLayer = editable.CreateGroupLayer(parentId, properties, sourceLayer.Info.childIndex);
                         else if (sourceLayer.Info.type == SourcePaintLayerType)
                             addLayer = editable.CreatePaintLayer(parentId, properties, sourceLayer.Info.childIndex);
+                        else if (sourceLayer.Info.type == SourcePictureLayerType)
+                            addLayer = editable.CreatePictureLayer(parentId, properties, sourceLayer.Info.childIndex);
                         else
                             addLayer = editable.CreateSpawnAreaLayer(parentId, properties, sourceLayer.Info.childIndex);
                         if (!addLayer.Succeeded)
@@ -638,6 +642,21 @@ namespace ImmPlayer.Authoring
             properties.DurationTicks = Math.Max(0, sourceLayer.Info.durationTicks);
             properties.MaxRepeatCount = sourceLayer.Info.maxRepeatCount;
 
+            if (sourceLayer.Info.type == SourcePictureLayerType)
+            {
+                if (!ImmStrokeReader.StrokeReader_GetPictureAssetInfo(source.DocId, sourceLayer.Index, out StrokePictureAssetInfo picture) ||
+                    picture.image.byteCount <= 0 || picture.image.sourceVersion != 0)
+                    throw new InvalidOperationException($"Picture '{properties.Name}' encoded asset metadata could not be read.");
+                byte[] bytes = new byte[picture.image.byteCount];
+                if (ImmStrokeReader.StrokeReader_GetPictureAssetData(source.DocId, sourceLayer.Index, bytes, bytes.Length) != bytes.Length)
+                    throw new InvalidOperationException($"Picture '{properties.Name}' encoded asset bytes could not be read.");
+                var image = ImmAuthoringImage.Create(picture.image.width, picture.image.height, picture.image.channels,
+                    (ImmAuthoringImageEncoding)picture.image.encoding, bytes);
+                if (!image.Succeeded) throw new InvalidOperationException(image.Message);
+                properties.PictureType = (ExportPictureType)picture.contentType;
+                properties.PictureViewerLocked = picture.isViewerLocked != 0;
+                properties.PictureImage = image.Value;
+            }
             if (sourceLayer.Info.type == SourceSpawnAreaLayerType)
             {
                 if (ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewInfo(source.DocId, sourceLayer.Index, out StrokeImageAssetInfo preview))

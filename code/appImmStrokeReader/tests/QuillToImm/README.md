@@ -29,8 +29,11 @@ Offline picture checks exercise the five existing native projection enum values,
 viewer-lock metadata, hierarchy/common properties, exact RGBA/alpha pixels, graph
 transactions and immutable snapshots, encoded PNG/JPEG payload identity, malformed
 input rejection and image-budget output guards. They do not establish projection
-appearance or viewer-lock behavior in playback. Picture import and Quill source
-conversion remain separate work.
+appearance or viewer-lock behavior in playback. Picture asset checks cover file
+and memory queries, ABI/index/buffer/lifetime guards, exact encoded PNG/JPEG import/
+export/import, hidden pictures and decoded 8-bit/1-bit grayscale. The real sample
+picture also passes; its three sound layers remain diagnosed omissions. Quill
+source conversion remains separate work.
 
 1. Run the synthetic native regression suite from the repository root. Use a fresh
    artifact directory for each local run; Windows CI runs this with freshly built DLLs:

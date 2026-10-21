@@ -83,12 +83,14 @@ static class PictureAuthoringChecks
             }
         }
         finally { if (doc > 0) Reader.StrokeReader_Unload(doc); Reader.StrokeReader_End(); }
+        PictureImportChecks.Run(output, directory);
         byte[] saved = File.ReadAllBytes(output);
         Require(!ImmAuthoringCompiler.ExportToFile(document, output,
                 new ImmAuthoringOperationOptions(limits: new ImmAuthoringLimits(maxInputBytes: 1))).Succeeded &&
             File.ReadAllBytes(output).SequenceEqual(saved), "Picture limits replaced existing output.");
         Require(!Native.ImmExporter_PictureSetImage(IntPtr.Zero, 2, 2, 4, 1, pixels, (ulong)pixels.Length), "Null native picture accepted.");
         CheckEncoded(directory);
+        PictureImportChecks.Run(Path.GetFullPath("exampleImmFiles/sample1.imm"), directory);
         Console.WriteLine("[IMM_PICTURE_AUTHORING] Passed picture projections/viewer lock, exact RGBA/alpha, common properties, transactions, encoded assets and output guards.");
     }
 
@@ -102,18 +104,50 @@ static class PictureAuthoringChecks
         string output = Path.Combine(directory, "picture-encoded.imm");
         Require(ImmAuthoringCompiler.ExportToFile(document, output).Succeeded && PreviewAssetChecks.ReadAsset(output, 1).SequenceEqual(png),
             "Encoded picture PNG was changed.");
+        PictureImportChecks.Run(output, directory);
         byte[] jpeg = PreviewAssetChecks.ReadAsset(Path.Combine(directory, "preview-encoded.imm"), 2);
         properties.PictureImage = ImmAuthoringImage.Create(16, 16, 3, ImmAuthoringImageEncoding.Jpeg, jpeg).Value;
         Require(document.SetLayerProperties(id, properties).Succeeded && ImmAuthoringCompiler.ExportToFile(document, output).Succeeded &&
             PreviewAssetChecks.ReadAsset(output, 2).SequenceEqual(jpeg), "Encoded picture JPEG was recompressed or changed.");
+        PictureImportChecks.Run(output, directory);
         properties.PictureImage = ImmAuthoringImage.Create(16, 16, 3, ImmAuthoringImageEncoding.Jpeg, jpeg, true).Value;
         Require(!document.SetLayerProperties(id, properties).Succeeded, "BGR picture payload accepted.");
+        byte[] gray = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGOoBgAAfQB8EB20bAAAAABJRU5ErkJggg==");
+        properties.PictureImage = ImmAuthoringImage.Create(1, 1, 1, ImmAuthoringImageEncoding.Png, gray).Value;
+        Require(document.SetLayerProperties(id, properties).Succeeded && ImmAuthoringCompiler.ExportToFile(document, output).Succeeded &&
+            PreviewAssetChecks.ReadAsset(output, 1).SequenceEqual(gray), "Grayscale picture asset changed.");
+        PictureImportChecks.Run(output, directory);
+        CheckGrayPixels(output, new byte[] { 123, 123, 123, 255 });
+        byte[] packedGray = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAIAAAABAQAAAADcWUInAAAACklEQVR4nGNoAAAAggCBd81ytgAAAABJRU5ErkJggg==");
+        properties.PictureImage = ImmAuthoringImage.Create(2, 1, 1, ImmAuthoringImageEncoding.Png, packedGray).Value;
+        Require(document.SetLayerProperties(id, properties).Succeeded && ImmAuthoringCompiler.ExportToFile(document, output).Succeeded,
+            "Packed grayscale picture export failed.");
+        CheckGrayPixels(output, new byte[] { 255, 255, 255, 255, 0, 0, 0, 255 });
+        PictureImportChecks.Run(output, directory);
+        properties.Visible = false;
+        Require(document.SetLayerProperties(id, properties).Succeeded && ImmAuthoringCompiler.ExportToFile(document, output).Succeeded,
+            "Hidden picture export failed.");
+        PictureImportChecks.Run(output, directory);
         properties.PictureImage = ImmAuthoringImage.Create(1, 1, 4, ImmAuthoringImageEncoding.Png,
             new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }).Value;
         Require(document.SetLayerProperties(id, properties).Succeeded, "Malformed picture fixture setup failed.");
         byte[] saved = File.ReadAllBytes(output);
         Require(!ImmAuthoringCompiler.ExportToFile(document, output).Succeeded && saved.SequenceEqual(File.ReadAllBytes(output)),
             "Malformed encoded picture replaced existing output.");
+    }
+
+    private static void CheckGrayPixels(string path, byte[] expected)
+    {
+        Require(Reader.StrokeReader_Init(null) == 0, "Gray reader init failed.");
+        int doc = Reader.StrokeReader_LoadFromFile(path);
+        byte[] actual = new byte[expected.Length];
+        var pinned = GCHandle.Alloc(actual, GCHandleType.Pinned);
+        try
+        {
+            Require(doc > 0 && Reader.StrokeReader_GetPicturePixelData(doc, 0, pinned.AddrOfPinnedObject(), actual.Length) == actual.Length &&
+                actual.SequenceEqual(expected), "Decoded grayscale values or alpha changed.");
+        }
+        finally { pinned.Free(); if (doc > 0) Reader.StrokeReader_Unload(doc); Reader.StrokeReader_End(); }
     }
 
     private static void Require(bool condition, string message)

@@ -139,6 +139,13 @@ struct StrokeImageAssetInfoC
 };
 static_assert(sizeof(StrokeImageAssetInfoC) == 24, "StrokeImageAssetInfoC layout changed");
 
+struct StrokePictureAssetInfoC
+{
+    int contentType, isViewerLocked;
+    StrokeImageAssetInfoC image;
+};
+static_assert(sizeof(StrokePictureAssetInfoC) == 32, "StrokePictureAssetInfoC layout changed");
+
 // Internal storage structures
 struct StoredStroke
 {
@@ -182,6 +189,8 @@ struct StoredLayer
     int spawnLocomotion = 0;                            // bit2 = X, bit1 = Y, bit0 = Z
     StrokeImageAssetInfoC spawnPreviewInfo{};
     std::vector<uint8_t> spawnPreviewBytes;
+    StrokePictureAssetInfoC pictureAssetInfo{};
+    std::vector<uint8_t> pictureAssetBytes;
     int32_t parentId = 0;
     int32_t childIndex = 0;
     bool isTimeline = false;
@@ -277,6 +286,8 @@ public:
     bool CaptureSequenceMetadata(ImmImporter::Sequence& sequence, const AssetReader& readAsset);
     bool GetSpawnAreaPreviewInfo(int layerIdx, StrokeImageAssetInfoC* info) const;
     int GetSpawnAreaPreviewData(int layerIdx, uint8_t* bytes, int maxBytes) const;
+    bool GetPictureAssetInfo(int layerIdx, StrokePictureAssetInfoC* info) const;
+    int GetPictureAssetData(int layerIdx, uint8_t* bytes, int maxBytes) const;
     bool GetRootLayerProperties(StrokeAuthoringLayerInfoC* info, StrokeLayerTransformC* transform) const;
     bool GetDocumentInfo(StrokeDocumentInfoC* info) const;
     bool GetRootAnimationKey(int keyIdx, StrokeAnimationKeyC* key) const;

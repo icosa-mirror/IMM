@@ -57,7 +57,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; SharpQuill adapter skips spawn layers | Spawn graph/import/export/default selection and immutable preview assets | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
-| Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | Offline picture construction with shared immutable assets, projection and viewer locking | Outside live scope | Add import/converter wiring and verify projection/viewer locking/assets against Quill references |
+| Pictures and panoramas | Metadata and embedded picture input exist | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | Add source-converter wiring and verify projection/viewer locking/assets against Quill references |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
 | File/memory output | SharpQuill writer supports a limited Quill-project subset | IMM-to-Quill entry point exists with losses below | Existing native IMM writer/compiler | Presented-revision save outstanding | Static converter reuses atomic file export; default rejects unsupported layers, explicit paint-only omission reports partial output |
@@ -114,7 +114,7 @@ The preferred first candidate is:
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; final full CI blocked by Godot iOS capacity | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; final full CI blocked by Godot iOS capacity | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata comparisons and default-camera capture pass within recorded scope. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
-| C3: media and coverage | Offline picture graph/ABI construction implemented with local native pixel checks. Picture import/converter wiring and sound construction remain open; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
+| C3: media and coverage | Offline picture graph/ABI construction and encoded asset import implemented with local native pixel/round-trip checks. Picture source-converter wiring and sound construction remain open; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Address SharpQuill adapter hierarchy/keys and Quill writer media limits when full IMM-to-Quill delivery is selected | Quill-project read-back and application checks for the declared subset; no silent media omission |
@@ -842,6 +842,34 @@ Status checked at 2026-10-21 14:36 UTC:
    conversion still diagnoses picture omissions until its mapping is implemented.
    No live mutation or runtime rendering path was extended. The next C3 step is
    picture import and source conversion against representative local references.
+
+### 6.20. Encoded picture import and reader contract (2026-10-21)
+
+1. Added authoring-indexed `StrokeReader_GetPictureAssetInfo` / `Data` queries
+   exposing original PNG/JPEG bytes, source channels, dimensions, projection and
+   viewer locking. The existing legacy decoded-pixel queries retain their indexing
+   and RGBA representation. The new 32-byte metadata struct is additive.
+2. Managed import creates picture layers with immutable encoded assets, preserving
+   common layer metadata, hierarchy and animation through the existing graph path.
+   File and memory import/re-export retain picture bytes exactly. Missing/unreadable
+   picture assets fail rather than being silently omitted. Source sound layers are
+   still explicitly reported as unsupported.
+3. Original channel counts are captured before native RGBA conversion. Encoded
+   grayscale pictures are supported alongside RGB/RGBA; grayscale is expanded to
+   RGB with opaque alpha for rendering. PNG grayscale depths 1/2/4 are expanded
+   to 8-bit values before conversion. Viewpoint previews retain their RGB/RGBA
+   contract. Redundant RGBA conversion is skipped and actual conversion failures
+   are checked.
+4. Local native checks pass for file/memory queries, metadata ABI, index/buffer/
+   lifetime guards, all five projection enums, encoded JPEG/PNG identity, graph
+   round trips, hidden pictures, and decoded 8-bit/1-bit grayscale values. The
+   real `sample1.imm` picture also passes; its three sound omissions are reported,
+   so this is not whole-document lossless import. Existing PNG bounds, paint,
+   root, animation, reflection, viewpoint and converter checks pass.
+5. Both Windows plugins are rebuilt; export verification sees 116 player/exporter
+   and 45 reader declarations. Full platform/device validation remains pending.
+   Source picture conversion, projection/stereo/viewer-lock visual acceptance and
+   sound construction/import are the remaining C3 work.
 
 ## 7. Consolidated documents
 
