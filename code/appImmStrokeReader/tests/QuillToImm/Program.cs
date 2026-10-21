@@ -25,19 +25,24 @@ if (args.Length == 4 && args[0] == "--self-test")
     PreviewAssetChecks.Run(args[3]);
     PngMemoryBoundsChecks.Run();
     PictureAuthoringChecks.Run(args[3]);
+    PictureConverterChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     return 0;
 }
-if (args.Length < 4 || args.Length > 7)
-    throw new ArgumentException("Expected project folder, output IMM, exporter DLL, reader DLL, and optional --animated, --with-viewpoints, --allow-omissions (legacy --paint-only).");
-if (args.Skip(4).Any(x => x != "--paint-only" && x != "--animated" && x != "--with-viewpoints" && x != "--allow-omissions")) throw new ArgumentException("Unknown option.");
+if (args.Length < 4 || args.Length > 8)
+    throw new ArgumentException("Expected project folder, output IMM, exporter DLL, reader DLL, and optional --animated, --with-viewpoints, --allow-omissions, --input-mib=N (legacy --paint-only).");
+if (args.Skip(4).Any(x => x != "--paint-only" && x != "--animated" && x != "--with-viewpoints" && x != "--allow-omissions" && !x.StartsWith("--input-mib="))) throw new ArgumentException("Unknown option.");
+string budget = args.Skip(4).SingleOrDefault(x => x.StartsWith("--input-mib="));
+if (budget != null && !args.Skip(4).Contains("--with-viewpoints")) throw new ArgumentException("--input-mib requires the project profile (--with-viewpoints).");
+var options = new ImmAuthoringOperationOptions(limits: budget == null ? null :
+    new ImmAuthoringLimits(maxInputBytes: checked(long.Parse(budget.Substring("--input-mib=".Length)) * 1024 * 1024)));
 string exporter = Path.GetFullPath(args[2]);
 string reader = Path.GetFullPath(args[3]);
 NativeLibrary.SetDllImportResolver(typeof(QuillToImmConverter).Assembly, (name, assembly, searchPath) =>
     name == "ImmUnityPlugin" ? NativeLibrary.Load(exporter) : name == "ImmStrokeReader" ? NativeLibrary.Load(reader) : IntPtr.Zero);
 bool allowOmittedLayers = args.Skip(4).Contains("--paint-only") || args.Skip(4).Contains("--allow-omissions");
 var result = args.Skip(4).Contains("--with-viewpoints")
-    ? QuillToImmConverter.ConvertProject(args[0], args[1], allowOmittedLayers)
+    ? QuillToImmConverter.ConvertProject(args[0], args[1], allowOmittedLayers, options)
     : args.Skip(4).Contains("--animated")
     ? QuillToImmConverter.ConvertAnimatedPaintProject(args[0], args[1], allowOmittedLayers)
     : QuillToImmConverter.ConvertStaticPaintProject(args[0], args[1], allowOmittedLayers);

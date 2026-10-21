@@ -57,7 +57,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; SharpQuill adapter skips spawn layers | Spawn graph/import/export/default selection and immutable preview assets | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
-| Pictures and panoramas | Metadata and embedded picture input exist | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | Add source-converter wiring and verify projection/viewer locking/assets against Quill references |
+| Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
 | File/memory output | SharpQuill writer supports a limited Quill-project subset | IMM-to-Quill entry point exists with losses below | Existing native IMM writer/compiler | Presented-revision save outstanding | Static converter reuses atomic file export; default rejects unsupported layers, explicit paint-only omission reports partial output |
@@ -114,7 +114,7 @@ The preferred first candidate is:
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; final full CI blocked by Godot iOS capacity | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; final full CI blocked by Godot iOS capacity | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata comparisons and default-camera capture pass within recorded scope. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
-| C3: media and coverage | Offline picture graph/ABI construction and encoded asset import implemented with local native pixel/round-trip checks. Picture source-converter wiring and sound construction remain open; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
+| C3: media and coverage | Offline picture construction/import and source 2D conversion implemented with native pixel/round-trip checks and 19 isolated reference matches. Stereo/panorama conversion/appearance and sound construction remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Address SharpQuill adapter hierarchy/keys and Quill writer media limits when full IMM-to-Quill delivery is selected | Quill-project read-back and application checks for the declared subset; no silent media omission |
@@ -887,6 +887,45 @@ Status checked at 2026-10-21 14:36 UTC:
    PNG bounds, paint, root, animation and viewpoint checks. Windows platform CI
    passed the preceding picture-construction milestone; newer import/full-platform
    gates remain pending. Source 2D picture wiring is still in progress separately.
+
+### 6.22. Quill 2D picture conversion (2026-10-21)
+
+1. `ConvertProject` now maps `2D` / `TwoD` picture declarations through the shared
+   graph/compiler, including RGB/RGBA pixels, alpha, local properties, hierarchy,
+   animation and viewer-lock metadata. Hidden pictures are excluded by the same
+   effective-visibility rule as paint. Picture-only projects can produce output.
+   Paint-only entry points retain their previous scope. Unsupported projections
+   require explicit omission permission; malformed mapped images always fail.
+2. Existing stored-preview reading is shared with picture input and checks format,
+   dimensions and complete pixel bounds. The explicit operation-options overload
+   supports caller-selected resource limits, cancellation checkpoints and shared
+   exporter options. Existing calls retain the 256 MiB input default; the harness
+   exposes `--input-mib=N` for the project profile. Input/output budget and cancelled
+   conversion failures are checked to preserve existing output.
+3. Current-source/reference inspection of the Alex pair verifies 19 visible source
+   RGB pictures, 2D native projection, viewer locking off and exact decoded pixels.
+   Cached transform evidence was checked against current source JSON/reference IMM hashes;
+   direct binary/image inspection independently verifies the media mapping.
+4. An isolated source corpus retained those 19 pictures, viewpoints and their
+   ancestors, with qbin offsets rewritten after removing unrelated content. Its
+   qbin is 432,471,208 bytes; an explicit 512 MiB budget produces 16,182,127 bytes.
+   All 19 converted/reference RGBA pixel arrays match exactly, as do projection,
+   viewer lock, local transform/pivot at reader float precision, opacity and
+   timeline/repeat metadata. This is **not** full-scene conversion or playback
+   acceptance. The corpus reports a default-viewpoint fallback, so output is partial.
+   Original large-project conversion still exceeds the default input budget.
+5. Native synthetic checks pass for RGB/RGBA/alpha, picture-only content, hidden
+   exclusion, viewer-lock metadata, import round trips, unsupported projection
+   diagnostics, malformed/truncated input, configured limits and cancellation.
+   `--compare-project` now includes picture counts/properties and exact decoded
+   pixels. Snoopy retains its previous paint/root/viewpoint comparison matches;
+   its five hidden source pictures are absent in both converted/reference IMM.
+6. Picture import revision `3adc000a` passed native Windows CI (`39656221903`,
+   job `119417092975`). Full platform/device gates remain pending. Stereo source
+   mapping, eye layout, panorama/depth/cubemap evidence, runtime appearance and
+   sound support remain open. A matching Quill export of the local Pano project
+   has been requested; the repository stereo IMM is a synthetic fixture.
+   Private corpus paths/reports remain in ignored `artifacts/quill-picture-*`.
 
 ## 7. Consolidated documents
 

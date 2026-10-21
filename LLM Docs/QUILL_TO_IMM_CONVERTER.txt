@@ -106,7 +106,10 @@ Remaining work for a basic converter
    or baking animated layer transforms into every stroke point.
 5. Media transfer: offline picture graph/compiler construction and additive Unity
    exporter ABI entry points now exist. Picture import preserves original encoded
-   assets; source-converter wiring remains incomplete. Sound/model construction
+   assets; the project converter maps stored 2D RGB/RGBA pictures. Nineteen isolated
+   Alex reference pictures match decoded pixels and exposed metadata. Stereo/
+   panorama source mappings and runtime appearance remain unverified; unsupported
+   projections require explicit omission permission. Sound/model construction
    is still absent. Preserve projection/viewer locking,
    embedded data, audio gain/loop/spatial properties and timing as Quill exports them.
    The reader fixes below address input, not this output/conversion work.
@@ -187,6 +190,13 @@ C2 animated paint implementation checkpoint (2026-10-21)
     unrepresented viewpoint pivot/opacity/timeline values fail. Broader navigation,
     generated thumbnails, startup/chapter source mapping and full CI remain open
     (roadmap sections 6.14-6.17).
+13. ConvertProject maps 2D pictures through the same graph and native encoder,
+    preserving exact RGB/RGBA pixels and alpha. Hidden pictures are excluded.
+    The operation-options overload allows an explicit input budget above the
+    unchanged 256 MiB default and passes common exporter options through. The
+    19-picture isolated Alex corpus matches reference pixels/properties, but is
+    partial due to default-viewpoint fallback and does not prove whole-scene or
+    stereo playback acceptance. See roadmap sections 6.20-6.22 for exact scope.
 
 C1 static profile implementation and validation (2026-10-21)
 
