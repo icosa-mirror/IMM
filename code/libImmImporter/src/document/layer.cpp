@@ -850,22 +850,35 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     if (!timeline->GetPlaying())
                         break;
                     
-                    // looping timeline
+                    // A finite repeated timeline also starts a new child span at
+                    // each wrap. Include the root; it can be the looping ancestor.
                     bool isParentSequenceLooping = false;
                     Layer* ti = timeline;
-                    while (ti != root)
+                    // Once this timeline is clamped at its finite end, an
+                    // advancing wall clock is not another wrap.
+                    const bool timelineCanWrap = timeline->GetMaxRepeatCount() == 0 || numPlays < timeline->GetMaxRepeatCount();
+                    while (timelineCanWrap && ti != nullptr)
                     {
-                        if (ti->GetMaxRepeatCount() == 0 && ti->GetDuration() != 0)
+                        if ((ti == root || ti->GetIsTimeline()) && ti->GetMaxRepeatCount() != 1 && ti->GetDuration() != 0)
                         {
-                            isParentSequenceLooping = true;
-                            break;
+                            const piTick elapsed = ti->GetStopTime() > ti->GetStartTime() ?
+                                ti->GetStopTime() - ti->GetStartTime() : now - ti->GetStartTime();
+                            const int64_t plays = piTick::CastInt(elapsed) / piTick::CastInt(ti->GetDuration());
+                            if (ti->GetMaxRepeatCount() == 0 || plays < ti->GetMaxRepeatCount())
+                            {
+                                isParentSequenceLooping = true;
+                                break;
+                            }
                         }
+                        if (ti == root) break;
                         ti = ti->GetParent();
                     }
 
                     // this could be due to parent sequence looping or restart from a pause
                     const bool hasRestarted = startTime > mStartTime;
-                    const bool clipRestartedAndParentLooping = isParentSequenceLooping && hasRestarted;
+                    // The root wraps its own clock without retiming its start;
+                    // resetting that start would make a finite root loop forever.
+                    const bool clipRestartedAndParentLooping = !isRoot && isParentSequenceLooping && hasRestarted;
                    
                     if (isTimeline && ( (!mIsPlaying && !isRoot) || clipRestartedAndParentLooping))
                     {

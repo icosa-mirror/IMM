@@ -209,6 +209,15 @@ jobs:
         code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll
         artifacts/quill-converter-regressions
 
+    - name: Compare native evaluated animation states
+      shell: pwsh
+      run: |
+        $ticks = '0,1,262,524,525,526,787,1049,1050,1051,1312,1574,1575,1576,1837,2099,2100,2101,2362,2624,2625,2626,3149,3150,3151,6299,6300,6301,12599,12600,12601,25199,25200,25201,26000,30000'
+        python code/appImmUnity/tests/evaluated_state_compare.py --msbuild (Get-Command msbuild).Source --scope paint-groups-root --ticks $ticks --reference artifacts/quill-converter-regressions/evaluation-reference.imm --candidate artifacts/quill-converter-regressions/evaluation-roundtrip.imm
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python code/appImmUnity/tests/evaluated_state_compare.py --msbuild (Get-Command msbuild).Source --scope paint-groups-root --ticks $ticks --skip-build --expect-mismatch --reference artifacts/quill-converter-regressions/evaluation-reference.imm --candidate artifacts/quill-converter-regressions/evaluation-mismatch.imm
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     - name: Verify IMM content baseline
       shell: pwsh
       run: python tests\tools\verify_imm_baseline.py exampleImmFiles\sample1.imm --baseline tests\baselines\content\sample1.json --write-actual artifacts\baseline-content\sample1.actual.json

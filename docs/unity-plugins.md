@@ -752,3 +752,8 @@ GetSpawnAreaPreviewInfo for dimensions/channels; version-one BGR correction is
 applied. The hierarchy adapter bounds decoded preview output with the optional
 maxDecodedPreviewBytes (default 256 MiB aggregate, not a total memory limit).
 SharpQuill PreviewData now survives project read/write (pipeline section 6.43).
+
+The native evaluator now restarts descendants at active finite ancestor/root wraps,
+without resetting root repeat clocks or retriggering after exhaustion. Headless
+Windows CI compares supported evaluated states and checks a deliberate mismatch;
+no ABI was added. See content pipeline6.44 for evidence and rendering/audio limits.

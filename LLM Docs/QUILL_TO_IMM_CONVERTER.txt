@@ -118,14 +118,16 @@ Remaining work for a basic converter
    behavior and computed bounds. Local reference paint subsets match exactly after
    native decoding. Native visual acceptance remains outstanding.
 3. Static scene transfer preserves groups, names, local transforms, pivots, visibility,
-   opacity and background. Default viewpoint/navigation remain outstanding.
-   The convenience group/paint methods
+   opacity and background. Source viewpoint/default selection and stored previews
+   are implemented; generated previews and broader navigation acceptance remain
+   outstanding. The convenience group/paint methods
    in ImmExporter.cs still supply identity pivots; the authoring compiler already
    passes actual pivots. Choose a path that preserves actual source values.
-4. Animation transfer: connect source drawings and hold-frame references, frame
-   rates, key channels/interpolation, nested offsets/durations/repeats and root
-   actions to existing IMM mechanisms. Avoid duplicate drawings for hold frames
-   or baking animated layer transforms into every stroke point.
+4. Animation transfer already maps source drawings/held frames, normalized paint
+   rates, supported keys/interpolation and nested offsets/durations/repeats.
+   Source root chapter/startup actions and evaluated playback acceptance remain
+   outstanding. Keep drawing reuse and local transforms; do not bake every frame
+   or layer transform into stroke points.
 5. Media transfer: offline picture graph/compiler construction and additive Unity
    exporter ABI entry points now exist. Picture import preserves original encoded
    assets; the project converter maps stored 2D RGB/RGBA pictures. Nineteen isolated
@@ -690,3 +692,10 @@ copy now supplies LayerViewpoint.PreviewData, which survives Quill project writi
 and ordinary reading. Version-one BGR correction is retained. A separate aggregate
 preview output budget prevents partial reads on exhaustion. Raw RGB/RGBA pixels,
 not compressed payload identity or rendered/application parity, are the guarantee.
+
+Evaluated animation update (shared plan6.44): a headless native evaluator comparison
+now passes paired Fishgym and Snoopy paint/group/root states at sampled sequential,
+recorded-clock seek and restart times. A synthetic public round trip exposed and
+verified a finite-ancestor/root wrap restart correction in Layer::SetStateAt.
+CI now requires both a matching round trip and rejection of an intentional key
+change. This does not establish geometry, audio, navigation or visual/device parity.

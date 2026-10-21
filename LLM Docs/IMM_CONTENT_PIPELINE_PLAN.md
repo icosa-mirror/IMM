@@ -26,6 +26,8 @@ Replacement run 39688086871 has passed its complete Windows job and Android,
 closing the earlier Windows staging/adapter failures with replacement evidence.
 macOS/iOS remain queued, so full validation is incomplete. Later viewpoint and
 spawn-property runs have no reported failures but are still incomplete (6.42-6.43).
+The preview run has now passed Windows too. Headless animation comparisons found
+and locally verified a finite-loop playback correction, now under validation (6.44).
 Hierarchy sound, reviewed editor menus and spherical
 viewpoint mapping are implemented; the offline spawn compiler now retains common
 properties through the additive constructor recorded in section 6.42.
@@ -87,7 +89,7 @@ The preferred first candidate is:
 
 1. Reuse graph transactions, validation, hierarchy, drawings, frames, keys, bounds
    compilation and export diagnostics where their contracts fit. The first static
-   static and initial animated paint mappings now use this graph/compiler;
+   and initial animated paint mappings now use this graph/compiler;
    animation acceptance, navigation and media remain outstanding.
 2. Keep Quill semantics in the mapping layer. Extend the shared graph/exporter only
    when a demonstrated source case needs a reusable capability. Do not introduce
@@ -124,7 +126,7 @@ The preferred first candidate is:
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; hosted full CI subsequently passed in 39645977224 and 39646549914 | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; hosted full CI subsequently passed in 39645977224 and 39646549914 | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
-| C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata comparisons and default-camera capture pass within recorded scope. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
+| C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop correction locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
@@ -1581,6 +1583,57 @@ replacement-run closure in section 6.26 (20:23 UTC):
 7. Older sound-import run 39669262483 remains nonterminal with its SDK-install
    Android failure and three queued iOS visual jobs. The one permitted targeted
    infrastructure retry remains deferred until GitHub allows it (section 6.28).
+
+### 6.44. Evaluated animation comparisons and finite-loop restart correction (2026-10-22)
+
+1. Added a CPU-only native comparison harness using ImportMetadataFromMemory with
+   a no-op stroke collector and the actual MngrPlayer. It loads asset-table/frame
+   metadata without decoding drawing geometry or creating renderers/audio engines.
+   Supported group/paint/root full-path sets must match; other types are counted
+   explicitly as outside this comparison scope. No production ABI was added.
+2. Comparisons cover local/world visibility, opacity and transforms, paint timing
+   metadata/playing and active drawing ordinal, at sequential samples, reverse paused
+   seeks using recorded GetTime clock pairs, and restart. Self-history checks also
+   compare these evaluated poses, ignoring expected paused-playing differences and
+   inactive hidden-drawing storage. They do not identify individual held-frame
+   indices when several frames select the same drawing. Relative tolerance is 1e-5.
+3. A public synthetic native -> Quill -> IMM case exercises nested offsets/timelines,
+   pivots/reflections, held drawings, visibility/opacity and five interpolations.
+   It exposed a native incremental-playback defect at a finite ancestor wrap:
+   opacity/drawing differed from fresh evaluation and restored-clock seeking, in
+   both reference and candidate. This was native history behavior, not conversion
+   drift. The incorrect initial scene-graph-only loader was replaced before these
+   results; its earlier provisional comparison is not acceptance evidence.
+4. Layer::SetStateAt now recognizes active finite repeated ancestors and the root
+   as possible wrap sources. It excludes exhausted repeat windows, and never
+   retimes the root's own start from its wrap. This restarts child timelines/sound
+   scheduling at real wraps without turning finite roots into infinite loops or
+   continuously retriggering children at a clamped end. No seek API change was made.
+5. Fresh source-matched Windows reader/player builds, full QuillToImm suite, native
+   chapter/viewpoint smoke and unchanged 121/51 export checks pass. The synthetic
+   pair has zero pair/history errors at 36 times across three modes (108 samples),
+   including finite-loop exhaustion. A deliberately changed transform is rejected;
+   the negative gate requires pair errors with zero history errors, so setup
+   failures or unrelated history regressions cannot pass as expected differences.
+6. Native sound scheduling metadata tests cover root single/finite/infinite and
+   nested finite repeats under single/infinite outer timelines, including stable
+   start times after exhaustion. No audio assets, decoder or audible output are
+   involved. Corrected paired comparisons pass for Fishgym (8 supported layers)
+   and Snoopy (46), each at 23 times across three modes (69 samples), with zero
+   pair/history errors. Their excluded viewpoint/media counts remain explicit.
+7. Added required Windows CI positive/negative evaluated-state checks after fixture
+   generation. Evidence: ignored artifacts/evaluated-state-final-positive.log,
+   evaluated-state-final-negative.log, evaluated-state-fishgym-final.log,
+   evaluated-state-snoopy-final.log, evaluated-state-commit-suite.log,
+   evaluated-state-viewpoint-policy.log, evaluated-state-exports.json and
+   finite-loop-root-clock-build.log. Source and test changes received independent
+   review; temporary project references remain uncommitted and are removed by the
+   runner. Native draw quantization and rendered/audio/device acceptance stay open.
+8. Latest CI audit: preview run 39690789395 Windows passed with no reported failures;
+   Android/browser work is still running and macOS/iOS gates remain incomplete.
+   Spawn run 39689819341 Windows also passed. This playback correction requires
+   fresh full CI. The older Android SDK infrastructure retry remains deferred
+   (6.28/6.43). Source chapter/startup mapping and the remaining roadmap are open.
 
 ## 7. Consolidated documents
 

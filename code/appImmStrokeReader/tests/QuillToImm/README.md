@@ -185,3 +185,12 @@ version-one BGR correction, complete-copy guards, adapter/project pixel equality
 and aggregate exact/short output budgets. SharpQuillReader independently checks
 absent/RGB/RGBA/mixed offsets, stale offsets and malformed/output-preservation cases
 (content pipeline section 6.43).
+
+The self-test writes evaluation-reference.imm, evaluation-roundtrip.imm and a
+changed-transform evaluation-mismatch.imm for the independent native evaluator.
+Run `code/appImmUnity/tests/evaluated_state_compare.py` with --msbuild, --reference,
+--candidate and --scope paint-groups-root. `--expect-mismatch` requires pair errors
+with no history errors; it cannot accept a setup failure. The Windows workflow
+runs positive and negative cases at 36 startup/boundary/midpoint/end times.
+This checks native evaluated metadata/active drawing selection and sound scheduling
+metadata, not geometry decoding, rendered frames or audible playback (pipeline6.44).
