@@ -83,7 +83,8 @@ namespace ImmPlayer.Authoring
         Group = 0,
         Paint = 1,
         /// <summary>A viewpoint: tracking level plus a locomotion volume. Carries no paint data.</summary>
-        SpawnArea = 2
+        SpawnArea = 2,
+        Picture = 3
     }
 
     public enum ImmAuthoringAnimationProperty
@@ -215,6 +216,9 @@ namespace ImmPlayer.Authoring
         public bool SpawnAreaAllowTranslationY;
         public bool SpawnAreaAllowTranslationZ;
         public ImmAuthoringImage SpawnAreaPreview;
+        public ExportPictureType PictureType;
+        public bool PictureViewerLocked;
+        public ImmAuthoringImage PictureImage;
 
         public static ImmAuthoringLayerProperties Default(string name) => new ImmAuthoringLayerProperties
         {

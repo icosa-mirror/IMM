@@ -4,6 +4,7 @@
 #include "libImmCore/src/libRender/piRenderer.h"
 #include "libImmCore/src/libBasics/piImage.h"
 #include "layer.h"
+#include <vector>
 
 #define DEFAULT_LAYER_PICTURE_VERSION 1
 
@@ -28,6 +29,9 @@ namespace ImmExporter
 		void Deinit();
 
         bool AssignAsset(const ImmCore::piImage *asset, bool move);
+        void SetEncodedAsset(const uint8_t* bytes, size_t size, uint32_t format);
+        const std::vector<uint8_t>& GetEncodedAsset() const { return mEncodedAsset; }
+        uint32_t GetEncodedFormat() const { return mEncodedFormat; }
 
 		const PictureType GetType() const;
         void SetType(PictureType type);
@@ -48,6 +52,8 @@ namespace ImmExporter
         ImmCore::bound3 mBBox; // for frustum culling, mono rendering (if too small), LOD, fast selection, etc
         uint32_t mVersion;
         bool mHasAsset;
+        std::vector<uint8_t> mEncodedAsset;
+        uint32_t mEncodedFormat = 0;
 
 	};
 

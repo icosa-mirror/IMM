@@ -25,6 +25,13 @@ reader rejects truncated prefixes and accepts the complete image. This check
 tests actual reads beyond the supplied length rather than relying on adjacent
 managed-array memory being inaccessible.
 
+Offline picture checks exercise the five existing native projection enum values,
+viewer-lock metadata, hierarchy/common properties, exact RGBA/alpha pixels, graph
+transactions and immutable snapshots, encoded PNG/JPEG payload identity, malformed
+input rejection and image-budget output guards. They do not establish projection
+appearance or viewer-lock behavior in playback. Picture import and Quill source
+conversion remain separate work.
+
 1. Run the synthetic native regression suite from the repository root. Use a fresh
    artifact directory for each local run; Windows CI runs this with freshly built DLLs:
 

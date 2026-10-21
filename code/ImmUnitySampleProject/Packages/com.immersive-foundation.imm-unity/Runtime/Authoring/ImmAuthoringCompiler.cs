@@ -390,6 +390,18 @@ namespace ImmPlayer.Authoring
                             }
                         }
                     }
+                    else if (layer.Type == ImmAuthoringLayerType.Picture)
+                    {
+                        handle = Native.ImmExporter_CreatePictureLayer(sequence.Handle, parent, layer.Properties.Name,
+                            layer.Properties.Visible ? 1 : 0, layer.Properties.Opacity, ref transform, ref pivot,
+                            layer.Properties.IsTimeline ? 1 : 0, layer.Properties.DurationTicks, layer.Properties.MaxRepeatCount,
+                            (int)layer.Properties.PictureType, layer.Properties.PictureViewerLocked ? 1 : 0);
+                        var image = layer.Properties.PictureImage;
+                        byte[] bytes = image.CopyData();
+                        if (handle == IntPtr.Zero || !Native.ImmExporter_PictureSetImage(handle, image.Width, image.Height,
+                            image.Channels, (int)image.Encoding, bytes, (ulong)bytes.LongLength))
+                            return CompileFailure(sequence, "Native picture creation or image setup failed.", layer.Id);
+                    }
                     else if (layer.Type == ImmAuthoringLayerType.Group)
                     {
                         handle = Native.ImmExporter_CreateGroupLayer(

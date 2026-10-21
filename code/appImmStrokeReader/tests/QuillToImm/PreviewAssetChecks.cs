@@ -132,7 +132,7 @@ static class PreviewAssetChecks
         }
     }
 
-    private static byte[] ReadAsset(string path, uint expectedFormat)
+    internal static byte[] ReadAsset(string path, uint expectedFormat)
     {
         byte[] file = File.ReadAllBytes(path);
         byte[] marker = Encoding.ASCII.GetBytes("Restable");

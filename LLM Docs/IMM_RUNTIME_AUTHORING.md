@@ -21,6 +21,12 @@ the export foundation; section 6.16 records encoded preview import and its local
 validation. Section 6.17 records source conversion and remaining generated-preview
 and pixel-parity gaps. Platform evidence remains pending.
 
+The offline graph/compiler also constructs picture layers with immutable raw or
+encoded image assets, projection/viewer-lock settings and common layer properties.
+Local export/read-back tests are recorded in content pipeline section 6.19.
+Picture import, Quill conversion and visual acceptance remain outstanding. This
+does not add picture mutation to the native live path.
+
 The original managed paint-authoring engine is implemented, including transactions, import,
 memory/file export, and compile-and-reload preview. Spawn areas and native exporter builds for
 macOS, Android, and iOS followed the original Windows delivery.

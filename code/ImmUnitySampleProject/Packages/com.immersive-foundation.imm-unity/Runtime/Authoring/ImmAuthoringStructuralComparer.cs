@@ -133,18 +133,24 @@ namespace ImmPlayer.Authoring
             Equal(differences, $"{path}.spawnAreaAllowTranslationX", expected.SpawnAreaAllowTranslationX, actual.SpawnAreaAllowTranslationX);
             Equal(differences, $"{path}.spawnAreaAllowTranslationY", expected.SpawnAreaAllowTranslationY, actual.SpawnAreaAllowTranslationY);
             Equal(differences, $"{path}.spawnAreaAllowTranslationZ", expected.SpawnAreaAllowTranslationZ, actual.SpawnAreaAllowTranslationZ);
-            var expectedPreview = expected.SpawnAreaPreview;
-            var actualPreview = actual.SpawnAreaPreview;
-            if (expectedPreview == null || actualPreview == null)
+            CompareImage(differences, $"{path}.spawnAreaPreview", expected.SpawnAreaPreview, actual.SpawnAreaPreview);
+            Equal(differences, $"{path}.pictureType", expected.PictureType, actual.PictureType);
+            Equal(differences, $"{path}.pictureViewerLocked", expected.PictureViewerLocked, actual.PictureViewerLocked);
+            CompareImage(differences, $"{path}.pictureImage", expected.PictureImage, actual.PictureImage);
+        }
+
+        private static void CompareImage(List<ImmAuthoringStructuralDifference> differences, string path,
+            ImmAuthoringImage expected, ImmAuthoringImage actual)
+        {
+            if (expected == null || actual == null)
             {
-                if (expectedPreview != actualPreview)
-                    Difference(differences, $"{path}.spawnAreaPreview", "Preview presence differs.");
+                if (expected != actual)
+                    Difference(differences, path, "Image presence differs.");
             }
-            else if (expectedPreview.Width != actualPreview.Width || expectedPreview.Height != actualPreview.Height ||
-                expectedPreview.Channels != actualPreview.Channels || expectedPreview.Encoding != actualPreview.Encoding ||
-                expectedPreview.EncodedBgr != actualPreview.EncodedBgr ||
-                !expectedPreview.CopyData().SequenceEqual(actualPreview.CopyData()))
-                Difference(differences, $"{path}.spawnAreaPreview", "Preview dimensions, encoding, color order or bytes differ.");
+            else if (expected.Width != actual.Width || expected.Height != actual.Height ||
+                expected.Channels != actual.Channels || expected.Encoding != actual.Encoding ||
+                expected.EncodedBgr != actual.EncodedBgr || !expected.CopyData().SequenceEqual(actual.CopyData()))
+                Difference(differences, path, "Image dimensions, encoding, color order or bytes differ.");
         }
 
         private static void CompareAnimationKeys(

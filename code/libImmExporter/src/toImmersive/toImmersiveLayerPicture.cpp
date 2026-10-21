@@ -26,6 +26,15 @@ namespace ImmExporter
 
             const int channel = 0;
             const piImage *image = lp->GetImage();
+            if (!image) return false;
+            const auto& encoded = lp->GetEncodedAsset();
+            if (!encoded.empty())
+            {
+                fp->WriteUInt32(lp->GetEncodedFormat());
+                fp->WriteUInt64(encoded.size() + 8);
+                fp->Write(encoded.data(), encoded.size());
+                return true;
+            }
             const int xres = image->GetXRes();
             const int yres = image->GetYRes();
             const piImage::Format format = image->GetFormat(channel);

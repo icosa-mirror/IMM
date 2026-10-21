@@ -32,6 +32,15 @@ namespace ImmPlayer.Exporter
         Always = 1
     }
 
+    public enum ExportPictureType
+    {
+        Image2D = 0,
+        Image360EquirectMono = 1,
+        Image360EquirectStereo = 2,
+        Image360CubemapCrossMono = 3,
+        Image360CubemapVstripMono = 4
+    }
+
     public enum ExportSpawnAreaVolume
     {
         Sphere = 0,
@@ -674,6 +683,17 @@ namespace ImmPlayer.Exporter
             int isTimeline,
             long durationTicks,
             uint maxRepeatCount);
+
+        [DllImport(DllName, CharSet = CharSet.Ansi)]
+        public static extern IntPtr ImmExporter_CreatePictureLayer(
+            IntPtr sequenceHandle, IntPtr parentLayerHandle, string name, int visible, float opacity,
+            ref TransformNative transform, ref TransformNative pivot, int isTimeline, long durationTicks,
+            uint maxRepeatCount, int pictureType, int viewerLocked);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_PictureSetImage(IntPtr layerHandle, int width, int height, int channels,
+            int encoding, [In] byte[] bytes, ulong size);
 
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr ImmExporter_CreateSpawnAreaLayer(

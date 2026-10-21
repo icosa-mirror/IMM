@@ -207,6 +207,11 @@ namespace ImmPlayer.Authoring
             long imageBytes = 0;
             foreach (ImmAuthoringLayerSnapshot layer in snapshot.Layers)
             {
+                if (layer.Type == ImmAuthoringLayerType.Picture && layer.Properties.PictureImage != null)
+                {
+                    var image = layer.Properties.PictureImage;
+                    imageBytes += Math.Max(image.ByteCount, (long)image.Width * image.Height * image.Channels);
+                }
                 if (layer.Type == ImmAuthoringLayerType.SpawnArea && layer.Properties.SpawnAreaPreview != null)
                 {
                     var image = layer.Properties.SpawnAreaPreview;

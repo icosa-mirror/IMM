@@ -24,6 +24,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     ViewpointConverterChecks.Run(args[3]);
     PreviewAssetChecks.Run(args[3]);
     PngMemoryBoundsChecks.Run();
+    PictureAuthoringChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     return 0;
 }

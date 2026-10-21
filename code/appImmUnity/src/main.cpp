@@ -103,6 +103,7 @@
 #include "libImmExporter/src/document/layerPaint.h"
 #include "libImmExporter/src/document/layerPaint/element.h"
 #include "libImmExporter/src/document/layerSpawnArea.h"
+#include "libImmExporter/src/document/layerPicture.h"
 #include "libImmExporter/src/toImmersive/toImmersive.h"
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
 #if defined(WINDOWS)
@@ -3630,37 +3631,62 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_GetRootL
     return sequence ? sequence->GetRoot() : nullptr;
 }
 
-extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SpawnAreaSetPreview(
-    void* layerHandle, int width, int height, int channels, int encoding, int version, const uint8_t* bytes, uint64_t size)
+static bool ImmExporterDecodeImage(ImmCore::piImage& image,
+    int width, int height, int channels, int encoding, const uint8_t* bytes, uint64_t size)
 {
-    auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
-    if (!layer || layer->GetType() != ImmExporter::Layer::Type::SpawnArea || !bytes || size == 0 ||
-        width <= 0 || height <= 0 || (channels != 3 && channels != 4) || (version != 1 && version != 2)) return false;
-    auto* spawn = reinterpret_cast<ImmExporter::LayerSpawnArea*>(layer->GetImplementation());
-    if (!spawn || uint64_t(width) * uint64_t(height) > uint64_t(INT32_MAX) / uint64_t(channels)) return false;
-    ImmCore::piImage image;
-    image.Init();
+    if (!bytes || size == 0 || size > INT32_MAX || width <= 0 || height <= 0 ||
+        (channels != 3 && channels != 4) || uint64_t(width) * uint64_t(height) > uint64_t(INT32_MAX) / uint64_t(channels)) return false;
     if (encoding == 0 || encoding == 1)
     {
-        if (version != 2 || channels != (encoding == 0 ? 3 : 4) || size != uint64_t(width) * uint64_t(height) * uint64_t(channels)) return false;
+        if (channels != (encoding == 0 ? 3 : 4) || size != uint64_t(width) * uint64_t(height) * uint64_t(channels)) return false;
         ImmCore::piImage::Format format = channels == 3 ? ImmCore::piImage::FORMAT_I_RGB : ImmCore::piImage::FORMAT_I_RGBA;
         if (!image.Init(ImmCore::piImage::TYPE_2D, width, height, 1, 1, &format)) return false;
         std::memcpy(image.GetData(0), bytes, static_cast<size_t>(size));
-        bool assigned = spawn->AssignAsset(&image, false);
-        image.Free();
-        return assigned;
+        return true;
     }
     if (encoding != 2 && encoding != 3) return false;
     ImmCore::piTArray<uint8_t> borrowed;
     borrowed.Init(0, false);
     borrowed.Set(const_cast<uint8_t*>(bytes), size);
     borrowed.SetLength(size);
-    if (!image.ReadFromMemory(&borrowed, encoding == 2 ? L"png" : L"jpg")) { image.Free(); return false; }
+    if (!image.ReadFromMemory(&borrowed, encoding == 2 ? L"png" : L"jpg")) return false;
     const auto format = image.GetFormat(0);
-    bool valid = image.GetXRes() == width && image.GetYRes() == height &&
+    return image.GetXRes() == width && image.GetYRes() == height &&
         ((channels == 3 && format == ImmCore::piImage::FORMAT_I_RGB) || (channels == 4 && format == ImmCore::piImage::FORMAT_I_RGBA));
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SpawnAreaSetPreview(
+    void* layerHandle, int width, int height, int channels, int encoding, int version, const uint8_t* bytes, uint64_t size)
+{
+    auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (!layer || layer->GetType() != ImmExporter::Layer::Type::SpawnArea ||
+        (version != 1 && version != 2) || ((encoding == 0 || encoding == 1) && version != 2)) return false;
+    auto* spawn = reinterpret_cast<ImmExporter::LayerSpawnArea*>(layer->GetImplementation());
+    if (!spawn) return false;
+    ImmCore::piImage image;
+    image.Init();
+    bool valid = ImmExporterDecodeImage(image, width, height, channels, encoding, bytes, size);
+    if (valid)
+        valid = encoding < 2 ? spawn->AssignAsset(&image, false) :
+            spawn->AssignEncodedAsset(bytes, static_cast<size_t>(size), encoding == 2 ? 1u : 2u, static_cast<uint32_t>(version));
     image.Free();
-    return valid && spawn->AssignEncodedAsset(bytes, static_cast<size_t>(size), encoding == 2 ? 1u : 2u, static_cast<uint32_t>(version));
+    return valid;
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_PictureSetImage(
+    void* layerHandle, int width, int height, int channels, int encoding, const uint8_t* bytes, uint64_t size)
+{
+    auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (!layer || layer->GetType() != ImmExporter::Layer::Type::Picture) return false;
+    auto* picture = reinterpret_cast<ImmExporter::LayerPicture*>(layer->GetImplementation());
+    if (!picture) return false;
+    ImmCore::piImage image;
+    image.Init();
+    bool valid = ImmExporterDecodeImage(image, width, height, channels, encoding, bytes, size);
+    if (valid) valid = picture->AssignAsset(&image, false);
+    if (valid && encoding >= 2) picture->SetEncodedAsset(bytes, static_cast<size_t>(size), encoding == 2 ? 1u : 2u);
+    image.Free();
+    return valid;
 }
 
 extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSequence(
@@ -3803,6 +3829,34 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateGr
     if (!ok)
         return nullptr;
 
+    return layer;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreatePictureLayer(
+    void* sequenceHandle, void* parentLayerHandle, const char* name, int visible, float opacity,
+    const ImmExporterTransformC* transform, const ImmExporterTransformC* pivot,
+    int isTimeline, int64_t durationTicks, uint32_t maxRepeatCount, int pictureType, int viewerLocked)
+{
+    auto* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    auto* parent = reinterpret_cast<ImmExporter::Layer*>(parentLayerHandle);
+    if (!seq || pictureType < 0 || pictureType > 4 || durationTicks < 0 ||
+        (parent && parent->GetType() != ImmExporter::Layer::Type::Group)) return nullptr;
+    if (!parent) parent = seq->GetRoot();
+    auto* layer = seq->CreateLayer(parent);
+    if (!layer) return nullptr;
+    ImmCore::piString wname;
+    if (name && name[0]) wname.InitCopyS(name);
+    else wname.InitCopyW(L"Picture");
+    bool ok = layer->Init(ImmExporter::Layer::Type::Picture, wname.GetS(), visible != 0,
+        ImmExporterMakeTransform(transform), ImmExporterMakeTransform(pivot), opacity,
+        isTimeline != 0, static_cast<ImmCore::piTick>(durationTicks), maxRepeatCount);
+    wname.End();
+    if (!ok) return nullptr;
+    auto* picture = new ImmExporter::LayerPicture();
+    picture->Init();
+    layer->SetImplementation(picture);
+    picture->SetType(static_cast<ImmExporter::LayerPicture::PictureType>(pictureType));
+    picture->SetIsViewerLocked(viewerLocked != 0);
     return layer;
 }
 

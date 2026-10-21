@@ -21,19 +21,35 @@ namespace ImmExporter
         mIsViewerLocked = false;
         mVersion = version;
         mHasAsset = false;
+        mType = PictureType::Image2D;
+        mEncodedAsset.clear();
 		return true;
 	}
 
     bool LayerPicture::AssignAsset(const piImage *asset, bool move)
     {
+        if (mHasAsset) mImage.Free();
+        mHasAsset = false;
+        mEncodedAsset.clear();
         if (move)
             mImage.InitMove(asset);
-        else
-            mImage.InitCopy(asset);
-        mImage.Convert(0, piImage::Format::FORMAT_I_RGBA, false);
+        else if (!mImage.InitCopy(asset))
+            return false;
+        if (mImage.GetFormat(0) != piImage::Format::FORMAT_I_RGBA &&
+            !mImage.Convert(0, piImage::Format::FORMAT_I_RGBA, false))
+        {
+            mImage.Free();
+            return false;
+        }
         iComputeBBox();
         mHasAsset = true;
         return true;
+    }
+
+    void LayerPicture::SetEncodedAsset(const uint8_t* bytes, size_t size, uint32_t format)
+    {
+        mEncodedAsset.assign(bytes, bytes + size);
+        mEncodedFormat = format;
     }
 
 	void LayerPicture::Deinit(void)

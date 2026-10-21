@@ -144,6 +144,10 @@ namespace ImmPlayer.Authoring
             ImmAuthoringLayerProperties properties,
             int siblingIndex = -1) => CreateLayer(ImmAuthoringLayerType.SpawnArea, parentId, properties, siblingIndex);
 
+        /// <summary>Create an offline picture layer with a required immutable image asset.</summary>
+        public ImmAuthoringResult<long> CreatePictureLayer(long parentId, ImmAuthoringLayerProperties properties, int siblingIndex = -1)
+            => CreateLayer(ImmAuthoringLayerType.Picture, parentId, properties, siblingIndex);
+
         public ImmAuthoringResult SetLayerProperties(long layerId, ImmAuthoringLayerProperties properties)
         {
             ImmAuthoringChange change;
@@ -977,6 +981,14 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer duration cannot be negative.", objectId);
             if (properties.SpawnAreaPreview != null && type != ImmAuthoringLayerType.SpawnArea)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only spawn-area layers can own a viewpoint preview.", objectId);
+            if (type == ImmAuthoringLayerType.Picture)
+            {
+                if (properties.PictureImage == null || properties.PictureImage.EncodedBgr ||
+                    !Enum.IsDefined(typeof(ExportPictureType), properties.PictureType))
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Picture layers require an RGB image asset and a supported projection.", objectId);
+            }
+            else if (properties.PictureImage != null)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only picture layers can own a picture image.", objectId);
             // The spawn-volume fields exist on every layer because the properties struct is
             // shared, so their rules are checked only for the layer type that owns them.
             // Applying them to paint, group or viewpoint layers would report a spawn-area
@@ -1176,6 +1188,9 @@ namespace ImmPlayer.Authoring
             if (layer.Type == ImmAuthoringLayerType.SpawnArea &&
                 (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Spawn-area layer contains paint data.", layerId);
+            if (layer.Type == ImmAuthoringLayerType.Picture &&
+                (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Picture layer contains paint data.", layerId);
             if (layer.Type == ImmAuthoringLayerType.Paint)
             {
                 foreach (long drawingId in layer.DrawingIds)

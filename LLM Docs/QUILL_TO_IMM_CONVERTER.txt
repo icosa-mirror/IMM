@@ -78,8 +78,9 @@ What exists
    and native API work depends on the mappings required below. Do not assume
    every media/model capability is exposed through the Unity export ABI.
 6. ImmAuthoringCompiler already forwards actual group/paint pivots and animation
-   keys through the low-level exporter bindings. Its graph supports Group, Paint
-   and SpawnArea, rather than picture/sound/model construction. Reuse that work
+   keys through the low-level exporter bindings. Its graph supports Group, Paint,
+   SpawnArea and offline Picture construction, with shared immutable image assets.
+   Sound/model construction remains absent. Reuse that work
    where appropriate instead of treating all managed animation support as absent.
 7. The first implementation candidate is SharpQuill -> ImmAuthoringDocument ->
    ImmAuthoringCompiler. The graph now preserves reflection flags through additive
@@ -103,9 +104,9 @@ Remaining work for a basic converter
    rates, key channels/interpolation, nested offsets/durations/repeats and root
    actions to existing IMM mechanisms. Avoid duplicate drawings for hold frames
    or baking animated layer transforms into every stroke point.
-5. Media transfer: native picture/sound capabilities exist, but managed construction
-   and converter wiring are incomplete: the Unity ImmExporter_* ABI has no
-   picture/sound/model construction entry points. Preserve projection/viewer locking,
+5. Media transfer: offline picture graph/compiler construction and additive Unity
+   exporter ABI entry points now exist. Picture import and source-converter wiring
+   remain incomplete; sound/model construction is still absent. Preserve projection/viewer locking,
    embedded data, audio gain/loop/spatial properties and timing as Quill exports them.
    The reader fixes below address input, not this output/conversion work.
 6. Reference checks: compare representative source projects with IMM files produced
