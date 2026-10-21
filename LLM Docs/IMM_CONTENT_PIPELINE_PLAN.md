@@ -22,11 +22,12 @@ build has no runner assigned. Later APIs still need their own platform/package a
 hosted success does not establish skipped hardware gates or full content fidelity.
 Confirmed regressions take priority over new feature work. See section 6.26.
 
-Latest Windows source regression: shared Opus test staging failed in decoder
-validation; correction 4ec3f148 passed that staging check but its Windows run reached
-an outdated sound-excluding adapter expectation (section 6.40). The local corrected
-adapter checks pass, but hosted replacement acceptance remains pending. The hierarchy
-sound path and reviewed editor menus are recorded in sections 6.37 and 6.39.
+The corrected Windows staging, independent adapter and static converter CI steps
+pass in replacement run 39688086871; Android also passes. The Windows job is still
+building Godot and macOS/iOS remain queued, so full replacement acceptance remains
+pending (sections 6.38-6.42). Hierarchy sound, reviewed editor menus and spherical
+viewpoint mapping are implemented; the offline spawn compiler now retains common
+properties through the additive constructor recorded in section 6.42.
 
 ## 1. Objective and document ownership
 
@@ -65,7 +66,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
-| Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; hierarchy adapter maps spheres and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; common spawn constructor fields remain limited | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
+| Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; hierarchy adapter maps spheres and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; full common-property constructor with hidden startup visibility encoded as a key | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
 | Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries, metadata import and offline PCM16 decoding; hierarchy adapter maps supported mono/stereo sound | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
@@ -1505,6 +1506,37 @@ replacement-run closure in section 6.26 (20:23 UTC):
    milestone requires fresh full CI too. R2 and the complete shared roadmap remain
    open, including previews, common spawn serialization, codec/fidelity decisions,
    broader navigation and live authoring/platform/application acceptance.
+
+### 6.42. Full common-property offline spawn construction (2026-10-21)
+
+1. Added ImmExporter_CreateSpawnAreaLayerWithProperties and switched the offline
+   compiler to it. Spawn pivots, opacity, timeline flag, duration and repeat count
+   now reach native serialization. Transform/pivot flips still use the existing
+   additive flip setter. This closes the constructor gap found in section 6.41;
+   no live mutation or per-frame path changes.
+2. Initial visibility has no Layerdes field. The new constructor encodes hidden
+   startup state as a false time-zero visibility key; later explicit caller keys
+   at zero replace that value. The reader's base visible field can remain true,
+   while its keys retain effective hidden startup state. This is visibility-track
+   preservation, not base-boolean identity. The original constructor still has its
+   exact prior defaults and adds no new key.
+3. Fresh Windows build, full local QuillToImm suite, legacy exporter bridge smoke
+   and ABI verifier pass (121 player/exporter, 50 reader declarations). Checks
+   cover nonidentity pivot/reflections, opacity/timeline/duration/repeats, hidden
+   startup plus later key, explicit true-at-zero override, authoring import/re-export,
+   Quill-project read-back, null sequence and old constructor defaults. Evidence:
+   ignored artifacts/spawn-properties-final-suite.log, spawn-properties-legacy-smoke.log,
+   spawn-properties-visibility-build.log and spawn-properties-exports.json.
+4. Independent read-only source review confirmed native/managed argument widths,
+   old-wrapper defaults and time-zero replacement behavior. Separate CI auditing
+   found no failures: 39688086871 passed the previously failing adapter/converter
+   steps and Android; its Windows job remains in the Godot build. Latest viewpoint
+   run 39688927555 reached its adapter step. Both still have queued macOS/iOS jobs;
+   neither is a completed full validation. Current API/binaries require fresh CI.
+5. Reverse preview writing, unsupported volumes/source navigation, codec fidelity,
+   Quill application/live-authoring and broader platform acceptance remain open.
+   The one earlier undetailed local fixture-setup failure from section 6.41 has not
+   recurred in the final full suites; its cause remains unestablished.
 
 ## 7. Consolidated documents
 

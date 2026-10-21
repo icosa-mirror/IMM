@@ -736,6 +736,13 @@ namespace ImmPlayer.Exporter
             ref TransformNative transform,
             int floorLevel);
 
+        /// <summary>Full offline common properties. Hidden startup visibility is a time-zero key, replaceable by explicit keys. The original constructor retains its defaults.</summary>
+        [DllImport(DllName, CharSet = CharSet.Ansi)]
+        public static extern IntPtr ImmExporter_CreateSpawnAreaLayerWithProperties(
+            IntPtr sequenceHandle, IntPtr parentLayerHandle, string name,
+            int visible, float opacity, ref TransformNative transform, ref TransformNative pivot,
+            int isTimeline, long durationTicks, uint maxRepeatCount, int floorLevel);
+
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool ImmExporter_SetInitialSpawnArea(IntPtr sequenceHandle, IntPtr layerHandle);

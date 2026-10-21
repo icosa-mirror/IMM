@@ -680,6 +680,7 @@ Source references
 Reverse viewpoint update (shared plan 6.41): the hierarchy reader maps native sphere
 volumes, floor/eye tracking, locomotion and uniquely representable default paths.
 Box volumes and stored reverse previews remain explicit gaps. Source gizmo metadata
-and native availability do not have identical semantics. The offline spawn creation
-ABI still defaults pivot position and several common fields; source spawn fidelity
-is not complete. Legacy flat reader behavior is unchanged.
+and native availability do not have identical semantics. The offline compiler now
+uses a full-property spawn constructor (shared plan 6.42), preserving pivots and
+common fields with hidden startup encoded as a visibility key. Source navigation
+fidelity is not complete. Legacy flat reader behavior is unchanged.

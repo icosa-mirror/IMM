@@ -3974,12 +3974,11 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreatePi
     return layer;
 }
 
-extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSpawnAreaLayer(
-    void* sequenceHandle,
-    void* parentLayerHandle,
-    const char* name,
-    const ImmExporterTransformC* transform,
-    int floorLevel)
+static void* ImmExporterCreateSpawnAreaLayer(
+    void* sequenceHandle, void* parentLayerHandle, const char* name,
+    int visible, float opacity, const ImmExporterTransformC* transform,
+    const ImmExporterTransformC* pivot, int isTimeline, int64_t durationTicks,
+    uint32_t maxRepeatCount, int floorLevel)
 {
     ImmExporter::Sequence* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
     if (seq == nullptr)
@@ -4002,13 +4001,13 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSp
     const bool ok = layer->Init(
         ImmExporter::Layer::Type::SpawnArea,
         wname.GetS(),
-        true,
+        visible != 0,
         t,
-        ImmCore::trans3d::identity(),
-        1.0f,
-        false,
-        ImmCore::piTick(0),
-        0);
+        ImmExporterMakeTransform(pivot),
+        opacity,
+        isTimeline != 0,
+        ImmCore::piTick(durationTicks),
+        maxRepeatCount);
     wname.End();
     if (!ok)
         return nullptr;
@@ -4036,6 +4035,34 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSp
     // it with ImmExporter_SetInitialSpawnArea once the layer tree is complete.
     if (seq->GetInitialSpawnArea() == nullptr)
         seq->SetInitialSpawnArea(layer);
+    return layer;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSpawnAreaLayer(
+    void* sequenceHandle, void* parentLayerHandle, const char* name,
+    const ImmExporterTransformC* transform, int floorLevel)
+{
+    return ImmExporterCreateSpawnAreaLayer(sequenceHandle, parentLayerHandle, name,
+        1, 1.0f, transform, nullptr, 0, 0, 0, floorLevel);
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSpawnAreaLayerWithProperties(
+    void* sequenceHandle, void* parentLayerHandle, const char* name,
+    int visible, float opacity, const ImmExporterTransformC* transform,
+    const ImmExporterTransformC* pivot, int isTimeline, int64_t durationTicks,
+    uint32_t maxRepeatCount, int floorLevel)
+{
+    auto* layer = static_cast<ImmExporter::Layer*>(ImmExporterCreateSpawnAreaLayer(sequenceHandle, parentLayerHandle, name,
+        visible, opacity, transform, pivot, isTimeline, durationTicks, maxRepeatCount, floorLevel));
+    if (layer && visible == 0)
+    {
+        // Layerdes has no base visibility field; encode the hidden startup value
+        // as a channel key. Explicit caller keys at time zero can replace it.
+        ImmExporter::Layer::AnimValue value{};
+        value.mBool = false;
+        if (!layer->AddKey(ImmCore::piTick(0), ImmExporter::Layer::AnimProperty::Visibility,
+            value, ImmExporter::Layer::InterpolationType::None)) return nullptr;
+    }
     return layer;
 }
 

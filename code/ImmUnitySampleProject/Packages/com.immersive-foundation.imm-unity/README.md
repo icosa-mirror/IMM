@@ -431,3 +431,9 @@ See content pipeline section 6.25 for validation scope and remaining source mapp
 On Windows, the required stroke-reader package owns shared decoder DLLs including
 `opus.dll`; this package owns `opusenc.dll` and `vorbisenc.dll`. The native loader
 preloads shared dependencies from the reader package before loading encoders.
+
+Offline spawn compilation uses `ImmExporter_CreateSpawnAreaLayerWithProperties`
+to retain pivot and common opacity/timeline/duration/repeat properties. Hidden
+startup is represented by a false time-zero visibility key, replaceable by explicit
+keys at zero. Reader base visibility can remain true with that key present. The
+original native constructor retains its prior defaults (content pipeline 6.42).

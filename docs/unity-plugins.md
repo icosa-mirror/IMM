@@ -680,7 +680,7 @@ package's `Runtime/ImmStrokeReader.cs`. Use
 `tests/tools/verify_unity_plugin_exports.py` to generate the exact declaration and
 binary-export inventory for a revision rather than maintaining a copied list.
 
-The current source declares 120 player/exporter and 50 reader entry points. Windows
+The current source declares 121 player/exporter and 50 reader entry points. Windows
 verification passes, including the additive root writer, reader and viewpoint
 preview setter/query calls, picture asset queries and offline picture/sound construction and encoded sound import/passthrough. Other platform binaries for these additions require CI publication
 and verification; earlier all-platform audit results do not prove those additions.
@@ -742,5 +742,6 @@ The standalone legacy flat API is unchanged (content pipeline section 6.39).
 
 Hierarchy reads map spherical spawn metadata and unique default paths. Box volumes,
 reverse preview writing and original gizmo metadata remain reported limitations.
-The existing offline native spawn constructor defaults pivot position and several
-common fields; full graph-to-file spawn preservation remains open (pipeline 6.41).
+The offline compiler uses CreateSpawnAreaLayerWithProperties to retain pivot,
+opacity/timeline/duration/repeats and hidden startup visibility as a time-zero key.
+The original constructor retains its defaults (pipeline 6.42).

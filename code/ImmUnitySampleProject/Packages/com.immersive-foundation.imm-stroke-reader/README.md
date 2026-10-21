@@ -135,5 +135,6 @@ The hierarchy reader also reconstructs spherical viewpoints and uniquely express
 native default paths. Box volumes and stored preview images are reported gaps.
 Quill gizmo fields unavailable in IMM use reported defaults; native availability
 and Quill gizmo visibility have different meanings. This does not establish source
-navigation behavior. The offline spawn compiler currently defaults some common
-fields, including pivot position; see content pipeline section 6.41.
+navigation behavior. The offline compiler now retains common spawn properties
+through an additive constructor, with hidden initial visibility represented by a
+time-zero key (content pipeline sections 6.41-6.42).

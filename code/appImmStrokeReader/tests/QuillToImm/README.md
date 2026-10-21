@@ -176,5 +176,6 @@ interaction and Quill application acceptance remain separate requirements.
 
 Hierarchy viewpoint checks cover sphere/tracking/locomotion, local reflection/keys,
 project read-back, explicit box/preview limitations and ambiguous/omitted default
-selection. They distinguish native reader preservation from the existing offline
-spawn constructor's common-field defaults (content pipeline section 6.41).
+selection. Full-property spawn tests cover common fields through native export,
+import/re-export and project read-back, hidden startup tracks, explicit zero-time
+overrides and unchanged legacy constructor defaults (content pipeline 6.42).

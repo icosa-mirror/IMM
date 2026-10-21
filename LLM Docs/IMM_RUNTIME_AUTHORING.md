@@ -37,6 +37,11 @@ paired settings/key checks (section 6.29). Stereo/panorama conversion and playba
 acceptance remain outstanding. This
 does not add picture mutation to the native live path.
 
+The offline spawn compiler now preserves pivot, opacity, timeline, duration and
+repeat properties through a full-property native constructor. Hidden startup
+visibility is encoded as a time-zero key; the old constructor retains its defaults.
+This changes offline serialization only (content pipeline section 6.42).
+
 The original managed paint-authoring engine is implemented, including transactions, import,
 memory/file export, and compile-and-reload preview. Spawn areas and native exporter builds for
 macOS, Android, and iOS followed the original Windows delivery.

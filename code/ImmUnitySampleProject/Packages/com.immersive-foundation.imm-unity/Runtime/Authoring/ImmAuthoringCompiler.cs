@@ -352,12 +352,10 @@ namespace ImmPlayer.Authoring
                     IntPtr handle;
                     if (layer.Type == ImmAuthoringLayerType.SpawnArea)
                     {
-                        // The native spawn-area entry point carries the viewpoint transform and
-                        // tracking level only; visibility/opacity/timeline stay at their native
-                        // defaults (animation keys still apply on top of them).
-                        handle = Native.ImmExporter_CreateSpawnAreaLayer(
-                            sequence.Handle, parent, layer.Properties.Name, ref transform,
-                            layer.Properties.SpawnAreaFloorLevel ? 1 : 0);
+                        handle = Native.ImmExporter_CreateSpawnAreaLayerWithProperties(
+                            sequence.Handle, parent, layer.Properties.Name, layer.Properties.Visible ? 1 : 0,
+                            layer.Properties.Opacity, ref transform, ref pivot, layer.Properties.IsTimeline ? 1 : 0,
+                            layer.Properties.DurationTicks, layer.Properties.MaxRepeatCount, layer.Properties.SpawnAreaFloorLevel ? 1 : 0);
                         if (handle != IntPtr.Zero)
                         {
                             int locomotionMask =
