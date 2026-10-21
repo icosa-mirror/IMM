@@ -20,8 +20,11 @@ static class RootKeyChecks
                 emptyInfo.rootAnimationKeyCount == 0, "Implicit default visibility became a counted root key.");
             Require(!Reader.StrokeReader_GetRootAnimationKey(empty, 0, out _), "Empty root returned a key.");
 
-            sample = Reader.StrokeReader_LoadFromFile(Path.GetFullPath("code/ImmGodotXRSampleProject/sample1.imm"));
-            Require(sample > 0 && Reader.StrokeReader_GetDocumentInfo(sample, out var sampleInfo) &&
+            string samplePath = Path.GetFullPath("exampleImmFiles/sample1.imm");
+            Require(File.Exists(samplePath), $"Tracked public fixture is missing: {samplePath}");
+            sample = Reader.StrokeReader_LoadFromFile(samplePath);
+            Require(sample > 0, "Tracked public fixture failed to load.");
+            Require(Reader.StrokeReader_GetDocumentInfo(sample, out var sampleInfo) &&
                 sampleInfo.rootAnimationKeyCount == 1, "Public sample root-key count changed.");
             Require(Reader.StrokeReader_GetRootAnimationKey(sample, 0, out var key) &&
                 key.property == 8 && key.timeTicks == 0 && key.interpolation == 0 && key.intValue == 0,

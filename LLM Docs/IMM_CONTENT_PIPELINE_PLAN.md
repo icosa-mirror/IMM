@@ -371,6 +371,15 @@ Status checked at 2026-10-21 14:36 UTC:
    root keys in Fishgym; all report one chapter. This does not supply a chapter-
    action reference or establish startup behavior. Reports remain under ignored
    `artifacts/quill-reference/*-root-metadata.json`.
+6. Root-query validation run 39622051362 failed its Windows self-test because the
+   new test referenced a locally present, untracked Godot sample copy. CI could not
+   load that path. This is a test-source defect, not an infrastructure retry case.
+   The test now requires the tracked `exampleImmFiles/sample1.imm`, checks file
+   existence and load success explicitly, and retains the exact root-key assertions.
+   The tracked file and local copy are byte-identical (SHA256
+   `baa05c125ed0ca130760f1b76a8cde39a475f66a60e5b4e96644a1839b0b2095`).
+   Local regressions pass with the tracked path; fresh full validation is required
+   after this source fix. The older Godot iOS capacity failure remains unresolved.
 
 ## 7. Consolidated documents
 
