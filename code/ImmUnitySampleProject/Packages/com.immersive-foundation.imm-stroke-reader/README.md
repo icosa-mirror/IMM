@@ -123,3 +123,10 @@ budget throws ArgumentOutOfRangeException. Budget exhaustion or malformed audio
 fails conversion without returning a partial sequence; unsupported spatial formats
 are reported omissions. Encoded bytes and native legacy sound fields are reported
 as unpreserved (pipeline section 6.37).
+
+The three Unity IMM-to-Quill menu commands use the hierarchy reader, including
+supported sounds and keys. They show conversion limitations and the destination
+before writing; existing destination content is called out for replacement. Skip
+leaves output untouched. Written projects include IMM-conversion-report.txt with
+all typed issues. Batch summaries count skips separately. Legacy flat read/write
+APIs retain their previous behavior. See content pipeline section 6.39.

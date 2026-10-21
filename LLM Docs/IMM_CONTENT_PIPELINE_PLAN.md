@@ -22,6 +22,11 @@ build has no runner assigned. Later APIs still need their own platform/package a
 hosted success does not establish skipped hardware gates or full content fidelity.
 Confirmed regressions take priority over new feature work. See section 6.26.
 
+Latest Windows source regression: shared Opus test staging failed in decoder
+validation; correction 4ec3f148 is under fresh validation (section 6.38). The local
+smoke checks pass, but hosted replacement acceptance remains pending. The hierarchy
+sound path and reviewed editor menus are recorded in sections 6.37 and 6.39.
+
 ## 1. Objective and document ownership
 
 Provide reusable content reading, representation and writing so applications can
@@ -120,7 +125,7 @@ The preferred first candidate is:
 | C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
-| R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys implemented; native sound decoding, codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
+| R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys and native sound decoding/mapping implemented; codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
 | A2: live breadth and save | Authoring M2 then M3 | Resource-owning layer lifecycle and revision-selected save accepted |
 | A3: managed live cutover/platforms | Authoring M4/M5 after required native contracts | Managed preview uses accepted live path; per-operation/backend evidence |
@@ -176,7 +181,9 @@ The preferred first candidate is:
    `ReadImmAsSequenceWithReport` now returns this same legacy subset plus explicit
    source-layer omissions and hierarchy/key/root/chapter limitations (section 6.31).
    `ReadImmAsHierarchyWithReport` is a separate authoring-indexed mode retaining
-   groups/local properties and verified key channels (section 6.34). Legacy callers
+   groups/local properties, verified key channels and supported sounds (sections
+   6.34 and 6.37). Editor menus use this mode with a review and saved loss report
+   (section 6.39). Legacy callers
    keep the flattened behavior.
 5. `WriteImmAsQuillProject` invokes the bundled Quill writer. The writer now
    serializes RGB/RGBA picture children with supported projection metadata and
@@ -1415,6 +1422,31 @@ replacement-run closure in section 6.26 (20:23 UTC):
    source defect. A fresh full run is required; the regression remains unaccepted
    until replacement Windows validation passes. This is separate from the older
    Android SDK installation infrastructure failure and its deferred isolated retry.
+
+### 6.39. Reviewed hierarchy conversion in Unity editor menus (2026-10-21)
+
+1. All three existing IMM-to-Quill menu commands now consume the hierarchy reader
+   instead of the legacy flat adapter. Supported groups, paint, pictures, sounds
+   and keys therefore reach project writing. The public legacy flat API remains
+   unchanged. The picture choice now says Exclude Pictures rather than Paint Only.
+2. Before writing, the menu logs every typed issue and shows a review of conversion
+   limitations and the destination. Existing destination content is explicitly
+   called out for replacement. Declining leaves existing files unchanged and does
+   not create a new output directory. Batch summaries distinguish skipped files
+   from failures and reveal only a successfully written output folder.
+3. A written project includes IMM-conversion-report.txt with source, destination
+   and all issue codes/layer identities/messages. Failed reads never reach writing
+   or request write confirmation. This exposes current spawn/root/codec and other
+   limitations; it does not complete their reconstruction or Quill app acceptance.
+4. The production editor source now compiles in the existing .NET/native harness
+   with simulated Editor interaction. Tests exercise declined overwrite, declined
+   new destination, accepted hierarchy/sound project read-back, complete saved
+   reports and malformed-read output preservation. The full local suite passes;
+   this is not live Unity Editor or Quill application validation. Evidence: ignored
+   artifacts/editor-hierarchy-commit-suite*.
+5. Windows smoke regression correction 4ec3f148 needs replacement hosted acceptance
+   (section 6.38). This editor milestone also requires fresh full CI. Pending gates
+   and the earlier Android SDK infrastructure failure are not passing results.
 
 ## 7. Consolidated documents
 

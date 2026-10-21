@@ -41,6 +41,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     PngMemoryBoundsChecks.Run();
     PictureAuthoringChecks.Run(args[3]);
     SoundAuthoringChecks.Run(args[3]);
+    EditorConversionChecks.Run(args[3]);
     PcmDecodeChecks.LifetimeAndOffset(args[3]);
     PcmDecodeChecks.WavFormats(args[3]);
     PcmDecodeChecks.Standalone(readerLibrary, args[3]);

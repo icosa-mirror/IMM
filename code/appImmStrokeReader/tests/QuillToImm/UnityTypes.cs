@@ -13,6 +13,7 @@ namespace UnityEngine
     }
     public static class Application
     {
+        public static string dataPath => System.IO.Path.GetFullPath("code/ImmUnitySampleProject/Assets");
         public static string temporaryCachePath => System.IO.Path.GetTempPath();
         public static event System.Action onBeforeRender { add { } remove { } }
     }

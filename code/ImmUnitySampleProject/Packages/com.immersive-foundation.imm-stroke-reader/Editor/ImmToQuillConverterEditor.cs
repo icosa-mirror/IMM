@@ -2,12 +2,14 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 using System;
+using System.Linq;
+using System.Text;
 
 namespace ImmStrokeReader
 {
     public static class ImmToQuillConverterEditor
     {
-        private const string LogPrefix = "[IMM2QUILL_20260209A] ";
+        private const string LogPrefix = "[IMM2QUILL_EDITOR_20261021] ";
 
         [MenuItem("IMM/Convert IMM To Quill...")]
         public static void ConvertImmToQuill()
@@ -50,28 +52,29 @@ namespace ImmStrokeReader
 
             bool includePictures = EditorUtility.DisplayDialog(
                 "Include picture layers?",
-                "Include picture layers in conversion for all selected files?\n\nPaint layers are always included.",
+                "Include picture layers in conversion for all selected files?\n\nGroups, paint, supported sound and animation are included. Unsupported content is reported before writing.",
                 "Include Pictures",
-                "Paint Only");
+                "Exclude Pictures");
 
             int okCount = 0;
             int failCount = 0;
+            int skippedCount = 0;
             string lastOutputFolder = null;
 
             for (int i = 0; i < immPaths.Length; i++)
             {
                 string immPath = immPaths[i];
                 string outputFolder = GetDefaultOutputFolderForImm(immPath);
-                Directory.CreateDirectory(outputFolder);
-                lastOutputFolder = outputFolder;
+
 
                 Debug.Log($"{LogPrefix}Batch converting '{immPath}' to '{outputFolder}' includePictures={includePictures}");
 
                 bool ok = false;
                 string error = null;
+                bool cancelled = false;
                 try
                 {
-                    ok = SharpQuillCompat.WriteImmAsQuillProject(immPath, outputFolder, includePictures);
+                    ok = WriteReviewedProject(immPath, outputFolder, includePictures, out cancelled, out error);
                 }
                 catch (Exception ex)
                 {
@@ -81,7 +84,9 @@ namespace ImmStrokeReader
                 if (ok)
                 {
                     okCount++;
+                    lastOutputFolder = outputFolder;
                 }
+                else if (cancelled) skippedCount++;
                 else
                 {
                     failCount++;
@@ -90,8 +95,8 @@ namespace ImmStrokeReader
                 }
             }
 
-            Debug.Log($"{LogPrefix}Batch conversion completed ok={okCount} failed={failCount}");
-            EditorUtility.DisplayDialog("IMM to Quill", $"Batch conversion complete.\n\nSuccess: {okCount}\nFailed: {failCount}", "OK");
+            Debug.Log($"{LogPrefix}Batch conversion completed ok={okCount} skipped={skippedCount} failed={failCount}");
+            EditorUtility.DisplayDialog("IMM to Quill", $"Batch conversion complete.\n\nWritten: {okCount}\nSkipped: {skippedCount}\nFailed: {failCount}", "OK");
             if (!string.IsNullOrEmpty(lastOutputFolder))
             {
                 EditorUtility.RevealInFinder(lastOutputFolder);
@@ -118,27 +123,28 @@ namespace ImmStrokeReader
             }
 
             string outputFolder = GetDefaultOutputFolderForImm(immPath);
-            Directory.CreateDirectory(outputFolder);
 
             bool includePictures = EditorUtility.DisplayDialog(
                 "Include picture layers?",
-                "Include picture layers in conversion?\n\nPaint layers are always included.",
+                "Include picture layers in conversion?\n\nGroups, paint, supported sound and animation are included. Unsupported content is reported before writing.",
                 "Include Pictures",
-                "Paint Only");
+                "Exclude Pictures");
 
             Debug.Log($"{LogPrefix}Converting '{immPath}' to '{outputFolder}' includePictures={includePictures}");
 
             bool ok = false;
             string error = null;
+            bool cancelled = false;
             try
             {
-                ok = SharpQuillCompat.WriteImmAsQuillProject(immPath, outputFolder, includePictures);
+                ok = WriteReviewedProject(immPath, outputFolder, includePictures, out cancelled, out error);
             }
             catch (System.Exception ex)
             {
                 error = ex.Message;
             }
 
+            if (cancelled) return;
             if (!ok)
             {
                 string details = string.IsNullOrEmpty(error) ? "Conversion returned false." : error;
@@ -148,8 +154,47 @@ namespace ImmStrokeReader
             }
 
             Debug.Log($"{LogPrefix}Conversion completed");
-            EditorUtility.DisplayDialog("IMM to Quill", "Conversion completed.", "OK");
+            EditorUtility.DisplayDialog("IMM to Quill", "Project written. See IMM-conversion-report.txt in the output folder for conversion limitations.", "OK");
             EditorUtility.RevealInFinder(outputFolder);
+        }
+
+        // Kept separate so the write boundary can be exercised without opening the Editor.
+        internal static bool WriteReviewedProject(string immPath, string outputFolder, bool includePictures, out bool cancelled, out string error)
+        {
+            cancelled = false;
+            var result = SharpQuillCompat.ReadImmAsHierarchyWithReport(immPath, includePictures);
+            var report = new StringBuilder();
+            report.AppendLine($"Source: {immPath}");
+            report.AppendLine($"Destination: {outputFolder}");
+            report.AppendLine($"Conversion limitations: {result.Issues.Count}");
+            foreach (var issue in result.Issues)
+            {
+                string line = $"{issue.Code}: layer {issue.SourceLayerId} '{issue.SourceLayerName}': {issue.Message}";
+                report.AppendLine(line);
+                Debug.LogWarning($"{LogPrefix}{line}");
+            }
+            error = null;
+            if (!result.Succeeded)
+            {
+                error = $"Content could not be read. {string.Join("\n", result.Issues.Take(6).Select(x => x.Message))}";
+                return false;
+            }
+            bool hasExistingFiles = Directory.Exists(outputFolder) && Directory.EnumerateFileSystemEntries(outputFolder).Any();
+            if (result.IsPartial || hasExistingFiles)
+            {
+                string summary = string.Join("\n", result.Issues.Take(6).Select(x => $"- {x.Message}"));
+                string replacement = hasExistingFiles ? "\n\nExisting project files at this destination will be replaced." : "";
+                if (!EditorUtility.DisplayDialog("Review Quill conversion",
+                    $"Destination: {outputFolder}\n\n{result.Issues.Count} conversion limitations. Full details are in the Console and will be saved as IMM-conversion-report.txt.\n\n{summary}{replacement}",
+                    "Write Project", "Skip"))
+                {
+                    cancelled = true;
+                    return false;
+                }
+            }
+            SharpQuill.QuillSequenceWriter.Write(result.Sequence, outputFolder);
+            File.WriteAllText(Path.Combine(outputFolder, "IMM-conversion-report.txt"), report.ToString());
+            return true;
         }
 
         private static string GetDefaultOutputFolderForImm(string immPath)

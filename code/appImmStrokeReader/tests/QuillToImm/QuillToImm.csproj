@@ -11,6 +11,7 @@
     <Compile Include="$(ReaderRuntime)/ThirdParty/SharpQuill/**/*.cs" />
     <Compile Include="$(ReaderRuntime)/ImmStrokeReader.cs" />
     <Compile Include="$(ReaderRuntime)/SharpQuillCompat.cs" />
+    <Compile Include="$(ReaderRuntime)/../Editor/ImmToQuillConverterEditor.cs" />
     <Compile Include="$(PlayerRuntime)/ImmExporter.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringTypes.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringImage.cs" />

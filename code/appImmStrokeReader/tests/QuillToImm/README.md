@@ -168,3 +168,8 @@ Hierarchy sound checks cover supported Opus/Vorbis/WAV to Quill PCM, settings,
 hidden layers, local transforms/pivots, key counts, aggregate budgets, malformed
 asset failure, unsupported ambisonic/frustum reports and project payload read-back.
 For a supplied IMM fixture, use `--hierarchy-sounds <input.imm> <reader.dll> <output-folder>`.
+
+Editor conversion checks compile the production menu source with simulated Editor
+interaction: declined overwrites/new destinations, accepted hierarchy/sound writing,
+complete saved reports and failed-read output preservation. Live Unity Editor
+interaction and Quill application acceptance remain separate requirements.

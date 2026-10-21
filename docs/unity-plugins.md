@@ -734,3 +734,8 @@ This reproduction loads no GPU or audio assets. Errors from a separate temporary
 preparation document's loading/cancellation/unloading require their own evidence;
 they are not a result of this chapter reproduction or proof of an audio restart
 failure.
+
+The Unity IMM-to-Quill editor menus use the hierarchy reader and a pre-write review
+of limitations/destination replacement. Written projects include a complete
+IMM-conversion-report.txt; skipped or unreadable inputs do not write output.
+The standalone legacy flat API is unchanged (content pipeline section 6.39).
