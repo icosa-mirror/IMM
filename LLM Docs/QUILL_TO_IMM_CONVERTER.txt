@@ -217,9 +217,10 @@ C1b shared reflection preservation (2026-10-21)
    nonnegative values, preserving zero tips without a width-adjustment diagnostic.
    A four-brush native export/import/export regression failed before the fix and
    passes afterward alongside the existing converter/reflection suite. Negative
-   and nonfinite fallback behavior is unchanged. This subsequent managed change
-   awaits its own Windows CI; full run 39609583383 predates it. Broader R1 remains
-   outstanding.
+   and nonfinite fallback behavior is unchanged. Windows job 119277784654 in run
+   39616195981 passed this new check and existing converter/reflection regressions.
+   The broader pipeline is pending; full run 39609583383 predates this fix.
+   Broader R1 remains outstanding.
 
 C2 evaluation contract: source review, playback acceptance outstanding
 
@@ -274,6 +275,15 @@ C2 evaluation contract: source review, playback acceptance outstanding
    A possible matching-export path has been requested from the user; this does not
    block independent paint/key/timing investigation or establish that no export
    exists elsewhere. Do not infer root behavior from the non-root key audit.
+7. Timing metadata audit of the large reference pair covers 1,149 matched layers,
+   including 191 timeline layers and 124 with positive durations. Timeline flags,
+   durations and repeat limits match directly. All repeat limits are zero here,
+   so this does not validate finite repeat behavior. All nine nonzero source
+   StartOffset values are represented by matching exported Offset keys, including
+   keys activated after time zero. Reuse the offset-key channel for these cases;
+   do not add a second offset API or double-apply the static field on top of its
+   keys. Other source cases and nested playback still need acceptance. Evidence:
+   artifacts/quill-reference/alex-timing-recheck.json.
 
 C0 reference inspection and reuse decision (2026-10-21)
 

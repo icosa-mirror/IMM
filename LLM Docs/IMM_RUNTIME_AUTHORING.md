@@ -110,8 +110,8 @@ Paint round trips preserve the codec's representation, not arbitrary source floa
 width are quantised, always-visible direction is omitted by the codec, and point length/time
 are derived. Unsupported or reinterpreted content must remain explicit in import diagnostics.
 Valid zero-width tips are now retained by the importer as well as the graph/compiler.
-The native four-brush export/import/export regression passes locally; Windows CI
-for this subsequent fix is pending. Negative/nonfinite width sanitization remains.
+The native four-brush export/import/export regression passes locally and in Windows
+CI run 39616195981. Negative/nonfinite width sanitization remains unchanged.
 
 September additions implemented spawn-area graph/import/export/comparison support and exporter
 builds for Windows, macOS, Android arm64, and iOS. `ImmAuthoringRuntime.Capabilities` currently

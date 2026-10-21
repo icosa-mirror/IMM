@@ -110,7 +110,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Reference metadata audit: 35,213 transform keys in 403 layers retain count/time/value/interpolation; base/startup evaluation remains unresolved. Extend C1 for shared drawings/holds, keys, nested timing, viewpoints and root/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| R1: reader and consumer contract | Zero-width tip import loss fixed and locally verified through export/import/export; CI pending for that fix. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
+| R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Address SharpQuill adapter hierarchy/keys and Quill writer media limits when full IMM-to-Quill delivery is selected | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
 | A2: live breadth and save | Authoring M2 then M3 | Resource-owning layer lifecycle and revision-selected save accepted |
@@ -322,7 +322,9 @@ Status checked at 2026-10-21 14:17 UTC:
    `artifacts/quill-zero-tip-import-before-fix.log` and
    `artifacts/quill-zero-tip-import-fixed.log`. The expanded test runs in Windows
    build CI. This managed importer fix is subsequent to run 39609583383's source
-   revision; that full run does not validate this new change. Its own CI is pending.
+   revision; that full run does not validate this new change. Its Windows job
+   119277784654 in run 39616195981 passed the new import round-trip check plus
+   existing reflection/converter regressions. The rest of that pipeline is pending.
 4. This closes one R1 data-loss defect locally, not the broader reader/consumer or
    reverse-conversion tracks. No player/rendering code or native binary changed.
 
