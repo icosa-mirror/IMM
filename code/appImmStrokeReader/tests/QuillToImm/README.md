@@ -49,6 +49,13 @@ maps and unsupported layer/root action keys must preserve existing output. Share
 exporter checks retain infinite/one/finite paint repeats independently of timeline
 repeats. These checks inspect stored native data rather than playback behavior.
 
+Root-property checks exercise snapshot/transaction isolation, structural comparison,
+invalid-value rejection, native visibility read-back and exact binary root metadata
+for opacity, timeline/duration/repeats, transforms/pivots and flips. The animated
+converter also checks the observed legacy zero-root normalization. The public reader
+does not yet expose root layer properties, so serialization checks explicitly parse
+the writer's version-1 Root descriptor; they do not imply root importer acceptance.
+
 For fixed-observer native paint playback comparisons, the viewer capture script
 `code/appImmViewer/scripts/capture_windows_directx_baseline.ps1` accepts `-LockCamera`.
 Set `Playback.PlayerSpawn.Location` to `Custom` in the supplied settings file and

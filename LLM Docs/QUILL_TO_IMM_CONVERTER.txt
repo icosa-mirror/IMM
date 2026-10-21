@@ -141,6 +141,19 @@ C2 animated paint implementation checkpoint (2026-10-21)
 6. capture_windows_directx_baseline.ps1 -LockCamera explicitly freezes the Custom
    observer camera for these paint tests, preventing automatic viewpoint selection
    from moving it. Normal navigation remains unchanged and requires separate tests.
+7. The shared graph/compiler now exposes optional root properties for offline
+   export: visibility, opacity, transforms/pivots/flips, timeline duration/repeats.
+   SetRootProperties/snapshot RootProperties preserve transactions and revision
+   values. The additive ImmExporter_SetRootLayerProperties leaves legacy defaults
+   and transform ABI unchanged when no root is specified. Native Windows checks
+   pass; other-platform/Unity CI remains pending for the new export.
+8. Root timing is now mapped in the animated entry. Fishgym's legacy false/zero
+   source root is normalized to Quill's usual one-hour root timeline, matching its
+   paired export and SharpQuill's existing root default. This emits an informational
+   NormalizedRootTimeline diagnostic. The frame-8 difference drops from 17 pixels
+   to one; combined precision probes remain inconclusive. Full animation parity
+   is not established. Root key/chapter construction and root property import
+   still need implementation and acceptance; see shared roadmap 6.7.
 
 C1 static profile implementation and validation (2026-10-21)
 

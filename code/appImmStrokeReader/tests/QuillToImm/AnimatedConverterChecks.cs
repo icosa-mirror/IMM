@@ -33,6 +33,11 @@ static class AnimatedConverterChecks
         string output = Path.Combine(root, "animated.imm");
         var result = QuillToImmConverter.ConvertAnimatedPaintProject(project, output);
         Require(result.Succeeded && !result.IsPartial, Describe(result));
+        var expectedRoot = ImmAuthoringLayerProperties.Default("Root");
+        expectedRoot.IsTimeline = sequence.RootLayer.Animation.Timeline;
+        expectedRoot.DurationTicks = (long)sequence.RootLayer.Animation.Duration;
+        expectedRoot.MaxRepeatCount = (uint)sequence.RootLayer.Animation.MaxRepeatCount;
+        RootPropertyChecks.AssertSerializedRoot(output, expectedRoot);
         Require(Reader.StrokeReader_Init(Path.Combine(root, "animated-reader.log")) == 0, "Reader init failed.");
         int doc = Reader.StrokeReader_LoadFromFile(output);
         try
@@ -65,6 +70,15 @@ static class AnimatedConverterChecks
         byte[] marker = { 9, 8, 7 };
         string jsonPath = Path.Combine(project, "Quill.json");
         string original = File.ReadAllText(jsonPath);
+        var legacyRoot = JObject.Parse(original);
+        legacyRoot["Sequence"]!["RootLayer"]!["Animation"]!["Timeline"] = false;
+        legacyRoot["Sequence"]!["RootLayer"]!["Animation"]!["Duration"] = 0;
+        File.WriteAllText(jsonPath, legacyRoot.ToString());
+        string legacyOutput = Path.Combine(root, "legacy-root.imm");
+        var legacyResult = QuillToImmConverter.ConvertAnimatedPaintProject(project, legacyOutput);
+        Require(legacyResult.Succeeded && legacyResult.Issues.Any(x => x.Code == "NormalizedRootTimeline"), Describe(legacyResult));
+        RootPropertyChecks.AssertSerializedRoot(legacyOutput, expectedRoot);
+        File.WriteAllText(jsonPath, original);
         Reject(() => QuillToImmConverter.ConvertStaticPaintProject(project, output));
         var json = JObject.Parse(original);
         var sourceGroup = json["Sequence"]!["RootLayer"]!["Implementation"]!["Children"]![0]!;

@@ -401,6 +401,8 @@ namespace ImmPlayer.Authoring
         public uint FrameRate { get; }
         public Color BackgroundColor { get; }
         public ExportRequirements Requirements { get; }
+        /// <summary>Optional offline root properties. Null retains the native sequence's legacy defaults.</summary>
+        public ImmAuthoringLayerProperties? RootProperties { get; }
         public IReadOnlyList<long> RootLayerIds => Array.AsReadOnly(_rootLayerIds);
         public IReadOnlyList<ImmAuthoringLayerSnapshot> Layers => Array.AsReadOnly(_layers);
 
@@ -412,7 +414,8 @@ namespace ImmPlayer.Authoring
             Color backgroundColor,
             ExportRequirements requirements,
             long[] rootLayerIds,
-            ImmAuthoringLayerSnapshot[] layers)
+            ImmAuthoringLayerSnapshot[] layers,
+            ImmAuthoringLayerProperties? rootProperties = null)
         {
             DocumentId = documentId;
             Revision = revision;
@@ -420,6 +423,7 @@ namespace ImmPlayer.Authoring
             FrameRate = frameRate;
             BackgroundColor = backgroundColor;
             Requirements = requirements;
+            RootProperties = rootProperties;
             _rootLayerIds = rootLayerIds ?? Array.Empty<long>();
             _layers = layers ?? Array.Empty<ImmAuthoringLayerSnapshot>();
             _layersById = new Dictionary<long, ImmAuthoringLayerSnapshot>(_layers.Length);

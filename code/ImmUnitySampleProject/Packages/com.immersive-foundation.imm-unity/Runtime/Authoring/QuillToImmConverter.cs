@@ -92,11 +92,31 @@ namespace ImmPlayer.Authoring
                 Sequence sequence = QuillSequenceReader.ReadMetadata(projectFolder);
                 if (sequence?.RootLayer == null)
                     throw new InvalidDataException("Quill hierarchy could not be parsed.");
-                CheckRoot(sequence.RootLayer);
+                if (!animated) CheckRoot(sequence.RootLayer);
                 var created = ImmAuthoringDocument.Create(animated ? ExportSequenceType.Animated : ExportSequenceType.Still, checked((uint)sequence.Framerate),
                     new UnityEngine.Color(sequence.BackgroundColor.R, sequence.BackgroundColor.G, sequence.BackgroundColor.B, 1f));
                 using (ImmAuthoringDocument document = Require(created, "/"))
                 {
+                    if (animated)
+                    {
+                        var rootProperties = ImmAuthoringLayerProperties.Default(sequence.RootLayer.Name);
+                        rootProperties.Visible = sequence.RootLayer.Visible;
+                        rootProperties.Opacity = sequence.RootLayer.Opacity;
+                        rootProperties.Transform = Transform(sequence.RootLayer.Transform);
+                        rootProperties.Pivot = Transform(sequence.RootLayer.Pivot);
+                        rootProperties.IsTimeline = sequence.RootLayer.Animation.Timeline;
+                        rootProperties.DurationTicks = ExactNonNegativeInteger(sequence.RootLayer.Animation.Duration, "/");
+                        if (rootProperties.DurationTicks == 0 && (bool?)root["Animation"]?["Timeline"] == false)
+                        {
+                            // The paired legacy Fishgym export normalizes its false/zero
+                            // root to Quill's usual one-hour root sequence.
+                            rootProperties.DurationTicks = (long)LayerGroup.CreateDefault().Animation.Duration;
+                            Issue(issues, QuillToImmIssueSeverity.Information, "NormalizedRootTimeline", "/",
+                                "Legacy zero-duration root uses Quill's default root timeline, matching the inspected export.");
+                        }
+                        rootProperties.MaxRepeatCount = checked((uint)ExactNonNegativeInteger(sequence.RootLayer.Animation.MaxRepeatCount, "/"));
+                        Require(document.SetRootProperties(rootProperties), "/");
+                    }
                     using (var stream = File.OpenRead(sourceBinary))
                     using (var reader = new QBinReader(stream))
                     {
@@ -153,7 +173,7 @@ namespace ImmPlayer.Authoring
             var animation = layer["Animation"];
             if (animation != null)
             {
-                if (animated && !isRoot)
+                if (animated)
                 {
                     foreach (string field in new[] { "Duration", "MaxRepeatCount", "StartOffset" })
                     {

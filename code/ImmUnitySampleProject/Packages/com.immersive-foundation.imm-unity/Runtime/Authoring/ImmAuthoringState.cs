@@ -7,6 +7,7 @@ namespace ImmPlayer.Authoring
     internal sealed class ImmAuthoringState
     {
         internal long NextObjectId = 1;
+        internal ImmAuthoringLayerProperties? RootProperties;
         internal readonly List<long> RootLayerIds = new List<long>();
         internal readonly Dictionary<long, LayerNode> Layers = new Dictionary<long, LayerNode>();
         internal readonly Dictionary<long, DrawingNode> Drawings = new Dictionary<long, DrawingNode>();
@@ -17,7 +18,7 @@ namespace ImmPlayer.Authoring
 
         internal ImmAuthoringState Clone()
         {
-            ImmAuthoringState clone = new ImmAuthoringState { NextObjectId = NextObjectId };
+            ImmAuthoringState clone = new ImmAuthoringState { NextObjectId = NextObjectId, RootProperties = RootProperties };
             clone.RootLayerIds.AddRange(RootLayerIds);
 
             foreach (KeyValuePair<long, LayerNode> item in Layers)
@@ -64,7 +65,7 @@ namespace ImmPlayer.Authoring
                 backgroundColor,
                 requirements,
                 RootLayerIds.ToArray(),
-                layers.ToArray());
+                layers.ToArray(), RootProperties);
         }
 
         private void AppendLayerSnapshot(long layerId, int order, List<ImmAuthoringLayerSnapshot> output)

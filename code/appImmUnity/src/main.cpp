@@ -3585,6 +3585,44 @@ static ImmCore::trans3d ImmExporterMakeTransform(const ImmExporterTransformC* t)
     return ImmCore::trans3d(q, static_cast<double>(t->scale), ImmCore::flip3::N, tr);
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SetRootLayerProperties(
+    void* sequenceHandle, int visible, float opacity,
+    const ImmExporterTransformC* transform, const ImmExporterTransformC* pivot,
+    int transformFlip, int pivotFlip, int isTimeline, int64_t durationTicks, uint32_t maxRepeatCount)
+{
+    auto* sequence = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    if (!sequence || !transform || !pivot || !std::isfinite(opacity) || opacity < 0.0f || opacity > 1.0f ||
+        durationTicks < 0 || transformFlip < 0 || transformFlip > 3 || pivotFlip < 0 || pivotFlip > 3 ||
+        (visible != 0 && visible != 1) || (isTimeline != 0 && isTimeline != 1))
+        return false;
+    for (const auto* value : { transform, pivot })
+        if (!std::isfinite(value->qx) || !std::isfinite(value->qy) || !std::isfinite(value->qz) || !std::isfinite(value->qw) ||
+            !std::isfinite(value->scale) || value->scale <= 0.0f ||
+            !std::isfinite(value->tx) || !std::isfinite(value->ty) || !std::isfinite(value->tz))
+            return false;
+    auto* root = sequence->GetRoot();
+    if (!root) return false;
+    // Visibility is serialized as a channel, not a Layerdes field. Without this
+    // constant key the importer supplies its implicit visible=true default.
+    ImmExporter::Layer::AnimValue visibilityValue{};
+    visibilityValue.mBool = visible != 0;
+    if (!root->AddKey(ImmCore::piTick(0), ImmExporter::Layer::AnimProperty::Visibility,
+        visibilityValue, ImmExporter::Layer::InterpolationType::None))
+        return false;
+    auto rootTransform = ImmExporterMakeTransform(transform);
+    auto rootPivot = ImmExporterMakeTransform(pivot);
+    rootTransform.mFlip = static_cast<ImmCore::flip3>(transformFlip);
+    rootPivot.mFlip = static_cast<ImmCore::flip3>(pivotFlip);
+    root->SetVisible(visible != 0);
+    root->SetOpacity(opacity);
+    root->SetTransform(rootTransform);
+    root->SetPivot(rootPivot);
+    root->SetIsTimeline(isTimeline != 0);
+    root->SetDuration(ImmCore::piTick(durationTicks));
+    root->SetMaxRepeatCount(maxRepeatCount);
+    return true;
+}
+
 extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSequence(
     int type,
     int caps,

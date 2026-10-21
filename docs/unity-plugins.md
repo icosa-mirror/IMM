@@ -255,6 +255,7 @@ binaries; availability is not inferred from legacy capability flags.
 | `ImmExporter_ComputeElementBounds` / `ComputeDrawingBounds` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_PaintAddFrame` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_LayerAddAnimationKey` | Export | `ImmAuthoringCompiler` |
+| `ImmExporter_SetRootLayerProperties` | Offline export, additive root properties | `ImmAuthoringCompiler` when snapshot root properties are explicit; matching native binary required; Windows locally verified, other-platform CI pending |
 | `ImmExporter_LayerSetTransformFlips` / `ImmExporter_LayerAddAnimationKeyWithFlip` | Export, additive reflection support | `ImmAuthoringCompiler`; requires matching native binaries, other-platform acceptance pending |
 | `ImmExporter_PaintSetMaxRepeatCount` | Export | `ImmAuthoringCompiler` |
 | `ImmExporter_ExportToFile` / `ExportToMemory` | Export | `ImmExporter` |

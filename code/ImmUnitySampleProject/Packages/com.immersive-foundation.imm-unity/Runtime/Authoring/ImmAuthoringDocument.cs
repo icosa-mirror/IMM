@@ -108,6 +108,24 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
+        /// <summary>Configure the canonical Root group for offline export; child layer IDs and live mutation APIs are unchanged.</summary>
+        public ImmAuthoringResult SetRootProperties(ImmAuthoringLayerProperties properties)
+        {
+            ImmAuthoringResult validation = ValidateLayerProperties(properties, ImmAuthoringLayerType.Group);
+            if (!validation.Succeeded) return validation;
+            if (properties.Name != "Root")
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.Unsupported, "The offline root name must be Root.");
+            ImmAuthoringChange change;
+            lock (_gate)
+            {
+                if (_disposed) return Disposed();
+                _state.RootProperties = properties;
+                change = AdvanceRevision(Array.Empty<long>());
+            }
+            Publish(change);
+            return ImmAuthoringResult.Success();
+        }
+
         public ImmAuthoringResult<long> CreateGroupLayer(
             long parentId,
             ImmAuthoringLayerProperties properties,
@@ -1053,6 +1071,11 @@ namespace ImmPlayer.Authoring
 
         private static ImmAuthoringResult ValidateState(ImmAuthoringState state)
         {
+            if (state.RootProperties.HasValue)
+            {
+                ImmAuthoringResult root = ValidateLayerProperties(state.RootProperties.Value, ImmAuthoringLayerType.Group);
+                if (!root.Succeeded) return root;
+            }
             HashSet<long> visited = new HashSet<long>();
             foreach (long rootId in state.RootLayerIds)
             {

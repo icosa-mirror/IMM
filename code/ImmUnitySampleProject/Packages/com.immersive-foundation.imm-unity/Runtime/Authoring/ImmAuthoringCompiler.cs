@@ -321,6 +321,16 @@ namespace ImmPlayer.Authoring
             IntPtr defaultSpawnAreaHandle = IntPtr.Zero;
             try
             {
+                if (snapshot.RootProperties.HasValue)
+                {
+                    ImmAuthoringLayerProperties root = snapshot.RootProperties.Value;
+                    TransformNative rootTransform = ToNative(root.Transform);
+                    TransformNative rootPivot = ToNative(root.Pivot);
+                    if (!Native.ImmExporter_SetRootLayerProperties(sequence.Handle, root.Visible ? 1 : 0, root.Opacity,
+                        ref rootTransform, ref rootPivot, (int)root.Transform.Flip, (int)root.Pivot.Flip,
+                        root.IsTimeline ? 1 : 0, root.DurationTicks, root.MaxRepeatCount))
+                        return CompileFailure(sequence, "Native root property setup failed.", 0);
+                }
                 foreach (ImmAuthoringLayerSnapshot layer in snapshot.Layers)
                 {
                     options.CancellationToken.ThrowIfCancellationRequested();

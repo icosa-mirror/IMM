@@ -492,6 +492,47 @@ Status checked at 2026-10-21 14:36 UTC:
    through the shared graph/compiler rather than silently dropped by C2. This is
    the next implementation prerequisite for root/chapter acceptance.
 
+### 6.7 Shared offline root properties (2026-10-21)
+
+1. `ImmAuthoringDocument.SetRootProperties` and nullable snapshot `RootProperties`
+   now represent the canonical Root group's visibility, opacity, transform/pivot
+   (including flips), timeline flag, duration and repeats. Transactions clone these
+   values; snapshots retain their revision's values; structural comparison checks
+   them. An unset root preserves legacy compiler behavior. Root naming remains
+   canonical; root keys/chapter construction and direct live mutation are separate.
+2. Additive `ImmExporter_SetRootLayerProperties` configures the sequence root before
+   compiling child layers. Visibility requires a serialized time-zero constant key;
+   setting the native layer field alone would be lost because visibility is stored
+   in key channels. Legacy transform structs/exports and playback code are unchanged.
+3. The animated converter applies declared root properties. Inspection of all 21
+   sources found 20 ordinary one-hour roots and one legacy false/zero root (Fishgym).
+   Fishgym's paired Quill IMM normalizes that legacy root to the ordinary timeline
+   of 45,360,000 ticks. The converter now performs that observed normalization with
+   a `NormalizedRootTimeline` informational diagnostic. This uses SharpQuill's
+   existing default root duration, not a frame resampling or new time unit.
+4. Windows source/binary and native export verification pass. New native tests check
+   exact serialized root timing/opacity/transform/pivot/flips, visibility read-back,
+   transaction isolation/commit, immutable snapshots, invalid-value rejection and
+   structural comparison. The existing repeat/static/import/root-key/reflection/
+   animation suite and exporter bridge smoke pass locally. Other-platform builds
+   and Unity compilation remain pending CI for this revision.
+5. Fishgym's regenerated root timeline/duration/repeats now match its reference;
+   its decoded paint/key comparison still passes. Frame-8 locked-camera capture
+   differs from the reference by one pixel, compared with 17 before root mapping.
+   Exact-transform probes do not monotonically improve raster equality (the newest
+   combined probe differs by 18 pixels), so do not claim a complete precision cause
+   or exact visual parity. Other animation boundaries/navigation remain open.
+6. Existing reader APIs expose root keys but not root layer properties. Root metadata
+   import/reverse conversion is therefore still incomplete; do not claim a full
+   authoring import/export round trip for this new capability. R1 must add root
+   property reading/import acceptance before closing that requirement.
+7. One local self-test run (`c2-root-properties-05.log`) failed replacing an existing
+   output in the pre-existing static partial-output check. The unchanged source
+   passed on the next fresh directory (`c2-root-properties-06.log`); its cause is
+   unproven. No retry logic or weaker assertion was added. Keep the failure recorded
+   if it recurs. Windows CI for the preceding revision f18d77b4 now passes, including
+   the corrected exporter bridge smoke; the full run remains incomplete.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

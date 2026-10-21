@@ -646,6 +646,13 @@ namespace ImmPlayer.Exporter
             long durationTicks,
             uint maxRepeatCount);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SetRootLayerProperties(
+            IntPtr sequenceHandle, int visible, float opacity,
+            ref TransformNative transform, ref TransformNative pivot,
+            int transformFlip, int pivotFlip, int isTimeline, long durationTicks, uint maxRepeatCount);
+
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr ImmExporter_CreateGroupLayer(
             IntPtr sequenceHandle,
