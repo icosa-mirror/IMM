@@ -85,6 +85,8 @@ reader queries; missing entry points are reported as `DiagnosticUnavailable`.
 Existing read/write methods retain their behavior. This report concerns adapter
 reading; the bundled Quill writer now serializes decoded RGB/RGBA picture children with
 2D/equirectangular mono/stereo metadata. Unsupported/depth/Gallery media is rejected
-before replacing project files; Sound/Model writing remains unsupported. This does
+before replacing project files. Supplied mono/stereo PCM16 WAV SoundData can also
+be written with Flat/Positional, gain/loop, attenuation and one None/Cone modifier;
+encoded audio, ambisonic and Model writing remain unsupported. This does
 not recover content already omitted by the legacy adapter. See content pipeline
-sections 6.31-6.32.
+sections 6.31-6.33.

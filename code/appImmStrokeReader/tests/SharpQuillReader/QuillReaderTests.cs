@@ -12,6 +12,7 @@ internal static class QuillReaderTests
     {
         PictureTypes();
         QuillPictureWriterChecks.Run();
+        QuillSoundWriterChecks.Run();
         ViewpointDefaults();
         SpatialSoundSettings();
         StartupSettings();
@@ -373,6 +374,13 @@ internal static class QuillReaderTests
                 var audio = binary.ReadSoundData();
                 Require(audio.Length > 44 && binary.BaseStream.Position == offset + 20 + audio.Length - 44,
                     "Corpus audio payload boundary is incorrect.");
+                using (var encoded = new MemoryStream())
+                using (var writer = new QBinWriter(encoded))
+                {
+                    writer.Write(audio); writer.Flush();
+                    using var readback = new QBinReader(new MemoryStream(encoded.ToArray()));
+                    Require(readback.ReadSoundData().AudioBytes.SequenceEqual(audio.AudioBytes), "Corpus sound write/read-back changed PCM bytes.");
+                }
                 binary.BaseStream.Position = offset + 20;
                 byte[] buffer = new byte[65536];
                 int copied = 0;

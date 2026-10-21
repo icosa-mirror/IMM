@@ -363,8 +363,10 @@ layers and uncopied hierarchy/keys/root/chapter semantics. Existing APIs remain
 unchanged. The report requires current authoring reader entry points and does not
 reconstruct content omitted before writing. The bundled writer now serializes
 RGB/RGBA pictures with 2D/equirectangular mono/stereo metadata; unsupported layer
-and depth/Gallery cases reject before replacing files. Sound/Model writing and
-Quill application acceptance remain open (content pipeline section 6.32).
+and depth/Gallery cases reject before replacing files. Supplied mono/stereo PCM16
+WAV SoundData can be serialized with its supported spatial settings. Native sound
+decoding into SharpQuill, Model writing and Quill application acceptance remain
+open (content pipeline sections 6.32-6.33).
 
 | Group | Entry points |
 |---|---|

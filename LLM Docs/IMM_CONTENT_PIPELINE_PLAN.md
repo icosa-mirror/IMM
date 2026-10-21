@@ -120,7 +120,7 @@ The preferred first candidate is:
 | C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in SharpQuill loss reporting implemented; hierarchy/key reconstruction and remaining consumer coverage stay open | Reader extraction and selected adapter output preserve intended content or report loss |
-| R2: reverse conversion | Picture project serialization/read-back implemented; unsupported media rejected before writing. Adapter hierarchy/keys, sound/model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
+| R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Adapter hierarchy/keys/native sound decoding, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
 | A2: live breadth and save | Authoring M2 then M3 | Resource-owning layer lifecycle and revision-selected save accepted |
 | A3: managed live cutover/platforms | Authoring M4/M5 after required native contracts | Managed preview uses accepted live path; per-operation/backend evidence |
@@ -1220,6 +1220,38 @@ replacement-run closure in section 6.26 (20:23 UTC):
    remain open. Mono/stereo metadata round trips do not establish native IMM stereo
    appearance or source stereo conversion; the missing paired Pano export remains
    a separate evidence gap. Full CI for this managed writer change is pending.
+
+### 6.33. Quill project PCM16 sound serialization (2026-10-21)
+
+1. QBinWriter and QuillSequenceWriter now serialize supported LayerSound children.
+   SoundData.AudioBytes must contain mono/stereo PCM16 WAV at 8-192 kHz. A bounded
+   RIFF/chunk inspection derives channels/rate/frame count from the actual bytes,
+   validates PCM format/alignment/byte rate and complete nonempty frames, and writes
+   the observed Quill 20-byte sound header plus exact interleaved PCM samples.
+   Ancillary WAV chunks are not stored in qbin; the source WAV container itself is
+   not promised byte-identical when it contains extra chunks. No resampling occurs.
+2. Sound type, gain, loop, attenuation mode/range and one None/Cone modifier are
+   serialized with metadata and rewritten offsets. Validation follows the observed
+   Flat/Positional profile, rejects invalid enums/nonfinite or negative settings,
+   invalid cone placement and unused None values before replacing project files.
+   Source four-channel/ambisonic, extensible/float/compressed WAV and encoded
+   Vorbis/Opus SoundData remain unsupported; model/depth/Gallery cases still reject.
+3. Mixed picture/mono/stereo project write/read-back passes exact PCM/sample rate,
+   channel layout, gain/loop/attenuation/cone and visibility checks. Raw qbin header
+   fields and payload boundaries match the observed layout. Odd-sized ancillary
+   WAV chunks are handled without changing PCM samples. Malformed WAV, unsupported
+   formats/channels, invalid settings and modifier cases preserve all three existing
+   project files. Invalid direct sound writes emit no partial qbin header.
+4. The optional local corpus check passes all 21 metadata trees, 35 picture settings
+   and 34 sounds; every sound's PCM payload also passes qbin write/read-back exactly.
+   Existing reader/picture writer, adapter and full converter/authoring suites pass.
+   Evidence is in ignored artifacts/quill-sound-writer-* logs. Native source, ABI and
+   binaries are unchanged; these are local data checks, not platform/app acceptance.
+5. This completes sound serialization only for valid supplied PCM16 SoundData.
+   The native IMM-to-SharpQuill adapter still omits native sound, as its opt-in
+   report identifies. Decoding encoded native audio into Quill PCM, hierarchy/key
+   reconstruction, Quill application acceptance, evaluated/native playback and the
+   other full-roadmap requirements remain open. Full CI for this change is pending.
 
 ## 7. Consolidated documents
 

@@ -143,8 +143,10 @@ namespace SharpQuill
         case LayerType.Picture:
           return WriteLayerImplementationPicture(layer as LayerPicture);
 
-        case LayerType.Model:
         case LayerType.Sound:
+          return WriteLayerImplementationSound(layer as LayerSound);
+
+        case LayerType.Model:
         case LayerType.Unknown:
         default:
           throw new NotSupportedException($"Writing layer type {layer.Type} is not supported.");
@@ -160,7 +162,8 @@ namespace SharpQuill
              layer.Type == LayerType.Paint ||
              layer.Type == LayerType.Camera ||
              layer.Type == LayerType.Viewpoint ||
-             layer.Type == LayerType.Picture;
+             layer.Type == LayerType.Picture ||
+             layer.Type == LayerType.Sound;
     }
 
     private static JObject WriteLayerImplementationGroup(LayerGroup layer)
@@ -222,6 +225,45 @@ namespace SharpQuill
       };
     }
 
+    private static JObject WriteLayerImplementationSound(LayerSound layer)
+    {
+      var modifier = layer.Modifiers[0];
+      var settings = new JObject { ["Type"] = modifier.Type.ToString() };
+      if (modifier.Type == SoundModifierType.Cone)
+      {
+        settings["AngleIn"] = modifier.AngleIn;
+        settings["AngleBand"] = modifier.AngleBand;
+        settings["AttenOut"] = modifier.AttenOut;
+      }
+      return new JObject
+      {
+        ["DataFileOffset"] = layer.DataFileOffset.ToString("X"),
+        ["ImportFilePath"] = layer.ImportFilePath ?? "",
+        ["Type"] = layer.SoundType.ToString(), ["Gain"] = layer.Gain, ["Loop"] = layer.Loop,
+        ["Attenuation"] = new JObject { ["Mode"] = layer.Attenuation.Mode.ToString(), ["Minimum"] = layer.Attenuation.Minimum, ["Maximum"] = layer.Attenuation.Maximum },
+        ["Modifiers"] = new JArray(settings)
+      };
+    }
+
+    private static bool IsNonnegativeFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0;
+
+    private static void ValidateSound(LayerSound layer)
+    {
+      if (!Enum.IsDefined(typeof(SoundType), layer.SoundType) || layer.Attenuation == null ||
+          !Enum.IsDefined(typeof(SoundAttenuationMode), layer.Attenuation.Mode) ||
+          layer.Modifiers == null || layer.Modifiers.Count != 1 || layer.Modifiers[0] == null ||
+          !Enum.IsDefined(typeof(SoundModifierType), layer.Modifiers[0].Type))
+        throw new NotSupportedException("Sound spatial type, attenuation and one None/Cone modifier are required.");
+      var modifier = layer.Modifiers[0];
+      if (!IsNonnegativeFinite(layer.Gain) || !IsNonnegativeFinite(layer.Attenuation.Minimum) ||
+          !IsNonnegativeFinite(layer.Attenuation.Maximum) || layer.Attenuation.Maximum < layer.Attenuation.Minimum ||
+          !IsNonnegativeFinite(modifier.AngleIn) || !IsNonnegativeFinite(modifier.AngleBand) || !IsNonnegativeFinite(modifier.AttenOut) ||
+          (modifier.Type == SoundModifierType.Cone && layer.SoundType != SoundType.Positional) ||
+          (modifier.Type == SoundModifierType.None && (modifier.AngleIn != 0 || modifier.AngleBand != 0 || modifier.AttenOut != 0)))
+        throw new InvalidDataException("Sound gain, attenuation or modifier values are invalid.");
+      QBinWriter.InspectSoundData(layer.Data);
+    }
+
     private static void ValidateLayerData(Layer layer)
     {
       if (!IsSupported(layer))
@@ -235,6 +277,8 @@ namespace SharpQuill
         WritePictureType(picture.PictureType);
         QBinWriter.ValidatePictureData(picture.Data);
       }
+      else if (layer is LayerSound sound)
+        ValidateSound(sound);
     }
 
     private static JObject WriteLayerImplementationCamera(LayerCamera layer)
@@ -412,7 +456,7 @@ namespace SharpQuill
     }
 
     /// <summary>
-    /// Recursive function to write paint/picture data to file and update the layers offsets.
+    /// Recursive function to write paint/picture/sound data to file and update the layers offsets.
     /// This is called with the root layer and will write all the data for the sequence.
     /// </summary>
     private static void WriteLayerData(Layer layer, QBinWriter qbinWriter)
@@ -429,6 +473,11 @@ namespace SharpQuill
       {
         picture.DataFileOffset = qbinWriter.BaseStream.Position;
         qbinWriter.Write(picture.Data);
+      }
+      else if (layer is LayerSound sound)
+      {
+        sound.DataFileOffset = qbinWriter.BaseStream.Position;
+        qbinWriter.Write(sound.Data);
       }
       else if (layer.Type == LayerType.Paint)
       {
