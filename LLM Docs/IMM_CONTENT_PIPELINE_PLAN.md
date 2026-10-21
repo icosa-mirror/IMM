@@ -61,7 +61,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; SharpQuill adapter skips spawn layers | Spawn graph/import/export/default selection and immutable preview assets | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
-| Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries, metadata import and offline PCM16 decoding; adapter audio pending | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
+| Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries, metadata import and offline PCM16 decoding; hierarchy adapter maps supported mono/stereo sound | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
 | File/memory output | SharpQuill writer supports a limited Quill-project subset | IMM-to-Quill entry point exists with losses below | Existing native IMM writer/compiler | Presented-revision save outstanding | Static converter reuses atomic file export; default rejects unsupported layers, explicit paint-only omission reports partial output |
 
@@ -1360,6 +1360,39 @@ replacement-run closure in section 6.26 (20:23 UTC):
    urp_content_fixture_roundtrip CTest passes. Evidence: ignored
    artifacts/sound-pcm16-face-orientation.log, sound-pcm16-urp-fixtures.log and
    sound-pcm16-windows-failed.log. Hosted Windows acceptance remains pending.
+
+### 6.37. Hierarchy reader native sound mapping (2026-10-21)
+
+1. ReadImmAsHierarchyWithReport now maps native mono/stereo WAV/Vorbis/Opus assets
+   to PCM16 WAV SoundData. Supported Flat/Positional, gain/loop, attenuation and
+   None/Cone settings accompany ordered hierarchy, local transforms/pivots/flips,
+   common timing/visibility and the existing supported key channels. Legacy flat
+   readers are unchanged. This supersedes the adapter audio gap in section 6.35.
+2. Ambisonic layouts and frustum/unrepresentable modifier settings produce typed,
+   layer-specific omissions. Each mapped sound reports original codec bytes/import
+   path and native legacy source-duration/initially-playing fields as unpreserved.
+   Decoded PCM is not a promise of codec identity or audible timing equivalence.
+3. Optional maxDecodedSoundBytes defaults to 256 MiB across decoded PCM in the
+   returned sequence. It does not bound total memory, encoded assets or codec
+   scratch. Nonpositive input throws; exhausted budgets and invalid assets fail
+   without returning a partial sequence. Native leases release in finally blocks,
+   including failed copy/allocation paths. Platform entrypoint absence is reported.
+4. The fresh full local suite passes with generated Opus/Vorbis, WAV and hidden
+   sound cases plus sample1's three Vorbis sounds. Checks compare exact decoded
+   samples, spatial/common properties, local transforms/pivots, supported key counts,
+   project payload read-back, exact aggregate cap and one-byte-short failure.
+   Ambisonic/frustum omissions and malformed-asset failure are explicit. Evidence:
+   ignored artifacts/hierarchy-sound-commit-suite*.
+5. Integrated Snoopy native candidate (section 6.30) also passes: all three Opus
+   sounds survive alongside its paint/groups as exact decoded PCM through Quill
+   project write/read-back, including aggregate budget checks. Evidence: ignored
+   artifacts/hierarchy-sound-Snoopy-final*. Original source camera omission and
+   reported native spawn omissions remain; this is not complete project fidelity.
+6. R2 still needs broader fields/models, quantization/fidelity decisions, source
+   startup/navigation, Quill application and playback acceptance. Windows decoder
+   support is locally verified; cross-platform gates and reader-only iOS linking
+   remain pending. Regression correction aa1e334f is in fresh full run 39686518984;
+   its passing replacement Windows gate must be verified, not inferred locally.
 
 ## 7. Consolidated documents
 

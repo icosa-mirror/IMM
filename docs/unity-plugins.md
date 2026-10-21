@@ -367,7 +367,8 @@ or input memory. Copy requires capacity for the complete PCM; invalid handles or
 undersized buffers return zero. Opus decodes at 48 kHz; WAV/Vorbis retain rate.
 This synchronous offline API is independent of live playback. Windows standalone
 reader decoding is locally verified; platform CI and reader-only iOS static linking
-remain unverified. The SharpQuill adapters still omit sounds (pipeline section 6.35).
+remain unverified. The hierarchy adapter now maps supported mono/stereo sounds
+with settings and keys. Legacy flat reads still omit sounds. See section 6.37.
 
 
 All are declared in `Runtime/ImmStrokeReader.cs`.
@@ -379,14 +380,17 @@ unchanged. The report requires current authoring reader entry points and does no
 reconstruct content omitted before writing. The bundled writer now serializes
 RGB/RGBA pictures with 2D/equirectangular mono/stereo metadata; unsupported layer
 and depth/Gallery cases reject before replacing files. Supplied mono/stereo PCM16
-WAV SoundData can be serialized with its supported spatial settings. Native sound
-decoding into SharpQuill, Model writing and Quill application acceptance remain
-open (content pipeline sections 6.32-6.33).
+WAV SoundData can be serialized with its supported spatial settings. The hierarchy
+adapter now supplies decoded mono/stereo WAV/Vorbis/Opus sounds. Model writing and
+Quill application acceptance remain open (content pipeline sections 6.32-6.37).
 
 `ReadImmAsHierarchyWithReport` separately retains ordered groups, local properties,
 paint drawing/frame reuse and verified key channels. It reports unsupported content
 and native requantization limitations and rejects unrepresentable timing. It leaves
-legacy flat import behavior unchanged; see content pipeline section 6.34.
+legacy flat import behavior unchanged. Sound mapping uses an optional aggregate
+maxDecodedSoundBytes budget (default 256 MiB of PCM, not total process memory).
+Invalid audio/budget exhaustion fails without a partial sequence; unsupported
+spatial formats are reported omissions. See content pipeline sections 6.34-6.37.
 
 | Group | Entry points |
 |---|---|

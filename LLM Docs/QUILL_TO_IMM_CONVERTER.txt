@@ -637,10 +637,11 @@ Unverified content and non-playback metadata
 6. SharpQuill's project writer now serializes decoded RGB/RGBA picture children
    with 2D/equirectangular mono/stereo metadata. It rejects unsupported layer types
    (including Model) before replacing output; it also serializes mono/stereo PCM16
-   SoundData from WAV with the observed spatial settings. Native sound decoding into
-   SharpQuill, depth/Gallery and application acceptance remain open. The reader now
-   provides bounded offline WAV/Vorbis/Opus PCM16 decoding, locally verified on
-   Windows, but adapter integration is still pending (shared plan 6.32-6.35).
+   SoundData from WAV with the observed spatial settings. The hierarchy adapter
+   maps native mono/stereo WAV/Vorbis/Opus to this PCM representation with common
+   hierarchy/keys and supported spatial settings, an aggregate byte budget and
+   explicit loss reports. Legacy flat reads still omit sounds. Depth/Gallery and
+   Quill application/playback acceptance remain open (shared plan 6.32-6.37).
    Reading media does not imply complete Quill-project round-trip support. A direct Quill-to-IMM
    converter should consume the parsed source, rather than round-tripping through
    this writer. Detect unsupported layer types before the reader drops them.

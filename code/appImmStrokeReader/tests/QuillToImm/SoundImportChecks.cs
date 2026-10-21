@@ -58,6 +58,7 @@ static class SoundImportChecks
         }
         Require(!Reader.StrokeReader_GetSoundAssetInfo(disk, 0, out _) &&
             Reader.StrokeReader_GetSoundAssetData(disk, 0, new byte[1], 1) == 0, "Sound query survived shutdown.");
+        HierarchySoundChecks.Run(path, directory);
         var imported = ImmAuthoringImporter.ImportFromFile(path);
         var memoryImport = ImmAuthoringImporter.ImportFromMemory(file);
         Require(imported.Succeeded && memoryImport.Succeeded, $"Sound import failed: {imported.Message}; {memoryImport.Message}");
@@ -151,6 +152,10 @@ static class SoundImportChecks
         int asset = checked((int)BitConverter.ToUInt64(broken, table + 24));
         broken[asset + 12] = 0; // Corrupt the known codec stream, retaining valid IMM framing.
         string bad = Path.Combine(directory, "sound-malformed.imm"); File.WriteAllBytes(bad, broken);
+        var badHierarchy = global::ImmStrokeReader.SharpQuillCompat.ReadImmAsHierarchyWithReport(bad);
+        Require(!badHierarchy.Succeeded && badHierarchy.Issues.Any(x =>
+            x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.DataReadFailed && x.SourceLayerType == 5),
+            "Malformed sound became a successful hierarchy subset.");
         var rejected = ImmAuthoringImporter.ImportFromFile(bad);
         Require(rejected.Succeeded, rejected.Message);
         using (rejected.Document)

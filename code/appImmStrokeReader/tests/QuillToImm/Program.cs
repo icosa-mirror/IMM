@@ -4,6 +4,15 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using ImmPlayer.Authoring;
 
+if (args.Length == 4 && args[0] == "--hierarchy-sounds")
+{
+    string library = Path.GetFullPath(args[2]);
+    NativeLibrary.SetDllImportResolver(typeof(QuillToImmConverter).Assembly, (name, assembly, searchPath) =>
+        name == "ImmStrokeReader" ? NativeLibrary.Load(library) : IntPtr.Zero);
+    Directory.CreateDirectory(args[3]);
+    HierarchySoundChecks.Run(args[1], args[3]);
+    return 0;
+}
 if (args.Length == 3 && args[0] == "--reader-only-pcm")
 {
     PcmDecodeChecks.ReaderOnly(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));

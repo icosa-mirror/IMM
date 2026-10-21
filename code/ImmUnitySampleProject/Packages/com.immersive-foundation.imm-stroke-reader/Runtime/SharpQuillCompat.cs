@@ -16,7 +16,7 @@ namespace ImmStrokeReader
     {
         LoadFailed, DiagnosticUnavailable, RootMetadataNotPreserved, FlattenedHierarchy,
         AnimationNotPreserved, LayerOmitted, PictureExcluded, UnsupportedPictureType,
-        ChapterSubset, DataReadFailed, UnsupportedBrush, ConversionFailed, ValueNotRepresentable, StrokeMetadataNotPreserved
+        ChapterSubset, DataReadFailed, UnsupportedBrush, ConversionFailed, ValueNotRepresentable, StrokeMetadataNotPreserved, SoundMetadataNotPreserved, ResourceLimit
     }
 
     public sealed class SharpQuillConversionIssue
@@ -59,11 +59,12 @@ namespace ImmStrokeReader
         }
 
         /// <summary>Read the authoring hierarchy and supported keys without flattening. Unsupported content is reported; legacy readers are unchanged.</summary>
-        public static SharpQuillReadResult ReadImmAsHierarchyWithReport(string path, bool includePictures = true)
+        public static SharpQuillReadResult ReadImmAsHierarchyWithReport(string path, bool includePictures = true, int maxDecodedSoundBytes = 256 * 1024 * 1024)
         {
             var issues = new List<SharpQuillConversionIssue>();
             Sequence sequence = null;
-            try { sequence = ReadImmAsSequenceCore(path, includePictures, -1, issues, true); }
+            if (maxDecodedSoundBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxDecodedSoundBytes));
+            try { sequence = ReadImmAsSequenceCore(path, includePictures, -1, issues, true, maxDecodedSoundBytes); }
             catch (EntryPointNotFoundException)
             {
                 issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DiagnosticUnavailable, -1, "",
@@ -77,13 +78,17 @@ namespace ImmStrokeReader
             {
                 issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ConversionFailed, -1, "", exception.Message));
             }
+            catch (OutOfMemoryException)
+            {
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ResourceLimit, -1, "", "Hierarchy conversion allocation failed; no partial sequence returned."));
+            }
             if (sequence == null && issues.Count == 0)
                 issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.LoadFailed, -1, "", "IMM loading or initialization failed."));
             return new SharpQuillReadResult(sequence, issues);
         }
 
         private static Sequence ReadImmAsSequenceCore(string path, bool includePictures, int chapterIndex,
-            List<SharpQuillConversionIssue> issues, bool preserveHierarchy = false)
+            List<SharpQuillConversionIssue> issues, bool preserveHierarchy = false, int maxDecodedSoundBytes = 0)
         {
             if (string.IsNullOrEmpty(path))
             {
@@ -115,7 +120,7 @@ namespace ImmStrokeReader
                         Debug.LogWarning($"{LogPrefix}StrokeReader_SetChapter({chapterIndex}) failed, using default chapter");
                     }
                 }
-                if (preserveHierarchy) return ConvertHierarchyDocument(docId, includePictures, issues);
+                if (preserveHierarchy) return ConvertHierarchyDocument(docId, includePictures, issues, maxDecodedSoundBytes);
                 if (issues != null) CaptureLossReport(docId, includePictures, chapterIndex, issues);
                 return ConvertDocument(docId, includePictures, chapterIndex, issues);
             }
@@ -207,7 +212,7 @@ namespace ImmStrokeReader
             return true;
         }
 
-        private static Sequence ConvertHierarchyDocument(int docId, bool includePictures, List<SharpQuillConversionIssue> issues)
+        private static Sequence ConvertHierarchyDocument(int docId, bool includePictures, List<SharpQuillConversionIssue> issues, int remainingSoundBytes)
         {
             if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetDocumentInfo(docId, out var document) ||
                 !ImmPlayer.ImmStrokeReader.StrokeReader_GetRootLayerProperties(docId, out var rootInfo, out var rootTransform))
@@ -260,7 +265,7 @@ namespace ImmStrokeReader
                         throw new InvalidDataException($"Missing or cyclic parent chain for '{info.name}'.");
                     ancestorsSupported &= ancestor.type == 0; parent = ancestor.parentId;
                 }
-                if (!ancestorsSupported || (info.type != 0 && info.type != 1 && info.type != 4))
+                if (!ancestorsSupported || (info.type != 0 && info.type != 1 && info.type != 4 && info.type != 5))
                 {
                     issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.LayerOmitted, info.id, info.name,
                         ancestorsSupported ? $"Native layer type {info.type} is not mapped in the hierarchy reader." : "The branch has an unsupported parent and was omitted.", info.type));
@@ -274,6 +279,11 @@ namespace ImmStrokeReader
                 Layer layer;
                 if (info.type == 0) layer = new LayerGroup(info.name);
                 else if (info.type == 1) layer = ReadAuthoringPaint(docId, record.Index, info, ref nextStrokeId, issues);
+                else if (info.type == 5)
+                {
+                    layer = ReadAuthoringSound(docId, record.Index, info, issues, ref remainingSoundBytes);
+                    if (layer == null) continue;
+                }
                 else
                 {
                     if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetPictureAssetInfo(docId, record.Index, out var picture) ||
@@ -302,6 +312,79 @@ namespace ImmStrokeReader
             }
             sequence.LastStrokeId = nextStrokeId == 0 ? 0 : nextStrokeId - 1;
             return sequence;
+        }
+
+        private static LayerSound ReadAuthoringSound(int docId, int index, StrokeAuthoringLayerInfo info,
+            List<SharpQuillConversionIssue> issues, ref int remainingBytes)
+        {
+            if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetSoundAssetInfo(docId, index, out var asset))
+                throw new InvalidDataException($"Sound metadata for '{info.name}' could not be read.");
+            var sound = asset.properties;
+            if (asset.sampleRate <= 0 || asset.byteCount <= 0)
+            {
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, info.id, info.name,
+                    "Sound asset framing or codec metadata is invalid; no partial sequence returned.", info.type));
+                throw new InvalidDataException($"Sound '{info.name}' has invalid encoded data.");
+            }
+            if ((asset.channels != 1 && asset.channels != 2) || (sound.spatialType != 0 && sound.spatialType != 2) ||
+                sound.modifier < 0 || sound.modifier > 1 || (sound.modifier == 1 && sound.spatialType != 2))
+            {
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.LayerOmitted, info.id, info.name,
+                    $"Sound channels {asset.channels}, spatial type {sound.spatialType} or modifier {sound.modifier} cannot be represented by SharpQuill.", info.type));
+                return null;
+            }
+            foreach (float value in new[] { sound.gain, sound.distanceMin, sound.distanceMax, sound.angleInX,
+                sound.angleInY, sound.angleBand, sound.attenuationOutside })
+                if (float.IsNaN(value) || float.IsInfinity(value) || value < 0)
+                    throw new InvalidDataException($"Nonfinite or negative sound setting for '{info.name}'.");
+            if (sound.attenuation < 0 || sound.attenuation > 2 || sound.distanceMax < sound.distanceMin ||
+                (sound.loop != 0 && sound.loop != 1)) throw new InvalidDataException($"Invalid sound setting for '{info.name}'.");
+            if (sound.angleInY != 0 || (sound.modifier == 0 && (sound.angleInX != 0 || sound.angleBand != 0 || sound.attenuationOutside != 0)))
+            {
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.LayerOmitted, info.id, info.name,
+                    "Sound modifier fields have no exact SharpQuill representation.", info.type));
+                return null;
+            }
+            StrokeSoundPcmInfo pcm = default;
+            long lease = remainingBytes == 0 ? -2 : ImmPlayer.ImmStrokeReader.StrokeReader_DecodeSoundPcm16(docId, index, remainingBytes, out pcm);
+            if (lease <= 0)
+            {
+                issues.Add(new SharpQuillConversionIssue(lease == -2 ? SharpQuillConversionIssueCode.ResourceLimit : SharpQuillConversionIssueCode.DataReadFailed,
+                    info.id, info.name, $"PCM16 decode failed ({lease}); remaining aggregate PCM budget is {remainingBytes} bytes.", info.type));
+                throw new InvalidDataException($"Sound '{info.name}' could not be decoded; no partial sequence returned.");
+            }
+            try
+            {
+                if (pcm.byteCount <= 0 || pcm.byteCount > remainingBytes || pcm.sampleRate != asset.sampleRate || pcm.channels != asset.channels ||
+                    (long)pcm.frameCount * pcm.channels * 2 != pcm.byteCount)
+                    throw new InvalidDataException($"Decoded sound metadata for '{info.name}' is inconsistent.");
+                byte[] bytes = new byte[pcm.byteCount];
+                if (ImmPlayer.ImmStrokeReader.StrokeReader_CopyDecodedSoundPcm16(lease, bytes, bytes.Length) != bytes.Length)
+                    throw new InvalidDataException($"Decoded sound '{info.name}' could not be copied.");
+                byte[] wave;
+                using (var stream = new MemoryStream(checked(bytes.Length + 44)))
+                {
+                    using (var writer = new BinaryWriter(stream, System.Text.Encoding.ASCII, true))
+                    {
+                        writer.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); writer.Write(checked(bytes.Length + 36));
+                        writer.Write(System.Text.Encoding.ASCII.GetBytes("WAVEfmt ")); writer.Write(16); writer.Write((ushort)1);
+                        writer.Write((ushort)pcm.channels); writer.Write(pcm.sampleRate); writer.Write(checked(pcm.sampleRate * pcm.channels * 2));
+                        writer.Write((ushort)(pcm.channels * 2)); writer.Write((ushort)16);
+                        writer.Write(System.Text.Encoding.ASCII.GetBytes("data")); writer.Write(bytes.Length); writer.Write(bytes);
+                    }
+                    wave = stream.ToArray();
+                }
+                remainingBytes -= bytes.Length;
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.SoundMetadataNotPreserved, info.id, info.name,
+                    $"Encoded sound was decoded to PCM16; original codec bytes, import path, native source duration ({asset.sourceDuration}) and initially-playing field ({asset.initiallyPlaying}) are not reconstructed.", info.type));
+                return new LayerSound(info.name) { SoundType = sound.spatialType == 0 ? SoundType.Flat : SoundType.Positional,
+                    Gain = sound.gain, Loop = sound.loop != 0,
+                    Attenuation = new SoundAttenuation { Mode = (SoundAttenuationMode)sound.attenuation, Minimum = sound.distanceMin, Maximum = sound.distanceMax },
+                    Modifiers = new List<SoundModifier> { new SoundModifier { Type = (SoundModifierType)sound.modifier,
+                        AngleIn = sound.angleInX, AngleBand = sound.angleBand, AttenOut = sound.attenuationOutside } },
+                    Data = new SoundData { AudioBytes = wave, Length = wave.Length } };
+            }
+            finally { ImmPlayer.ImmStrokeReader.StrokeReader_ReleaseDecodedSoundPcm16(lease); }
         }
 
         private static float ExactTimingFloat(long value)

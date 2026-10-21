@@ -163,3 +163,8 @@ output byte caps, malformed packets, Opus gain and initial/end granules, complet
 copy guards, lease release/unload/End lifetimes, and a fresh child process loading
 only an isolated Windows reader package. Independent PCM comparisons and remaining
 platform/playback limits are recorded in content pipeline section 6.35.
+
+Hierarchy sound checks cover supported Opus/Vorbis/WAV to Quill PCM, settings,
+hidden layers, local transforms/pivots, key counts, aggregate budgets, malformed
+asset failure, unsupported ambisonic/frustum reports and project payload read-back.
+For a supplied IMM fixture, use `--hierarchy-sounds <input.imm> <reader.dll> <output-folder>`.

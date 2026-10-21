@@ -99,7 +99,7 @@ unmapped key channels are reported. Unrepresentable integer/float timing fails
 explicitly. A zero document frame rate selects a reported 24 fps sequence default;
 paint rates remain unchanged. Check `Succeeded` and `Issues` before using the subset.
 This mode does not change legacy flat reads. It does not certify codec identity,
-full root/startup/navigation reconstruction, native audio or application acceptance;
+full root/startup/navigation reconstruction or application acceptance;
 re-encoding decoded geometry can change quantization (content pipeline section 6.34).
 
 
@@ -115,4 +115,11 @@ or input memory. Copy requires capacity for the complete PCM; invalid handles or
 undersized buffers return zero. Opus decodes at 48 kHz; WAV/Vorbis retain rate.
 This synchronous offline API is independent of live playback. Windows standalone
 reader decoding is locally verified; platform CI and reader-only iOS static linking
-remain unverified. The SharpQuill adapters still omit sounds (pipeline section 6.35).
+remain unverified. The hierarchy adapter maps supported mono/stereo sounds to WAV
+SoundData with settings, common properties and supported keys; legacy flat reads
+still omit sounds. Its optional maxDecodedSoundBytes parameter defaults to 256 MiB
+across all decoded PCM in the sequence (not total process memory). A nonpositive
+budget throws ArgumentOutOfRangeException. Budget exhaustion or malformed audio
+fails conversion without returning a partial sequence; unsupported spatial formats
+are reported omissions. Encoded bytes and native legacy sound fields are reported
+as unpreserved (pipeline section 6.37).
