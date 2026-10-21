@@ -12,7 +12,8 @@ gates now pass in fresh run 39609583383 after earlier dependency/capture failure
 Full acceptance remains unresolved. The shared reflection extension is locally verified;
 native builds and packaged exports pass on all four platforms. Broader Unity/device
 acceptance is limited by the unresolved full-validation result. Regression investigation takes priority
-over further feature work. Unity player/device jobs now pass; final full acceptance
+over further feature work when a source failure is confirmed. Independent roadmap
+work continues while infrastructure is unavailable. Unity player/device jobs now pass; final full acceptance
 is blocked by Godot iOS hosted-runner capacity: the original job and its one
 permitted retry never started. Zero-tip fix workflow 39616195981 completed successfully.
 
@@ -109,7 +110,7 @@ The preferred first candidate is:
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; final full CI blocked by Godot iOS capacity | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; final full CI blocked by Godot iOS capacity | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
-| C2: animation and navigation | Reference metadata audit: 35,213 transform keys in 403 layers retain count/time/value/interpolation; base/startup evaluation remains unresolved. Extend C1 for shared drawings/holds, keys, nested timing, viewpoints and root/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
+| C2: animation and navigation | Initial animated-paint conversion implemented: drawings/holds, layer keys and nested timing; local native synthetic checks and exact Fishgym paint/key metadata comparison pass. Viewpoints, root/chapter behavior and evaluated playback remain outstanding | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
@@ -397,6 +398,36 @@ Status checked at 2026-10-21 14:36 UTC:
    before this repair was committed. The prior hosted-runner capacity failure
    remains unresolved. Confirmed source regressions retain priority over features;
    independent C2 implementation continues while infrastructure is unavailable.
+
+### 6.5 C2 animated-paint implementation checkpoint (2026-10-21)
+
+1. `QuillToImmConverter.ConvertAnimatedPaintProject` uses the shared graph/compiler
+   for multiple drawings, held/empty drawing references, paint repeats, timeline
+   duration/repeats, visibility, opacity, offset and reflected transform keys.
+   Interpolation names map explicitly to IMM enums. Sequence frame rate is used
+   without resampling frame maps, matching inspected Quill exports. The existing
+   static entry still rejects animation.
+2. Raw JSON declarations distinguish absent channels from SharpQuill's constructor
+   defaults. Statically hidden paint is excluded, while visibility-keyed paint can
+   be retained through animated ancestors. StartOffset is not applied a second
+   time when an offset key already represents it. Unrepresented offsets, fractional
+   or out-of-range timing, invalid frame references and unsupported action channels
+   fail without replacing existing output.
+3. Local native export/read-back checks pass for drawings/held frames, hidden paint,
+   independent repeats, timeline timing, key values/ticks, all five source
+   interpolation enums and reflected transform keys. Existing static, importer,
+   root-query and reflection regressions pass. These are stored-data checks, not
+   evaluated interpolation/startup/playback acceptance.
+4. Fishgym's candidate matches its co-located Quill-exported IMM exactly for the
+   paint/group subset: one paint layer, 4,085 strokes, 143,833 stored points,
+   drawings/frame maps, transforms/pivots, all stored layer keys and nested timing.
+   Viewpoint/startup metadata are explicitly omitted with partial-output warnings.
+   Local logs: `artifacts/c2-fishgym-animated-compare.log` and
+   `artifacts/c2-tests-06.log`. This case does not prove animated transform playback.
+5. C2 remains incomplete: native playback at boundary/interpolation times, startup,
+   pause/seek/restart, broader paired assets, viewpoints, root actions/chapters and
+   source cases outside the implemented timing range remain to be completed.
+   C3 media and the remaining reader/reverse/live-authoring tracks retain their scope.
 
 ## 7. Consolidated documents
 

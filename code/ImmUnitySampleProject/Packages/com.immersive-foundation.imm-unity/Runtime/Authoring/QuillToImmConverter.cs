@@ -43,8 +43,8 @@ namespace ImmPlayer.Authoring
     }
 
     /// <summary>
-    /// Initial offline static-paint profile. Animation is an error; layer/pivot
-    /// reflections are preserved through the additive offline exporter APIs.
+    /// Offline static and animated paint profiles. The static entry rejects animation;
+    /// layer/pivot/key reflections use the additive offline exporter APIs.
     /// Viewpoints/media/unknown layers require explicit omission permission and
     /// produce partial-output diagnostics. No existing output is touched on failure.
     /// </summary>
@@ -52,6 +52,15 @@ namespace ImmPlayer.Authoring
     {
         public static QuillToImmConversionResult ConvertStaticPaintProject(
             string projectFolder, string outputPath, bool allowOmittedLayers = false)
+            => ConvertPaintProject(projectFolder, outputPath, allowOmittedLayers, animated: false);
+
+        /// <summary>Converts paint drawings and layer animation. Root animation and navigation remain unsupported.</summary>
+        public static QuillToImmConversionResult ConvertAnimatedPaintProject(
+            string projectFolder, string outputPath, bool allowOmittedLayers = false)
+            => ConvertPaintProject(projectFolder, outputPath, allowOmittedLayers, animated: true);
+
+        private static QuillToImmConversionResult ConvertPaintProject(
+            string projectFolder, string outputPath, bool allowOmittedLayers, bool animated)
         {
             var issues = new List<QuillToImmIssue>();
             try
@@ -73,10 +82,10 @@ namespace ImmPlayer.Authoring
                 if ((int?)json["Version"] != 1 || !(json["Sequence"] is JObject settings) ||
                     !(settings["RootLayer"] is JObject root) || (string)root["Type"] != "Group")
                     throw new InvalidDataException("Expected a Version 1 Quill project with a Group root.");
-                Preflight(root, "", true, true, issues, allowOmittedLayers);
+                Preflight(root, "", true, true, issues, allowOmittedLayers, animated);
                 if (settings["AnimateOnStart"] != null || settings["TrackingOrigin"] != null)
                     Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
-                        "OmittedStartupMetadata", "/", "Startup/tracking metadata is outside the static paint profile.");
+                        "OmittedStartupMetadata", "/", "Startup/tracking metadata is outside the paint profiles.");
                 if (issues.Any(x => x.Severity == QuillToImmIssueSeverity.Error))
                     return new QuillToImmConversionResult(issues);
 
@@ -84,19 +93,18 @@ namespace ImmPlayer.Authoring
                 if (sequence?.RootLayer == null)
                     throw new InvalidDataException("Quill hierarchy could not be parsed.");
                 CheckRoot(sequence.RootLayer);
-                var created = ImmAuthoringDocument.Create(ExportSequenceType.Still, checked((uint)sequence.Framerate),
+                var created = ImmAuthoringDocument.Create(animated ? ExportSequenceType.Animated : ExportSequenceType.Still, checked((uint)sequence.Framerate),
                     new UnityEngine.Color(sequence.BackgroundColor.R, sequence.BackgroundColor.G, sequence.BackgroundColor.B, 1f));
                 using (ImmAuthoringDocument document = Require(created, "/"))
                 {
                     using (var stream = File.OpenRead(sourceBinary))
                     using (var reader = new QBinReader(stream))
                     {
-                        foreach (Layer child in sequence.RootLayer.Children)
-                            MapLayer(document, child, 0, $"/{sequence.RootLayer.Name}", true, reader);
+                        MapChildren(document, sequence.RootLayer, root, 0, $"/{sequence.RootLayer.Name}", true, reader, animated);
                     }
                     var snapshot = Require(document.CreateSnapshot(), "/");
                     if (!snapshot.Layers.Any(x => x.Type == ImmAuthoringLayerType.Paint && x.Drawings.Any(d => d.Strokes.Count > 0)))
-                        throw new InvalidDataException("The selected static profile contains no exportable paint.");
+                        throw new InvalidDataException("The selected paint profile contains no exportable paint.");
                     ImmAuthoringExportResult exported = ImmAuthoringCompiler.ExportToFile(snapshot, fullOutput);
                     if (!exported.Succeeded)
                         Issue(issues, QuillToImmIssueSeverity.Error, "ExportFailed", "/", exported.Message);
@@ -114,15 +122,15 @@ namespace ImmPlayer.Authoring
         }
 
         private static void Preflight(JObject layer, string parentPath, bool parentVisible, bool isRoot,
-            List<QuillToImmIssue> issues, bool allowOmittedLayers)
+            List<QuillToImmIssue> issues, bool allowOmittedLayers, bool animated)
         {
             string path = $"{parentPath}/{(string)layer["Name"]}";
             string type = (string)layer["Type"];
-            bool visible = parentVisible && ((bool?)layer["Visible"] ?? true);
+            bool visible = parentVisible && PotentiallyVisible(layer, animated);
             if (type != "Group" && type != "Paint")
             {
                 Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
-                    "OmittedLayer", path, $"{type ?? "Unknown"} is outside the static paint profile.");
+                    "OmittedLayer", path, $"{type ?? "Unknown"} is outside the paint profiles.");
                 return;
             }
             if (type == "Paint" && !visible)
@@ -145,10 +153,20 @@ namespace ImmPlayer.Authoring
             var animation = layer["Animation"];
             if (animation != null)
             {
+                if (animated && !isRoot)
+                {
+                    foreach (string field in new[] { "Duration", "MaxRepeatCount", "StartOffset" })
+                    {
+                        double value = (double?)animation[field] ?? 0;
+                        ExactNonNegativeInteger(value, path);
+                        if (value != (double)(float)value)
+                            throw new NotSupportedException($"{field} cannot be represented exactly by the source reader at {path}.");
+                    }
+                }
                 bool dynamicTiming = (double?)animation["StartOffset"] != null && (double)animation["StartOffset"] != 0;
                 if (!isRoot) dynamicTiming |= ((bool?)animation["Timeline"] ?? false) ||
                     ((double?)animation["Duration"] ?? 0) != 0 || ((double?)animation["MaxRepeatCount"] ?? 0) != 0;
-                if (dynamicTiming)
+                if (dynamicTiming && (!animated || isRoot))
                     Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedAnimation", path,
                         "Timeline timing is outside the static profile.");
                 if (animation["Keys"] is JObject keys)
@@ -159,7 +177,17 @@ namespace ImmPlayer.Authoring
                         bool defaults = values.Count == 0 || (values.Count == 1 && (double?)values[0]["Time"] == 0 &&
                             ((channel.Name == "Visibility" && (bool?)values[0]["Value"] == true) ||
                              (channel.Name == "Offset" && (double?)values[0]["Value"] == 0)));
-                        if (!defaults)
+                        bool supported = animated && !isRoot &&
+                            (channel.Name == "Visibility" || channel.Name == "Opacity" || channel.Name == "Transform" || channel.Name == "Offset");
+                        if (supported)
+                            foreach (JToken key in values)
+                            {
+                                long time = ExactNonNegativeInteger((double)key["Time"], path);
+                                if (time > int.MaxValue) throw new NotSupportedException($"Key time exceeds source reader range at {path}.");
+                                if (channel.Name == "Offset" && ExactNonNegativeInteger((double)key["Value"], path) > int.MaxValue)
+                                    throw new NotSupportedException($"Offset exceeds source reader range at {path}.");
+                            }
+                        if (!defaults && !supported)
                             Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedAnimation", path,
                                 $"{channel.Name} keys are outside the static profile.");
                     }
@@ -170,12 +198,15 @@ namespace ImmPlayer.Authoring
             {
                 if (!(implementation["Children"] is JArray children))
                     throw new InvalidDataException($"Missing group children at {path}.");
-                foreach (JObject child in children) Preflight(child, path, visible, false, issues, allowOmittedLayers);
+                foreach (JObject child in children) Preflight(child, path, visible, false, issues, allowOmittedLayers, animated);
             }
             else if (implementation["Drawings"] is JArray drawings)
             {
-                if (drawings.Count != 1 || !(implementation["Frames"] is JArray frames) ||
-                    frames.Count == 0 || frames.Any(x => !IsZeroFrame(x)))
+                if (animated && (!(implementation["Frames"] is JArray frameMap) ||
+                    frameMap.Count == 0 || frameMap.Any(x => !IsDrawingIndex(x, drawings.Count))))
+                    throw new InvalidDataException($"Invalid animated frame map at {path}.");
+                if (!animated && (drawings.Count != 1 || !(implementation["Frames"] is JArray frames) ||
+                    frames.Count == 0 || frames.Any(x => !IsZeroFrame(x))))
                     Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedAnimation", path,
                         "Static paint requires one drawing and frame references to drawing zero.");
             }
@@ -194,15 +225,39 @@ namespace ImmPlayer.Authoring
             (value.Type == JTokenType.String && int.TryParse((string)value, NumberStyles.Integer,
                 CultureInfo.InvariantCulture, out int index) && index == 0);
 
+        private static bool IsDrawingIndex(JToken value, int count)
+        {
+            if (value.Type == JTokenType.String)
+                return int.TryParse((string)value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int index) && index >= 0 && index < count;
+            if (value.Type != JTokenType.Integer && value.Type != JTokenType.Float) return false;
+            double number = (double)value;
+            return number >= 0 && number < count && number == Math.Truncate(number);
+        }
+
         private static bool IsIdentity(SharpQuill.Transform t) => t.Scale == 1f && t.Flip == "N" &&
             t.Translation.X == 0f && t.Translation.Y == 0f && t.Translation.Z == 0f &&
             t.Rotation.X == 0f && t.Rotation.Y == 0f && t.Rotation.Z == 0f && Math.Abs(t.Rotation.W) == 1f;
 
-        private static void MapLayer(ImmAuthoringDocument document, Layer layer, long parentId,
-            string parentPath, bool parentVisible, QBinReader reader)
+        private static bool PotentiallyVisible(JObject source, bool animated) =>
+            ((bool?)source["Visible"] ?? true) || (animated && source["Animation"]?["Keys"]?["Visibility"] is JArray keys &&
+                keys.Any(x => (bool?)x["Value"] == true));
+
+        private static void MapChildren(ImmAuthoringDocument document, LayerGroup group, JObject source, long parentId,
+            string path, bool visible, QBinReader reader, bool animated)
+        {
+            var layers = group.Children.Where(x => x is LayerGroup || x is LayerPaint).ToArray();
+            var declarations = ((JArray)source["Implementation"]["Children"]).OfType<JObject>()
+                .Where(x => (string)x["Type"] == "Group" || (string)x["Type"] == "Paint").ToArray();
+            if (layers.Length != declarations.Length) throw new InvalidDataException($"Parsed hierarchy differs at {path}.");
+            for (int i = 0; i < layers.Length; i++)
+                MapLayer(document, layers[i], declarations[i], parentId, path, visible, reader, animated);
+        }
+
+        private static void MapLayer(ImmAuthoringDocument document, Layer layer, JObject source, long parentId,
+            string parentPath, bool parentVisible, QBinReader reader, bool animated)
         {
             string path = $"{parentPath}/{layer.Name}";
-            bool visible = parentVisible && layer.Visible;
+            bool visible = parentVisible && PotentiallyVisible(source, animated);
             if (!(layer is LayerGroup) && !(layer is LayerPaint)) return;
             if (layer is LayerPaint && !visible) return;
             var properties = ImmAuthoringLayerProperties.Default(layer.Name);
@@ -210,40 +265,100 @@ namespace ImmPlayer.Authoring
             properties.Opacity = layer.Opacity;
             properties.Transform = Transform(layer.Transform);
             properties.Pivot = Transform(layer.Pivot);
+            if (animated)
+            {
+                properties.IsTimeline = layer.Animation.Timeline;
+                properties.DurationTicks = ExactNonNegativeInteger(layer.Animation.Duration, path);
+                properties.MaxRepeatCount = checked((uint)ExactNonNegativeInteger(layer.Animation.MaxRepeatCount, path));
+                if (layer.Animation.StartOffset != 0 && !layer.Animation.Keys.Offset.Any(x => x.Value == layer.Animation.StartOffset))
+                    throw new NotSupportedException($"StartOffset without a matching offset key is unsupported at {path}.");
+            }
             if (layer is LayerGroup group)
             {
                 long groupId = Require(document.CreateGroupLayer(parentId, properties), path);
-                foreach (Layer child in group.Children) MapLayer(document, child, groupId, path, visible, reader);
+                if (animated) MapAnimation(document, groupId, layer.Animation.Keys, source, path);
+                MapChildren(document, group, source, groupId, path, visible, reader, animated);
                 return;
             }
             var paint = (LayerPaint)layer;
             properties.PaintMaxRepeatCount = checked((uint)paint.MaxRepeatCount);
             long paintId = Require(document.CreatePaintLayer(parentId, properties), path);
-            var drawing = paint.Drawings.Single();
-            if (drawing.DataFileOffset < 4 || drawing.DataFileOffset > reader.BaseStream.Length - 4)
-                throw new InvalidDataException($"Drawing offset is outside qbin at {path}.");
-            reader.BaseStream.Position = drawing.DataFileOffset;
-            DrawingData data = reader.ReadDrawingData(rejectUnknownBrushes: true);
-            long drawingId = Require(document.CreateDrawing(paintId), path);
-            foreach (Stroke stroke in data.Strokes)
+            if (animated) MapAnimation(document, paintId, layer.Animation.Keys, source, path);
+            var drawingIds = new List<long>();
+            foreach (var drawing in paint.Drawings)
             {
-                if (stroke.Vertices.Count > 8192)
-                    throw new NotSupportedException($"Stroke {stroke.Id} at {path} exceeds the IMM writer's 8192-point limit.");
-                var points = new PaintPoint[stroke.Vertices.Count];
-                for (int i = 0; i < points.Length; i++)
+                if (drawing.DataFileOffset < 4 || drawing.DataFileOffset > reader.BaseStream.Length - 4)
+                    throw new InvalidDataException($"Drawing offset is outside qbin at {path}.");
+                reader.BaseStream.Position = drawing.DataFileOffset;
+                DrawingData data = reader.ReadDrawingData(rejectUnknownBrushes: true);
+                long drawingId = Require(document.CreateDrawing(paintId), path);
+                drawingIds.Add(drawingId);
+                foreach (Stroke stroke in data.Strokes)
                 {
-                    Vertex vertex = stroke.Vertices[i];
-                    points[i] = new PaintPoint
+                    if (stroke.Vertices.Count > 8192)
+                        throw new NotSupportedException($"Stroke {stroke.Id} at {path} exceeds the IMM writer's 8192-point limit.");
+                    var points = new PaintPoint[stroke.Vertices.Count];
+                    for (int i = 0; i < points.Length; i++)
                     {
-                        Position = Vector(vertex.Position), Normal = Vector(vertex.Normal), Direction = Vector(vertex.Tangent),
-                        Color = new UnityEngine.Color(vertex.Color.R, vertex.Color.G, vertex.Color.B, 1f),
-                        Alpha = vertex.Opacity, Width = vertex.Width
-                    };
+                        Vertex vertex = stroke.Vertices[i];
+                        points[i] = new PaintPoint
+                        {
+                            Position = Vector(vertex.Position), Normal = Vector(vertex.Normal), Direction = Vector(vertex.Tangent),
+                            Color = new UnityEngine.Color(vertex.Color.R, vertex.Color.G, vertex.Color.B, 1f),
+                            Alpha = vertex.Opacity, Width = vertex.Width
+                        };
+                    }
+                    Require(document.CreateStroke(drawingId, Brush(stroke.BrushType),
+                        stroke.DisableRotationalOpacity ? VisibilityType.Always : VisibilityType.FadePow2, points), path);
                 }
-                Require(document.CreateStroke(drawingId, Brush(stroke.BrushType),
-                    stroke.DisableRotationalOpacity ? VisibilityType.Always : VisibilityType.FadePow2, points), path);
             }
-            foreach (int frame in paint.Frames) Require(document.AppendFrame(paintId, drawingId), path);
+            foreach (int frame in paint.Frames)
+            {
+                if (frame < 0 || frame >= drawingIds.Count)
+                    throw new InvalidDataException($"Frame references an invalid drawing at {path}.");
+                Require(document.AppendFrame(paintId, drawingIds[frame]), path);
+            }
+        }
+
+        private static long ExactNonNegativeInteger(double value, string path)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0 || value != Math.Truncate(value))
+                throw new InvalidDataException($"Expected nonnegative integer timing at {path}.");
+            return checked((long)value);
+        }
+
+        private static void MapAnimation(ImmAuthoringDocument document, long layerId, Keyframes keys, JObject source, string path)
+        {
+            var channels = source["Animation"]?["Keys"];
+            if (channels?["Visibility"] != null)
+                foreach (var key in keys.Visibility)
+                    Add(ImmAuthoringAnimationProperty.Visibility, key.Time, ImmAuthoringAnimationValue.FromBool(key.Value), key.Interpolation);
+            if (channels?["Opacity"] != null)
+                foreach (var key in keys.Opacity)
+                    Add(ImmAuthoringAnimationProperty.Opacity, key.Time, ImmAuthoringAnimationValue.FromFloat(key.Value), key.Interpolation);
+            if (channels?["Transform"] != null)
+                foreach (var key in keys.Transform)
+                    Add(ImmAuthoringAnimationProperty.Transform, key.Time, ImmAuthoringAnimationValue.FromTransform(Transform(key.Value)), key.Interpolation);
+            // Inspected Quill exports retain paint's default zero offset even when
+            // the JSON omits that channel. Groups need no implicit offset key.
+            if (channels?["Offset"] != null || (string)source["Type"] == "Paint")
+                foreach (var key in keys.Offset)
+                    Add(ImmAuthoringAnimationProperty.Offset, key.Time, ImmAuthoringAnimationValue.FromUInt(checked((uint)key.Value)), key.Interpolation);
+
+            void Add(ImmAuthoringAnimationProperty property, long time, ImmAuthoringAnimationValue value, Interpolation interpolation)
+            {
+                ImmAuthoringInterpolation mapped;
+                switch (interpolation)
+                {
+                    case Interpolation.None: mapped = ImmAuthoringInterpolation.None; break;
+                    case Interpolation.Linear: mapped = ImmAuthoringInterpolation.Linear; break;
+                    case Interpolation.Smoothstep: mapped = ImmAuthoringInterpolation.Smoothstep; break;
+                    case Interpolation.EaseIn: mapped = ImmAuthoringInterpolation.EaseIn; break;
+                    case Interpolation.EaseOut: mapped = ImmAuthoringInterpolation.EaseOut; break;
+                    default: throw new NotSupportedException($"Unknown interpolation at {path}.");
+                }
+                Require(document.CreateAnimationKey(layerId, property, time, value, mapped), path);
+            }
         }
 
         private static BrushSectionType Brush(BrushType brush)

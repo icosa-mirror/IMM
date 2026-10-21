@@ -112,6 +112,27 @@ Remaining work for a basic converter
    Static conversion and native data comparisons exist; full conversion and
    reference playback acceptance remain outstanding.
 
+C2 animated paint implementation checkpoint (2026-10-21)
+
+1. ConvertAnimatedPaintProject now exports multiple drawings, held/empty frame
+   references, paint repeats, nested timeline duration/repeats and visibility,
+   opacity, offset and reflected transform keys through the shared graph/compiler.
+   ConvertStaticPaintProject retains its animation rejection contract.
+2. Interpolation names map explicitly: None/Linear/Smoothstep/EaseIn/EaseOut to
+   native 0/1/2/3/4. Source sequence rate drives paint without resampling maps.
+   Offset keys represent supported StartOffset values; no second offset is added.
+   Unrepresented StartOffset, fractional/out-of-range timing, invalid frame maps
+   and action channels are rejected. Root keys/navigation/media remain outstanding.
+3. Native synthetic read-back checks pass for frame maps, empty drawings, animated
+   visibility, timing, keys and flips. Fishgym matches its Quill-exported paint/group
+   subset exactly: 4,085 strokes, 143,833 stored points, drawing/frame maps and all
+   stored layer keys/timeline metadata. Viewpoint/startup omissions are reported.
+   Evaluated playback/startup/interpolation and broader C2 acceptance remain open.
+4. This work exposed and repaired ImmExporter_PaintSetMaxRepeatCount updating the
+   timeline field instead of LayerPaint. Native tests now check drawing repeats
+   0/1/3 independently of timeline repeat 7. Windows source/binary are updated;
+   cross-platform publication and runtime evidence require CI.
+
 C1 static profile implementation and validation (2026-10-21)
 
 1. Runtime API: ImmPlayer.Authoring.QuillToImmConverter.ConvertStaticPaintProject(

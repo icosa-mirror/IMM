@@ -1,4 +1,4 @@
-# Static Quill to IMM conversion checks
+# Quill to IMM conversion checks
 
 The .NET 8 harness compiles the production reader, converter, authoring graph,
 compiler and native declarations. Small Unity data stand-ins replace engine types;
@@ -13,11 +13,16 @@ does not replace Unity compilation or visual playback acceptance.
    ```
 
 2. Convert a private project using the same runtime API. The output parent directory
-   must exist. Omit `--paint-only` to reject all omitted media/viewpoints/unknown layers:
+   must exist. Add `--animated` for animated paint conversion. Omit `--paint-only`
+   to reject all omitted media/viewpoints/unknown layers:
 
    ```powershell
    dotnet run --project code/appImmStrokeReader/tests/QuillToImm -- $projectFolder $outputImm code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll --paint-only
    ```
+
+   Use `--compare-animated-paint` instead of `--compare-paint` to additionally require
+   exact stored animation keys and timeline flags/durations/repeats. Evaluated
+   animation playback is outside both comparisons.
 
 3. Compare the decoded paint/group subset with a local reference export. This includes
    every stored stroke/point, rather than skipping source strokes affected by codec
@@ -35,6 +40,13 @@ X/Y/Z reflection preservation, unknown reflection/animation rejection, unknown s
 output, source-file overwrite protection and preservation of existing output on failure.
 The no-argument `QBinReader.ReadDrawingData()` brush fallback remains unchanged;
 conversion explicitly requests strict brush validation.
+
+Animated checks cover multiple/empty drawings, held frame maps, sequence-rate
+normalization, animated visibility, nested timeline timing, offset/opacity/transform
+keys, all five interpolation mappings and key reflections. Invalid timing/frame
+maps and unsupported layer/root action keys must preserve existing output. Shared
+exporter checks retain infinite/one/finite paint repeats independently of timeline
+repeats. These checks inspect stored native data rather than playback behavior.
 
 Reflection checks additionally cover native layer/pivot and transform-key flips,
 known-flip import, structural comparison, invalid native enum rejection without

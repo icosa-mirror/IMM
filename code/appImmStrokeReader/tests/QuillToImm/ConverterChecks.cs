@@ -112,6 +112,7 @@ static class ConverterChecks
             Require(!document.CreateStroke(d, BrushSectionType.Circle, VisibilityType.Always, new[] { point, point }).Succeeded, "Zero-extent stroke was accepted.");
         }
         ReflectionChecks.Run(root);
+        AnimatedConverterChecks.Run(root, sequence);
         Console.WriteLine("[IMM_QUILL_CONVERTER_TEST] Passed native four-brush/zero-tip/hierarchy/pivot checks and rejection/output-preservation cases.");
 
         void RejectPreservingOutput(string code)
@@ -174,7 +175,7 @@ static class ConverterChecks
         finally { if (doc > 0) Reader.StrokeReader_Unload(doc); Reader.StrokeReader_End(); }
     }
 
-    public static void ComparePaint(string reference, string actual)
+    public static void ComparePaint(string reference, string actual, bool compareAnimation = false)
     {
         Require(Reader.StrokeReader_Init(Path.ChangeExtension(actual, ".comparison.log")) == 0, "Reader init failed.");
         int a = Reader.StrokeReader_LoadFromFile(Path.GetFullPath(reference));
@@ -199,6 +200,19 @@ static class ConverterChecks
                     layer.Info.pivotRotY == other.Info.pivotRotY && layer.Info.pivotRotZ == other.Info.pivotRotZ &&
                     layer.Info.pivotRotW == other.Info.pivotRotW && layer.Info.pivotScale == other.Info.pivotScale &&
                     layer.Info.pivotFlip == other.Info.pivotFlip, $"Pivot differs at {path}.");
+                if (compareAnimation)
+                {
+                    Require(layer.Info.isTimeline == other.Info.isTimeline && layer.Info.durationTicks == other.Info.durationTicks &&
+                        layer.Info.maxRepeatCount == other.Info.maxRepeatCount, $"Timeline metadata differs at {path}.");
+                    int keyCount = Reader.StrokeReader_GetLayerAnimationKeyCount(a, layer.Index);
+                    Require(keyCount == Reader.StrokeReader_GetLayerAnimationKeyCount(b, other.Index), $"Animation key count differs at {path}.");
+                    for (int k = 0; k < keyCount; k++)
+                    {
+                        Require(Reader.StrokeReader_GetLayerAnimationKey(a, layer.Index, k, out var ak) &&
+                            Reader.StrokeReader_GetLayerAnimationKey(b, other.Index, k, out var bk) && ak.Equals(bk),
+                            $"Stored animation key differs at {path}/{k}.");
+                    }
+                }
                 if (layer.Info.type != 1) continue;
                 int drawings = Reader.StrokeReader_GetAuthoringDrawingCount(a, layer.Index);
                 Require(drawings == Reader.StrokeReader_GetAuthoringDrawingCount(b, other.Index), "Drawing count differs.");
@@ -227,6 +241,7 @@ static class ConverterChecks
                 }
             }
             Console.WriteLine($"[IMM_QUILL_CONVERTER_COMPARE] Exact paint subset match: {sourcePaint.Length} layers, {strokes} strokes, {points} points, hierarchy/transforms/pivots/frame buffers.");
+            if (compareAnimation) Console.WriteLine("[IMM_QUILL_ANIMATION_COMPARE] Exact stored layer animation keys and nested timeline metadata match; evaluated playback not checked.");
         }
         finally { if (a > 0) Reader.StrokeReader_Unload(a); if (b > 0) Reader.StrokeReader_Unload(b); Reader.StrokeReader_End(); }
     }
