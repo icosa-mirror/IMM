@@ -203,11 +203,21 @@ namespace ImmPlayer.Authoring
                     "Statically hidden content is excluded, matching the inspected Quill exports.");
                 return;
             }
-            if (type == "Picture" && !IsTwoDimensionalPicture(layer["Implementation"]?["Type"]))
+            if (type == "Picture" && !TryPictureType(layer["Implementation"]?["Type"], out _))
             {
                 Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
-                    "OmittedLayer", path, "Picture projection is outside the verified 2D source mapping.");
+                    "OmittedLayer", path, "Picture projection has no supported source mapping.");
                 return;
+            }
+            if (type == "Picture" && TryPictureType(layer["Implementation"]?["Type"], out var projection) &&
+                projection != ExportPictureType.Image2D)
+            {
+                var metadata = layer["Implementation"]?["Metadata"];
+                if (metadata?["HorizontalFOV"] != null || metadata?["VerticalFOV"] != null)
+                    Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedPictureFov", path,
+                        "Explicit panorama field-of-view metadata has no verified native mapping.");
+                Issue(issues, QuillToImmIssueSeverity.Information, "PanoramaLayoutUnverified", path,
+                    "Equirectangular projection and stored pixels are transferred without rearrangement; Quill orientation and stereo eye order still require reference or application validation.");
             }
             if (type == "Sound") SoundSettings((JObject)layer["Implementation"], path);
             string keepAlive = (string)layer["KeepAlive"]?["Type"];
@@ -333,9 +343,18 @@ namespace ImmPlayer.Authoring
         private static bool IsMappedType(string type, bool includeProjectContent) =>
             type == "Group" || type == "Paint" || (includeProjectContent && (type == "Viewpoint" || type == "Picture" || type == "Sound"));
 
-        private static bool IsTwoDimensionalPicture(JToken type) =>
-            string.Equals((string)type, "2D", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals((string)type, "TwoD", StringComparison.OrdinalIgnoreCase);
+        private static bool TryPictureType(JToken type, out ExportPictureType projection)
+        {
+            switch (((string)type ?? "").ToLowerInvariant())
+            {
+                case "2d": case "twod": projection = ExportPictureType.Image2D; return true;
+                case "360_equirect_mono": case "360 equirectangular mono":
+                    projection = ExportPictureType.Image360EquirectMono; return true;
+                case "360_equirect_stereo": case "360 equirectangular stereo":
+                    projection = ExportPictureType.Image360EquirectStereo; return true;
+                default: projection = default; return false;
+            }
+        }
 
         private static void MapChildren(ImmAuthoringDocument document, LayerGroup group, JObject source, long parentId,
             string path, bool visible, QBinReader reader, bool animated, ProjectMapping projectMapping)
@@ -357,7 +376,7 @@ namespace ImmPlayer.Authoring
             bool visible = parentVisible && PotentiallyVisible(source, animated);
             if (layer is LayerViewpoint excluded && !excluded.Exporting) return;
             if ((layer is LayerPaint || layer is LayerPicture) && !visible) return;
-            if (layer is LayerPicture && !IsTwoDimensionalPicture(source["Implementation"]?["Type"])) return;
+            if (layer is LayerPicture && !TryPictureType(source["Implementation"]?["Type"], out _)) return;
             var properties = ImmAuthoringLayerProperties.Default(layer.Name);
             properties.Visible = layer.Visible;
             properties.Opacity = layer.Opacity;
@@ -401,7 +420,9 @@ namespace ImmPlayer.Authoring
             }
             if (layer is LayerPicture picture)
             {
-                properties.PictureType = ExportPictureType.Image2D;
+                if (!TryPictureType(source["Implementation"]?["Type"], out var pictureType))
+                    throw new NotSupportedException($"Unsupported picture projection at {path}.");
+                properties.PictureType = pictureType;
                 properties.PictureViewerLocked = picture.ViewerLocked;
                 properties.PictureImage = ReadQbinImage(reader, picture.DataFileOffset, path, required: true);
                 long pictureId = Require(document.CreatePictureLayer(parentId, properties), path);

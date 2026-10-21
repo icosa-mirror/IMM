@@ -130,9 +130,12 @@ Remaining work for a basic converter
    or layer transform into stroke points.
 5. Media transfer: offline picture graph/compiler construction and additive Unity
    exporter ABI entry points now exist. Picture import preserves original encoded
-   assets; the project converter maps stored 2D RGB/RGBA pictures. Nineteen isolated
-   Alex reference pictures match decoded pixels and exposed metadata. Stereo/
-   panorama source mappings and runtime appearance remain unverified; unsupported
+   assets; the project converter maps stored 2D and full-sphere equirectangular
+   mono/stereo RGB/RGBA pictures structurally. Nineteen isolated
+   Alex reference pictures match decoded pixels and exposed metadata. The local
+   stereo panorama matches every stored qbin pixel and projection/locking metadata;
+   eye order, orientation and runtime appearance remain unverified. Explicit
+   panorama FOV metadata fails; other unsupported
    projections require explicit omission permission. Offline PCM16 sound
    construction, encoded sound extraction/import and mono/stereo PCM16 source
    conversion exist. Isolated paired sound metadata checks pass (shared plan 6.29);
@@ -216,13 +219,16 @@ C2 animated paint implementation checkpoint (2026-10-21)
     unrepresented viewpoint pivot/opacity/timeline values fail. Broader navigation,
     generated thumbnails, startup/chapter source mapping and full CI remain open
     (roadmap sections 6.14-6.17).
-13. ConvertProject maps 2D pictures through the same graph and native encoder,
+13. ConvertProject maps 2D and equirectangular mono/stereo pictures through the
+    same graph and native encoder,
     preserving exact RGB/RGBA pixels and alpha. Hidden pictures are excluded.
     The operation-options overload allows an explicit input budget above the
     unchanged 256 MiB default and passes common exporter options through. The
     19-picture isolated Alex corpus matches reference pixels/properties, but is
     partial due to default-viewpoint fallback and does not prove whole-scene or
-    stereo playback acceptance. See roadmap sections 6.20-6.22 for exact scope.
+    stereo playback acceptance. Source panorama transfer preserves qbin layout
+    without repacking and reports PanoramaLayoutUnverified. Explicit FOV
+    metadata is rejected. See roadmap sections 6.20-6.22 and 6.45 for exact scope.
 
 C1 static profile implementation and validation (2026-10-21)
 

@@ -70,7 +70,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed; project reader/writer retains raw RGB/RGBA previews | Spawn metadata, encoded previews and on-demand pixels exposed; hierarchy adapter maps spheres, previews and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; full common-property constructor with hidden startup visibility encoded as a key | Spawn edits within limits | Stored preview conversion implemented both directions; generated previews, exact JPEG parity and broader navigation acceptance open |
-| Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
+| Pictures and panoramas | Stored 2D and full-sphere equirectangular mono/stereo RGB/RGBA pictures mapped structurally; explicit panorama FOV and depth remain unsupported | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels/metadata; real stereo panorama pixels/metadata match source qbin; orientation, eye order and playback acceptance remain open |
 | Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries, metadata import and offline PCM16 decoding; hierarchy adapter maps supported mono/stereo sound | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
 | File/memory output | SharpQuill writer supports a limited Quill-project subset | IMM-to-Quill entry point exists with losses below | Existing native IMM writer/compiler | Presented-revision save outstanding | Static converter reuses atomic file export; default rejects unsupported layers, explicit paint-only omission reports partial output |
@@ -127,7 +127,7 @@ The preferred first candidate is:
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; hosted full CI subsequently passed in 39645977224 and 39646549914 | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; hosted full CI subsequently passed in 39645977224 and 39646549914 | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop correction locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
-| C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
+| C3: media and coverage | Offline picture construction/import, source 2D and structural equirectangular mono/stereo conversion, and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Panorama orientation/eye order and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys and native sound decoding/mapping implemented; codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
@@ -1634,6 +1634,40 @@ replacement-run closure in section 6.26 (20:23 UTC):
    Spawn run 39689819341 Windows also passed. This playback correction requires
    fresh full CI. The older Android SDK infrastructure retry remains deferred
    (6.28/6.43). Source chapter/startup mapping and the remaining roadmap are open.
+
+### 6.45. Structural source panorama transfer (2026-10-22)
+
+1. Project conversion now recognizes `360_Equirect_Mono` and
+   `360_Equirect_Stereo`, plus the existing reader's human-readable aliases,
+   mapping them to native equirectangular types 1 and 2. Stored qbin pixels are
+   transferred without repacking; common layer properties, animation and viewer
+   locking continue through the existing picture path. Unknown/depth/cubemap
+   projections still require explicit omission permission. Explicit horizontal
+   or vertical FOV metadata fails before replacing output, including when
+   omission permission is enabled; no verified cropped-panorama mapping exists.
+2. Synthetic checks cover both projections and aliases, distinct upper/lower RGB
+   and RGBA pixels, alpha, viewer locking, native import round trips, explicit
+   FOV rejection and the existing malformed/budget/cancellation/output guards.
+   Full converter/native .NET self-test passes. No native ABI or binary changed.
+3. The local Pano source converts without omissions. Independent native reader
+   verification finds a 4096x4096 stereo, viewer-locked picture; every decoded
+   RGB pixel matches its stored qbin payload and output alpha is opaque. The
+   original JPEG decodes differently, so it is deliberately not reimported.
+   Evidence: ignored artifacts/panorama-structural-suite.log,
+   panorama-Pano-conversion.log and panorama-Pano-pixel-check.json.
+4. This establishes structural transfer, not Quill visual equivalence. Native
+   stereo sampling uses vertical halves, but no matching official Pano IMM was
+   found in the inspected local corpus. Eye order, panorama orientation,
+   application/device appearance and mono reference coverage remain open.
+   Conversion reports `PanoramaLayoutUnverified` explicitly. Source chapters,
+   broader navigation and the rest of the roadmap remain open.
+5. Independent regression audit found no new source failure: playback correction
+   run 39693358402 has Windows/Android checks in progress; preview run
+   39690789395 Windows passed, full validation pending. Old run 39669262483 still
+   has the Android SDK archive infrastructure failure and active independent
+   iOS jobs; its single affected-job retry remains deferred until terminal.
+   These are snapshots, not a claim that full CI has passed. Fresh full CI is
+   required for this panorama milestone.
 
 ## 7. Consolidated documents
 

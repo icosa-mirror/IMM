@@ -37,9 +37,12 @@ appearance or viewer-lock behavior in playback. Picture asset checks cover file
 and memory queries, ABI/index/buffer/lifetime guards, exact encoded PNG/JPEG import/
 export/import, hidden pictures and decoded 8-bit/1-bit grayscale. The real sample
 picture and all three encoded sounds also pass exact import round trips. Quill
-2D source checks cover picture-only RGB/RGBA/alpha, hidden exclusion, viewer-lock
+2D and equirectangular mono/stereo source checks cover picture-only RGB/RGBA/alpha,
+projection aliases, distinct upper/lower rows, explicit FOV rejection, hidden exclusion, viewer-lock
 metadata, import round trips, unsupported projections, invalid/truncated image
-data, configured resource budgets and cancellation/output preservation.
+data, configured resource budgets and cancellation/output preservation. Panorama
+checks establish structural transfer; Quill eye order/orientation and visual parity
+remain unverified.
 `--compare-project` includes picture counts, properties and exact decoded pixels.
 
 Sound construction checks cover immutable PCM16 ownership, spatial-setting ABI,
@@ -61,7 +64,7 @@ limits are recorded in content pipeline section 6.24.
 
 2. Convert a private project using the same runtime API. The output parent directory
    must exist. Add `--animated` for animated paint or `--with-viewpoints` for the
-   project paint/animation/viewpoint/2D-picture entry. `--input-mib=N` sets an
+   project paint/animation/viewpoint/picture entry. `--input-mib=N` sets an
    explicit project input budget; the default remains 256 MiB. `--allow-omissions` permits diagnosed
    partial output (legacy `--paint-only` also grants omission permission):
 
