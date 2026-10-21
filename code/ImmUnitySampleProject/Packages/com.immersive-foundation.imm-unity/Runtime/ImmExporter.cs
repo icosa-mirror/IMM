@@ -32,6 +32,22 @@ namespace ImmPlayer.Exporter
         Always = 1
     }
 
+    public enum ExportSoundSpatialType { Flat = 0, Ambisonic = 1, Positional = 2 }
+    public enum ExportSoundAttenuationType { None = 0, Linear = 1, Logarithmic = 2 }
+    public enum ExportSoundModifierType { None = 0, DirectionalCone = 1, DirectionalFrustum = 2 }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ExportSoundProperties
+    {
+        public ExportSoundSpatialType SpatialType;
+        public float Gain;
+        public int Loop;
+        public ExportSoundAttenuationType Attenuation;
+        public float DistanceMin, DistanceMax;
+        public ExportSoundModifierType Modifier;
+        public float AngleInX, AngleInY, AngleBand, AttenuationOutside;
+    }
+
     public enum ExportPictureType
     {
         Image2D = 0,
@@ -694,6 +710,15 @@ namespace ImmPlayer.Exporter
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool ImmExporter_PictureSetImage(IntPtr layerHandle, int width, int height, int channels,
             int encoding, [In] byte[] bytes, ulong size);
+
+        [DllImport(DllName, CharSet = CharSet.Ansi)]
+        public static extern IntPtr ImmExporter_CreateSoundLayer(IntPtr sequenceHandle, IntPtr parentLayerHandle,
+            string name, int visible, float opacity, ref TransformNative transform, ref TransformNative pivot,
+            int isTimeline, long durationTicks, uint maxRepeatCount, ref ExportSoundProperties properties);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SoundSetPcm16(IntPtr layerHandle, int sampleRate, int channels, [In] byte[] bytes, ulong size);
 
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr ImmExporter_CreateSpawnAreaLayer(

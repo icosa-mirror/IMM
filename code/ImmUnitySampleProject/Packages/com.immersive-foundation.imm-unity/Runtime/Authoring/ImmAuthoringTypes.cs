@@ -84,7 +84,8 @@ namespace ImmPlayer.Authoring
         Paint = 1,
         /// <summary>A viewpoint: tracking level plus a locomotion volume. Carries no paint data.</summary>
         SpawnArea = 2,
-        Picture = 3
+        Picture = 3,
+        Sound = 4
     }
 
     public enum ImmAuthoringAnimationProperty
@@ -219,6 +220,8 @@ namespace ImmPlayer.Authoring
         public ExportPictureType PictureType;
         public bool PictureViewerLocked;
         public ImmAuthoringImage PictureImage;
+        public ExportSoundProperties Sound;
+        public ImmAuthoringAudio SoundAudio;
 
         public static ImmAuthoringLayerProperties Default(string name) => new ImmAuthoringLayerProperties
         {
@@ -231,6 +234,7 @@ namespace ImmPlayer.Authoring
             DurationTicks = 0,
             MaxRepeatCount = 0,
             PaintMaxRepeatCount = 1,
+            Sound = new ExportSoundProperties { Gain = 1, DistanceMin = 1, DistanceMax = 10 },
             SpawnAreaIsDefault = false,
             SpawnAreaFloorLevel = false,
             SpawnAreaVolume = ExportSpawnAreaVolume.Sphere,

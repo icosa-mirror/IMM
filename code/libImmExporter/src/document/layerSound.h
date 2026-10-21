@@ -93,7 +93,8 @@ namespace ImmExporter
 
         inline ImmCore::piWav * GetSound() { return &mSound; }
 
-        void AssignAsset(const ImmCore::piWav* wav, bool move);
+        bool AssignAsset(const ImmCore::piWav* wav, bool move);
+        bool HasAsset() const { return mHasAsset; }
 	private:
         // Serialization Data
         SpatialType     mType;

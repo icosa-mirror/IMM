@@ -42,6 +42,13 @@ metadata, import round trips, unsupported projections, invalid/truncated image
 data, configured resource budgets and cancellation/output preservation.
 `--compare-project` includes picture counts, properties and exact decoded pixels.
 
+Sound construction checks cover immutable PCM16 ownership, spatial-setting ABI,
+graph transactions/comparison, native mono/stereo/four-channel Opus and Ogg
+serialization, encoded headers, common layer properties and failure/output guards.
+These do not establish audible playback, gapless timing, native sound import or
+Quill source conversion. Independent local decode results and codec sample-count
+limits are recorded in content pipeline section 6.24.
+
 1. Run the synthetic native regression suite from the repository root. Use a fresh
    artifact directory for each local run; Windows CI runs this with freshly built DLLs:
 

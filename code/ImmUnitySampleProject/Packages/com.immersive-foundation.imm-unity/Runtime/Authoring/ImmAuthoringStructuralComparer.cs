@@ -137,6 +137,18 @@ namespace ImmPlayer.Authoring
             Equal(differences, $"{path}.pictureType", expected.PictureType, actual.PictureType);
             Equal(differences, $"{path}.pictureViewerLocked", expected.PictureViewerLocked, actual.PictureViewerLocked);
             CompareImage(differences, $"{path}.pictureImage", expected.PictureImage, actual.PictureImage);
+            if (expected.SoundAudio != null || actual.SoundAudio != null)
+            {
+                Equal(differences, $"{path}.sound", expected.Sound, actual.Sound);
+                var a = expected.SoundAudio;
+                var b = actual.SoundAudio;
+                if (a == null || b == null)
+                {
+                    if (a != b) Difference(differences, $"{path}.soundAudio", "Audio presence differs.");
+                }
+                else if (a.SampleRate != b.SampleRate || a.Channels != b.Channels || !a.CopyData().SequenceEqual(b.CopyData()))
+                    Difference(differences, $"{path}.soundAudio", "Audio format or sample bytes differ.");
+            }
         }
 
         private static void CompareImage(List<ImmAuthoringStructuralDifference> differences, string path,

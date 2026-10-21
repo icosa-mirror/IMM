@@ -390,6 +390,17 @@ namespace ImmPlayer.Authoring
                             }
                         }
                     }
+                    else if (layer.Type == ImmAuthoringLayerType.Sound)
+                    {
+                        ExportSoundProperties sound = layer.Properties.Sound;
+                        handle = Native.ImmExporter_CreateSoundLayer(sequence.Handle, parent, layer.Properties.Name,
+                            layer.Properties.Visible ? 1 : 0, layer.Properties.Opacity, ref transform, ref pivot,
+                            layer.Properties.IsTimeline ? 1 : 0, layer.Properties.DurationTicks, layer.Properties.MaxRepeatCount, ref sound);
+                        var audio = layer.Properties.SoundAudio;
+                        byte[] bytes = audio.CopyData();
+                        if (handle == IntPtr.Zero || !Native.ImmExporter_SoundSetPcm16(handle, audio.SampleRate, audio.Channels, bytes, (ulong)bytes.LongLength))
+                            return CompileFailure(sequence, "Native sound creation or PCM setup failed.", layer.Id);
+                    }
                     else if (layer.Type == ImmAuthoringLayerType.Picture)
                     {
                         handle = Native.ImmExporter_CreatePictureLayer(sequence.Handle, parent, layer.Properties.Name,

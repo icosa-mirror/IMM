@@ -73,6 +73,7 @@ namespace ImmExporter
 		bool ExportAsset(piOStream *fp, LayerImplementation imp, const AudioType audioType, int opusBitrate)
 		{
 			LayerSound* lp = (LayerSound*)imp;
+            if (!lp->HasAsset()) return false;
 
             const piWav *sound = lp->GetSound();
 

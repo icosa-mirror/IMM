@@ -26,6 +26,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     PreviewAssetChecks.Run(args[3]);
     PngMemoryBoundsChecks.Run();
     PictureAuthoringChecks.Run(args[3]);
+    SoundAuthoringChecks.Run(args[3]);
     PictureConverterChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     return 0;

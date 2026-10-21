@@ -148,6 +148,9 @@ namespace ImmPlayer.Authoring
         public ImmAuthoringResult<long> CreatePictureLayer(long parentId, ImmAuthoringLayerProperties properties, int siblingIndex = -1)
             => CreateLayer(ImmAuthoringLayerType.Picture, parentId, properties, siblingIndex);
 
+        public ImmAuthoringResult<long> CreateSoundLayer(long parentId, ImmAuthoringLayerProperties properties, int siblingIndex = -1)
+            => CreateLayer(ImmAuthoringLayerType.Sound, parentId, properties, siblingIndex);
+
         public ImmAuthoringResult SetLayerProperties(long layerId, ImmAuthoringLayerProperties properties)
         {
             ImmAuthoringChange change;
@@ -979,6 +982,25 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer transform and pivot must be finite with positive scale.", objectId);
             if (properties.DurationTicks < 0)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer duration cannot be negative.", objectId);
+            if (type == ImmAuthoringLayerType.Sound)
+            {
+                var sound = properties.Sound;
+                if (properties.SoundAudio == null || !Enum.IsDefined(typeof(ExportSoundSpatialType), sound.SpatialType) ||
+                    !Enum.IsDefined(typeof(ExportSoundAttenuationType), sound.Attenuation) ||
+                    !Enum.IsDefined(typeof(ExportSoundModifierType), sound.Modifier) || (sound.Loop != 0 && sound.Loop != 1) ||
+                    !IsFinite(sound.Gain) || sound.Gain < 0 || !IsFinite(sound.DistanceMin) || !IsFinite(sound.DistanceMax) ||
+                    sound.DistanceMin < 0 || sound.DistanceMax < sound.DistanceMin || !IsFinite(sound.AngleInX) ||
+                    !IsFinite(sound.AngleInY) || !IsFinite(sound.AngleBand) || !IsFinite(sound.AttenuationOutside) ||
+                    sound.AngleInX < 0 || sound.AngleInY < 0 || sound.AngleBand < 0 || sound.AttenuationOutside < 0 ||
+                    (sound.Modifier != ExportSoundModifierType.None && sound.SpatialType != ExportSoundSpatialType.Positional) ||
+                    (sound.Modifier == ExportSoundModifierType.None &&
+                        (sound.AngleInX != 0 || sound.AngleInY != 0 || sound.AngleBand != 0 || sound.AttenuationOutside != 0)) ||
+                    (sound.Modifier == ExportSoundModifierType.DirectionalCone && sound.AngleInY != 0) ||
+                    ((sound.SpatialType == ExportSoundSpatialType.Ambisonic) != (properties.SoundAudio.Channels == 4)))
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Sound asset, spatial settings or channel layout are invalid.", objectId);
+            }
+            else if (properties.SoundAudio != null)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only sound layers can own audio.", objectId);
             if (properties.SpawnAreaPreview != null && type != ImmAuthoringLayerType.SpawnArea)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only spawn-area layers can own a viewpoint preview.", objectId);
             if (properties.SpawnAreaPreview != null && properties.SpawnAreaPreview.Channels == 1)
@@ -1193,6 +1215,9 @@ namespace ImmPlayer.Authoring
             if (layer.Type == ImmAuthoringLayerType.Picture &&
                 (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Picture layer contains paint data.", layerId);
+            if (layer.Type == ImmAuthoringLayerType.Sound &&
+                (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Sound layer contains paint data.", layerId);
             if (layer.Type == ImmAuthoringLayerType.Paint)
             {
                 foreach (long drawingId in layer.DrawingIds)

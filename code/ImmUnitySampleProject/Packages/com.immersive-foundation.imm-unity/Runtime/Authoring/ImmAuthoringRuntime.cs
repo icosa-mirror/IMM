@@ -204,18 +204,20 @@ namespace ImmPlayer.Authoring
             long points = 0;
             long frames = 0;
             long keys = snapshot.RootAnimationKeys.Count;
-            long imageBytes = 0;
+            long assetBytes = 0;
             foreach (ImmAuthoringLayerSnapshot layer in snapshot.Layers)
             {
+                if (layer.Type == ImmAuthoringLayerType.Sound && layer.Properties.SoundAudio != null)
+                    assetBytes += layer.Properties.SoundAudio.ByteCount;
                 if (layer.Type == ImmAuthoringLayerType.Picture && layer.Properties.PictureImage != null)
                 {
                     var image = layer.Properties.PictureImage;
-                    imageBytes += Math.Max(image.ByteCount, (long)image.Width * image.Height * image.Channels);
+                    assetBytes += Math.Max(image.ByteCount, (long)image.Width * image.Height * image.Channels);
                 }
                 if (layer.Type == ImmAuthoringLayerType.SpawnArea && layer.Properties.SpawnAreaPreview != null)
                 {
                     var image = layer.Properties.SpawnAreaPreview;
-                    imageBytes += Math.Max(image.ByteCount, (long)image.Width * image.Height * image.Channels);
+                    assetBytes += Math.Max(image.ByteCount, (long)image.Width * image.Height * image.Channels);
                 }
                 if (layer.Properties.Name != null && layer.Properties.Name.Length > limits.MaxLayerNameCharacters)
                     return Exceeded("layer-name characters", layer.Properties.Name.Length, limits.MaxLayerNameCharacters, layer.Id);
@@ -244,7 +246,7 @@ namespace ImmPlayer.Authoring
             if (points > limits.MaxTotalPoints) return Exceeded("total points", points, limits.MaxTotalPoints);
             if (frames > limits.MaxFrames) return Exceeded("frames", frames, limits.MaxFrames);
             if (keys > limits.MaxAnimationKeys) return Exceeded("animation keys", keys, limits.MaxAnimationKeys);
-            if (imageBytes > limits.MaxInputBytes) return Exceeded("image bytes", imageBytes, limits.MaxInputBytes);
+            if (assetBytes > limits.MaxInputBytes) return Exceeded("asset bytes", assetBytes, limits.MaxInputBytes);
             return ImmAuthoringResult.Success();
         }
 

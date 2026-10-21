@@ -13,6 +13,7 @@
     <Compile Include="$(PlayerRuntime)/ImmExporter.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringTypes.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringImage.cs" />
+    <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringAudio.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringState.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringDocument.cs" />
     <Compile Include="$(PlayerRuntime)/Authoring/ImmAuthoringTransaction.cs" />

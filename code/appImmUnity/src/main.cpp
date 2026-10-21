@@ -104,6 +104,7 @@
 #include "libImmExporter/src/document/layerPaint/element.h"
 #include "libImmExporter/src/document/layerSpawnArea.h"
 #include "libImmExporter/src/document/layerPicture.h"
+#include "libImmExporter/src/document/layerSound.h"
 #include "libImmExporter/src/toImmersive/toImmersive.h"
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
 #if defined(WINDOWS)
@@ -3834,6 +3835,90 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateGr
         return nullptr;
 
     return layer;
+}
+
+struct ImmExporterSoundPropertiesC
+{
+    int spatialType;
+    float gain;
+    int loop, attenuation;
+    float distanceMin, distanceMax;
+    int modifier;
+    float angleInX, angleInY, angleBand, attenuationOutside;
+};
+static_assert(sizeof(ImmExporterSoundPropertiesC) == 44, "Sound properties ABI changed");
+
+static bool ImmExporterValidSoundProperties(const ImmExporterSoundPropertiesC* sound)
+{
+    if (!sound || sound->spatialType < 0 || sound->spatialType > 2 || sound->attenuation < 0 || sound->attenuation > 2 ||
+        sound->modifier < 0 || sound->modifier > 2 || (sound->loop != 0 && sound->loop != 1)) return false;
+    for (float value : { sound->gain, sound->distanceMin, sound->distanceMax, sound->angleInX,
+        sound->angleInY, sound->angleBand, sound->attenuationOutside })
+        if (!std::isfinite(value) || value < 0) return false;
+    return sound->distanceMax >= sound->distanceMin &&
+        (sound->modifier == 0 || sound->spatialType == 2) &&
+        (sound->modifier != 0 || (sound->angleInX == 0 && sound->angleInY == 0 && sound->angleBand == 0 && sound->attenuationOutside == 0)) &&
+        (sound->modifier != 1 || sound->angleInY == 0);
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSoundLayer(
+    void* sequenceHandle, void* parentLayerHandle, const char* name, int visible, float opacity,
+    const ImmExporterTransformC* transform, const ImmExporterTransformC* pivot,
+    int isTimeline, int64_t durationTicks, uint32_t maxRepeatCount, const ImmExporterSoundPropertiesC* properties)
+{
+    auto* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    auto* parent = reinterpret_cast<ImmExporter::Layer*>(parentLayerHandle);
+    if (!seq || !ImmExporterValidSoundProperties(properties) || durationTicks < 0 ||
+        (parent && parent->GetType() != ImmExporter::Layer::Type::Group)) return nullptr;
+    if (!parent) parent = seq->GetRoot();
+    auto* layer = seq->CreateLayer(parent);
+    if (!layer) return nullptr;
+    ImmCore::piString wname;
+    if (name && name[0]) wname.InitCopyS(name);
+    else wname.InitCopyW(L"Sound");
+    const bool ok = layer->Init(ImmExporter::Layer::Type::Sound, wname.GetS(), visible != 0,
+        ImmExporterMakeTransform(transform), ImmExporterMakeTransform(pivot), opacity,
+        isTimeline != 0, static_cast<ImmCore::piTick>(durationTicks), maxRepeatCount);
+    wname.End();
+    if (!ok) return nullptr;
+    auto* sound = new ImmExporter::LayerSound();
+    sound->Init();
+    layer->SetImplementation(sound);
+    sound->SetSpatialType(static_cast<ImmExporter::LayerSound::SpatialType>(properties->spatialType));
+    sound->SetGain(properties->gain);
+    sound->SetLooping(properties->loop != 0);
+    ImmExporter::LayerSound::AttenuationParameters attenuation{};
+    attenuation.mType = static_cast<ImmExporter::LayerSound::AttenuationType>(properties->attenuation);
+    attenuation.mMin = properties->distanceMin;
+    attenuation.mMax = properties->distanceMax;
+    sound->SetAttenuation(attenuation);
+    ImmExporter::LayerSound::ModifierParameters modifier{};
+    modifier.mType = static_cast<ImmExporter::LayerSound::ModifierType>(properties->modifier);
+    if (properties->modifier == 1)
+    {
+        modifier.mParams.mDirectionalCone = { properties->angleInX, properties->angleBand, properties->attenuationOutside };
+    }
+    else if (properties->modifier == 2)
+    {
+        modifier.mParams.mDirectionalFrus = { properties->angleInX, properties->angleInY, properties->angleBand, properties->attenuationOutside };
+    }
+    sound->SetModifier(modifier);
+    return layer;
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SoundSetPcm16(
+    void* layerHandle, int sampleRate, int channels, const uint8_t* bytes, uint64_t size)
+{
+    auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (!layer || layer->GetType() != ImmExporter::Layer::Type::Sound || !bytes || size == 0 || size > INT32_MAX ||
+        sampleRate < 8000 || sampleRate > 192000 || (channels != 1 && channels != 2 && channels != 4) ||
+        size % (static_cast<uint64_t>(channels) * 2) != 0) return false;
+    auto* sound = reinterpret_cast<ImmExporter::LayerSound*>(layer->GetImplementation());
+    if (!sound || ((sound->GetType() == ImmExporter::LayerSound::SpatialType::Ambisonic) != (channels == 4))) return false;
+    // Borrow only for the synchronous deep copy; never free or retain the caller's buffer.
+    ImmCore::piWav wave;
+    wave.Make(sampleRate, channels, 16, const_cast<uint8_t*>(bytes), size);
+    return sound->AssignAsset(&wave, false);
 }
 
 extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreatePictureLayer(

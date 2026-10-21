@@ -80,7 +80,8 @@ What exists
 6. ImmAuthoringCompiler already forwards actual group/paint pivots and animation
    keys through the low-level exporter bindings. Its graph supports Group, Paint,
    SpawnArea and offline Picture construction, with shared immutable image assets.
-   Sound/model construction remains absent. Reuse that work
+   Offline PCM16 sound construction is also implemented; sound import/source
+   mapping and model construction remain absent. Reuse that work
    where appropriate instead of treating all managed animation support as absent.
 7. The first implementation candidate is SharpQuill -> ImmAuthoringDocument ->
    ImmAuthoringCompiler. The graph now preserves reflection flags through additive
@@ -109,8 +110,9 @@ Remaining work for a basic converter
    assets; the project converter maps stored 2D RGB/RGBA pictures. Nineteen isolated
    Alex reference pictures match decoded pixels and exposed metadata. Stereo/
    panorama source mappings and runtime appearance remain unverified; unsupported
-   projections require explicit omission permission. Sound/model construction
-   is still absent. Preserve projection/viewer locking,
+   projections require explicit omission permission. Offline PCM16 sound
+   construction exists, but encoded sound extraction/import and source mapping
+   remain open; model construction is absent. Preserve projection/viewer locking,
    embedded data, audio gain/loop/spatial properties and timing as Quill exports them.
    The reader fixes below address input, not this output/conversion work.
 6. Reference checks: compare representative source projects with IMM files produced
