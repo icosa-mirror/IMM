@@ -65,7 +65,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
-| Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; SharpQuill adapter skips spawn layers | Spawn graph/import/export/default selection and immutable preview assets | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
+| Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; hierarchy adapter maps spheres and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; common spawn constructor fields remain limited | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
 | Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries, metadata import and offline PCM16 decoding; hierarchy adapter maps supported mono/stereo sound | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
@@ -1468,6 +1468,43 @@ replacement-run closure in section 6.26 (20:23 UTC):
    and sound-adapter-authoring-smoke.log.
 4. Cancelled remaining work in runs 39687422704 and 39687578973 for this source/test
    contract failure. Push a fresh full validation; hosted acceptance remains open.
+
+### 6.41. Reverse spherical viewpoint metadata and default selection (2026-10-21)
+
+1. The hierarchy adapter now maps spherical spawn areas to Quill viewpoints with
+   volume offset/radius, floor/eye tracking, movement permissions and Exporting=true.
+   Existing ordered hierarchy, local/common metadata and supported keys also apply.
+   A uniquely representable reader-selected default becomes its full Quill path;
+   duplicate paths, slash/empty names, nonunique or omitted defaults are reported
+   without silently choosing a different default. Legacy flat reads are unchanged.
+2. Box volumes remain explicit omissions. Original gizmo color/version/show-volume
+   metadata is unavailable and uses reported defaults. Native availability is not
+   Quill gizmo visibility, so navigation equivalence is not claimed. Stored encoded
+   previews remain exposed by the reader but are explicitly reported as unwritten
+   by the reverse project writer; decoded preview writing remains the next gap.
+3. Fresh local QuillToImm and independent SharpQuillAdapter suites pass. Tests cover
+   sphere/tracking/movement, hierarchy/reflections/keys, project read-back, stored
+   preview/box reports and unique/ambiguous/omitted-default paths. The independent
+   sample comparison now checks viewpoint settings as well as geometry and sounds.
+   Evidence: ignored artifacts/viewpoint-hierarchy-final-suite.log and
+   viewpoint-hierarchy-final-adapter.log. No live Quill/Unity or playback acceptance.
+4. A synthetic nonzero pivot exposed a separate existing compiler gap: its spawn
+   constructor accepts transform/tracking only; pivot position, visibility/opacity
+   and timeline properties default natively (flip setup and keys still apply).
+   The reader correctly reproduces the native zero pivot, not the original graph's
+   position. Preserve these fields through an additive full-property constructor
+   before claiming complete source spawn round-trip fidelity.
+5. One initial local float-boundary fixture export setup failed before adapter
+   reading with an undetailed message. Subsequent diagnostic and final suites
+   passed that boundary. Setup assertions now distinguish root update/export and
+   retain the underlying message. The initial cause is unestablished; do not call
+   it a proven adapter bug or a fixed regression. Keep improved diagnostics active.
+6. Latest checked replacement run 39688086871 (a8c4432c) has no reported failures,
+   but Windows job 119527150527 remains running. The previous adapter-test failure
+   is not closed until replacement Windows validation passes. This viewpoint
+   milestone requires fresh full CI too. R2 and the complete shared roadmap remain
+   open, including previews, common spawn serialization, codec/fidelity decisions,
+   broader navigation and live authoring/platform/application acceptance.
 
 ## 7. Consolidated documents
 

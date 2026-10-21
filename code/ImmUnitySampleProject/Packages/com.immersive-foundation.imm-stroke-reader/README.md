@@ -130,3 +130,10 @@ before writing; existing destination content is called out for replacement. Skip
 leaves output untouched. Written projects include IMM-conversion-report.txt with
 all typed issues. Batch summaries count skips separately. Legacy flat read/write
 APIs retain their previous behavior. See content pipeline section 6.39.
+
+The hierarchy reader also reconstructs spherical viewpoints and uniquely expressible
+native default paths. Box volumes and stored preview images are reported gaps.
+Quill gizmo fields unavailable in IMM use reported defaults; native availability
+and Quill gizmo visibility have different meanings. This does not establish source
+navigation behavior. The offline spawn compiler currently defaults some common
+fields, including pivot position; see content pipeline section 6.41.

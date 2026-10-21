@@ -739,3 +739,8 @@ The Unity IMM-to-Quill editor menus use the hierarchy reader and a pre-write rev
 of limitations/destination replacement. Written projects include a complete
 IMM-conversion-report.txt; skipped or unreadable inputs do not write output.
 The standalone legacy flat API is unchanged (content pipeline section 6.39).
+
+Hierarchy reads map spherical spawn metadata and unique default paths. Box volumes,
+reverse preview writing and original gizmo metadata remain reported limitations.
+The existing offline native spawn constructor defaults pivot position and several
+common fields; full graph-to-file spawn preservation remains open (pipeline 6.41).

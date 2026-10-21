@@ -49,6 +49,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     SoundConverterChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     HierarchyReadChecks.Run(args[3]);
+    HierarchyViewpointChecks.Run(args[3]);
     return 0;
 }
 if (args.Length < 4 || args.Length > 8)

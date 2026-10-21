@@ -16,7 +16,7 @@ namespace ImmStrokeReader
     {
         LoadFailed, DiagnosticUnavailable, RootMetadataNotPreserved, FlattenedHierarchy,
         AnimationNotPreserved, LayerOmitted, PictureExcluded, UnsupportedPictureType,
-        ChapterSubset, DataReadFailed, UnsupportedBrush, ConversionFailed, ValueNotRepresentable, StrokeMetadataNotPreserved, SoundMetadataNotPreserved, ResourceLimit
+        ChapterSubset, DataReadFailed, UnsupportedBrush, ConversionFailed, ValueNotRepresentable, StrokeMetadataNotPreserved, SoundMetadataNotPreserved, ResourceLimit, ViewpointMetadataNotPreserved
     }
 
     public sealed class SharpQuillConversionIssue
@@ -230,7 +230,7 @@ namespace ImmStrokeReader
             ApplyAuthoringProperties(root, rootInfo, rootTransform);
             ReadAuthoringKeys(docId, -1, document.rootAnimationKeyCount, root, rootInfo, issues);
             issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.RootMetadataNotPreserved, 0, rootInfo.name,
-                "Original Quill export range/startup/default navigation is not reconstructed; root properties and supported root keys are copied.", 0));
+                "Original Quill export range/startup/tracking-origin navigation is not reconstructed; root properties, supported root keys and representable native default viewpoint selection are copied.", 0));
             if (rootInfo.isTimeline == 0)
                 issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.RootMetadataNotPreserved, 0, rootInfo.name,
                     "The native root timeline flag is retained in memory, but the Quill reader normalizes project roots to timelines.", 0));
@@ -265,7 +265,7 @@ namespace ImmStrokeReader
                         throw new InvalidDataException($"Missing or cyclic parent chain for '{info.name}'.");
                     ancestorsSupported &= ancestor.type == 0; parent = ancestor.parentId;
                 }
-                if (!ancestorsSupported || (info.type != 0 && info.type != 1 && info.type != 4 && info.type != 5))
+                if (!ancestorsSupported || (info.type != 0 && info.type != 1 && info.type != 4 && info.type != 5 && info.type != 8))
                 {
                     issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.LayerOmitted, info.id, info.name,
                         ancestorsSupported ? $"Native layer type {info.type} is not mapped in the hierarchy reader." : "The branch has an unsupported parent and was omitted.", info.type));
@@ -279,6 +279,11 @@ namespace ImmStrokeReader
                 Layer layer;
                 if (info.type == 0) layer = new LayerGroup(info.name);
                 else if (info.type == 1) layer = ReadAuthoringPaint(docId, record.Index, info, ref nextStrokeId, issues);
+                else if (info.type == 8)
+                {
+                    layer = ReadAuthoringViewpoint(docId, record.Index, info, issues);
+                    if (layer == null) continue;
+                }
                 else if (info.type == 5)
                 {
                     layer = ReadAuthoringSound(docId, record.Index, info, issues, ref remainingSoundBytes);
@@ -310,8 +315,57 @@ namespace ImmStrokeReader
                 var parent = record.Info.parentId == 0 ? root : (LayerGroup)layers[record.Info.parentId];
                 parent.Children.Add(layer);
             }
+            var defaults = records.FindAll(x => x.Info.type == 8 && x.Info.isDefaultSpawn != 0);
+            if (defaults.Count == 1 && layers.TryGetValue(defaults[0].Info.id, out var defaultLayer) && defaultLayer is LayerViewpoint)
+            {
+                string PathFor(int id)
+                {
+                    var segments = new List<string>();
+                    while (id != 0) { segments.Add(byId[id].name); id = byId[id].parentId; }
+                    segments.Add(root.Name); segments.Reverse();
+                    return segments.Exists(x => string.IsNullOrEmpty(x) || x.Contains("/")) ? null : string.Join("/", segments);
+                }
+                string defaultPath = PathFor(defaults[0].Info.id);
+                int matches = 0;
+                foreach (var record in records)
+                    if (layers.TryGetValue(record.Info.id, out var candidate) && candidate is LayerViewpoint && PathFor(record.Info.id) == defaultPath) matches++;
+                if (defaultPath != null && matches == 1) sequence.DefaultViewpoint = defaultPath;
+                else issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ViewpointMetadataNotPreserved,
+                    defaults[0].Info.id, defaults[0].Info.name, "Default viewpoint path is ambiguous or contains an unrepresentable name; no default is declared.", 8));
+            }
+            else if (defaults.Count != 0)
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ViewpointMetadataNotPreserved, 0, root.Name,
+                    "The native default viewpoint is omitted or not unique; no Quill default is declared.", 8));
             sequence.LastStrokeId = nextStrokeId == 0 ? 0 : nextStrokeId - 1;
             return sequence;
+        }
+
+        private static LayerViewpoint ReadAuthoringViewpoint(int docId, int index, StrokeAuthoringLayerInfo info,
+            List<SharpQuillConversionIssue> issues)
+        {
+            if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(docId, index, out var spawn))
+                throw new InvalidDataException($"Viewpoint '{info.name}' metadata could not be read.");
+            if (spawn.volumeType != 0)
+            {
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.LayerOmitted, info.id, info.name,
+                    $"Native viewpoint volume type {spawn.volumeType} has no SharpQuill sphere representation.", info.type));
+                return null;
+            }
+            foreach (float value in new[] { spawn.volumeOffsetX, spawn.volumeOffsetY, spawn.volumeOffsetZ, spawn.volumeExtentX })
+                if (float.IsNaN(value) || float.IsInfinity(value)) throw new InvalidDataException($"Nonfinite viewpoint volume for '{info.name}'.");
+            if (spawn.volumeExtentX < 0 || spawn.locomotion < 0 || spawn.locomotion > 7 || (spawn.isFloorLevel != 0 && spawn.isFloorLevel != 1))
+                throw new InvalidDataException($"Invalid viewpoint settings for '{info.name}'.");
+            var layer = LayerViewpoint.CreateDefault();
+            layer.Name = info.name; layer.TypeStr = spawn.IsFloorLevel ? "FloorLevel" : "EyeLevel";
+            layer.Sphere = new SharpQuill.Vector4(spawn.volumeOffsetX, spawn.volumeOffsetY, spawn.volumeOffsetZ, spawn.volumeExtentX);
+            layer.AllowTranslationX = spawn.AllowTranslationX; layer.AllowTranslationY = spawn.AllowTranslationY; layer.AllowTranslationZ = spawn.AllowTranslationZ;
+            layer.Exporting = true;
+            issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ViewpointMetadataNotPreserved, info.id, info.name,
+                "Native viewpoint availability is copied to Quill gizmo visibility; original gizmo color/show-volume/version/import metadata is unavailable and uses SharpQuill defaults. Source navigation behavior is not certified.", info.type));
+            if (ImmPlayer.ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewInfo(docId, index, out _))
+                issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ViewpointMetadataNotPreserved, info.id, info.name,
+                    "Stored viewpoint preview is available in the native reader but is not yet written to the Quill project.", info.type));
+            return layer;
         }
 
         private static LayerSound ReadAuthoringSound(int docId, int index, StrokeAuthoringLayerInfo info,

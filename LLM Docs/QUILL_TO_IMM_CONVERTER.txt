@@ -676,3 +676,10 @@ Source references
 7. Reader fixes were applied in the IMM checkout at
    C:\Users\andyb\Documents\IMM. The five commit IDs above identify their
    implementation. The report is local documentation, not runtime validation.
+
+Reverse viewpoint update (shared plan 6.41): the hierarchy reader maps native sphere
+volumes, floor/eye tracking, locomotion and uniquely representable default paths.
+Box volumes and stored reverse previews remain explicit gaps. Source gizmo metadata
+and native availability do not have identical semantics. The offline spawn creation
+ABI still defaults pivot position and several common fields; source spawn fidelity
+is not complete. Legacy flat reader behavior is unchanged.

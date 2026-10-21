@@ -25,17 +25,18 @@ static class HierarchyAdapterChecks
             Require(Reader.StrokeReader_GetDocumentInfo(doc, out var metadata), "Hierarchy document unavailable.");
             CheckCommon(result.Sequence.RootLayer, root, transform);
             CheckKeys(result.Sequence.RootLayer, root, -1, metadata.rootAnimationKeyCount);
-            int paints = 0, groups = 0, points = 0, sounds = 0;
+            int paints = 0, groups = 0, points = 0, sounds = 0, viewpoints = 0;
             CheckGroup(result.Sequence.RootLayer, 0);
             Require(paints > 0 && groups > 0 && points > 0, "Hierarchy fixture must exercise groups and paint geometry.");
             Require(sounds == 3, "Hierarchy fixture must preserve its three supported sounds.");
+            Require(viewpoints > 0, "Hierarchy fixture must preserve its spherical viewpoints.");
             Require(!result.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.FlattenedHierarchy ||
                 x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.ConversionFailed), "Hierarchy mode fell back or failed.");
             Console.WriteLine($"[IMM_SHARPQUILL_HIERARCHY] Compared {groups} groups, {paints} paint layers, {sounds} sounds and {points} points, local transforms/pivots, keys and frame maps.");
 
             void CheckGroup(LayerGroup actual, int parentId)
             {
-                var expected = records.Where(x => x.Info.parentId == parentId && (x.Info.type == 0 || x.Info.type == 1 || x.Info.type == 4 || x.Info.type == 5)).OrderBy(x => x.Info.childIndex).ToArray();
+                var expected = records.Where(x => x.Info.parentId == parentId && (x.Info.type == 0 || x.Info.type == 1 || x.Info.type == 4 || x.Info.type == 5 || x.Info.type == 8)).OrderBy(x => x.Info.childIndex).ToArray();
                 Require(actual.Children.Count == expected.Length, "Hierarchy child count/order changed.");
                 for (int index = 0; index < expected.Length; index++)
                 {
@@ -44,6 +45,18 @@ static class HierarchyAdapterChecks
                     CheckCommon(child, item.Info, local);
                     CheckKeys(child, item.Info, item.Index, Reader.StrokeReader_GetLayerAnimationKeyCount(doc, item.Index));
                     if (item.Info.type == 0) { groups++; Require(child is LayerGroup, "Group was flattened."); CheckGroup((LayerGroup)child, item.Info.id); }
+                    if (item.Info.type == 8)
+                    {
+                        viewpoints++;
+                        Require(child is LayerViewpoint, "Viewpoint type changed.");
+                        var viewpoint = (LayerViewpoint)child;
+                        Require(Reader.StrokeReader_GetLayerSpawnAreaInfo(doc, item.Index, out var spawn) && spawn.volumeType == 0 &&
+                            viewpoint.Sphere.X == spawn.volumeOffsetX && viewpoint.Sphere.Y == spawn.volumeOffsetY &&
+                            viewpoint.Sphere.Z == spawn.volumeOffsetZ && viewpoint.Sphere.W == spawn.volumeExtentX &&
+                            (viewpoint.TypeStr == "FloorLevel") == spawn.IsFloorLevel && viewpoint.AllowTranslationX == spawn.AllowTranslationX &&
+                            viewpoint.AllowTranslationY == spawn.AllowTranslationY && viewpoint.AllowTranslationZ == spawn.AllowTranslationZ && viewpoint.Exporting,
+                            "Viewpoint volume/tracking/movement settings changed.");
+                    }
                     if (item.Info.type == 5)
                     {
                         sounds++;

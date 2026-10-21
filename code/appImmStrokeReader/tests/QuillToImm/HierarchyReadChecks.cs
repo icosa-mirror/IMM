@@ -78,7 +78,10 @@ static class HierarchyReadChecks
         Require(partial.Succeeded && partial.Issues.Count(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.AnimationNotPreserved) == 2,
             "Unmapped channel/interpolation was not reported.");
         root.DurationTicks = 16777217;
-        Require(document.SetRootProperties(root).Succeeded && ImmAuthoringCompiler.ExportToFile(document, source).Succeeded, "Float-boundary fixture failed.");
+        var rootUpdate = document.SetRootProperties(root);
+        Require(rootUpdate.Succeeded, $"Float-boundary root update failed: {rootUpdate.Message}");
+        var boundaryExport = ImmAuthoringCompiler.ExportToFile(document, source);
+        Require(boundaryExport.Succeeded, $"Float-boundary fixture export failed: {boundaryExport.Message}");
         var rejected = global::ImmStrokeReader.SharpQuillCompat.ReadImmAsHierarchyWithReport(source);
         Require(!rejected.Succeeded && rejected.Issues.Any(x => x.Code == global::ImmStrokeReader.SharpQuillConversionIssueCode.ValueNotRepresentable), "Duration rounded silently.");
         root.DurationTicks = 2147483648;

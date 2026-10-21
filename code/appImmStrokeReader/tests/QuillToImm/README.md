@@ -173,3 +173,8 @@ Editor conversion checks compile the production menu source with simulated Edito
 interaction: declined overwrites/new destinations, accepted hierarchy/sound writing,
 complete saved reports and failed-read output preservation. Live Unity Editor
 interaction and Quill application acceptance remain separate requirements.
+
+Hierarchy viewpoint checks cover sphere/tracking/locomotion, local reflection/keys,
+project read-back, explicit box/preview limitations and ambiguous/omitted default
+selection. They distinguish native reader preservation from the existing offline
+spawn constructor's common-field defaults (content pipeline section 6.41).
