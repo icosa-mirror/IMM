@@ -10,6 +10,7 @@
 
 // if you enable the avatars, disable _controlfp(_EM_UNDERFLOW | _EM_INEXACT, _MCW_EM); in mymain.cpp (line 147)
 #include <algorithm>
+#include <cstdlib>
 #include <chrono>
 #include <thread>
 
@@ -31,6 +32,18 @@ bool Viewer::Init(const char *appID_DELETE_ME_THIS_IS_A_HACK, piRenderer* render
     if (playerSettings->mPlayback.mPlayerSpawn.mLocation.EqualW(L"Default"))        mCamera.SetWorldToCamera(mat4x4d::identity());
     else if (playerSettings->mPlayback.mPlayerSpawn.mLocation.EqualW(L"Custom"))         mCamera.SetWorldToCamera(invert(toMatrix(playerSettings->mPlayback.mPlayerSpawn.mCustom)));
     else { log->Printf(LT_ERROR, L"Unknown spawn position"); return false; }
+
+    const char* lockCamera = std::getenv("IMM_VIEWER_VALIDATE_LOCK_CAMERA");
+    mValidationLockCamera = lockCamera != nullptr && lockCamera[0] == '1' && lockCamera[1] == '\0';
+    if (mValidationLockCamera)
+    {
+        if (!playerSettings->mPlayback.mPlayerSpawn.mLocation.EqualW(L"Custom"))
+        {
+            log->Printf(LT_ERROR, L"[IMM_C2_CAMERA] Locked-camera validation requires a Custom camera.");
+            return false;
+        }
+        log->Printf(LT_MESSAGE, L"[IMM_C2_CAMERA] Custom camera locked for validation; spawn navigation is not being tested.");
+    }
 
 
     mStereoMode = stereMode;
@@ -246,7 +259,8 @@ void Viewer::SetSpawnArea(int docID, int spawnAreaID, bool recenter)
             viewerTransform.mTranslation.y = -1.6;
     }
 
-    mCamera.SetWorldToCamera(toMatrix( viewerTransform * invert(mCurrentSpawnArea.mSpawnAreaToWorld) ));
+    if (!mValidationLockCamera)
+        mCamera.SetWorldToCamera(toMatrix( viewerTransform * invert(mCurrentSpawnArea.mSpawnAreaToWorld) ));
 
     mPlayer.SetSpawnArea(docID, spawnAreaID);
 }

@@ -140,7 +140,8 @@ The preferred first candidate is:
    Preserve source base fields and keys separately; validate startup, key-boundary,
    midpoint, seek/restart and nested timing behavior before declaring animation
    parity. The converter findings record the source-level contract and remaining
-   reference questions. This investigation adds no production animation support.
+   reference questions. The initial converter implementation is recorded in 6.5;
+   this evaluator audit alone does not establish playback parity.
 7. C2 root/startup reference inspection now has a root-key value query, locally
    verified on Windows; other-platform CI is pending. It uses the existing count,
    which excludes implicit default visibility but includes other properties and
@@ -435,6 +436,37 @@ Status checked at 2026-10-21 14:36 UTC:
    pause/seek/restart, broader paired assets, viewpoints, root actions/chapters and
    source cases outside the implemented timing range remain to be completed.
    C3 media and the remaining reader/reverse/live-authoring tracks retain their scope.
+
+### 6.6 C2 native playback capture checkpoint (2026-10-21)
+
+1. Native viewer spawn selection overrides the initial Custom camera. This made
+   Fishgym's original default viewpoint unsuitable for a fixed-observer paint
+   comparison. The DirectX capture script now accepts opt-in `-LockCamera`, backed
+   by `IMM_VIEWER_VALIDATE_LOCK_CAMERA=1`. It requires a Custom camera and prevents
+   spawn selection from moving it; document spawn state still updates normally.
+   Normal navigation is unchanged and is not validated by these locked captures.
+2. Rebuilt Windows viewer SHA256:
+   `64e624fee5eed48653b862c2d7f7073735a70930e2ea07a410b7e41080235286`.
+   Fishgym reference/candidate captures at player frames 1, 8, 16, 30 and 45 use
+   fixed dt=1/30, 960x540 and an identical fixed camera. Actual player frames match
+   requests, and paint draw/triangle counts match in each pair. Changing triangle
+   counts across frames confirms different drawing content was rendered.
+3. Pixel differences are respectively 12, 17, 10, 7 and 0 out of 518,400 pixels.
+   Frame-8 repeat captures are individually pixel-identical, so the discrepancy is
+   reproducible. Do not declare exact animation parity or silently relax gates.
+   Logs/captures/metrics remain under ignored `artifacts/c2-playback/`.
+4. The earlier exact metadata comparison covers reader-exposed float fields.
+   Binary layer metadata inspection finds additional double-precision differences
+   hidden by that API (for example a 2.37e-8 translation delta on NewGroup1).
+   A controlled local probe copying only reference transform/pivot bytes into the
+   candidate reduced frame-8 differences from 17 to 10 pixels, but did not eliminate
+   them. Precision contributes to the discrepancy; its remaining cause is unresolved.
+   The probe is an ignored experimental file, not converter output or acceptance.
+5. Without `-LockCamera`, taperecorder's existing frame-60 capture remains exactly
+   unchanged after the viewer rebuild: SHA256
+   `92e422b899bd32de1f758110550d20b808eab9fcb1937d64078a109f08611455`.
+   Next C2 work must resolve remaining raster/precision differences and exercise
+   transform interpolation, boundary/startup/seek/restart and navigation behavior.
 
 ## 7. Consolidated documents
 

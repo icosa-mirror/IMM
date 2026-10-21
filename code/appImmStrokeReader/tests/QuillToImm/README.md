@@ -48,6 +48,15 @@ maps and unsupported layer/root action keys must preserve existing output. Share
 exporter checks retain infinite/one/finite paint repeats independently of timeline
 repeats. These checks inspect stored native data rather than playback behavior.
 
+For fixed-observer native paint playback comparisons, the viewer capture script
+`code/appImmViewer/scripts/capture_windows_directx_baseline.ps1` accepts `-LockCamera`.
+Set `Playback.PlayerSpawn.Location` to `Custom` in the supplied settings file and
+provide the same camera for both files. This opts into
+`IMM_VIEWER_VALIDATE_LOCK_CAMERA=1`, preventing automatic spawn selection from
+moving the camera. It does not test navigation. Omit the switch for normal behavior;
+the script explicitly resets the environment flag. Pixel results and native double
+precision can differ even when reader-exposed float metadata compares exactly.
+
 Reflection checks additionally cover native layer/pivot and transform-key flips,
 known-flip import, structural comparison, invalid native enum rejection without
 partial mutation, and the unchanged 32-byte legacy transform ABI. No-flip keys

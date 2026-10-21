@@ -132,6 +132,15 @@ C2 animated paint implementation checkpoint (2026-10-21)
    timeline field instead of LayerPaint. Native tests now check drawing repeats
    0/1/3 independently of timeline repeat 7. Windows source/binary are updated;
    cross-platform publication and runtime evidence require CI.
+5. Five native DirectX fixed-camera Fishgym comparisons now render matching drawing
+   counts at player frames 1/8/16/30/45. Pixel differences are 12/17/10/7/0 of 518,400;
+   repeats are deterministic. Exact float reader fields do not establish exact
+   double-precision layer metadata: raw transform differences are present. A local
+   transform-only probe reduced but did not eliminate the discrepancy. Full
+   animation parity remains open. See roadmap 6.6 for hashes, scope and next work.
+6. capture_windows_directx_baseline.ps1 -LockCamera explicitly freezes the Custom
+   observer camera for these paint tests, preventing automatic viewpoint selection
+   from moving it. Normal navigation remains unchanged and requires separate tests.
 
 C1 static profile implementation and validation (2026-10-21)
 

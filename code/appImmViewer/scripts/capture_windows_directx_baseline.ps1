@@ -10,6 +10,7 @@ param(
     [int]$MinPicture360DrawCalls = 1,
     [int]$MinPicture360EquirectDrawCalls = 1,
     [int]$TimeoutSeconds = 45,
+    [switch]$LockCamera,
     [switch]$SkipBuild
 )
 
@@ -207,6 +208,7 @@ $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = "$MinPicture360Equi
 $env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES = "1"
 $env:IMM_VIEWER_VALIDATE_CAPTURE_PATH = $outputFullPath
 $env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO = "1"
+$env:IMM_VIEWER_VALIDATE_LOCK_CAMERA = $(if ($LockCamera) { "1" } else { "0" })
 
 Write-Host "Running Windows DirectX baseline capture..."
 Write-Host "Viewer:   $ViewerExe"

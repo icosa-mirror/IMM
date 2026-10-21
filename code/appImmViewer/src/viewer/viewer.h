@@ -69,6 +69,7 @@ namespace ExePlayer
         bool mFilesLoaded;
         bool mWasMouseDown = false;
         bool mSpawnAreaReady = false;
+        bool mValidationLockCamera = false;
         FrameSample mFrameSample;
 
         struct DisplayRenderState
