@@ -1,0 +1,357 @@
+Open Brush to Quill and IMM brush compatibility
+Consolidated research report — 2026-10-15
+
+Purpose and current decisions
+
+Authoritative format policy
+
+1. Quill and Tilt files remain the authoritative authoring formats when native
+   editability and reliable round-tripping are required.
+2. IMM conversion and reverse conversion are best effort. Preserve useful native
+   stroke editing and appearance where feasible, but exact recovery of original
+   authoring inputs is not a requirement for this converter.
+3. Do not add authoring-provenance payloads or complicate IMM merely to guarantee
+   lossless round-tripping. The provenance discussion below describes an option
+   that would be needed for such a guarantee, not planned or required work.
+4. Existing fidelity, no-mesh-fallback and playback-performance constraints remain.
+
+1. Identify Open Brush brushes that can become editable Quill/IMM paint strokes.
+   Preserve paths, widths, colours, opacity and stroke identity. Do not use model
+   layers, arbitrary mesh fallback, or meshes disguised as many tiny paint strokes.
+2. Be pragmatic: A is a strong visual match candidate; B allows small disclosed
+   differences; C is outside the current shortlist. These are source assessments,
+   not visual certification. Fidelity tier and implementation route are separate.
+3. Lit shaders are out of scope. Texture sampling is also outside the current
+   implementation scope. A textured brush qualifies only if its important
+   appearance can be reproduced by native stroke data or a small analytic feature.
+4. Playback performance is an acceptance gate. Ordinary files must retain their
+   existing path and performance. No native extension has been implemented or
+   performance-approved. Texture cost has been assessed, not measured; its
+   potential expense must not be presented as an established reason to reject it.
+5. No converter, Unity compile, visual round-trip or playback benchmark was run.
+   A proposed safe drawing mode is not currently implemented.
+
+Coverage
+
+1. Inventory: 135 distinct brush descriptors, including regular, experimental,
+   compatibility, legacy, template and test assets. This is not a palette count.
+2. Every brush reference in the three local manifests resolves to this inventory:
+   Manifest.asset: 48 Brushes, 18 CompatibilityBrushes.
+   Manifest_Experimental.asset: 56 Brushes.
+   Manifest_Zapbox.asset: 30 Brushes, 14 CompatibilityBrushes.
+   These lists overlap and must not be added to obtain a unique-brush count.
+3. Current source classification: 5 A, 5 B, 124 C, 1 excluded test descriptor.
+   C does not mean impossible: additional individual assessment can promote a
+   brush. The full inventory is covered; the whitelist is not proven exhaustive.
+4. Test/TubeUnlit.asset has a blank durable name and explicitly null m_Material.
+   It is excluded because it has no normal material, not because a file was lost.
+5. Materials were resolved through m_Material, not m_TestingMaterial. Unity Tools
+   was inspected in the user's checkout. For Light, TaperedHueShift and
+   SoftHighlighter, shader and texture bytes were also checked against the
+   installed package com.icosa.open-brush-unity-tools@8163316eb52b and matched.
+   This does not establish installed-package parity for every other brush.
+
+Existing-format shortlist — ten candidates
+
+1. A — QuillRibbon -> Ribbon: transfer native stroke data with frame checks.
+2. A — QuillCylinder -> Cylinder: matching seven-sided cross-section.
+3. A — QuillEllipse -> Ellipse: seven sides and 0.3 minor/major radius ratio.
+4. A — QuillCube -> Cube: matching square dimensions; Open Brush's sqrt(2) radius
+   multiplier and -pi/4 phase account for the square's corner distance.
+5. A — DoubleTaperedMarker -> Ribbon: bake CPU smoothing and the shader's static
+   sin(pi*u) vertex-offset displacement into final ribbon edges. Do not assume
+   final width is raw pressure width multiplied by the sine envelope.
+6. B — Wire -> Cylinder: seven instead of eight sides and modest cap differences
+   are accepted. Do not extend IMM solely to reproduce the eighth side. Preserve
+   centreline/radius/colour and use compatible end samples where useful.
+7. B — Marker -> Ribbon: correct visible width and optionally centre offset.
+8. B — Marker Geometry -> Ribbon: the same mask-envelope approach as Marker.
+9. B — TaperedMarker -> Ribbon: bake the visible taper into width/centre samples.
+10. B — TaperedHueShift -> Ribbon: bake taper and static along-stroke hue into
+    native widths/centres and per-point RGB. No new IMM feature is required.
+
+1. Keep breaks, units, colour-space conversion and opacity correct. Disable
+   rotational opacity for ordinary always-visible Open Brush paint.
+2. Match broad silhouettes and characteristic effects rather than demanding
+   pixel identity. Keep sample counts modest; do not recreate texel-scale detail
+   with dense geometry. Additional samples still have playback cost.
+3. Baked output remains native editable paint, but the source shader's behavior
+   under subsequent length or pressure edits is not automatically preserved.
+4. Coverage/dither differs between renderers. Opacity-data compatibility is not
+   a guarantee of identical screen pixels, particularly under different MSAA.
+
+Texture and shader findings
+
+1. Marker and Marker Geometry: RGB is white; authored alpha cutoff is 0.067.
+   Texel-column inspection gives visible width 0.9375–0.94921875 of the strip,
+   with a small centre offset. The earlier approximately 0.57 measurement used
+   cutoff 0.5 and is not relevant to these materials. Width estimates do not
+   reproduce filtered runtime sampling exactly.
+2. TaperedMarker: white-RGB mask, cutoff 0.067, one visible band per inspected
+   column. Bake the principal taper, permitting fine contour/asymmetry differences.
+3. TaperedHueShift: white-RGB 512x256 mask, cutoff 0.5, one smooth tapered band.
+   Rounded broad end narrows towards the other end. Shader is unlit and static.
+   Its vector-to-scalar expressions select the first component: effective colour
+   weight is saturate(4*(u-0.5)^2), along U, not across V. Shifted RGB is
+   hue06_to_base_rgb(r*(5+r)), with r the shader-space interpolated input red.
+   Bake in the correct colour space; allow modest interpolation differences.
+4. Taffy: cutoff 0.5 and a four-row atlas, with disconnected bands and substantial
+   contour changes. A single width envelope would erase characteristic structure.
+   It is not admitted merely because its shader is unlit.
+5. Light: one 512x256 nearly white RGB texture with an irregular paint-like alpha
+   mask, holes and rough edges. m_TextureAtlasV is 1: no row-atlas selection.
+   Bloom.shader samples once and multiplies emitted RGB by the sampled alpha.
+   The texture mapping is simple; the mask detail is defining. Light is excluded.
+   A smooth luminous ribbon is not an accepted B-tier substitute.
+6. SoftHighlighter: white-RGB 512x256 mask describing a smooth soft tapered mark,
+   broad/rounded at one end and narrow at the other. Unlike Light, there are no
+   defining paint-like holes or colour detail. It is a conditional B-tier candidate
+   with additive blending plus analytic across-width softness; see below.
+7. A crude maximum-row/column separability probe produced alpha MAE 0.1049 for
+   SoftHighlighter and 0.4204 for Light. That constant-width probe was not a fit
+   of a variable-width tapered ribbon and must not be used to reject the proposed
+   SoftHighlighter approximation. Highlighter's inspected alpha was separable.
+8. DotMarker: white-RGB circular mask at cutoff 0.5. A later editable stamp adapter
+   may approximate each dot with a few width samples, preserving source placement
+   and grouping. It is not admitted as a continuous ribbon, and no adapter exists.
+
+Square and excluded lit brushes
+
+1. Experimental SquarePaper uses SquareBrush and a lit StandardSingleSided graph.
+   Its geometry is rectangular, height/width = 0.375. Every vertex receives UV
+   (0.5,0.5), so assigned textures are sampled at a constant location; texture
+   detail is not the exclusion reason. Lighting is. A rectangle parameter could
+   represent the geometry with four vertices per section, but is not proposed
+   solely for this excluded brush.
+2. Experimental 3D Printing Brush is separate: Square3DPrintBrush produces beveled
+   square sections/caps and uses FlatLit.shader. It is also excluded as lit.
+3. QuillCube is the existing unlit square-section candidate already shortlisted.
+4. Flat, Wire (Lit), FacetedTube, DoubleTaperedFlat, Lofted, Spikes, Icing,
+   LightWire and lit/normal-mapped paint remain out of this investigation.
+5. Hull/membrane brushes, including UnlitHull, have no admitted native editable
+   stroke mapping. The prohibited model/mesh route must not be used as fallback.
+
+Small optional native features and near misses
+
+1. Additive blending — first candidate: TubeAdditive. Its shader uses One/One,
+   ZWrite Off, Cull Off, default-white texture with no material texture assigned.
+   With audio disabled, reuse B-tier Cylinder geometry and additive colour/opacity.
+   Highlighter also nearly qualifies: SrcAlpha/One and a white-RGB mask whose
+   hard silhouette can be baked into width. Its cutoff 0.12 applies to
+   vertexAlpha*textureAlpha before final material opacity; preserve that distinction.
+2. Soft opacity profile — SoftHighlighter. Bake broad taper into widths and
+   lengthwise end fades into point opacity; evaluate a simple across-width soft
+   band in an optional shader and blend SrcAlpha/One. Disable audio-reactive
+   colour/geometry. No texture sample is needed for the proposed B-tier match.
+   Visual and performance acceptance remain pending.
+3. Multiplicative blending — Dark. Uses DstColor/Zero, ZWrite Off, no brush texture
+   sampling. LineWithFadeBrush's lengthwise fades can use native point opacity;
+   transverse edge fade can share the analytic softness feature. Shader factor is
+   lerp(white, brushColour, k), where k saturates vertexAlpha*opacity*alphaMultiply*
+   softMultiply*edgeFade. This is not ordinary alpha blending.
+4. Emissive gain — an optional scalar could retain brightness beyond stored RGB.
+   This does not unlock Light by itself. Validate colour space, render-target range
+   and host tone mapping. Bloom is separate; no fullscreen bloom pass is proposed.
+5. Explicit authored frames — optional data decoded into existing mAxU/mAxV at
+   drawing preparation could preserve tilted sections and important bend geometry.
+   Matching topology could keep existing GPU strides, shaders and draw counts.
+   It is an opportunity, not a demonstrated performance-neutral implementation.
+6. Additive variants must handle alpha once. Do not multiply RGB by alpha and
+   also apply ordinary paint alpha-to-coverage. Keep depth testing, choose correct
+   depth writes, and preserve mixed blend/layer order. Additive strokes commute
+   within their group; additive and multiplicative groups generally do not.
+7. Avoid per-stroke materials/draws and per-frame reconstruction. Investigate
+   TubeAdditive, then Highlighter, then SoftHighlighter, then Dark. Leave Light,
+   animated procedural shaders and all lit shaders excluded.
+8. Runtime alpha-mask sampling/atlases remain outside the current implementation
+   scope. General textures, PBR, arbitrary profiles and brush programs are not
+   proposed. The separate cost assessment below does not authorize such changes.
+
+Normal drawing frames and format compatibility
+
+1. Standard ribbons use ComputeSurfaceFrameNew, whose cross products make width
+   perpendicular to movement. Standard tubes use ComputeMinimalRotationFrame,
+   aligning forward with the tangent. Arbitrary controller tilt is not generally
+   retained in their section planes.
+2. QuillFlatBrush and QuillTubeBrush override those defaults, taking controller
+   right/up or orientation directly. Tilt is possible in normal use, without a
+   plugin. Disabling plugins alone does not align these particular brushes.
+3. IMM derives the tangent by averaging normalized neighboring directions, then
+   U = normalize(cross(normal,tangent)), V = normalize(cross(tangent,U)). Different
+   smoothing/tangents can change bends. Accept small differences; investigate
+   visible distortion. A safe drawing mode could align the frame conventions.
+4. Explicit-frame metadata needs versioning and an editor/import representation;
+   do not repurpose mDir, the drawing-time view direction. Current paint importer
+   rejects metadata versions greater than 1. Encoding is undecided.
+5. Extended native IMM is not automatically readable as ordinary Quill. Keep
+   standard Quill and extended IMM targets explicit, without silently exporting
+   extended semantics as Quill-safe. Geometry, opacity and shader behavior all
+   need verification, not just the brush GUID.
+
+Texture-support performance assessment — no implementation authorized
+
+1. No slowdown percentage or milliseconds has been measured. One optional unlit
+   mask sample could be inexpensive; assuming it is prohibitively expensive is
+   unsupported. Texture detail and sampling cost are different questions.
+2. A narrow feature would add one shared mask sample and UV interpolation only
+   on textured strokes. Existing applicable paint already samples blue noise for
+   coverage. An extra lookup does not imply twice the frame time.
+3. Uncompressed 512x256 R8 is 128 KiB, approximately 171 KiB with full mipmaps;
+   RGBA8 is 512 KiB, approximately 683 KiB with mips, per unique image, not stroke.
+   Compression and allocation alignment can change actual memory use.
+4. Illustrative UV storage: adding 4 bytes changes an Android static point from
+   28 to 32 bytes (+14.3% record size), or a pretessellated vertex from 20 to 24
+   (+20%). These are not frame-time estimates or a required design. Section indices
+   can generate across-width coordinates; along-stroke data needs separate design.
+5. Sampling cost depends on shaded coverage, overlap, filtering and cache reuse.
+   A shared small mask could have good locality. Image byte size alone does not
+   predict bandwidth. Additive blending, disabled depth writes and bloom are
+   separate costs; do not charge all of them to texture sampling.
+6. Preserve untextured shaders/strides. Optional variants and shared images could
+   avoid per-stroke binds/draws, though layer/material grouping may split batches.
+   Existing fragment coverage means generic alpha-cutout penalties cannot simply
+   be counted as entirely new costs.
+7. Analytic avoidance is not automatically faster than a cached sample, particularly
+   if it uses expensive math or adds many geometry samples. A future diagnostic
+   should compare constant and sampled masks on identical geometry/blending, both
+   sparse and overlapping, before matched complete-scene runs.
+8. Primary guidance: https://developer.android.com/games/optimize/materials and
+   https://developer.android.com/android-performance-analyzer/analyze/texture-mem-bw.
+   These support bandwidth/overdraw attribution, not a numerical IMM prediction.
+
+Playback acceptance and validation
+
+1. Existing files must not become slower. Extended/converted workloads must also
+   meet the playback requirement; richer appearance does not grant a slowdown
+   allowance. Inconclusive timing is not proof of neutrality.
+2. Before prototyping, identify a visible interaction, representative device/backend
+   and input. Record baseline binary/input hashes, resolution, stereo, MSAA,
+   sample/triangle counts and batches. Compare one independent change at a time.
+3. Measure CPU and GPU frame time separately, tails/missed budgets, draw calls,
+   upload stalls and memory. Include loading/seeking during playback and bounds/
+   culling. Report loading and editing rebuild costs separately. Do not interfere
+   with another agent's shared benchmark turn or run heavy builds during it.
+4. Start with one diagnostic run; only expand promising experiments. Web work must
+   follow code/projects/web/performance/INVESTIGATION_PROCEDURE.md, including
+   matched Gallery interactions, warmup and alternating complete playback passes.
+5. Preserve native editability, timing, content and A/B-appropriate appearance.
+   Keep prototypes out of production until accepted. Stop or revise regressions;
+   do not inflate stroke samples merely to chase texture detail or pixel identity.
+6. No performance experiment was run in this session; all cost statements above
+   are source-grounded hypotheses or arithmetic, not measured acceptance.
+
+Source evidence and reproduction
+
+1. Open Brush checkout: C:\Users\andyb\Documents\open-brush-fast.
+   Brush descriptors are under Assets/Resources/Brushes and Assets/Resources/X/Brushes.
+   Check Assets/Manifest.asset, Manifest_Experimental.asset and Manifest_Zapbox.asset
+   for active and compatibility brush references. Resolve the normal m_Material
+   and m_BrushPrefab GUIDs via .meta files; do not substitute m_TestingMaterial.
+2. Meshing/frame sources: Assets/Scripts/Brushes/QuillFlatBrush.cs,
+   QuillTubeBrush.cs, FlatGeometryBrush.cs, TubeBrush.cs, QuadStripBrushStretchUV.cs,
+   QuadStripBrush.cs, BaseBrushScript.cs, SquareBrush.cs, Square3DPrintBrush.cs and
+   LineWithFadeBrush.cs; Assets/Scripts/Util/MathUtils.cs.
+3. Unity Tools checkout: F:\Unity Projects\open-brush-unity-tools.
+   Shader root: Packages/open-brush-unity-tools/Runtime/Shaders.
+   Relevant subpaths: 1_UnlitCommon/Marker/Unlit.shader;
+   1_UnlitCommon/Highlighter/AdditiveCutout.shader;
+   1_UnlitCommon/SoftHighlighter/SoftHighlighter.shader;
+   2_UnlitSpecials/DoubleTaperedMarker/DoubleTaperedMarker.shader;
+   2_UnlitSpecials/Light/Bloom.shader;
+   8_Experimental/Additive/Additive.shader;
+   8_Experimental/TaperedHueShift/TaperedHueShift.shader;
+   Include/ColorSpace.cginc. Dark uses Open Brush Assets/Shaders/Darken.shader.
+4. Texture inspection is reproducible from the source masks: Light/maintexture.png,
+   SoftHighlighter/maintexture.png and TaperedHueShift/main.png beside their
+   respective shaders. Inspect alpha separately from the nearly white RGB.
+   Marker and TaperedMarker masks are beside their respective Unity Tools materials;
+   Taffy's inspected mask is Open Brush Assets/Resources/Brushes/Basic/Taffy/main.png.
+5. Quill brushes use Open Brush's local
+   Assets/Resources/Brushes/Shared/Shaders/UnlitA2CVertexColor.shader.
+6. IMM source: code/libImmImporter/src/document/layerPaint/paintGeometry.cpp,
+   element.h, drawingStatic.h/.cpp and drawingPretessellated.h/.cpp;
+   code/libImmExporter/src/document/layerPaint/element.h;
+   code/libImmPlayer/src/layerRenderers/layerRendererPaint/static brush shaders.
+7. Source revisions: IMM 11773c2fd8cc7442e26a13c3c02b74ebf13fb2d8;
+   Open Brush 578a7b047a3f191d633b1e57526d29bcd836f83b;
+   Unity Tools fa7cdb7aca37943c624f0514ec0b705e003c37be.
+   Working files were read; revisions do not certify clean source trees.
+8. The source inventory, classifications and alpha diagnostics can be regenerated
+   from these repositories. This is the retained brush-compatibility research report;
+   its findings do not depend on session-generated supporting files.
+
+Existing-format candidate brush identifiers
+
+1. DoubleTaperedMarker: 0d3889f3-3ede-470c-8af4-de4813306126
+2. QuillCube: b3e7f8c2-4d5a-1e9b-6c8f-3a7d2f1e9c4b
+3. QuillCylinder: f1c4e3e7-2a9f-4b5d-8c3e-7d9a1f8e6b4c
+4. QuillEllipse: a2d5f6b8-9c1e-4f3a-7b8d-2e6c9f4a1d5b
+5. QuillRibbon: c4f8b3e2-9d1a-5e7f-4c3b-8a6d2f9e1c7b
+6. Marker: 429ed64a-4e97-4466-84d3-145a861ef684
+7. Marker Geometry: 66ec961b-e5ea-5464-4a97-c601ac31047c
+8. TaperedHueShift: 3d9755da-56c7-7294-9b1d-5ec349975f52
+9. TaperedMarker: d90c6ad8-af0f-4b54-b422-e0f92abe1b3c
+10. Wire: 4391385a-cf83-4396-9e33-31e4e4930b27
+
+Reverse conversion from IMM to Tilt stroke data
+
+1. Distinguish editable visual reconstruction from original authoring-data recovery.
+   Native IMM can support the former for the ten candidates. Render-oriented paint
+   data alone cannot generally recover the original Tilt control-point records.
+2. Tilt StrokeData holds brush GUID, base brush size/scale, base colour, flags,
+   grouping and control points. Control points have position, quaternion orientation,
+   pressure and creation timestamp. Per-point colour overrides may also be present.
+   StrokeData also has a generation seed, explicitly documented as not currently
+   serialized; do not claim seed identity is guaranteed by existing Tilt files.
+3. IMM paint stores positions, an orientation normal, drawing-view direction,
+   per-point colour/opacity and width plus cross-section type. It does not directly
+   retain the Open Brush GUID, original base-size/pressure decomposition, complete
+   original controller quaternions, dropped source samples or their timestamps.
+   Derived stroke timing is not the original controller sample timing. Normal,
+   width and colour encoding/quantization further preclude exact numeric recovery.
+4. Open Brush PressuredSize uses baseSize * lerp(minPressureScale,1,pressure), with
+   unit/scale factors. Width alone does not identify both original size and pressure.
+   A reverse converter can choose a consistent base size and synthesize pressure.
+   It can also build a canonical quaternion from path tangent and normal, but that
+   is a replacement orientation, not recovery of the original controller pose.
+5. Existing Quill import demonstrates reconstruction: Quill.cs chooses base size
+   from maximum width, derives pressure from width, constructs orientation from
+   path tangent/normal, and generates timestamps using time++. It imports editable
+   strokes, not original Tilt authoring records.
+6. QuillRibbon/Cylinder/Ellipse/Cube: strongest visual reconstruction candidates.
+   Target section data directly supports corresponding Open Brush Quill brushes,
+   subject to prior frame/coverage limitations. Original raw pose/pressure/timing
+   is still not preserved automatically.
+7. Wire: good approximate visual reconstruction if identified as Wire. Returning
+   to the original eight-sided brush can restore the customary appearance from
+   path/radius, but frame/smoothing/cap details remain approximate. Plain IMM Circle
+   does not identify whether its source was Wire or QuillCylinder.
+8. Marker and Marker Geometry: good approximate editable ribbon reconstruction.
+   Returning to the original brush requires reversing visible-width/centre baking
+   and handling its texture/CPU smoothing. Plain IMM Ribbon does not preserve which
+   source brush was used. Using a QuillRibbon preserves the baked appearance more
+   directly, with different source-brush editing behavior.
+9. DoubleTaperedMarker, TaperedMarker and TaperedHueShift: baked native strokes can
+   be reconstructed visually as QuillRibbon strokes with widths and point colours.
+   Recovering original-brush control points is substantially less reliable: taper,
+   mask envelope, smoothing and colour transformations were applied during export.
+   Reapplying the original shader to baked data would apply effects twice. At
+   zero-width taper ends, original pressure/width information may be unrecoverable.
+   TaperedHueShift's base colour may be estimated in suitable cases (the centre U
+   has zero hue-mix weight), but this is not a general lossless inverse.
+10. Exact preservation for an unmodified round trip would require optional
+    authoring provenance: original source stroke records, brush identifiers and
+    enough layer/transform context, associated with the exported stroke. Store
+    original samples rather than hoping to invert smoothing/baking. This is a
+    proposed editor/export concern, not an implemented IMM format feature.
+11. Such provenance need not add shader work or GPU attributes. A versioned optional
+    block could be skipped by playback, but file size, loading/decompression, older
+    reader behavior and mapping to IMM strokes would still need design/validation.
+    Do not claim literally zero loading cost or automatic Quill compatibility.
+12. After an IMM stroke is edited, saved original records become historical data.
+    Unchanged strokes can be restored from provenance; edited strokes need reverse
+    conversion or a defined source-aware edit mapping. Exact original-data recovery
+    cannot be promised for arbitrary edits merely by retaining a metadata block.
+13. Assessment is code-based, not a tested round trip. Primary sources are Open
+    Brush Assets/Scripts/StrokeData.cs, PointerManager.cs, Brushes/BaseBrushScript.cs
+    and Quill.cs, plus IMM's exporter paint Point fields and serialization.

@@ -2,6 +2,10 @@
 
 Reviewed against repository source on 2026-10-14 at `f93d3f23`.
 
+The [content pipeline roadmap](IMM_CONTENT_PIPELINE_PLAN.md) owns shared conversion,
+reader and authoring dependencies and delivery order. This document owns the detailed
+runtime authoring architecture, milestones and acceptance requirements.
+
 This is the consolidated planning and architecture document for runtime animation authoring.
 It replaces the previous engine plan, live-editor roadmap, and live-document architecture.
 Implemented behavior, recorded validation, and future requirements are distinguished below.

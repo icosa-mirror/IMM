@@ -1,0 +1,254 @@
+Quill to IMM converter status and findings
+Updated 2026-10-21 against local source revision ee5e02f3
+
+Planning entry point: LLM Docs/IMM_CONTENT_PIPELINE_PLAN.md. It owns shared
+capabilities, dependencies and milestones; this document retains converter-specific
+findings and evidence. Runtime authoring contracts remain in IMM_RUNTIME_AUTHORING.md.
+
+Current review scope
+
+1. Rechecked the reader, writer, managed/native exporter entry points, authoring
+   compiler and local regression harnesses. No direct Quill-to-IMM entry point
+   exists in this checkout. Converter implementation remains the next work.
+2. Reran reader regressions and the 21-project metadata/media corpus check, plus
+   the native IMM-to-Quill adapter regression against the bundled Windows DLL.
+   These passed; no Quill reference-export or visual/playback comparison was run.
+3. Detailed corpus statistics below describe the 2026-10-15 inventory. This review
+   reconfirmed the test coverage totals, not every historical inventory count.
+
+Purpose and reference behavior
+
+1. Build an independent Quill-project to IMM converter that matches the existing
+   Quill application's IMM export. Quill's exported files are the behavioral
+   reference, including what is preserved, transformed, baked or omitted.
+2. This is separate from the Open Brush brush-compatibility investigation. Its
+   restrictions on brush textures, lighting and mesh substitution do not define
+   the scope of this converter.
+3. Existing Quill animation/export behavior is a mapping to reproduce, not a new
+   IMM feature set for the user to design. Investigate apparent gaps against
+   Quill's actual IMM output before proposing native format or player changes.
+4. Behavioral agreement is required; binary byte identity is not assumed.
+   Quill reference exports have not yet been compared as part of this work.
+
+What exists
+
+1. Bundled SharpQuill reads Quill.json and Quill.qbin into a Sequence: group trees,
+   native paint strokes, drawing/frame tables, layer properties, animation keys,
+   viewpoints, camera FOV and embedded picture/sound data, with the limits below.
+2. Quill's four native brush sections already correspond to IMM Ribbon, Cylinder,
+   Ellipse and Cube. Ordinary Quill paint does not require the separate Open Brush
+   brush adapters, additive blending or analytic-softness proposals.
+3. libImmExporter already writes IMM documents and native layer structures.
+   Managed ImmExporter.cs wraps sequence, groups, paint, drawings, elements,
+   points, frame references, spawn areas and file/memory output. Low-level bindings
+   exist for animation keys and paint repeat count.
+4. Native IMM has hierarchy, timing, picture and sound structures. Model metadata
+   and bounded mesh serialization/deserialization are also implemented now
+   (ca905f4b); model input is still skipped by SharpQuill. Native format support
+   alone is not proof of Quill mapping or renderer parity.
+5. The checked repository has IMM-to-Quill conversion through SharpQuillCompat and
+   ImmToQuillConverterEditor, but no direct Quill-to-IMM conversion entry point
+   was found. Existing native paint/group export can be reused; further managed
+   and native API work depends on the mappings required below. Do not assume
+   every media/model capability is exposed through the Unity export ABI.
+6. ImmAuthoringCompiler already forwards actual group/paint pivots and animation
+   keys through the low-level exporter bindings. Its graph supports Group, Paint
+   and SpawnArea, rather than picture/sound/model construction. Reuse that work
+   where appropriate instead of treating all managed animation support as absent.
+7. The first implementation candidate is SharpQuill -> ImmAuthoringDocument ->
+   ImmAuthoringCompiler. Validate its no-flip transform representation, single
+   document frame rate and root/chapter limitations against references before
+   committing to that path. No converter mapping through this graph exists yet.
+
+Missing work for a basic converter
+
+1. Conversion entry point: read a Quill project, build an IMM export document,
+   report errors/unsupported data and write the output safely.
+2. Native stroke transfer: map the four sections and copy positions, orientation
+   normals, drawing-view directions, widths, colours, opacity and rotational-opacity
+   behavior with correct units/conventions; compute required bounds. Match Quill's
+   own exported values rather than routing through Open Brush or Tilt strokes.
+3. Scene transfer: preserve groups, names, local transforms, pivots, visibility,
+   opacity, background and default viewpoint. The convenience group/paint methods
+   in ImmExporter.cs still supply identity pivots; the authoring compiler already
+   passes actual pivots. Choose a path that preserves actual source values.
+4. Animation transfer: connect source drawings and hold-frame references, frame
+   rates, key channels/interpolation, nested offsets/durations/repeats and root
+   actions to existing IMM mechanisms. Avoid duplicate drawings for hold frames
+   or baking animated layer transforms into every stroke point.
+5. Media transfer: native picture/sound capabilities exist, but managed construction
+   and converter wiring are incomplete: the Unity ImmExporter_* ABI has no
+   picture/sound/model construction entry points. Preserve projection/viewer locking,
+   embedded data, audio gain/loop/spatial properties and timing as Quill exports them.
+   The reader fixes below address input, not this output/conversion work.
+6. Reference checks: compare representative source projects with IMM files produced
+   by Quill, then check appearance, timing, media and playback in the native player.
+   This bridge and those comparisons have not been implemented/run in this work.
+
+Local source corpus and coverage
+
+1. Source collection: C:\Users\andyb\Documents\Quill. All 21 Quill.json files
+   parsed as JSON and have Quill.qbin alongside them. All declare Version 1 and
+   contain one Sequence root. Source projects were read only.
+2. Layer counts: 1174 Paint, 448 Group, 37 Viewpoint, 34 Sound, 35 Picture,
+   1 Camera, 0 Model; no other types occurred. These are raw corpus counts.
+3. Paint has 12155 drawing declarations and 39666 frame references. There are
+   232 timeline-marked groups, including roots. Key counts: Transform 38266,
+   Visibility 1705, Offset 1175, Opacity 1080, Action 4. Observed interpolation:
+   None, Linear and Smoothstep. Counts are not deduplicated semantic assets.
+4. Pictures: 34 ordinary 2D and one 360_Equirect_Stereo picture. The latter is
+   viewer-locked. Inspected picture headers had plausible dimensions, and media
+   offsets were in bounds; complete picture-pixel decode was not validated.
+5. Sound: 30 Positional and 4 Flat. Attenuation: 22 Linear, 8 Logarithmic, 4 None.
+   One layer has a Cone modifier. Every inspected sound uses 16-bit PCM at 44100 Hz:
+   33 stereo and one mono, each with a 20-byte header and interleaved sample frames.
+   Original imported filenames such as .mp3 do not describe the stored encoding.
+6. Thirty-six viewpoints are FloorLevel (32) or EyeLevel (4); 23 are marked
+   Exporting true and 13 false. Fishgym2Example has an additional minimal viewpoint
+   with only a Color field in its Implementation.
+7. One project explicitly supplies TrackingOrigin=1 and AnimateOnStart=false;
+   the other 20 omit those fields. Absence must remain distinct from false/zero.
+8. All 1729 layers have KeepAlive Type None. No Model, TwoDDepth, explicit cubemap
+   picture type or active keep-alive occurred. Two gallery pictures and one camera
+   (FOV 37) occur. Absence is not proof of placeholder or unsupported status.
+
+Five confirmed reader bugs and fixes
+
+1. 5d191d4d - panorama names. The observed 360_Equirect_Stereo string previously
+   became Unknown. Added the actual underscore aliases while retaining existing
+   picture aliases and viewer-lock settings.
+2. 1edf74b4 - minimal viewpoints. Missing Version/Sphere/translation/export fields
+   previously caused parsing failure. Use known viewpoint defaults while preserving
+   explicit fields, including false/zero.
+3. c4d69441 - spatial sound properties. Positional/Flat type, attenuation mode/range
+   and Cone angles/outside attenuation were present in source but ignored. Added
+   enum values/model fields and parsing, with defaults for absent optional data.
+4. fd36a10f - startup metadata. TrackingOrigin and AnimateOnStart were discarded.
+   They are now nullable Sequence fields preserved by both reader and writer, so
+   an explicit paused start is not confused with missing legacy metadata.
+5. 2a9ffcb9 - embedded audio. The reader previously expected a byte length followed
+   by an encoded audio file. All 34 real payloads began with zero and therefore
+   returned empty audio. It now reads the actual header and wraps the observed
+   interleaved 16-bit PCM in valid WAV bytes through SoundData.AudioBytes.
+   Truncated, oversized and invalid payloads fail explicitly; unobserved encodings
+   are not silently treated as supported.
+6. At the 2026-10-15 checkpoint all five commits were pushed through 2a9ffcb9 after pulling
+   (already up to date). No source Quill files or native shaders were changed.
+
+Validation and local test usage
+
+1. Committed regression project:
+   code/appImmStrokeReader/tests/SharpQuillReader/SharpQuillReader.csproj.
+   Synthetic tests exercise picture aliases, minimal/explicit viewpoints, sound
+   metadata, optional startup read/write and PCM/WAV payloads and failure cases.
+2. Run synthetic checks from the repository root:
+   dotnet run --project code/appImmStrokeReader/tests/SharpQuillReader/SharpQuillReader.csproj
+3. Add -- followed by a local Quill corpus directory for real-project checks.
+   The corpus mode reads real hierarchy/metadata without allocating all paint points
+   or image pixels, and reads embedded sounds directly from the unchanged qbin files.
+4. Passed again on 2026-10-21: all 21 metadata hierarchies, 35 picture settings
+   and 34 embedded sounds, along with the synthetic regressions.
+   Every returned PCM byte matched the source payload, with correct boundaries.
+5. No Unity refresh/compilation, audio listening, visual playback or Quill-to-IMM
+   conversion/reference comparison was performed. Passing reader data checks is
+   not a claim of complete scene/playback or converter parity.
+6. This documentation review makes no CI changes. The SharpQuillReader regressions
+   are available locally and are not currently invoked by build.yml; the private
+   corpus is not proposed as a CI fixture. The separate native SharpQuillAdapter
+   harness is invoked by its Windows build job. Its missing Unity initialization
+   stubs were fixed in d045ae14, so the earlier compile-failure warning is obsolete.
+7. Native adapter regression passed on 2026-10-21 against the bundled Windows
+   ImmStrokeReader.dll and exampleImmFiles/sample1.imm: 30 paint layers in both
+   modes, with zero or one picture as requested. This tests IMM-to-Quill adapter
+   data, not Quill-to-IMM conversion. Reproduce from the repository root:
+   dotnet run --project code/appImmStrokeReader/tests/SharpQuillAdapter/SharpQuillAdapter.csproj -- code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll exampleImmFiles/sample1.imm artifacts/quill-doc-adapter-native.log
+8. Review logs: artifacts/quill-reader-doc-audit.log and
+   artifacts/quill-doc-adapter.log. No source project files were changed.
+
+Timing findings
+
+1. Quill's stored timeline key/offset values use 12600 ticks per second, matching
+   native piTick and ExportLayerTiming. At 24 fps one frame is 525 ticks; at 60 fps
+   it is 210. The corpus has 18 sequence rates of 24, two of 60 and one omitted.
+2. SharpQuill Keyframe<T>.Time's milliseconds comment is misleading. Current
+   parsing passes key times through float before int. The maximum corpus key time
+   is 14859810 and no integer key times were lost here. Longer-timeline precision
+   is a potential issue, not a confirmed failure from this corpus.
+3. Eleven layers have nonzero static StartOffset values. Preserve local timing,
+   offsets, repeats and held references using Quill's output as the oracle.
+4. Chapters has root Stop keys at 0, 3675 and 26775, plus MakeDefault at 50400,
+   in stored ticks. It has one Sequence root, not a separate multi-document chapter
+   container. Equal action names in source/target enums do not establish identical
+   behavior; compare actual exported actions and playback boundaries.
+5. Validate mappings before proposing native timing changes. Existing animation
+   features are not new format-design decisions for the user.
+
+Useful reference cases
+
+1. Chapters: root pauses/default-start behavior and held drawings.
+2. Pano: viewer-locked stereo panorama and source type-string mapping.
+3. Audio: small embedded-sound case.
+4. Fishgym2Example: minimal/legacy viewpoint defaults and omitted metadata.
+5. Snoopy: camera, pictures, sound, nested timelines and animation together.
+6. AlexsSciFiWorld_Phase4Test: smaller mixed/nested integration case.
+7. AlexsSciFiWorld_Phase4: later stress/integration case, with 342 groups,
+   767 paint layers, 28 sounds, 19 pictures and 192 timeline groups, including
+   the cone sound. Do not begin debugging by loading the largest case in full.
+
+Unverified content and non-playback metadata
+
+1. Official Quill documentation describes OBJ/FBX reference-model import, with
+   animated layer properties. Model is not merely an enum placeholder in that
+   documented authoring application. However, no models appeared in the local
+   corpus, and the target Quill application's IMM export/player behavior for them
+   was not checked. The bundled SharpQuill reader currently skips Model/Unknown.
+2. TwoDDepth exists in the reader enum but target application support was not
+   established. Official docs describe cubemap pictures, while the local enum
+   has no explicit cubemap entry. Neither absence nor a parser TODO proves that
+   a feature is a placeholder. Seek reference behavior when a relevant case arises.
+3. Native IMM Effect/Reference/Instance enum entries are not a list of Quill source
+   features that must be invented in this converter.
+4. Camera FOV/capture settings, gallery previews, lock/collapsed/bounding-box UI
+   state and original import paths may be authoring/presentation metadata. Match
+   Quill's IMM export rather than treating every source field as a player blocker.
+   Gallery parsing is still a TODO, and nonempty Gallery picture writing currently
+   throws; keep this distinct from required visible picture layers.
+5. For unrepresented cases, follow the native exporter when suitable examples are
+   available, and report unsupported data clearly. Do not delay ordinary corpus
+   coverage to implement speculative behavior or silently discard unknown layers.
+6. SharpQuill's project writer currently filters out Sound, Picture and Model
+   children, and has no implementation writers for them. Reading their data does
+   not imply complete Quill-project round-trip support. A direct Quill-to-IMM
+   converter should consume the parsed source, rather than round-tripping through
+   this writer. Detect unsupported layer types before the reader drops them.
+
+Source references
+
+1. Quill reader/model/writer:
+   code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime/ThirdParty/SharpQuill/.
+   Relevant files: QuillSequenceReader.cs, QBinReader.cs, QuillSequenceWriter.cs,
+   Sequence.cs, Layer.cs, LayerPaint.cs, Animation.cs, Keyframes.cs, Keyframe`1.cs,
+   PictureType.cs, LayerSound.cs, SoundData.cs and LayerViewpoint.cs.
+2. Managed IMM writer:
+   code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmExporter.cs
+   and Runtime/Authoring/ImmAuthoringCompiler.cs.
+3. Native APIs: code/appImmUnity/src/main.cpp, ImmExporter_* entry points.
+   Native format output: code/libImmExporter/src/document and src/toImmersive.
+   Timing/playback: code/libImmCore/src/libBasics/piTick.cpp,
+   code/libImmImporter/src/document/layer.cpp, code/libImmPlayer/src/document.cpp
+   and code/libImmPlayer/src/mngrPlayer.cpp (chapter/playback management).
+4. Existing opposite-direction tool: imm-stroke-reader Runtime/SharpQuillCompat.cs
+   and Editor/ImmToQuillConverterEditor.cs.
+5. Shared roadmap: LLM Docs/IMM_CONTENT_PIPELINE_PLAN.md. It replaces the old
+   QUILL_TIMELINE_TO_IMM.md and reader/reverse-converter plans. Actual Quill
+   exports remain the behavioral oracle. For current model serialization see
+   code/libImmExporter/src/toImmersive/toImmersiveLayerModel.cpp and
+   code/libImmImporter/src/fromImmersive/fromImmersiveLayerModel.cpp; this does
+   not establish Quill model mapping or rendering parity.
+6. Official authoring documentation:
+   https://quill.art/developers_models_in_quill.html
+   https://quill.art/tutorials_timeline.html
+   These describe authoring features, not proof of target IMM-export/player parity.
+7. Reader fixes were applied in the IMM checkout at
+   C:\Users\andyb\Documents\IMM. The five commit IDs above identify their
+   implementation. The report is local documentation, not runtime validation.
