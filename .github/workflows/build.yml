@@ -186,6 +186,10 @@ jobs:
         python code/appImmUnity/tests/native_logging_smoke.py
         --msbuild (Get-Command msbuild).Source
 
+    - name: Verify Quill source reader regressions
+      shell: pwsh
+      run: dotnet run --project code/appImmStrokeReader/tests/SharpQuillReader/SharpQuillReader.csproj
+
     - name: Verify SharpQuill adapter skips spawn metadata
       shell: pwsh
       run: >-

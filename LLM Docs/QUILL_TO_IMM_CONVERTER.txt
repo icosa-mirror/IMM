@@ -16,6 +16,13 @@ Current review scope
    no controlled Quill re-export or visual/playback comparison was run.
 3. Detailed corpus statistics below describe the 2026-10-15 inventory. This review
    reconfirmed the test coverage totals, not every historical inventory count.
+4. C1 reader prerequisite implemented: QuillSequenceReader.ReadMetadata reads the
+   original hierarchy and payload declarations without opening qbin. Full Read
+   retains attached-data loading. The regression checks a locked, empty qbin to
+   prove the metadata path does not open it, and verifies that full Read still
+   rejects truncated data. Corpus mode and the reference inspector use this API.
+   Synthetic regressions and all 21 metadata/media corpus checks passed locally;
+   Windows CI now invokes the synthetic reader checks. CI results remain pending.
 
 Purpose and reference behavior
 
@@ -247,9 +254,9 @@ Validation and local test usage
    conversion was performed. C0 reference data inspection is recorded separately.
    Passing reader data checks is
    not a claim of complete scene/playback or converter parity.
-6. This documentation review makes no CI changes. The SharpQuillReader regressions
-   are available locally and are not currently invoked by build.yml; the private
-   corpus is not proposed as a CI fixture. The separate native SharpQuillAdapter
+6. The C1 reader prerequisite adds synthetic SharpQuillReader regressions to the
+   Windows build job. The private corpus remains local, not a CI fixture.
+   The separate native SharpQuillAdapter
    harness is invoked by its Windows build job. Its missing Unity initialization
    stubs were fixed in d045ae14, so the earlier compile-failure warning is obsolete.
 7. Native adapter regression passed on 2026-10-21 against the bundled Windows

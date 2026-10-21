@@ -15,8 +15,69 @@ internal static class QuillReaderTests
         SpatialSoundSettings();
         StartupSettings();
         EmbeddedSound();
+        MetadataDoesNotReadPayloads();
         if (corpusPath != null) CheckCorpus(corpusPath);
         Console.WriteLine("[IMM_QUILL_READER] All reader regressions passed.");
+    }
+
+    private static void MetadataDoesNotReadPayloads()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"imm-quill-metadata-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string jsonPath = Path.Combine(directory, "Quill.json");
+        string binaryPath = Path.Combine(directory, "Quill.qbin");
+        var document = new JObject
+        {
+            ["Version"] = 1,
+            ["Sequence"] = new JObject
+            {
+                ["RootLayer"] = new JObject
+                {
+                    ["Name"] = "Root", ["Type"] = "Group",
+                    ["Implementation"] = new JObject
+                    {
+                        ["Children"] = new JArray(new JObject
+                        {
+                            ["Name"] = "Paint", ["Type"] = "Paint",
+                            ["Implementation"] = new JObject
+                            {
+                                ["Framerate"] = 12,
+                                ["Drawings"] = new JArray(new JObject
+                                {
+                                    ["BoundingBox"] = new JArray(0, 1, 0, 1, 0, 1),
+                                    ["DataFileOffset"] = "1234"
+                                }),
+                                ["Frames"] = new JArray(0, 0)
+                            }
+                        })
+                    }
+                }
+            }
+        };
+        try
+        {
+            File.WriteAllText(jsonPath, document.ToString());
+            File.WriteAllBytes(binaryPath, Array.Empty<byte>());
+            // An exclusive lock proves metadata access does not open qbin at all.
+            using (var locked = new FileStream(binaryPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                var sequence = QuillSequenceReader.ReadMetadata(directory);
+                var paint = sequence?.RootLayer.Children.Single() as LayerPaint;
+                Require(paint != null && paint.Framerate == 12 && paint.Drawings.Count == 1
+                    && paint.Drawings[0].DataFileOffset == 0x1234 && paint.Frames.SequenceEqual(new[] { 0, 0 }),
+                    "Metadata read lost drawing declarations, held frames or layer rate.");
+                Require(paint.Drawings[0].Data.Strokes.Count == 0, "Metadata read loaded paint data.");
+            }
+            try { QuillSequenceReader.Read(directory); }
+            catch (EndOfStreamException) { return; }
+            throw new InvalidOperationException("Full read must still detect the truncated qbin.");
+        }
+        finally
+        {
+            File.Delete(jsonPath);
+            File.Delete(binaryPath);
+            Directory.Delete(directory);
+        }
     }
 
     private static void PictureTypes()
@@ -264,20 +325,9 @@ internal static class QuillReaderTests
         foreach (string path in Directory.EnumerateFiles(corpusPath, "Quill.json", SearchOption.AllDirectories))
         {
             var original = JObject.Parse(File.ReadAllText(path));
-            var metadataOnly = (JObject)original.DeepClone();
-            foreach (var layer in SourceLayers((JObject)metadataOnly["Sequence"]["RootLayer"]))
-            {
-                var implementation = (JObject)layer["Implementation"];
-                if ((string)layer["Type"] == "Paint")
-                {
-                    implementation["Drawings"] = new JArray();
-                    implementation["Frames"] = new JArray();
-                }
-                if ((string)layer["Type"] == "Sound" || (string)layer["Type"] == "Picture")
-                    implementation["DataFileOffset"] = "ffffffffffffffff";
-            }
             // Parse real hierarchy/metadata without allocating every paint point or image.
-            var sequence = ReadDocument(metadataOnly);
+            var sequence = QuillSequenceReader.ReadMetadata(Path.GetDirectoryName(path));
+            Require(sequence?.RootLayer != null, $"Metadata read failed for {Path.GetDirectoryName(path)}.");
             var expected = SourceLayers((JObject)original["Sequence"]["RootLayer"]).ToArray();
             var parsed = ParsedLayers(sequence.RootLayer).ToArray();
             Require(expected.Length == parsed.Length, $"Layer count changed for {Path.GetDirectoryName(path)}.");

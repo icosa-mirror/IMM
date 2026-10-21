@@ -19,8 +19,8 @@ under ignored `artifacts/`, not in public fixtures or CI.
    ```
 
 3. Append `--metadata-only` for large sources. This parses source metadata through a
-   temporary stripped project using the production reader, then restores drawing
-   declarations/frame references without loading vertices or media. Native IMM
+   production `QuillSequenceReader.ReadMetadata` API, retaining drawing declarations
+   and frame references without loading vertices or media. Native IMM
    loading still decodes the reference's assets; this is not a streaming native
    metadata reader. Source hashing still reads the qbin as a stream.
 

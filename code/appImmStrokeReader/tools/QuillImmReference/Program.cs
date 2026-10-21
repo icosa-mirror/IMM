@@ -19,7 +19,7 @@ Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
 NativeLibrary.SetDllImportResolver(typeof(Reader).Assembly,
     (name, assembly, searchPath) => name == "ImmStrokeReader" ? NativeLibrary.Load(libraryPath) : IntPtr.Zero);
 var sourceJson = JObject.Parse(File.ReadAllText(Path.Combine(sourcePath, "Quill.json")));
-var sequence = metadataOnly ? ReadMetadata(sourceJson) : QuillSequenceReader.Read(sourcePath);
+var sequence = metadataOnly ? QuillSequenceReader.ReadMetadata(sourcePath) : QuillSequenceReader.Read(sourcePath);
 var sourceLayers = Flatten(sequence.RootLayer, "").ToArray();
 var rawRoot = sourceJson["Sequence"]!["RootLayer"]!;
 var rawLayerTypes = RawLayers(rawRoot).GroupBy(x => (string)x["Type"]!).ToDictionary(x => x.Key, x => x.Count());
@@ -235,48 +235,6 @@ static IEnumerable<JToken> RawLayers(JToken layer)
     if ((string)layer["Type"] == "Group")
         foreach (var child in layer["Implementation"]!["Children"]!)
             foreach (var item in RawLayers(child)) yield return item;
-}
-static Sequence ReadMetadata(JObject original)
-{
-    // Exercise the production reader on metadata with empty attached data, as the
-    // reader regression harness does. Restore drawing declarations/frame references
-    // afterward, without allocating any source vertices or media pixels.
-    var metadata = (JObject)original.DeepClone();
-    foreach (var layer in RawLayers(metadata["Sequence"]!["RootLayer"]!))
-    {
-        var impl = (JObject)layer["Implementation"]!;
-        if ((string)layer["Type"] == "Paint")
-        {
-            impl["Drawings"] = new JArray(); impl["Frames"] = new JArray();
-        }
-        else if ((string)layer["Type"] is "Picture" or "Sound") impl["DataFileOffset"] = "-1";
-    }
-    string temporary = Path.Combine(Path.GetTempPath(), $"imm-quill-reference-{Guid.NewGuid():N}");
-    Directory.CreateDirectory(temporary);
-    try
-    {
-        File.WriteAllText(Path.Combine(temporary, "Quill.json"), metadata.ToString());
-        File.WriteAllBytes(Path.Combine(temporary, "Quill.qbin"), new byte[4]);
-        var sequence = QuillSequenceReader.Read(temporary);
-        var raw = RawLayers(original["Sequence"]!["RootLayer"]!).Where(x => (string)x["Type"] == "Paint").ToArray();
-        var paint = Flatten(sequence.RootLayer, "").Where(x => x.Layer is LayerPaint).Select(x => (LayerPaint)x.Layer).ToArray();
-        Require(raw.Length == paint.Length, "Metadata paint traversal mismatch.");
-        for (int i = 0; i < paint.Length; i++)
-        {
-            var impl = raw[i]["Implementation"]!;
-            int count = impl["Drawings"] is JArray drawings ? drawings.Count : 1;
-            paint[i].Drawings = Enumerable.Range(0, count).Select(_ => new Drawing()).ToList();
-            paint[i].Frames = impl["Frames"]?.ToObject<List<int>>() ?? new List<int> { 0 };
-        }
-        return sequence;
-    }
-    finally
-    {
-        // Only these two files, in the uniquely created temporary directory, exist.
-        File.Delete(Path.Combine(temporary, "Quill.json"));
-        File.Delete(Path.Combine(temporary, "Quill.qbin"));
-        Directory.Delete(temporary);
-    }
 }
 static string NativePath(NativeLayer layer, List<NativeLayer> layers)
 {

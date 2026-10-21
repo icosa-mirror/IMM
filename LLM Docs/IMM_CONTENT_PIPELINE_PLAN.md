@@ -93,7 +93,7 @@ The preferred first candidate is:
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
-| C1: static paint conversion | Build entry point and SharpQuill-to-authoring mapping; reuse compiler; resolve only C0-required graph gaps | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
+| C1: static paint conversion | In progress: metadata-only source reading added for preflight/selected payload loading; entry point and mapping remain outstanding | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C2: animation and navigation | Extend C1 for shared drawings/holds, keys, nested timing, viewpoints, root/startup/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
@@ -168,7 +168,10 @@ The preferred first candidate is:
 3. Reproduction commands and reader logs are in the converter findings and
    `code/appImmStrokeReader/tests/SharpQuillReader/README.md` and
    `tests/SharpQuillAdapter/README.md` under the same directory. The adapter check
-   runs in Windows build CI; the reader corpus is a local check, not a CI fixture.
+   runs in Windows build CI. C1 adds synthetic reader regressions to the same job;
+   the reader corpus remains a local check, not a CI fixture. Metadata-only reading
+   is implemented and its local locked-qbin, full-read and corpus regressions pass;
+   CI acceptance for that change is pending.
 4. Preserve existing player regression and package/export gates when code changes.
    Live work must retain the authoring document's timing/failure/platform criteria
    and the web performance investigation procedure where applicable.

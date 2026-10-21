@@ -18,6 +18,28 @@ namespace SharpQuill
     /// </summary>
     public static Sequence Read(string path)
     {
+      Sequence seq = ReadMetadata(path);
+      if (seq == null)
+        return null;
+
+      using (Stream stream = File.OpenRead(Path.Combine(path, "Quill.qbin")))
+      {
+        QBinReader qbinReader = new QBinReader(stream);
+        seq.LastStrokeId = qbinReader.ReadUInt32();
+        ReadLayerData(seq.RootLayer, qbinReader);
+      }
+      return seq;
+    }
+
+    /// <summary>
+    /// Reads the project hierarchy and attached-data declarations without opening
+    /// Quill.qbin. Drawing, picture and sound payloads remain unloaded. Like Read,
+    /// this requires both project files and returns null when JSON parsing fails.
+    /// Unsupported layer types are still skipped; callers needing strict coverage
+    /// must inspect the source JSON before conversion.
+    /// </summary>
+    public static Sequence ReadMetadata(string path)
+    {
       if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
         return null;
 
@@ -42,17 +64,6 @@ namespace SharpQuill
       catch(Exception e)
       {
         Console.WriteLine("Error during the parsing of the Quill.json document: {0}", e.Message);
-      }
-
-      if (seq == null)
-        return null;
-
-      // Now that we have loaded the scene hierarchy, read the actual attached data from the qbin.
-      using (Stream stream = File.OpenRead(paintDataFilename))
-      {
-        QBinReader qbinReader = new QBinReader(stream);
-        seq.LastStrokeId = qbinReader.ReadUInt32();
-        ReadLayerData(seq.RootLayer, qbinReader);
       }
 
       return seq;
