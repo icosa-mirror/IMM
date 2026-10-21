@@ -9,7 +9,9 @@ Current CI status (2026-10-21 20:23 UTC): full hosted runs 39645977224
 (ac34f4f1) and 39646549914 (740eec8a) passed, closing the earlier Unity compiler
 and Godot iOS capacity failures. Historical pending/failure notes below are
 superseded for those revisions. Later sound-import run 39669262483 remains
-incomplete; its new APIs still require platform acceptance. See shared plan 6.26.
+incomplete; its Android SDK CMake installation failed before compilation. The
+isolated retry is deferred because GitHub rejects retries while the parent is
+running. New APIs still require platform acceptance. See shared plan 6.26/6.28.
 
 Current review scope
 

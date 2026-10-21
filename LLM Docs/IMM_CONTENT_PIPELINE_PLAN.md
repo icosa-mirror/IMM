@@ -16,9 +16,9 @@ validation success for compiler correction ac34f4f1 (39645977224) and viewpoint
 revision 740eec8a (39646549914). These runs close the earlier Unity CS1061 and
 Godot iOS capacity failures with passing replacement gates, including Unity Android
 URP/non-XR Firebase, Android Vulkan, Windows DirectX/Vulkan and Godot iOS Metal.
-Later sound-import revision 179a9f30 is under validation in 39669262483; it has no
-reported failed jobs at this check, but is incomplete. A queued macOS build has no
-runner assigned. Later APIs still need their own platform/package acceptance;
+Later sound-import revision 179a9f30 is under validation in 39669262483; its Android build subsequently failed during SDK CMake installation before
+project compilation (section 6.28). Other gates are incomplete. A queued macOS
+build has no runner assigned. Later APIs still need their own platform/package acceptance;
 hosted success does not establish skipped hardware gates or full content fidelity.
 Confirmed regressions take priority over new feature work. See section 6.26.
 
@@ -1069,6 +1069,24 @@ replacement-run closure in section 6.26 (20:23 UTC):
    supported-mapping and settings-equality checks pass. Next implement source PCM
    loading and graph mapping with those settings, retaining hidden layers and
    validating malformed input/output preservation before paired candidate checks.
+
+### 6.28. Latest Android SDK infrastructure failure (2026-10-21)
+
+1. Sound-import run 39669262483 Android job 119462462600 failed while configuring
+   libImmCore: Android SDK installation of CMake 3.22.1 raised ZipException,
+   "Archive is not a ZIP archive". Project compilation did not begin. This is an
+   SDK archive/install infrastructure failure, not evidence of a source regression;
+   the new native sound APIs are still unverified on Android.
+2. Requested the permitted isolated job retry through GitHub's job-rerun API.
+   GitHub returned HTTP 403: the parent workflow is already running. No retry was
+   executed and the one permitted infrastructure retry remains available. Preserve
+   successful independent jobs, wait for the parent to finish, then retry this job
+   and its dependents once. Repeated failure remains unresolved. Do not relax gates
+   or cancel independent jobs for this download failure.
+3. Diagnostic evidence is saved in ignored sound-passthrough-android-failed.log,
+   sound-passthrough-android-job.json and sound-passthrough-android-retry-response.txt
+   under artifacts/. The earlier compiler-fix and viewpoint hosted runs remain
+   successfully completed as recorded in section 6.26.
 
 ## 7. Consolidated documents
 
