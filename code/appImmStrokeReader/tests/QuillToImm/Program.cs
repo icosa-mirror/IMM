@@ -4,6 +4,11 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using ImmPlayer.Authoring;
 
+if (args.Length == 3 && args[0] == "--reader-only-pcm")
+{
+    PcmDecodeChecks.ReaderOnly(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+    return 0;
+}
 if (args.Length == 4 && (args[0] == "--compare-paint" || args[0] == "--compare-animated-paint" || args[0] == "--compare-project"))
 {
     string library = Path.GetFullPath(args[3]);
@@ -27,6 +32,9 @@ if (args.Length == 4 && args[0] == "--self-test")
     PngMemoryBoundsChecks.Run();
     PictureAuthoringChecks.Run(args[3]);
     SoundAuthoringChecks.Run(args[3]);
+    PcmDecodeChecks.LifetimeAndOffset(args[3]);
+    PcmDecodeChecks.WavFormats(args[3]);
+    PcmDecodeChecks.Standalone(readerLibrary, args[3]);
     PictureConverterChecks.Run(args[3]);
     SoundConverterChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);

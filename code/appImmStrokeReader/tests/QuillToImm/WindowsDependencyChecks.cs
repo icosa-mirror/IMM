@@ -12,6 +12,8 @@ static class WindowsDependencyChecks
         IntPtr plugin = NativeLibrary.Load(exporterLibrary);
         try
         {
+            if (GetModuleHandle("opus.dll") == IntPtr.Zero || GetModuleHandle("opusenc.dll") == IntPtr.Zero)
+                throw new InvalidOperationException("Shared Opus decoder/player encoder were not preloaded from their package owners.");
             if (GetModuleHandle("vorbisenc.dll") == IntPtr.Zero)
                 throw new InvalidOperationException("Packaged Vorbis encoder was not preloaded by the native plugin.");
         }

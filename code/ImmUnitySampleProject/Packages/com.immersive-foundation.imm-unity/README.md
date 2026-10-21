@@ -427,3 +427,7 @@ Import/export preserves these bytes, spatial settings and legacy duration/playin
 fields. Encoded frame count is -1; Opus sample rate is its 48 kHz decode rate.
 Container validation does not establish packet decoding or audible playback.
 See content pipeline section 6.25 for validation scope and remaining source mapping.
+
+On Windows, the required stroke-reader package owns shared decoder DLLs including
+`opus.dll`; this package owns `opusenc.dll` and `vorbisenc.dll`. The native loader
+preloads shared dependencies from the reader package before loading encoders.

@@ -52,11 +52,16 @@ add_library(ogg-lib STATIC IMPORTED)
 set_target_properties(ogg-lib PROPERTIES IMPORTED_LOCATION
     ${core-build-dir}/libs/${ANDROID_ABI}/libogg.a)
 
+add_library(opus-lib STATIC IMPORTED)
+set_target_properties(opus-lib PROPERTIES IMPORTED_LOCATION
+    ${core-build-dir}/libs/${ANDROID_ABI}/libopus.a)
+
 target_link_libraries(
     ImmStrokeReader
     libImmImporter
     libImmCore
     vorbis-lib
+    opus-lib
     ogg-lib
     png-lib
     jpeg-lib

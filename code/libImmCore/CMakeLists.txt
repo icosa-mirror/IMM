@@ -31,6 +31,7 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/piWave.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveWAV.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveOGG.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveDecode.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveOPUS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/piSound.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/piSoundEngineNULL.cpp

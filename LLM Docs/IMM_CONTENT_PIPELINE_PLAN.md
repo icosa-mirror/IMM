@@ -61,7 +61,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; SharpQuill adapter skips spawn layers | Spawn graph/import/export/default selection and immutable preview assets | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
-| Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries and metadata import | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
+| Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries, metadata import and offline PCM16 decoding; adapter audio pending | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
 | File/memory output | SharpQuill writer supports a limited Quill-project subset | IMM-to-Quill entry point exists with losses below | Existing native IMM writer/compiler | Presented-revision save outstanding | Static converter reuses atomic file export; default rejects unsupported layers, explicit paint-only omission reports partial output |
 
@@ -1299,6 +1299,52 @@ replacement-run closure in section 6.26 (20:23 UTC):
    decoding, broader field/model coverage, codec/fidelity decisions, Quill application
    and playback acceptance. Current managed changes need full CI; prior sound API
    run 39669262483 is still active with its SDK-install failure and deferred retry.
+
+### 6.35. Offline native sound decoding foundation (2026-10-21)
+
+1. The reader now decodes stored WAV, Vorbis and Opus to interleaved PCM16 through
+   DecodeSoundPcm16, CopyDecodedSoundPcm16 and ReleaseDecodedSoundPcm16. Positive
+   64-bit handles own immutable PCM independently of document lifetime; release or
+   End frees them. Invalid/stale handles cannot copy or release another allocation.
+   Errors distinguish invalid data, output limit, allocation and unsupported format.
+   The caller's positive byte limit bounds decoded PCM, not input or codec scratch.
+   Decoding is synchronous and offline; player/per-frame decoding is unchanged.
+2. WAV supports inspected PCM8/16/24/32 and float32 with explicit PCM16 conversion;
+   nonfinite floats reject. Vorbis uses the existing synthesis library. Opus uses
+   existing multistream decoding at 48 kHz with pre-skip, initial granule offset,
+   EOS trimming and header gain. Malformed codec packets reject even when their
+   container/header passes the encoded-asset inspector.
+3. Windows Opus DLL ownership moves from player to reader with its Unity GUID
+   retained. The player already depends on the reader package and preloads shared
+   dependencies before its encoder DLLs. Packaging checks reject obsolete duplicate
+   player Opus copies. A fresh child process loaded only an isolated reader package
+   and decoded Opus using that package's DLL. No reader-to-player dependency exists.
+4. Fresh Windows native builds, the full QuillToImm suite, package layout and export
+   checks pass (120 player/exporter, 50 reader declarations). Tests cover byte caps,
+   exact PCM16 WAV, other WAV profiles, Opus gains/offsets/end trimming, corrupt
+   Vorbis setup, copy bounds, double release, document unload and End/re-init lifetime.
+   Existing audio pipeline contracts and sample-project entrypoint checks pass.
+5. Independent checks: five generated Opus profiles (1/2/4 channels) matched FFmpeg
+   frame counts and differed by at most one PCM16 unit. Five 0.1-second Vorbis
+   profiles yielded 4,410 frames in both this decoder and libvorbisfile, with at most
+   one unit difference. FFmpeg returned 4,282 matching-prefix frames; this decoder
+   comparison does not establish audible timing or native playback acceptance.
+   Evidence: ignored artifacts/sound-pcm16-commit-suite*, sound-pcm16-final-native-build.log,
+   sound-pcm16-final-exports*, sound-pcm16-final-*-layout.log,
+   sound-pcm16-independent-all.json and sound-pcm16-vorbisfile-independent.json.
+6. This foundation is not yet connected to ReadImmAsHierarchyWithReport: it still
+   reports/omits native sounds. Next, map supported mono/stereo spatial settings and
+   PCM WAV SoundData, release leases in finally blocks, and report unsupported
+   ambisonic/frustum/legacy fields and resource failures explicitly. R2 remains open.
+   Windows standalone reader decoding is verified locally; other platforms require
+   CI. The iOS reader static archive does not itself merge dependency archives;
+   standalone reader-only iOS link completeness is unproven. No Web decoder or
+   Quill application/playback acceptance is claimed.
+7. Latest live check still shows sound-import run 39669262483 active/queued with
+   three iOS jobs waiting and the Android SDK-install failure from section 6.28.
+   GitHub rejected the earlier isolated retry while the parent is active; the one
+   permitted retry remains deferred. Older compiler/Godot failures are closed by
+   passing replacement runs (section 6.26). This milestone needs fresh full CI.
 
 ## 7. Consolidated documents
 

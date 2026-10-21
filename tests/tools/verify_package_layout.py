@@ -16,6 +16,8 @@ UNITY_PACKAGES = {
         "Runtime/ImmStrokeReader.cs",
         "Runtime/SharpQuillCompat.cs",
         "Plugins/x86_64/ImmStrokeReader.dll",
+        "Plugins/x86_64/opus.dll",
+        "Plugins/x86_64/opus.dll.meta",
         "Plugins/Android/arm64-v8a/libImmStrokeReader.so",
         "Plugins/macOS/libImmStrokeReader.dylib",
         "Plugins/iOS/libImmStrokeReader.a",
@@ -65,6 +67,11 @@ def verify_unity_package(path: Path, expected_name: str | None, errors: list[str
             errors.append(f"{manifest_path} is missing version")
         if not manifest.get("unity"):
             errors.append(f"{manifest_path} is missing unity version")
+
+    if expected_name == "com.immersive-foundation.imm-unity":
+        for name in ("opus.dll", "opus.dll.meta"):
+            if (path / "Plugins/x86_64" / name).exists():
+                errors.append(f"{name} belongs to the shared stroke-reader package, not the player package")
 
     required = UNITY_PACKAGES.get(expected_name or "", ["package.json", "README.md", "Runtime"])
     for rel in required:

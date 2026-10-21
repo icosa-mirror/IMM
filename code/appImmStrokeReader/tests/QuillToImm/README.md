@@ -157,3 +157,9 @@ interpolations, plus unmapped-channel and exact timing guards. Native re-encodin
 succeeds, but strict codec equality is not accepted: the fixture's drawing scale
 changes from 3 to 3.0000916 with both legacy and hierarchy readers. Existing exact
 forward comparison gates remain unchanged. See shared plan section 6.34.
+
+Offline PCM16 checks cover WAV8/16/24/32/float conversion, Vorbis/Opus decoding,
+output byte caps, malformed packets, Opus gain and initial/end granules, complete
+copy guards, lease release/unload/End lifetimes, and a fresh child process loading
+only an isolated Windows reader package. Independent PCM comparisons and remaining
+platform/playback limits are recorded in content pipeline section 6.35.

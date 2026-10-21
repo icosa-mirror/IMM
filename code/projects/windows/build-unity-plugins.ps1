@@ -94,12 +94,12 @@ if (-not (Test-Path $strokePluginSource)) {
 $unityDllMap = @{
     "ImmUnityPlugin.dll" = $unityPluginSource
     "Audio360.dll"       = (Join-Path $repoRoot "thirdparty\audio360-sdk\Audio360\Windows\x64\Audio360.dll")
-    "opus.dll"           = (Join-Path $repoRoot "thirdparty\opus\bin\opus.dll")
     "opusenc.dll"        = (Join-Path $repoRoot "thirdparty\libopusenc\bin\opusenc.dll")
     "vorbisenc.dll"      = (Join-Path $repoRoot "thirdparty\libvorbis\bin\vorbisenc.dll")
 }
 
 $strokeRuntimeDllMap = @{
+    "opus.dll"     = (Join-Path $repoRoot "thirdparty\opus\bin\opus.dll")
     "zlib1.dll"    = (Join-Path $repoRoot "thirdparty\zlib\bin\zlib1.dll")
     "jpeg62.dll"   = (Join-Path $repoRoot "thirdparty\libjpeg-turbo\bin\jpeg62.dll")
     "libpng16.dll" = (Join-Path $repoRoot "thirdparty\libpng\bin\libpng16.dll")
@@ -125,6 +125,13 @@ foreach ($name in $strokeRuntimeDllMap.Keys) {
     }
 
     Copy-Item $src (Join-Path $strokePkgWin $name) -Force
+}
+
+# Opus is shared by player encoding and reader decoding. Keep one Unity plugin
+# owner; remove only the obsolete copy from the named player package directory.
+foreach ($name in @("opus.dll", "opus.dll.meta")) {
+    $legacyOpus = Join-Path $unityPkgWin $name
+    if (Test-Path -LiteralPath $legacyOpus) { Remove-Item -LiteralPath $legacyOpus -Force }
 }
 
 Write-Host "Updated Unity sample packages:"

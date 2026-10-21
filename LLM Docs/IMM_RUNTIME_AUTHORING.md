@@ -30,7 +30,9 @@ conversion is implemented with isolated reference pixel matches (section 6.22).
 Offline PCM16 sound construction now supports spatial settings and native Opus/Ogg
 encoding; section 6.24 records local file/decoder checks and the unresolved timing
 acceptance. Encoded WAV/Vorbis/Opus sound import and exact passthrough are implemented
-(section 6.25). Quill mono/stereo PCM16 sound mapping is implemented with isolated
+(section 6.25). Offline reader PCM16 decoding for WAV/Vorbis/Opus is implemented
+with owned leases and a decoded-output byte cap (section 6.35); this does not extend
+live editing or establish playback acceptance. Quill mono/stereo PCM16 sound mapping is implemented with isolated
 paired settings/key checks (section 6.29). Stereo/panorama conversion and playback
 acceptance remain outstanding. This
 does not add picture mutation to the native live path.

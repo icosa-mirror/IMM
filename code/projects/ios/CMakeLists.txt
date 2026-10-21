@@ -87,6 +87,7 @@ set(IMMCORE_UNITY_SOURCES
     ${CODE_DIR}/libImmCore/src/libWave/piWave.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveWAV.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
+    ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveDecode.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOPUS.cpp
     ${CODE_DIR}/libImmCore/src/libSound/piSound.cpp
     ${CODE_DIR}/libImmCore/src/libSound/piSoundEngineNULL.cpp
@@ -148,11 +149,13 @@ set(IMMCORE_MIN_SOURCES
     ${CODE_DIR}/libImmCore/src/libWave/piWave.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveWAV.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
+    ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveDecode.cpp
 )
 
 add_library(libImmCoreMinimal STATIC ${IMMCORE_MIN_SOURCES})
 target_include_directories(libImmCoreMinimal
     PUBLIC
+        ${THIRDPARTY_DIR}/opus-src/include
         ${CODE_DIR}
         ${THIRDPARTY_DIR}/ogg/include
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include
@@ -166,6 +169,7 @@ target_include_directories(libImmCoreMinimal
 )
 target_link_libraries(libImmCoreMinimal
     PUBLIC
+        opus
         ogg
         vorbis
         png_static

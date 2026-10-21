@@ -104,7 +104,7 @@ only the stroke reader DLL here is tracked in git):
 Windows runtime dependencies (from the PE import tables):
 
 - `ImmUnityPlugin.dll`: `Audio360.dll`, `opusenc.dll`, `zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`, `vorbis.dll`, `vorbisenc.dll`, plus system `d3d11`/`opengl32`/`DSOUND`.
-- `ImmStrokeReader.dll`: `zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`, `vorbis.dll`.
+- `ImmStrokeReader.dll`: `zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`, `vorbis.dll`, `opus.dll`.
 
 Each package ships only its own subset, so `imm-unity` alone cannot load on Windows â€”
 the `zlib1`/`jpeg62`/`libpng16`/`ogg`/`vorbis` DLLs come from the stroke-reader package.
@@ -350,10 +350,25 @@ None of these flags is documented in the packages.
 
 Source: `code/appImmStrokeReader/src/main.cpp` + `strokeStore.cpp/.h`. It links only
 `libImmImporter` and `libImmCore` (no player, no renderer, no exporter) and reads an IMM
-file into a plain in-memory stroke/layer graph. All 38 entry points exist on all four
-platforms.
+file into a plain in-memory stroke/layer graph. The historical binary inventory above is not the current API contract; new
+entry points require matching platform rebuilds and export validation.
 
-### 3.1 Native API (47 declared entry points)
+### 3.1 Native API (50 declared entry points)
+
+Offline PCM16 decoding is available through `StrokeReader_DecodeSoundPcm16`
+(authoring layer index), `StrokeReader_CopyDecodedSoundPcm16` and
+`StrokeReader_ReleaseDecodedSoundPcm16`. The positive 64-bit lease owns samples;
+copy them and release in a `finally` block. Leases survive document unload, but
+`StrokeReader_End` clears them. `StrokeSoundPcmInfo` is 16 bytes (sample rate,
+channels, per-channel frame count and total byte count). Negative decode results
+mean invalid data (-1), decoded PCM limit (-2), allocation (-3) or unsupported
+format (-4). The required positive byte cap bounds output PCM, not codec scratch
+or input memory. Copy requires capacity for the complete PCM; invalid handles or
+undersized buffers return zero. Opus decodes at 48 kHz; WAV/Vorbis retain rate.
+This synchronous offline API is independent of live playback. Windows standalone
+reader decoding is locally verified; platform CI and reader-only iOS static linking
+remain unverified. The SharpQuill adapters still omit sounds (pipeline section 6.35).
+
 
 All are declared in `Runtime/ImmStrokeReader.cs`.
 
@@ -385,6 +400,8 @@ legacy flat import behavior unchanged; see content pipeline section 6.34.
 | Drawings / frames | `GetDrawingCount`, `GetDrawingIndexForChapter`, `GetFrameBuffer`, `GetAuthoringDrawingCount`, `GetAuthoringFrameBuffer` |
 | Strokes | `GetStrokeCount`, `GetStrokeInfo`, `GetStrokePoints`, `GetAuthoringStrokeCount`, `GetAuthoringStrokeInfo`, `GetAuthoringStrokePoints`, `GetDrawingBiggestStroke` |
 | Pictures | `GetPictureInfo`, `GetPicturePixelData` |
+| Sound assets | `GetSoundAssetInfo`, `GetSoundAssetData` |
+| Offline PCM16 | `DecodeSoundPcm16`, `CopyDecodedSoundPcm16`, `ReleaseDecodedSoundPcm16` |
 | Chapters | `GetChapterCount`, `GetChapterCountFromFile`, `GetCurrentChapter`, `SetChapter` |
 
 `GetRootAnimationKey` uses `GetDocumentInfo().rootAnimationKeyCount` and the existing
@@ -567,12 +584,13 @@ listed.
 
 ### G10 â€” imm-unity depends on the stroke-reader package for its Windows DLL dependencies
 
-`ImmUnityPlugin.dll` imports `zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`,
-`vorbis.dll` (plus `Audio360.dll`, `opusenc.dll`, `vorbisenc.dll`, which it does ship).
-The imm-unity package's `Plugins/x86_64` contains only the latter three plus
-`Audio360.dll`; the missing five are shipped by the stroke-reader package. Installing
-imm-unity without the stroke reader leaves a Windows player that cannot load the plugin.
-The dependency is declared in `package.json` and in the README, but nothing verifies it â€”
+The reader package owns `zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`,
+`vorbis.dll` and `opus.dll`. The player owns `Audio360.dll`, `opusenc.dll` and
+`vorbisenc.dll` and preloads shared dependencies from the reader sibling directory.
+Opus moved to the reader package for standalone decoding, retaining its Unity GUID.
+Installing imm-unity without its declared reader dependency leaves missing Windows
+runtime dependencies. Layout checks enforce a single reader-owned Opus copy.
+The dependency is declared in `package.json` and in the README â€”
 and the two packages use different plugin folder conventions (`OSX/*.bundle` vs
 `macOS/*.dylib`, `Android/libs/arm64-v8a` vs `Android/arm64-v8a`).
 
@@ -658,7 +676,7 @@ package's `Runtime/ImmStrokeReader.cs`. Use
 `tests/tools/verify_unity_plugin_exports.py` to generate the exact declaration and
 binary-export inventory for a revision rather than maintaining a copied list.
 
-The current source declares 120 player/exporter and 47 reader entry points. Windows
+The current source declares 120 player/exporter and 50 reader entry points. Windows
 verification passes, including the additive root writer, reader and viewpoint
 preview setter/query calls, picture asset queries and offline picture/sound construction and encoded sound import/passthrough. Other platform binaries for these additions require CI publication
 and verification; earlier all-platform audit results do not prove those additions.

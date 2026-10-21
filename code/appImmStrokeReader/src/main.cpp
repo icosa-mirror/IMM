@@ -13,6 +13,8 @@
 
 #include <map>
 #include <mutex>
+#include <new>
+#include "libImmCore/src/libWave/formats/piWaveDecode.h"
 
 using namespace ImmCore;
 using namespace ImmImporter;
@@ -34,8 +36,8 @@ using namespace ImmStrokeReader;
 #endif
 
 // Bump this when you need to confirm Unity loaded the new dylib.
-static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-10-21-SOUND-ASSETS";
-static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-10-21-SOUND-ASSETS";
+static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-10-21-SOUND-PCM16";
+static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-10-21-SOUND-PCM16";
 
 extern "C" UNITY_INTERFACE_EXPORT const char* UNITY_INTERFACE_API StrokeReader_GetBuildId()
 {
@@ -56,6 +58,13 @@ static struct
     std::map<int, StrokeStore*> mDocuments;
     std::mutex mMutex;
 } gStrokeReader = { {}, false, 1, {}, {} };
+
+// Explicit decoded-PCM leases, protected by mMutex. They survive document unload,
+// and are released individually or by StrokeReader_End; this is not a playback cache.
+static std::map<int64_t, DecodedAudioPcm16> gDecodedSoundPcm;
+static int64_t gNextDecodedSoundPcm = 1;
+struct StrokeSoundPcmInfoC { int sampleRate, channels, frameCount, byteCount; };
+static_assert(sizeof(StrokeSoundPcmInfoC) == 16, "PCM info ABI changed");
 
 static void ExtractChapterStartTimes(const Sequence& seq, std::vector<piTick>* chapterStartTimes)
 {
@@ -156,6 +165,7 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_End()
         delete pair.second;
     }
     gStrokeReader.mDocuments.clear();
+    gDecodedSoundPcm.clear();
 
     gStrokeReader.mLog.Printf(LT_MESSAGE, L"ImmStrokeReader shutdown");
     gStrokeReader.mLog.End();
@@ -474,6 +484,55 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetSound
     if (!gStrokeReader.mInitialized || !info) return false;
     auto it = gStrokeReader.mDocuments.find(docId);
     return it != gStrokeReader.mDocuments.end() && it->second->GetSoundAssetInfo(layerIdx, info);
+}
+
+// Positive result is an owned PCM lease; negative results match AudioDecodeStatus.
+extern "C" int64_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_DecodeSoundPcm16(
+    int docId, int layerIdx, int maxPcmBytes, StrokeSoundPcmInfoC* info)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (info) *info = {};
+    if (!gStrokeReader.mInitialized || !info || maxPcmBytes <= 0) return -1;
+    auto document = gStrokeReader.mDocuments.find(docId);
+    StrokeSoundAssetInfoC asset{};
+    if (document == gStrokeReader.mDocuments.end() || !document->second->GetSoundAssetInfo(layerIdx, &asset)) return -1;
+    if (asset.encoding < 3 || asset.encoding > 5) return -4;
+    if (asset.byteCount <= 0 || asset.sampleRate <= 0) return -1;
+    if (gNextDecodedSoundPcm == INT64_MAX) return -2;
+    try
+    {
+        std::vector<uint8_t> encoded(static_cast<size_t>(asset.byteCount));
+        if (document->second->GetSoundAssetData(layerIdx, encoded.data(), asset.byteCount) != asset.byteCount) return -1;
+        DecodedAudioPcm16 decoded;
+        auto status = DecodeAudioPcm16(encoded.data(), encoded.size(), asset.encoding, maxPcmBytes, decoded);
+        if (status != AudioDecodeStatus::Ok) return static_cast<int64_t>(status);
+        if (decoded.rate != asset.sampleRate || decoded.channels != asset.channels) return -1;
+        const int64_t id = gNextDecodedSoundPcm++;
+        auto stored = gDecodedSoundPcm.emplace(id, std::move(decoded));
+        const auto& pcm = stored.first->second;
+        *info = { pcm.rate, pcm.channels, static_cast<int>(pcm.samples.size() / pcm.channels), static_cast<int>(pcm.samples.size() * sizeof(int16_t)) };
+        return id;
+    }
+    catch (const std::bad_alloc&) { return -3; }
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_CopyDecodedSoundPcm16(int64_t id, uint8_t* bytes, int maxBytes)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || !bytes || maxBytes <= 0) return 0;
+    auto found = gDecodedSoundPcm.find(id);
+    if (found == gDecodedSoundPcm.end()) return 0;
+    const auto& samples = found->second.samples;
+    const int count = static_cast<int>(samples.size() * sizeof(int16_t));
+    if (maxBytes < count) return 0;
+    std::memcpy(bytes, samples.data(), count);
+    return count;
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_ReleaseDecodedSoundPcm16(int64_t id)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    return gStrokeReader.mInitialized && gDecodedSoundPcm.erase(id) != 0;
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetSoundAssetData(int docId, int layerIdx, uint8_t* bytes, int maxBytes)

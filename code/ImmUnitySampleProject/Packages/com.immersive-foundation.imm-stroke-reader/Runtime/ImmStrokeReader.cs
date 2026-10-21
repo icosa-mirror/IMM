@@ -435,6 +435,17 @@ namespace ImmPlayer
         public static extern int StrokeReader_GetPicturePixelData(
             int docId, int layerIdx, IntPtr pixels, int maxBytes);
 
+        /// <summary>Offline decode. Positive owned lease; -1 invalid, -2 PCM byte limit, -3 allocation failure, -4 unsupported format.</summary>
+        [DllImport(DllName)]
+        public static extern long StrokeReader_DecodeSoundPcm16(int docId, int layerIdx, int maxPcmBytes, out StrokeSoundPcmInfo info);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_CopyDecodedSoundPcm16(long lease, [Out] byte[] bytes, int maxBytes);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_ReleaseDecodedSoundPcm16(long lease);
+
         #endregion
     }
 
@@ -739,6 +750,13 @@ namespace ImmPlayer
         public int encoding, sampleRate, channels, byteCount;
         public float sourceDuration;
         public int initiallyPlaying;
+    }
+
+    /// <summary>Owned decoded PCM16 info. Counts are per-channel frames and total interleaved bytes.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeSoundPcmInfo
+    {
+        public int sampleRate, channels, frameCount, byteCount;
     }
 
     #endregion

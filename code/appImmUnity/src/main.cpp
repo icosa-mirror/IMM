@@ -188,27 +188,27 @@ namespace
         const std::wstring packagesDir = iDirName(unityPackageDir);
         const std::wstring strokePluginDir = packagesDir + L"\\com.immersive-foundation.imm-stroke-reader\\Plugins\\x86_64";
 
-        constexpr std::array<const wchar_t*, 5> kSharedDeps = {
+        constexpr std::array<const wchar_t*, 6> kSharedDeps = {
             L"zlib1.dll",
             L"jpeg62.dll",
             L"libpng16.dll",
             L"ogg.dll",
             L"vorbis.dll",
+            L"opus.dll",
         };
 
         for (const wchar_t* depName : kSharedDeps)
         {
-            const std::wstring fullPath = strokePluginDir + L"\\" + depName;
-            if (!iFileExists(fullPath))
-            {
-                continue;
-            }
-
-            LoadLibraryW(fullPath.c_str());
+            std::wstring fullPath = unityPluginDir + L"\\" + depName;
+            if (!iFileExists(fullPath)) fullPath = strokePluginDir + L"\\" + depName;
+            if (iFileExists(fullPath)) LoadLibraryW(fullPath.c_str());
         }
         // Delay-load resolution does not search the calling DLL's directory.
-        const std::wstring encoderPath = unityPluginDir + L"\\vorbisenc.dll";
-        if (iFileExists(encoderPath)) LoadLibraryW(encoderPath.c_str());
+        for (const wchar_t* encoder : { L"opusenc.dll", L"vorbisenc.dll" })
+        {
+            const std::wstring encoderPath = unityPluginDir + L"\\" + encoder;
+            if (iFileExists(encoderPath)) LoadLibraryW(encoderPath.c_str());
+        }
     }
 }
 

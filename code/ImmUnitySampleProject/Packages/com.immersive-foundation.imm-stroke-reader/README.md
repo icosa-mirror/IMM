@@ -101,3 +101,18 @@ paint rates remain unchanged. Check `Succeeded` and `Issues` before using the su
 This mode does not change legacy flat reads. It does not certify codec identity,
 full root/startup/navigation reconstruction, native audio or application acceptance;
 re-encoding decoded geometry can change quantization (content pipeline section 6.34).
+
+
+Offline PCM16 decoding is available through `StrokeReader_DecodeSoundPcm16`
+(authoring layer index), `StrokeReader_CopyDecodedSoundPcm16` and
+`StrokeReader_ReleaseDecodedSoundPcm16`. The positive 64-bit lease owns samples;
+copy them and release in a `finally` block. Leases survive document unload, but
+`StrokeReader_End` clears them. `StrokeSoundPcmInfo` is 16 bytes (sample rate,
+channels, per-channel frame count and total byte count). Negative decode results
+mean invalid data (-1), decoded PCM limit (-2), allocation (-3) or unsupported
+format (-4). The required positive byte cap bounds output PCM, not codec scratch
+or input memory. Copy requires capacity for the complete PCM; invalid handles or
+undersized buffers return zero. Opus decodes at 48 kHz; WAV/Vorbis retain rate.
+This synchronous offline API is independent of live playback. Windows standalone
+reader decoding is locally verified; platform CI and reader-only iOS static linking
+remain unverified. The SharpQuill adapters still omit sounds (pipeline section 6.35).

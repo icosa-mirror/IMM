@@ -44,6 +44,7 @@ static class SoundImportChecks
                 memoryBytes[0] = 42;
                 Require(Reader.StrokeReader_GetSoundAssetData(disk, index, memoryBytes, memoryBytes.Length - 1) == 0 && memoryBytes[0] == 42 &&
                     Reader.StrokeReader_GetSoundAssetData(disk, index, null, 0) == 0, "Sound buffer guard failed.");
+                PcmDecodeChecks.Check(disk, index, info, bytes, directory, Path.GetFileNameWithoutExtension(path));
                 expected.Add((info, bytes));
             }
             Require(expected.Count > 0 && !Reader.StrokeReader_GetSoundAssetInfo(disk, -1, out _) &&

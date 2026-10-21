@@ -75,6 +75,7 @@
     <ClInclude Include="src\libVR\piVR.h" />
     <ClInclude Include="src\libVR\vive\piVive.h" />
     <ClInclude Include="src\libWave\formats\piWaveOGG.h" />
+    <ClInclude Include="src\libWave\formats\piWaveDecode.h" />
     <ClInclude Include="src\libWave\formats\piWaveOPUS.h" />
     <ClInclude Include="src\libWave\formats\piWaveWAV.h" />
     <ClInclude Include="src\libWave\piWave.h" />
@@ -121,6 +122,7 @@
     <ClCompile Include="src\libVR\piVR.cpp" />
     <ClCompile Include="src\libVR\vive\piVive.cpp" />
     <ClCompile Include="src\libWave\formats\piWaveOGG.cpp" />
+    <ClCompile Include="src\libWave\formats\piWaveDecode.cpp" />
     <ClCompile Include="src\libWave\formats\piWaveOPUS.cpp" />
     <ClCompile Include="src\libWave\formats\piWaveWAV.cpp" />
     <ClCompile Include="src\libWave\piWave.cpp" />
