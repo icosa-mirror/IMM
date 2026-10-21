@@ -380,6 +380,14 @@ namespace ImmPlayer.Authoring
                             }
                             if (layer.Properties.SpawnAreaIsDefault && defaultSpawnAreaHandle == IntPtr.Zero)
                                 defaultSpawnAreaHandle = handle;
+                            ImmAuthoringImage preview = layer.Properties.SpawnAreaPreview;
+                            if (preview != null)
+                            {
+                                byte[] data = preview.CopyData();
+                                if (!Native.ImmExporter_SpawnAreaSetPreview(handle, preview.Width, preview.Height, preview.Channels,
+                                    (int)preview.Encoding, preview.EncodedBgr ? 1 : 2, data, (ulong)data.LongLength))
+                                    return CompileFailure(sequence, "Native viewpoint preview setup failed.", layer.Id);
+                            }
                         }
                     }
                     else if (layer.Type == ImmAuthoringLayerType.Group)

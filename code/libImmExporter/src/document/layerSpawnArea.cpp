@@ -21,6 +21,7 @@ namespace ImmExporter
         mVolume.mType = Volume::Type::Sphere;
         mVolume.mShape.mSphere = vec4(0.0f, 1.0f, 0.0f, 2.0f);
         mHasAsset = false;
+        mEncodedAsset.clear();
         //mScreenshot.Init();
         mVersion = version;
         return true;
@@ -81,13 +82,27 @@ namespace ImmExporter
 
     bool LayerSpawnArea::AssignAsset(const piImage *asset, bool move)
     {
+        if (mHasAsset) mScreenshot.Free();
+        mHasAsset = false;
+        mEncodedAsset.clear();
         if (move)
             mScreenshot.InitMove(asset);
-        else
-            mScreenshot.InitCopy(asset);
+        else if (!mScreenshot.InitCopy(asset))
+            return false;
         if(asset->GetFormat(0) == piImage::Format::FORMAT_I_RGBA)
             mScreenshot.Convert(0, piImage::Format::FORMAT_I_RGB, false);
         mHasAsset = true;
+        return true;
+    }
+
+    bool LayerSpawnArea::AssignEncodedAsset(const uint8_t* data, size_t size, uint32_t format, uint32_t version)
+    {
+        if (!data || size == 0 || (format != 1 && format != 2) || (version != 1 && version != 2)) return false;
+        mEncodedAsset.assign(data, data + size);
+        mEncodedFormat = format;
+        mEncodedVersion = version;
+        if (mHasAsset) mScreenshot.Free();
+        mHasAsset = false;
         return true;
     }
 

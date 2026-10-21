@@ -3630,6 +3630,39 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_GetRootL
     return sequence ? sequence->GetRoot() : nullptr;
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SpawnAreaSetPreview(
+    void* layerHandle, int width, int height, int channels, int encoding, int version, const uint8_t* bytes, uint64_t size)
+{
+    auto* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (!layer || layer->GetType() != ImmExporter::Layer::Type::SpawnArea || !bytes || size == 0 ||
+        width <= 0 || height <= 0 || (channels != 3 && channels != 4) || (version != 1 && version != 2)) return false;
+    auto* spawn = reinterpret_cast<ImmExporter::LayerSpawnArea*>(layer->GetImplementation());
+    if (!spawn || uint64_t(width) * uint64_t(height) > uint64_t(INT32_MAX) / uint64_t(channels)) return false;
+    ImmCore::piImage image;
+    image.Init();
+    if (encoding == 0 || encoding == 1)
+    {
+        if (version != 2 || channels != (encoding == 0 ? 3 : 4) || size != uint64_t(width) * uint64_t(height) * uint64_t(channels)) return false;
+        ImmCore::piImage::Format format = channels == 3 ? ImmCore::piImage::FORMAT_I_RGB : ImmCore::piImage::FORMAT_I_RGBA;
+        if (!image.Init(ImmCore::piImage::TYPE_2D, width, height, 1, 1, &format)) return false;
+        std::memcpy(image.GetData(0), bytes, static_cast<size_t>(size));
+        bool assigned = spawn->AssignAsset(&image, false);
+        image.Free();
+        return assigned;
+    }
+    if (encoding != 2 && encoding != 3) return false;
+    ImmCore::piTArray<uint8_t> borrowed;
+    borrowed.Init(0, false);
+    borrowed.Set(const_cast<uint8_t*>(bytes), size);
+    borrowed.SetLength(size);
+    if (!image.ReadFromMemory(&borrowed, encoding == 2 ? L"png" : L"jpg")) { image.Free(); return false; }
+    const auto format = image.GetFormat(0);
+    bool valid = image.GetXRes() == width && image.GetYRes() == height &&
+        ((channels == 3 && format == ImmCore::piImage::FORMAT_I_RGB) || (channels == 4 && format == ImmCore::piImage::FORMAT_I_RGBA));
+    image.Free();
+    return valid && spawn->AssignEncodedAsset(bytes, static_cast<size_t>(size), encoding == 2 ? 1u : 2u, static_cast<uint32_t>(version));
+}
+
 extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSequence(
     int type,
     int caps,

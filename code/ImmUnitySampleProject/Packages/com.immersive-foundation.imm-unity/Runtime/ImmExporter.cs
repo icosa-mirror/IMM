@@ -657,6 +657,11 @@ namespace ImmPlayer.Exporter
         [DllImport(DllName)]
         public static extern IntPtr ImmExporter_GetRootLayer(IntPtr sequenceHandle);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SpawnAreaSetPreview(IntPtr layerHandle, int width, int height, int channels,
+            int encoding, int version, [In] byte[] bytes, ulong size);
+
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr ImmExporter_CreateGroupLayer(
             IntPtr sequenceHandle,

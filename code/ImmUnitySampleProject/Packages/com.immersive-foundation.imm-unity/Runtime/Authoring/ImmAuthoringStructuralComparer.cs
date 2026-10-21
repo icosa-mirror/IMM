@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ImmPlayer.Exporter;
 using UnityEngine;
 
@@ -132,6 +133,18 @@ namespace ImmPlayer.Authoring
             Equal(differences, $"{path}.spawnAreaAllowTranslationX", expected.SpawnAreaAllowTranslationX, actual.SpawnAreaAllowTranslationX);
             Equal(differences, $"{path}.spawnAreaAllowTranslationY", expected.SpawnAreaAllowTranslationY, actual.SpawnAreaAllowTranslationY);
             Equal(differences, $"{path}.spawnAreaAllowTranslationZ", expected.SpawnAreaAllowTranslationZ, actual.SpawnAreaAllowTranslationZ);
+            var expectedPreview = expected.SpawnAreaPreview;
+            var actualPreview = actual.SpawnAreaPreview;
+            if (expectedPreview == null || actualPreview == null)
+            {
+                if (expectedPreview != actualPreview)
+                    Difference(differences, $"{path}.spawnAreaPreview", "Preview presence differs.");
+            }
+            else if (expectedPreview.Width != actualPreview.Width || expectedPreview.Height != actualPreview.Height ||
+                expectedPreview.Channels != actualPreview.Channels || expectedPreview.Encoding != actualPreview.Encoding ||
+                expectedPreview.EncodedBgr != actualPreview.EncodedBgr ||
+                !expectedPreview.CopyData().SequenceEqual(actualPreview.CopyData()))
+                Difference(differences, $"{path}.spawnAreaPreview", "Preview dimensions, encoding, color order or bytes differ.");
         }
 
         private static void CompareAnimationKeys(

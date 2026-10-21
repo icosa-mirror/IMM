@@ -22,6 +22,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     RootPropertyChecks.Run(args[3]);
     RootAnimationChecks.Run(args[3]);
     ViewpointConverterChecks.Run(args[3]);
+    PreviewAssetChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     return 0;
 }

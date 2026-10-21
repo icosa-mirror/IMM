@@ -214,6 +214,7 @@ namespace ImmPlayer.Authoring
         public bool SpawnAreaAllowTranslationX;
         public bool SpawnAreaAllowTranslationY;
         public bool SpawnAreaAllowTranslationZ;
+        public ImmAuthoringImage SpawnAreaPreview;
 
         public static ImmAuthoringLayerProperties Default(string name) => new ImmAuthoringLayerProperties
         {

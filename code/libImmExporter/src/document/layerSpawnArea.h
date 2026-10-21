@@ -4,6 +4,7 @@
 #include "libImmCore/src/libBasics/piImage.h"
 #include "libImmCore/src/libBasics/piVecTypes.h"
 #include "layer.h"
+#include <vector>
 
 #define DEFAULT_LAYER_SPAWNAREA_VERSION 1
 
@@ -60,6 +61,11 @@ namespace ImmExporter
         const ImmCore::bound3& GetVolumeBox(void) const;
 
         bool AssignAsset(const ImmCore::piImage *asset, bool move);
+        bool AssignEncodedAsset(const uint8_t* data, size_t size, uint32_t format, uint32_t version);
+        const std::vector<uint8_t>& GetEncodedAsset() const { return mEncodedAsset; }
+        uint32_t GetEncodedFormat() const { return mEncodedFormat; }
+        uint32_t GetExportVersion() const { return mEncodedAsset.empty() ? 2u : mEncodedVersion; }
+        bool HasScreenshot() const { return mHasAsset || !mEncodedAsset.empty(); }
         inline bool GetTranslationX(void) const { return mVolume.mAllowTranslationX; }
         inline bool GetTranslationY(void) const { return mVolume.mAllowTranslationY; }
         inline bool GetTranslationZ(void) const { return mVolume.mAllowTranslationZ; }
@@ -71,5 +77,8 @@ namespace ImmExporter
         Volume      mVolume;
         ImmCore::piImage mScreenshot;
         bool mHasAsset;
+        std::vector<uint8_t> mEncodedAsset;
+        uint32_t mEncodedFormat = 0;
+        uint32_t mEncodedVersion = 2;
     };
 }

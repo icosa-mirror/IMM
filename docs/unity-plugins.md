@@ -642,9 +642,9 @@ package's `Runtime/ImmStrokeReader.cs`. Use
 `tests/tools/verify_unity_plugin_exports.py` to generate the exact declaration and
 binary-export inventory for a revision rather than maintaining a copied list.
 
-The current source declares 113 player/exporter and 41 reader entry points. Windows
-verification passes, including the additive root writer and reader calls. Other
-platform binaries for the new root-property reader still require CI publication
+The current source declares 114 player/exporter and 41 reader entry points. Windows
+verification passes, including the additive root writer, reader and viewpoint
+preview setter calls. Other platform binaries for these additions require CI publication
 and verification; earlier all-platform audit results do not prove those additions.
 
 ```powershell

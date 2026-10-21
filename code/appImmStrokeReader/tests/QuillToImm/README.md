@@ -10,6 +10,11 @@ production files must provide the imports required in Unity. This catches missin
 imports such as the comic-export LINQ regression; Unity package/player CI remains
 necessary for engine-specific compilation and behavior.
 
+The suite also exercises immutable viewpoint preview bytes, native RGBA-to-JPEG
+encoding, unchanged encoded JPEG export, structural comparison, and malformed-image
+and image-budget output guards. Preview reader/import and Quill payload mapping
+are separate outstanding work.
+
 1. Run the synthetic native regression suite from the repository root. Use a fresh
    artifact directory for each local run; Windows CI runs this with freshly built DLLs:
 

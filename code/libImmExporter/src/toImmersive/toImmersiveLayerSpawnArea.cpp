@@ -22,7 +22,7 @@ namespace ImmExporter
             LayerSpawnArea::Volume::Type type = lv->GetVolumeType();
             vec4 sph;
             bound3 bnd;
-            constexpr uint32_t kVersion = 2;
+            const uint32_t kVersion = lv->GetExportVersion();
             // version 1 adds all data and thumbnail (spaces)
             // version 2 changes swap of RB on thumbnail asset
 
@@ -66,7 +66,7 @@ namespace ImmExporter
             );
 
             // NOTE: These are important so current version of QuillPlayer will run in Spaces
-            fp->WriteUInt8(lv->GetScreenshot()!=nullptr); // Has screenshot
+            fp->WriteUInt8(lv->HasScreenshot()); // Has screenshot
             fp->WriteUInt8(1); // Is exported (always true)
             fp->WriteUInt8(lv->GetTracking() == LayerSpawnArea::TrackingLevel::Floor ? 1 : 0); // Is floor level spawn area (Not used in Spaces)
 
@@ -78,6 +78,14 @@ namespace ImmExporter
             LayerSpawnArea* lv = (LayerSpawnArea*)imp;
 
             const int channel = 0;
+            if (!lv->GetEncodedAsset().empty())
+            {
+                const auto& bytes = lv->GetEncodedAsset();
+                fp->WriteUInt32(lv->GetEncodedFormat());
+                fp->WriteUInt64(bytes.size() + 8); // Existing IMM blob-size convention includes this length word.
+                fp->Write(bytes.data(), bytes.size());
+                return true;
+            }
             const piImage *image = lv->GetScreenshot();
             piImage tmp;
             bool wasTmpCreated = false;

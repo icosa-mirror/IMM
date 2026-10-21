@@ -719,6 +719,28 @@ Status checked at 2026-10-21 14:36 UTC:
    mapping and image previews need separate work. Fresh full CI must also validate
    the LINQ correction and this revision; previous failures remain unresolved.
 
+### 6.15. Viewpoint preview export foundation (2026-10-21)
+
+1. Added immutable `ImmAuthoringImage` assets for RGB8/RGBA8 and encoded JPEG/PNG,
+   shared safely by graph snapshots and transactions. Spawn layers own previews;
+   other layer types reject them. Structural comparison checks image metadata and
+   bytes. Export limits count the larger of encoded and decoded byte sizes.
+2. Added `ImmExporter_SpawnAreaSetPreview`. Raw pixels use the existing native
+   JPEG codec; encoded assets retain their bytes and IMM v1 BGR/v2 RGB version.
+   Encoded dimensions/channels are checked by native decoding before assignment.
+   This is an offline export capability; it adds no per-frame playback work.
+3. Local Windows native and managed builds pass. The native harness covers image
+   byte ownership, snapshot isolation, comparison, raw RGBA encoding, unchanged
+   JPEG payload export, malformed-image rejection and output preservation under
+   image limits. The export verifier sees 114 player/exporter declarations and
+   41 reader declarations. Full platform validation remains pending.
+4. Preview import/query support and Quill qbin preview mapping are the next
+   milestone. `ConvertProject` still diagnoses embedded previews as unsupported;
+   this foundation alone does not close preview round-trip or C3 acceptance.
+   The current full CI run is `39646549914`; at the latest check it reported no
+   failures and iOS Metal validation was running. Earlier Unity compiler failures
+   remain unresolved until the replacement platform gates pass.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

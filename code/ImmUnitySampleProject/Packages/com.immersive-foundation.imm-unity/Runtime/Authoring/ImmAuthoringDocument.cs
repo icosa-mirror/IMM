@@ -975,6 +975,8 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer transform and pivot must be finite with positive scale.", objectId);
             if (properties.DurationTicks < 0)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer duration cannot be negative.", objectId);
+            if (properties.SpawnAreaPreview != null && type != ImmAuthoringLayerType.SpawnArea)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only spawn-area layers can own a viewpoint preview.", objectId);
             // The spawn-volume fields exist on every layer because the properties struct is
             // shared, so their rules are checked only for the layer type that owns them.
             // Applying them to paint, group or viewpoint layers would report a spawn-area
