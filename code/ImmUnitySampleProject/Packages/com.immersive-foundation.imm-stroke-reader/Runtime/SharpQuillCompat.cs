@@ -59,12 +59,13 @@ namespace ImmStrokeReader
         }
 
         /// <summary>Read the authoring hierarchy and supported keys without flattening. Unsupported content is reported; legacy readers are unchanged.</summary>
-        public static SharpQuillReadResult ReadImmAsHierarchyWithReport(string path, bool includePictures = true, int maxDecodedSoundBytes = 256 * 1024 * 1024)
+        public static SharpQuillReadResult ReadImmAsHierarchyWithReport(string path, bool includePictures = true, int maxDecodedSoundBytes = 256 * 1024 * 1024, int maxDecodedPreviewBytes = 256 * 1024 * 1024)
         {
             var issues = new List<SharpQuillConversionIssue>();
             Sequence sequence = null;
             if (maxDecodedSoundBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxDecodedSoundBytes));
-            try { sequence = ReadImmAsSequenceCore(path, includePictures, -1, issues, true, maxDecodedSoundBytes); }
+            if (maxDecodedPreviewBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxDecodedPreviewBytes));
+            try { sequence = ReadImmAsSequenceCore(path, includePictures, -1, issues, true, maxDecodedSoundBytes, maxDecodedPreviewBytes); }
             catch (EntryPointNotFoundException)
             {
                 issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DiagnosticUnavailable, -1, "",
@@ -88,7 +89,7 @@ namespace ImmStrokeReader
         }
 
         private static Sequence ReadImmAsSequenceCore(string path, bool includePictures, int chapterIndex,
-            List<SharpQuillConversionIssue> issues, bool preserveHierarchy = false, int maxDecodedSoundBytes = 0)
+            List<SharpQuillConversionIssue> issues, bool preserveHierarchy = false, int maxDecodedSoundBytes = 0, int maxDecodedPreviewBytes = 0)
         {
             if (string.IsNullOrEmpty(path))
             {
@@ -120,7 +121,7 @@ namespace ImmStrokeReader
                         Debug.LogWarning($"{LogPrefix}StrokeReader_SetChapter({chapterIndex}) failed, using default chapter");
                     }
                 }
-                if (preserveHierarchy) return ConvertHierarchyDocument(docId, includePictures, issues, maxDecodedSoundBytes);
+                if (preserveHierarchy) return ConvertHierarchyDocument(docId, includePictures, issues, maxDecodedSoundBytes, maxDecodedPreviewBytes);
                 if (issues != null) CaptureLossReport(docId, includePictures, chapterIndex, issues);
                 return ConvertDocument(docId, includePictures, chapterIndex, issues);
             }
@@ -212,7 +213,7 @@ namespace ImmStrokeReader
             return true;
         }
 
-        private static Sequence ConvertHierarchyDocument(int docId, bool includePictures, List<SharpQuillConversionIssue> issues, int remainingSoundBytes)
+        private static Sequence ConvertHierarchyDocument(int docId, bool includePictures, List<SharpQuillConversionIssue> issues, int remainingSoundBytes, int remainingPreviewBytes)
         {
             if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetDocumentInfo(docId, out var document) ||
                 !ImmPlayer.ImmStrokeReader.StrokeReader_GetRootLayerProperties(docId, out var rootInfo, out var rootTransform))
@@ -281,7 +282,7 @@ namespace ImmStrokeReader
                 else if (info.type == 1) layer = ReadAuthoringPaint(docId, record.Index, info, ref nextStrokeId, issues);
                 else if (info.type == 8)
                 {
-                    layer = ReadAuthoringViewpoint(docId, record.Index, info, issues);
+                    layer = ReadAuthoringViewpoint(docId, record.Index, info, issues, ref remainingPreviewBytes);
                     if (layer == null) continue;
                 }
                 else if (info.type == 5)
@@ -341,7 +342,7 @@ namespace ImmStrokeReader
         }
 
         private static LayerViewpoint ReadAuthoringViewpoint(int docId, int index, StrokeAuthoringLayerInfo info,
-            List<SharpQuillConversionIssue> issues)
+            List<SharpQuillConversionIssue> issues, ref int remainingPreviewBytes)
         {
             if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(docId, index, out var spawn))
                 throw new InvalidDataException($"Viewpoint '{info.name}' metadata could not be read.");
@@ -362,9 +363,30 @@ namespace ImmStrokeReader
             layer.Exporting = true;
             issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ViewpointMetadataNotPreserved, info.id, info.name,
                 "Native viewpoint availability is copied to Quill gizmo visibility; original gizmo color/show-volume/version/import metadata is unavailable and uses SharpQuill defaults. Source navigation behavior is not certified.", info.type));
-            if (ImmPlayer.ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewInfo(docId, index, out _))
+            if (ImmPlayer.ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewInfo(docId, index, out var preview))
+            {
+                long pixelCount = (long)preview.width * preview.height;
+                if (preview.width <= 0 || preview.height <= 0 || (preview.channels != 3 && preview.channels != 4) || pixelCount > int.MaxValue / preview.channels)
+                    throw new InvalidDataException($"Invalid preview dimensions for '{info.name}'.");
+                int byteCount = (int)pixelCount * preview.channels;
+                if (byteCount > remainingPreviewBytes)
+                {
+                    issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ResourceLimit, info.id, info.name,
+                        $"Decoded preview needs {byteCount} bytes; remaining aggregate preview budget is {remainingPreviewBytes} bytes.", info.type));
+                    throw new InvalidDataException($"Preview for '{info.name}' exceeds the output budget; no partial sequence returned.");
+                }
+                byte[] pixels = new byte[(int)byteCount];
+                if (ImmPlayer.ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewPixels(docId, index, pixels, pixels.Length) != pixels.Length)
+                {
+                    issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.DataReadFailed, info.id, info.name,
+                        "Stored viewpoint preview could not be decoded; no partial sequence returned.", info.type));
+                    throw new InvalidDataException($"Preview for '{info.name}' could not be decoded.");
+                }
+                layer.PreviewData = new PictureData { Width = preview.width, Height = preview.height, HasAlpha = preview.channels == 4, Pixels = pixels };
+                remainingPreviewBytes -= pixels.Length;
                 issues.Add(new SharpQuillConversionIssue(SharpQuillConversionIssueCode.ViewpointMetadataNotPreserved, info.id, info.name,
-                    "Stored viewpoint preview is available in the native reader but is not yet written to the Quill project.", info.type));
+                    "Stored preview was decoded to RGB/RGBA; original compressed bytes/version are not preserved. Version-one BGR correction is applied.", info.type));
+            }
             return layer;
         }
 

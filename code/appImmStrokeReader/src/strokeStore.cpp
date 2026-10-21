@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <new>
 
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmImporter/src/document/sequence.h"
@@ -1068,6 +1069,36 @@ int StrokeStore::GetSpawnAreaPreviewData(int layerIdx, uint8_t* bytes, int maxBy
     if (data.empty() || maxBytes < static_cast<int>(data.size())) return 0;
     std::memcpy(bytes, data.data(), data.size());
     return static_cast<int>(data.size());
+}
+
+int StrokeStore::GetSpawnAreaPreviewPixels(int layerIdx, uint8_t* pixels, int maxBytes) const
+{
+    StrokeImageAssetInfoC info{};
+    if (!pixels || maxBytes <= 0 || !GetSpawnAreaPreviewInfo(layerIdx, &info) ||
+        info.width <= 0 || info.height <= 0 || (info.channels != 3 && info.channels != 4) ||
+        (info.encoding != 2 && info.encoding != 3)) return 0;
+    const uint64_t byteCount = uint64_t(info.width) * uint64_t(info.height) * uint64_t(info.channels);
+    if (byteCount > uint64_t(maxBytes) || byteCount > INT32_MAX) return 0;
+    const auto& encoded = mDocument.authoringLayers[layerIdx].spawnPreviewBytes;
+    ImmCore::piImage image;
+    image.Init();
+    struct ImageCleanup { ImmCore::piImage& value; ~ImageCleanup() { value.Free(); } } cleanup{ image };
+    try
+    {
+        ImmCore::piTArray<uint8_t> borrowed;
+        borrowed.Init(0, false);
+        borrowed.Set(const_cast<uint8_t*>(encoded.data()), encoded.size());
+        borrowed.SetLength(encoded.size());
+        if (!image.ReadFromMemory(&borrowed, info.encoding == 2 ? L"png" : L"jpg")) return 0;
+        const auto format = image.GetFormat(0);
+        if (image.GetXRes() != info.width || image.GetYRes() != info.height ||
+            image.GetDataSize(0) != byteCount || !image.GetData(0) ||
+            (info.channels == 3 ? format != ImmCore::piImage::FORMAT_I_RGB : format != ImmCore::piImage::FORMAT_I_RGBA)) return 0;
+        if (info.sourceVersion == 1) image.SwapRB(0);
+        std::memcpy(pixels, image.GetData(0), static_cast<size_t>(byteCount));
+        return static_cast<int>(byteCount);
+    }
+    catch (const std::bad_alloc&) { return 0; }
 }
 
 bool StrokeStore::GetPictureAssetInfo(int layerIdx, StrokePictureAssetInfoC* info) const

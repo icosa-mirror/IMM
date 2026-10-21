@@ -469,6 +469,15 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetPictu
     return it != gStrokeReader.mDocuments.end() && it->second->GetPictureAssetInfo(layerIdx, info);
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetSpawnAreaPreviewPixels(
+    int docId, int layerIdx, uint8_t* pixels, int maxBytes)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || !pixels || maxBytes <= 0) return 0;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it == gStrokeReader.mDocuments.end() ? 0 : it->second->GetSpawnAreaPreviewPixels(layerIdx, pixels, maxBytes);
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetPictureAssetData(
     int docId, int layerIdx, uint8_t* bytes, int maxBytes)
 {

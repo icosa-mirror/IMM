@@ -13,6 +13,7 @@ internal static class QuillReaderTests
         PictureTypes();
         QuillPictureWriterChecks.Run();
         QuillSoundWriterChecks.Run();
+        QuillViewpointPreviewChecks.Run();
         ViewpointDefaults();
         SpatialSoundSettings();
         StartupSettings();

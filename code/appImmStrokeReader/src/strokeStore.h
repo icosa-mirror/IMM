@@ -307,6 +307,7 @@ public:
     bool CaptureSequenceMetadata(ImmImporter::Sequence& sequence, const AssetReader& readAsset);
     bool GetSpawnAreaPreviewInfo(int layerIdx, StrokeImageAssetInfoC* info) const;
     int GetSpawnAreaPreviewData(int layerIdx, uint8_t* bytes, int maxBytes) const;
+    int GetSpawnAreaPreviewPixels(int layerIdx, uint8_t* pixels, int maxBytes) const;
     bool GetPictureAssetInfo(int layerIdx, StrokePictureAssetInfoC* info) const;
     int GetPictureAssetData(int layerIdx, uint8_t* bytes, int maxBytes) const;
     bool GetSoundAssetInfo(int layerIdx, StrokeSoundAssetInfoC* info) const;

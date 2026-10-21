@@ -353,7 +353,7 @@ Source: `code/appImmStrokeReader/src/main.cpp` + `strokeStore.cpp/.h`. It links 
 file into a plain in-memory stroke/layer graph. The historical binary inventory above is not the current API contract; new
 entry points require matching platform rebuilds and export validation.
 
-### 3.1 Native API (50 declared entry points)
+### 3.1 Native API (51 declared entry points)
 
 Offline PCM16 decoding is available through `StrokeReader_DecodeSoundPcm16`
 (authoring layer index), `StrokeReader_CopyDecodedSoundPcm16` and
@@ -680,7 +680,7 @@ package's `Runtime/ImmStrokeReader.cs`. Use
 `tests/tools/verify_unity_plugin_exports.py` to generate the exact declaration and
 binary-export inventory for a revision rather than maintaining a copied list.
 
-The current source declares 121 player/exporter and 50 reader entry points. Windows
+The current source declares 121 player/exporter and 51 reader entry points. Windows
 verification passes, including the additive root writer, reader and viewpoint
 preview setter/query calls, picture asset queries and offline picture/sound construction and encoded sound import/passthrough. Other platform binaries for these additions require CI publication
 and verification; earlier all-platform audit results do not prove those additions.
@@ -740,8 +740,15 @@ of limitations/destination replacement. Written projects include a complete
 IMM-conversion-report.txt; skipped or unreadable inputs do not write output.
 The standalone legacy flat API is unchanged (content pipeline section 6.39).
 
-Hierarchy reads map spherical spawn metadata and unique default paths. Box volumes,
-reverse preview writing and original gizmo metadata remain reported limitations.
+Hierarchy reads map spherical spawn metadata, stored RGB/RGBA previews and unique
+default paths. Box volumes and original gizmo metadata remain reported limitations.
 The offline compiler uses CreateSpawnAreaLayerWithProperties to retain pivot,
 opacity/timeline/duration/repeats and hidden startup visibility as a time-zero key.
 The original constructor retains its defaults (pipeline 6.42).
+
+`StrokeReader_GetSpawnAreaPreviewPixels` decodes the authoring-indexed stored
+PNG/JPEG preview into complete caller-owned RGB/RGBA bytes or returns zero. Use
+GetSpawnAreaPreviewInfo for dimensions/channels; version-one BGR correction is
+applied. The hierarchy adapter bounds decoded preview output with the optional
+maxDecodedPreviewBytes (default 256 MiB aggregate, not a total memory limit).
+SharpQuill PreviewData now survives project read/write (pipeline section 6.43).

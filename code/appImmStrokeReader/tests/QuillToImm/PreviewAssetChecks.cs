@@ -106,6 +106,41 @@ static class PreviewAssetChecks
                 byte[] bytes = new byte[expected.Length];
                 Require(Reader.StrokeReader_GetSpawnAreaPreviewData(doc, 0, bytes, bytes.Length) == bytes.Length && bytes.SequenceEqual(expected),
                     "Original preview bytes changed.");
+                byte[] decoded = new byte[width * height * channels];
+                Require(Reader.StrokeReader_GetSpawnAreaPreviewPixels(doc, 0, decoded, decoded.Length) == decoded.Length,
+                    "Preview pixel decoding failed.");
+                byte[] guarded = Enumerable.Repeat((byte)42, decoded.Length).ToArray();
+                Require(Reader.StrokeReader_GetSpawnAreaPreviewPixels(doc, 0, guarded, guarded.Length - 1) == 0 && guarded.All(x => x == 42) &&
+                    Reader.StrokeReader_GetSpawnAreaPreviewPixels(doc, 0, null, decoded.Length) == 0 &&
+                    Reader.StrokeReader_GetSpawnAreaPreviewPixels(doc, -1, guarded, guarded.Length) == 0,
+                    "Preview pixel copy bounds guard failed.");
+                if (encoding == 2)
+                    Require(decoded.SequenceEqual(new byte[] { 220, 40, 90, 255 }), "PNG preview pixels/alpha changed.");
+                if (doc == disk)
+                {
+                    var converted = global::ImmStrokeReader.SharpQuillCompat.ReadImmAsHierarchyWithReport(path);
+                    Require(converted.Succeeded, "Hierarchy preview decode failed.");
+                    var viewpoint = converted.Sequence.RootLayer.Children.OfType<SharpQuill.LayerViewpoint>().Single();
+                    Require(viewpoint.PreviewData != null && viewpoint.PreviewData.Pixels.SequenceEqual(decoded), "Adapter preview pixels differ from native decode.");
+                    string project = Path.Combine(directory, $"{Path.GetFileNameWithoutExtension(path)}-preview-project");
+                    SharpQuill.QuillSequenceWriter.Write(converted.Sequence, project);
+                    var restored = SharpQuill.QuillSequenceReader.Read(project).RootLayer.Children.OfType<SharpQuill.LayerViewpoint>().Single();
+                    Require(restored.PreviewData.Pixels.SequenceEqual(decoded), "Preview project pixels changed.");
+                }
+                if (bgr)
+                {
+                    int rgbDoc = Reader.StrokeReader_LoadFromFile(Path.Combine(directory, "preview-encoded.imm"));
+                    try
+                    {
+                        byte[] rgb = new byte[decoded.Length];
+                        Require(rgbDoc > 0 && Reader.StrokeReader_GetSpawnAreaPreviewPixels(rgbDoc, 0, rgb, rgb.Length) == rgb.Length,
+                            "RGB preview reference decode failed.");
+                        for (int pixel = 0; pixel < rgb.Length; pixel += 3)
+                            Require(decoded[pixel] == rgb[pixel + 2] && decoded[pixel + 1] == rgb[pixel + 1] && decoded[pixel + 2] == rgb[pixel],
+                                "Version-one preview BGR correction changed.");
+                    }
+                    finally { if (rgbDoc > 0) Reader.StrokeReader_Unload(rgbDoc); }
+                }
                 bytes[0] = 42;
                 Require(Reader.StrokeReader_GetSpawnAreaPreviewData(doc, 0, bytes, bytes.Length - 1) == 0 && bytes[0] == 42 &&
                     Reader.StrokeReader_GetSpawnAreaPreviewData(doc, 0, null, 0) == 0 &&
@@ -119,7 +154,8 @@ static class PreviewAssetChecks
             if (memory > 0) Reader.StrokeReader_Unload(memory);
             pinned.Free(); Reader.StrokeReader_End();
         }
-        Require(!Reader.StrokeReader_GetSpawnAreaPreviewInfo(disk, 0, out _), "Preview query survived shutdown.");
+        Require(!Reader.StrokeReader_GetSpawnAreaPreviewInfo(disk, 0, out _) &&
+            Reader.StrokeReader_GetSpawnAreaPreviewPixels(disk, 0, new byte[4], 4) == 0, "Preview query survived shutdown.");
         var imported = ImmAuthoringImporter.ImportFromFile(path, Path.Combine(directory, "preview-import.log"));
         Require(imported.Succeeded, imported.Message);
         using (imported.Document)

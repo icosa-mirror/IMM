@@ -22,10 +22,11 @@ build has no runner assigned. Later APIs still need their own platform/package a
 hosted success does not establish skipped hardware gates or full content fidelity.
 Confirmed regressions take priority over new feature work. See section 6.26.
 
-The corrected Windows staging, independent adapter and static converter CI steps
-pass in replacement run 39688086871; Android also passes. The Windows job is still
-building Godot and macOS/iOS remain queued, so full replacement acceptance remains
-pending (sections 6.38-6.42). Hierarchy sound, reviewed editor menus and spherical
+Replacement run 39688086871 has passed its complete Windows job and Android,
+closing the earlier Windows staging/adapter failures with replacement evidence.
+macOS/iOS remain queued, so full validation is incomplete. Later viewpoint and
+spawn-property runs have no reported failures but are still incomplete (6.42-6.43).
+Hierarchy sound, reviewed editor menus and spherical
 viewpoint mapping are implemented; the offline spawn compiler now retains common
 properties through the additive constructor recorded in section 6.42.
 
@@ -66,7 +67,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
-| Viewpoints / spawn areas | Tracking defaults and preview offsets parsed | Spawn metadata and encoded previews exposed; hierarchy adapter maps spheres and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; full common-property constructor with hidden startup visibility encoded as a key | Spawn edits within limits | Stored preview conversion implemented; generated previews, exact JPEG parity and broader navigation acceptance open |
+| Viewpoints / spawn areas | Tracking defaults and preview offsets parsed; project reader/writer retains raw RGB/RGBA previews | Spawn metadata, encoded previews and on-demand pixels exposed; hierarchy adapter maps spheres, previews and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; full common-property constructor with hidden startup visibility encoded as a key | Spawn edits within limits | Stored preview conversion implemented both directions; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D RGB/RGBA pictures mapped by project converter; panorama/depth mappings remain unverified | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels and exposed metadata; stereo/panorama and playback acceptance remain open |
 | Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries, metadata import and offline PCM16 decoding; hierarchy adapter maps supported mono/stereo sound | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
@@ -1537,6 +1538,49 @@ replacement-run closure in section 6.26 (20:23 UTC):
    Quill application/live-authoring and broader platform acceptance remain open.
    The one earlier undetailed local fixture-setup failure from section 6.41 has not
    recurred in the final full suites; its cause remains unestablished.
+
+### 6.43. Reverse viewpoint preview project writing (2026-10-22)
+
+1. Added authoring-indexed StrokeReader_GetSpawnAreaPreviewPixels. It decodes stored
+   PNG/JPEG on demand into a complete caller-owned RGB/RGBA buffer, returning zero
+   on failure or insufficient space without partial writes. Version-one previews
+   receive the same BGR correction as the importer. Encoded bytes remain unchanged;
+   no additional decoded cache or playback/per-frame behavior is introduced.
+2. LayerViewpoint now has optional PreviewData. The project writer validates it
+   before output replacement, writes the observed raw image header and pixels to
+   qbin, regenerates the offset and emits it in JSON. Absent data clears stale
+   offsets. Ordinary project reads hydrate preview pixels with bounded offset,
+   format, dimension and payload checks; metadata-only reads leave data unloaded.
+3. The hierarchy adapter now supplies those pixels. Its independent optional
+   maxDecodedPreviewBytes budget defaults to 256 MiB across all decoded viewpoint
+   preview pixels. This bounds retained output, not encoded input, codec scratch,
+   other picture layers or total process memory. Nonpositive budgets throw;
+   exhausted budgets or failed decoding fail without returning a partial sequence.
+   Original compressed bytes/version changes remain explicitly reported losses.
+4. Fresh Windows native build, complete local QuillToImm suite, independent reader
+   and adapter suites and export checks pass (121 player/exporter, 51 reader).
+   Checks cover PNG exact pixels/alpha, JPEG read-back, version-one BGR correction,
+   file/memory queries, complete-copy/invalid-handle guards, aggregate exact/short
+   budgets, absent/RGB/RGBA previews, mixed offsets, malformed payload rejection,
+   stale-offset removal and invalid-writer output preservation. Integrated Snoopy
+   still passes its sound/whole-project read-back checks; no visual fidelity claim.
+   Evidence: ignored artifacts/preview-write-suite.log, preview-write-reader.log,
+   preview-write-adapter.log, preview-write-Snoopy.log, preview-write-exports.json
+   and preview-pixels-native-build.log.
+5. Delegated writer implementation and a separate native/adapter review accompany
+   the parent-owned integration; the combined local tests above use the actual
+   connected path. Cross-platform exports, Quill application/rendered preview and
+   playback acceptance still need CI/runtime evidence. This closes reverse stored
+   preview writing, not generated previews, box/source navigation, codec identity
+   or the remaining live-authoring roadmap.
+6. Latest independent CI audit found no failed jobs: replacement 39688086871 Windows
+   is successful (11 jobs passed, five queued). Viewpoint run 39688927555 passed its
+   Windows source checks and is building Godot. Spawn run 39689819341 native Windows
+   build passed but later source checks remain pending. macOS/iOS waits prevent
+   full-run acceptance; this preview API also requires fresh full validation.
+7. Older sound-import run 39669262483 remains nonterminal with its SDK-install
+   Android failure and three queued iOS visual jobs. The one permitted targeted
+   infrastructure retry remains deferred until GitHub allows it (section 6.28).
 
 ## 7. Consolidated documents
 

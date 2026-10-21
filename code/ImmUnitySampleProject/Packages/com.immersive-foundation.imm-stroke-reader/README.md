@@ -132,9 +132,21 @@ all typed issues. Batch summaries count skips separately. Legacy flat read/write
 APIs retain their previous behavior. See content pipeline section 6.39.
 
 The hierarchy reader also reconstructs spherical viewpoints and uniquely expressible
-native default paths. Box volumes and stored preview images are reported gaps.
+native default paths. Box volumes remain reported gaps. Stored previews now
+survive through decoded LayerViewpoint.PreviewData and Quill project read/write.
 Quill gizmo fields unavailable in IMM use reported defaults; native availability
 and Quill gizmo visibility have different meanings. This does not establish source
 navigation behavior. The offline compiler now retains common spawn properties
 through an additive constructor, with hidden initial visibility represented by a
 time-zero key (content pipeline sections 6.41-6.42).
+
+`StrokeReader_GetSpawnAreaPreviewPixels` returns the complete decoded RGB/RGBA
+preview or zero. Dimensions/channels come from GetSpawnAreaPreviewInfo. Version-one
+BGR correction is applied; encoded byte queries remain unchanged. Hierarchy reads
+accept maxDecodedPreviewBytes (default 256 MiB across preview pixels, independent
+of the sound budget). It bounds retained decoded output, not scratch/input/total
+memory; temporary native and managed decoded copies coexist during conversion.
+Insufficient budget fails the read; no partial sequence is returned.
+Original compressed preview bytes/version are reported as changed. Quill project
+writing validates optional PreviewData before replacing files and regenerates
+its qbin offset; absent data clears old offsets (content pipeline section 6.43).

@@ -175,7 +175,13 @@ complete saved reports and failed-read output preservation. Live Unity Editor
 interaction and Quill application acceptance remain separate requirements.
 
 Hierarchy viewpoint checks cover sphere/tracking/locomotion, local reflection/keys,
-project read-back, explicit box/preview limitations and ambiguous/omitted default
+project read-back, explicit box/preview encoding limitations and ambiguous/omitted default
 selection. Full-property spawn tests cover common fields through native export,
 import/re-export and project read-back, hidden startup tracks, explicit zero-time
 overrides and unchanged legacy constructor defaults (content pipeline 6.42).
+
+Reverse preview checks exercise native file/memory decode, PNG pixels/alpha,
+version-one BGR correction, complete-copy guards, adapter/project pixel equality
+and aggregate exact/short output budgets. SharpQuillReader independently checks
+absent/RGB/RGBA/mixed offsets, stale offsets and malformed/output-preservation cases
+(content pipeline section 6.43).

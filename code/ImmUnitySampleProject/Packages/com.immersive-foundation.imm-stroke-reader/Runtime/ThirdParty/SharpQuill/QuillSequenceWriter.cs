@@ -279,6 +279,8 @@ namespace SharpQuill
       }
       else if (layer is LayerSound sound)
         ValidateSound(sound);
+      else if (layer is LayerViewpoint viewpoint && viewpoint.PreviewData != null)
+        QBinWriter.ValidatePictureData(viewpoint.PreviewData);
     }
 
     private static JObject WriteLayerImplementationCamera(LayerCamera layer)
@@ -300,6 +302,8 @@ namespace SharpQuill
       jLayer.Add(new JProperty("Exporting", layer.Exporting));
       jLayer.Add(new JProperty("ShowingVolume", layer.ShowingVolume));
       jLayer.Add(new JProperty("TypeStr", layer.TypeStr));
+      if (layer.PreviewData != null)
+        jLayer.Add(new JProperty("DataFileOffset", layer.DataFileOffset.ToString("X")));
       return jLayer;
     }
 
@@ -456,7 +460,7 @@ namespace SharpQuill
     }
 
     /// <summary>
-    /// Recursive function to write paint/picture/sound data to file and update the layers offsets.
+    /// Recursive function to write paint/picture/sound/preview data and update the layers offsets.
     /// This is called with the root layer and will write all the data for the sequence.
     /// </summary>
     private static void WriteLayerData(Layer layer, QBinWriter qbinWriter)
@@ -478,6 +482,15 @@ namespace SharpQuill
       {
         sound.DataFileOffset = qbinWriter.BaseStream.Position;
         qbinWriter.Write(sound.Data);
+      }
+      else if (layer is LayerViewpoint viewpoint)
+      {
+        viewpoint.DataFileOffset = 0;
+        if (viewpoint.PreviewData != null)
+        {
+          viewpoint.DataFileOffset = qbinWriter.BaseStream.Position;
+          qbinWriter.Write(viewpoint.PreviewData);
+        }
       }
       else if (layer.Type == LayerType.Paint)
       {

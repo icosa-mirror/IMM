@@ -353,6 +353,10 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int StrokeReader_GetSpawnAreaPreviewData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
 
+        /// <summary>Offline decode of the declared PNG/JPEG preview. Complete RGB/RGBA copy or zero; dimensions/channels come from GetSpawnAreaPreviewInfo.</summary>
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetSpawnAreaPreviewPixels(int docId, int layerIdx, [Out] byte[] pixels, int maxBytes);
+
         /// <summary>Original encoded picture asset, indexed by authoring layer; independent of the legacy decoded-pixel array.</summary>
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]

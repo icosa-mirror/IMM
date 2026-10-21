@@ -27,6 +27,7 @@ static class HierarchyViewpointChecks
         Require(document.CreateAnimationKey(floorId, ImmAuthoringAnimationProperty.Visibility, 525, ImmAuthoringAnimationValue.FromBool(false)).Succeeded,
             "Viewpoint key fixture failed.");
         var eye = ImmAuthoringLayerProperties.Default("Eye"); eye.SpawnAreaFloorLevel = false; eye.SpawnAreaIsDefault = true;
+        eye.SpawnAreaPreview = floor.SpawnAreaPreview;
         long eyeId = document.CreateSpawnAreaLayer(group, eye).Value;
         var box = ImmAuthoringLayerProperties.Default("Box"); box.SpawnAreaVolume = ExportSpawnAreaVolume.Box;
         long boxId = document.CreateSpawnAreaLayer(group, box).Value;
@@ -34,6 +35,11 @@ static class HierarchyViewpointChecks
         Export();
         var result = Adapter.ReadImmAsHierarchyWithReport(input);
         Require(result.Succeeded && result.Sequence.DefaultViewpoint == "Root/Views/Eye", "Native default viewpoint path lost.");
+        var limited = Adapter.ReadImmAsHierarchyWithReport(input, maxDecodedPreviewBytes: 16 * 16 * 3 * 2 - 1);
+        Require(!limited.Succeeded && limited.Issues.Any(x => x.Code == Issue.ResourceLimit && x.SourceLayerName == "Eye"),
+            "Aggregate preview budget returned a partial success.");
+        Require(Adapter.ReadImmAsHierarchyWithReport(input, maxDecodedPreviewBytes: 16 * 16 * 3 * 2).Succeeded,
+            "Exact aggregate preview budget rejected.");
         var views = ((SharpQuill.LayerGroup)result.Sequence.RootLayer.Children.Single()).Children.OfType<SharpQuill.LayerViewpoint>().ToArray();
         Require(views.Length == 2 && views[0].Name == "Floor" && views[1].Name == "Eye", "Viewpoint order/box omission changed.");
         var actual = views[0];
@@ -45,6 +51,7 @@ static class HierarchyViewpointChecks
             actual.Animation.Keys.Visibility.Count == 2 && actual.Animation.Keys.Visibility[0].Time == 0 && !actual.Animation.Keys.Visibility[0].Value && actual.Animation.Keys.Visibility[1].Time == 525,
             $"Viewpoint changed: tracking={actual.TypeStr}/{views[1].TypeStr}, sphere={actual.Sphere.X},{actual.Sphere.Y},{actual.Sphere.Z},{actual.Sphere.W}, movement={actual.AllowTranslationX},{actual.AllowTranslationY},{actual.AllowTranslationZ}, local={actual.Transform.Translation.X}/{actual.Transform.Flip}, pivot={actual.Pivot.Translation.X}/{actual.Pivot.Flip}, keys={actual.Animation.Keys.Visibility.Count}, visible={actual.Visible}, opacity={actual.Opacity:R}, timeline={actual.Animation.Timeline}/{actual.Animation.Duration}/{actual.Animation.MaxRepeatCount}.");
         Require(result.Issues.Any(x => x.Code == Issue.LayerOmitted && x.SourceLayerName == "Box") &&
+            actual.PreviewData != null && actual.PreviewData.Width == 16 && actual.PreviewData.Height == 16 &&
             result.Issues.Any(x => x.Code == Issue.ViewpointMetadataNotPreserved && x.SourceLayerName == "Floor" && x.Message.Contains("preview")),
             "Box or preview limitation was silent.");
         string project = Path.Combine(directory, "hierarchy-viewpoint-project");
@@ -55,6 +62,8 @@ static class HierarchyViewpointChecks
             restored[1].TypeStr == "EyeLevel" && restored[0].Animation.Keys.Visibility.Count == 2 && !restored[0].Animation.Keys.Visibility[0].Value && restored[0].Animation.Keys.Visibility[1].Time == 525 &&
             restored[0].Pivot.Translation.X == 2 && restored[0].Opacity == 0.65f && restored[0].Animation.Duration == 25200,
             "Viewpoint project read-back changed.");
+        Require(restored[0].PreviewData != null && restored[0].PreviewData.Pixels.SequenceEqual(actual.PreviewData.Pixels),
+            "Viewpoint preview pixels did not survive project read-back.");
         var imported = ImmAuthoringImporter.ImportFromFile(input);
         Require(imported.Succeeded, imported.Message);
         using (imported.Document)
