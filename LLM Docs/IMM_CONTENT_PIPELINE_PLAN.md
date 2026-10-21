@@ -558,8 +558,11 @@ Status checked at 2026-10-21 14:36 UTC:
    adapter checks and Windows export verification pass. The reader now declares
    41 native entry points, with build ID `2026-10-21-ROOT-PROPERTIES`; both committed
    Windows reader DLLs match. Other-platform publication and Unity CI remain
-   pending for this new API. The preceding root-writer run 39634328582 is still
-   active without a confirmed failed job at the last check.
+   pending for this new API. The preceding root-writer run 39634328582 has passed
+   Windows job 119340634233. Its Godot iOS job 119340633744 was cancelled without
+   acquiring a runner or executing any steps; annotations explicitly identify
+   hosted macOS ARM64 capacity. This is still unresolved infrastructure, not a
+   passing full run. Fresh reader/import validation is run 39637172881 at 7cb26ffb.
 5. R1 is not complete: root animation/chapter construction, native double precision,
    remaining consumer/adapter contracts and reverse-conversion acceptance retain
    their scope. C2 still needs broader evaluated animation and navigation evidence.
