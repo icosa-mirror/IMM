@@ -3606,8 +3606,9 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SetRootLa
     // constant key the importer supplies its implicit visible=true default.
     ImmExporter::Layer::AnimValue visibilityValue{};
     visibilityValue.mBool = visible != 0;
-    if (!root->AddKey(ImmCore::piTick(0), ImmExporter::Layer::AnimProperty::Visibility,
-        visibilityValue, ImmExporter::Layer::InterpolationType::None))
+    if (root->GetNumAnimKeys(ImmExporter::Layer::AnimProperty::Visibility) == 0 &&
+        !root->AddKey(ImmCore::piTick(0), ImmExporter::Layer::AnimProperty::Visibility,
+            visibilityValue, ImmExporter::Layer::InterpolationType::None))
         return false;
     auto rootTransform = ImmExporterMakeTransform(transform);
     auto rootPivot = ImmExporterMakeTransform(pivot);
@@ -3621,6 +3622,12 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SetRootLa
     root->SetDuration(ImmCore::piTick(durationTicks));
     root->SetMaxRepeatCount(maxRepeatCount);
     return true;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_GetRootLayer(void* sequenceHandle)
+{
+    auto* sequence = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    return sequence ? sequence->GetRoot() : nullptr;
 }
 
 extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSequence(

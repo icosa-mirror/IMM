@@ -321,6 +321,17 @@ namespace ImmPlayer.Authoring
             IntPtr defaultSpawnAreaHandle = IntPtr.Zero;
             try
             {
+                if (snapshot.RootAnimationKeys.Count != 0)
+                {
+                    IntPtr rootHandle = Native.ImmExporter_GetRootLayer(sequence.Handle);
+                    if (rootHandle == IntPtr.Zero) return CompileFailure(sequence, "Native root handle was unavailable.", 0);
+                    foreach (ImmAuthoringAnimationKeySnapshot key in snapshot.RootAnimationKeys)
+                    {
+                        options.CancellationToken.ThrowIfCancellationRequested();
+                        if (!AddNativeAnimationKey(rootHandle, key))
+                            return CompileFailure(sequence, "Native root animation key creation failed.", key.Id);
+                    }
+                }
                 if (snapshot.RootProperties.HasValue)
                 {
                     ImmAuthoringLayerProperties root = snapshot.RootProperties.Value;
@@ -395,25 +406,7 @@ namespace ImmPlayer.Authoring
 
                     foreach (ImmAuthoringAnimationKeySnapshot key in layer.AnimationKeys)
                     {
-                        TransformNative keyTransform = ToNative(key.Value.TransformValue);
-                        bool added;
-                        if (key.Property == ImmAuthoringAnimationProperty.Transform && key.Value.TransformValue.Flip != ImmAuthoringFlip.None)
-                            added = Native.ImmExporter_LayerAddAnimationKeyWithFlip(
-                                handle, (int)key.Property, key.TimeTicks, (int)key.Interpolation,
-                                key.Value.BoolValue ? 1 : 0, key.Value.UIntValue, key.Value.FloatValue,
-                                key.Value.DoubleValue, ref keyTransform, (int)key.Value.TransformValue.Flip);
-                        else
-                            added = Native.ImmExporter_LayerAddAnimationKey(
-                                handle,
-                                (int)key.Property,
-                                key.TimeTicks,
-                                (int)key.Interpolation,
-                                key.Value.BoolValue ? 1 : 0,
-                                key.Value.UIntValue,
-                                key.Value.FloatValue,
-                                key.Value.DoubleValue,
-                                ref keyTransform);
-                        if (!added)
+                        if (!AddNativeAnimationKey(handle, key))
                         {
                             return CompileFailure(sequence, "Native animation key creation failed.", key.Id);
                         }
@@ -442,6 +435,17 @@ namespace ImmPlayer.Authoring
                 sequence.Dispose();
                 throw;
             }
+        }
+
+        private static bool AddNativeAnimationKey(IntPtr handle, ImmAuthoringAnimationKeySnapshot key)
+        {
+            TransformNative transform = ToNative(key.Value.TransformValue);
+            if (key.Property == ImmAuthoringAnimationProperty.Transform && key.Value.TransformValue.Flip != ImmAuthoringFlip.None)
+                return Native.ImmExporter_LayerAddAnimationKeyWithFlip(handle, (int)key.Property, key.TimeTicks, (int)key.Interpolation,
+                    key.Value.BoolValue ? 1 : 0, key.Value.UIntValue, key.Value.FloatValue, key.Value.DoubleValue,
+                    ref transform, (int)key.Value.TransformValue.Flip);
+            return Native.ImmExporter_LayerAddAnimationKey(handle, (int)key.Property, key.TimeTicks, (int)key.Interpolation,
+                key.Value.BoolValue ? 1 : 0, key.Value.UIntValue, key.Value.FloatValue, key.Value.DoubleValue, ref transform);
         }
 
         private static ImmAuthoringResult CompilePaintLayer(
@@ -512,8 +516,9 @@ namespace ImmPlayer.Authoring
         {
             if (snapshot == null)
                 return Failure(ImmAuthoringErrorCode.InvalidArgument, "Snapshot cannot be null.", 0, 0, statistics);
-            if (snapshot.SequenceType == ExportSequenceType.Comic)
-                return Failure(ImmAuthoringErrorCode.Unsupported, "Comic authoring is not supported by the phase 3 compiler.", 0, snapshot.Revision, statistics);
+            if (snapshot.SequenceType == ExportSequenceType.Comic &&
+                !snapshot.RootAnimationKeys.Any(key => key.Property == ImmAuthoringAnimationProperty.Action))
+                return Failure(ImmAuthoringErrorCode.Unsupported, "Comic export requires root action keys.", 0, snapshot.Revision, statistics);
             if (opusBitrate <= 0 || !Enum.IsDefined(typeof(ExportAudioType), audioType))
                 return Failure(ImmAuthoringErrorCode.InvalidArgument, "Audio export settings are invalid.", 0, snapshot.Revision, statistics);
             ImmAuthoringResult limitsResult = ImmAuthoringLimitValidator.Validate(snapshot, limits);

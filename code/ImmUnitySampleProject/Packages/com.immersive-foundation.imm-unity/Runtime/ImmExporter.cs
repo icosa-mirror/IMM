@@ -653,6 +653,10 @@ namespace ImmPlayer.Exporter
             ref TransformNative transform, ref TransformNative pivot,
             int transformFlip, int pivotFlip, int isTimeline, long durationTicks, uint maxRepeatCount);
 
+        /// <summary>Borrow the sequence-owned root handle for offline key authoring. Do not destroy it separately.</summary>
+        [DllImport(DllName)]
+        public static extern IntPtr ImmExporter_GetRootLayer(IntPtr sequenceHandle);
+
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr ImmExporter_CreateGroupLayer(
             IntPtr sequenceHandle,

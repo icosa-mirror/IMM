@@ -56,8 +56,12 @@ converter also checks the observed legacy zero-root normalization. The public re
 does not yet expose root layer properties, so serialization checks explicitly parse
 the writer's version-1 Root descriptor. Native root-property queries and static root
 import/re-export are also checked, including root visibility, unchanged indexed
-child-layer counts, null/bounds/unload handling, default zero offsets and explicit
-nondefault root-key loss diagnostics. Full root animation/chapter import remains open.
+child-layer counts and null/bounds/unload handling. Default and nondefault root offsets
+are retained. Root animation checks author 12 keys through root layer ID zero, exercise
+ownership/lookup/transactions/replacement/removal/limits, and compare every native key
+after export/import/re-export. All four action values and the 524/525-tick Play/Stop
+separation survive; both files report Comic and three chapters. This does not validate
+actual chapter navigation, playback controls or Quill source action mapping.
 
 For fixed-observer native paint playback comparisons, the viewer capture script
 `code/appImmViewer/scripts/capture_windows_directx_baseline.ps1` accepts `-LockCamera`.

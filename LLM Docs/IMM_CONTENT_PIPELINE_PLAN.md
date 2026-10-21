@@ -53,7 +53,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
-| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys and static root properties exposed; static root import locally verified on Windows; cross-platform CI pending. Nondefault root animation still reported unsupported | Static root settings supported; complete root/comic/chapter authoring absent; comic compilation rejected | No complete chapter authoring claim | Inspect actual root keys and Quill export behavior, then extend required authoring APIs |
+| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Existing defaults and properties | Spawn metadata exposed; SharpQuill adapter skips spawn layers | Existing spawn graph/import/export/default selection | Spawn edits within limits | Map export flags, tracking, volume and defaults |
 | Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | No picture construction in current graph/Unity exporter ABI | Outside live scope | Add construction and map projection/viewer locking/assets |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
@@ -563,9 +563,48 @@ Status checked at 2026-10-21 14:36 UTC:
    acquiring a runner or executing any steps; annotations explicitly identify
    hosted macOS ARM64 capacity. This is still unresolved infrastructure, not a
    passing full run. Fresh reader/import validation is run 39637172881 at 7cb26ffb.
-5. R1 is not complete: root animation/chapter construction, native double precision,
+5. R1 is not complete: root animation/chapter acceptance (construction added in 6.9), native double precision,
    remaining consumer/adapter contracts and reverse-conversion acceptance retain
    their scope. C2 still needs broader evaluated animation and navigation evidence.
+
+### 6.9 Shared root keys and comic/chapter export (2026-10-21)
+
+1. `CreateAnimationKey(layerId: 0, ...)` now targets the document root. Existing
+   replacement/removal operations, ownership validation, transaction cloning and
+   immutable snapshot lookup support those keys. `RootAnimationKeys` is separate
+   from indexed child layers and participates in the existing key resource limit.
+2. Additive `ImmExporter_GetRootLayer` supplies a borrowed sequence-owned handle.
+   The compiler uses the same key-writing path for root and child channels. Explicit
+   root keys precede static root properties; the native root-property setter supplies
+   a default visibility key only when no visibility channel exists. This preserves
+   pre-first-key hiding and explicit channels without adding an earlier default key.
+3. Supported native root visibility/opacity/transform/draw-in/action/loop/offset keys
+   now import into the graph. Root action values retain native Stop/Play/Loop/
+   MakeDefault enums and exact tick times. Comic import/export is enabled with root
+   action markers; comic export without those markers still fails explicitly.
+   Legacy component transform keys and invalid values retain existing diagnostics.
+4. Root structural comparison canonicalizes static visibility carried by a sole
+   None/time-zero key, and the absence of an independent serialized base visibility
+   for animated roots. Explicit/unset default roots remain semantically equivalent;
+   remaining key fields/times/interpolation still compare normally.
+5. A native synthetic fixture round-trips all 12 supported root keys, including all
+   four action values, a reflected Smoothstep transform and Play/Stop at ticks
+   524/525. Both encoded files report Comic and three chapters; every stored root
+   key compares exactly after import/re-export. Root-only snapshot ownership,
+   transaction isolation/commit, replacement/removal and limit/output-preservation
+   checks pass. Default and nondefault root offsets are both retained, replacing
+   the previous unsupported-offset behavior. Existing native regressions and bridge
+   smoke also pass; Windows export verification reports 113 player/exporter and
+   41 reader declarations, with matching local binaries.
+6. This proves stored-data construction and native chapter indexing, not actual
+   chapter navigation, pause/seek/restart or Quill source action mapping. The Quill
+   converter still rejects unverified root action channels. The local Chapters
+   project's missing paired export and the remaining native playback cases retain
+   their scope. No direct live-edit root mutation or per-frame player change was added.
+7. The preceding reader/import revision 7cb26ffb has passed Windows CI job
+   119350736467 in run 39637172881. Full validation and this new writer API's
+   other-platform/Unity acceptance remain pending; the old Godot capacity failure
+   is still unresolved.
 
 ## 7. Consolidated documents
 

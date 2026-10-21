@@ -388,6 +388,7 @@ namespace ImmPlayer.Authoring
     public sealed class ImmAuthoringSnapshot
     {
         private readonly ImmAuthoringLayerSnapshot[] _layers;
+        private readonly ImmAuthoringAnimationKeySnapshot[] _rootAnimationKeys;
         private readonly long[] _rootLayerIds;
         private readonly Dictionary<long, ImmAuthoringLayerSnapshot> _layersById;
         private readonly Dictionary<long, ImmAuthoringDrawingSnapshot> _drawingsById;
@@ -403,6 +404,7 @@ namespace ImmPlayer.Authoring
         public ExportRequirements Requirements { get; }
         /// <summary>Optional offline root properties. Null retains the native sequence's legacy defaults.</summary>
         public ImmAuthoringLayerProperties? RootProperties { get; }
+        public IReadOnlyList<ImmAuthoringAnimationKeySnapshot> RootAnimationKeys => Array.AsReadOnly(_rootAnimationKeys);
         public IReadOnlyList<long> RootLayerIds => Array.AsReadOnly(_rootLayerIds);
         public IReadOnlyList<ImmAuthoringLayerSnapshot> Layers => Array.AsReadOnly(_layers);
 
@@ -415,7 +417,8 @@ namespace ImmPlayer.Authoring
             ExportRequirements requirements,
             long[] rootLayerIds,
             ImmAuthoringLayerSnapshot[] layers,
-            ImmAuthoringLayerProperties? rootProperties = null)
+            ImmAuthoringLayerProperties? rootProperties = null,
+            ImmAuthoringAnimationKeySnapshot[] rootAnimationKeys = null)
         {
             DocumentId = documentId;
             Revision = revision;
@@ -424,6 +427,7 @@ namespace ImmPlayer.Authoring
             BackgroundColor = backgroundColor;
             Requirements = requirements;
             RootProperties = rootProperties;
+            _rootAnimationKeys = rootAnimationKeys ?? Array.Empty<ImmAuthoringAnimationKeySnapshot>();
             _rootLayerIds = rootLayerIds ?? Array.Empty<long>();
             _layers = layers ?? Array.Empty<ImmAuthoringLayerSnapshot>();
             _layersById = new Dictionary<long, ImmAuthoringLayerSnapshot>(_layers.Length);
@@ -431,6 +435,8 @@ namespace ImmPlayer.Authoring
             _framesById = new Dictionary<long, ImmAuthoringFrameSnapshot>();
             _strokesById = new Dictionary<long, ImmAuthoringStrokeSnapshot>();
             _animationKeysById = new Dictionary<long, ImmAuthoringAnimationKeySnapshot>();
+            foreach (ImmAuthoringAnimationKeySnapshot key in _rootAnimationKeys)
+                _animationKeysById.Add(key.Id, key);
             foreach (ImmAuthoringLayerSnapshot layer in _layers)
             {
                 _layersById.Add(layer.Id, layer);

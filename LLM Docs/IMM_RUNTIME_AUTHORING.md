@@ -115,9 +115,12 @@ serialization and graph checks pass locally; other-platform/Unity CI is pending.
 The reader's additive `GetRootLayerProperties` now supplies those settings to the
 authoring importer through the existing float layouts. Static root import/re-export
 passes locally, including hidden roots and reflected transforms/pivots. Default
-zero offsets are recognized; nondefault root keys remain explicitly lossy. Root
-key/chapter construction and direct live root mutation remain incomplete. This is
-not full root animation import/export or live-authoring acceptance.
+zero offsets and other supported native root keys are retained. Root key authoring
+uses `CreateAnimationKey(0, ...)` with snapshot `RootAnimationKeys`; replacement,
+removal, transactions and limits apply normally. Comic export requires root action
+markers. A 12-key native export/import/re-export preserves all four action values,
+one-tick marker separation and three-chapter indexing. Actual chapter navigation,
+Quill source action mapping and direct live root mutation still require acceptance.
 
 Paint round trips preserve the codec's representation, not arbitrary source floats: alpha and
 width are quantised, always-visible direction is omitted by the codec, and point length/time
@@ -132,9 +135,9 @@ enables authoring on 64-bit processes; that check alone is not a backend validat
 The formerly missing `ImmExporter_LayerAddAnimationKey` and
 `ImmExporter_PaintSetMaxRepeatCount` exports were also implemented.
 
-Pictures, sound, models, effects, references/instances, and complete comic/chapter authoring
-remain outside the delivered managed scope. The compiler rejects comic export. These are
-separate potential extensions, not prerequisites for the live paint editor.
+Pictures, sound, models, effects and references/instances remain outside the delivered
+managed scope. Root-key and comic file construction now exist, while full chapter
+playback/control acceptance remains open. These are separate from live paint editing.
 
 ## 4. Measured motivation and acceptance budget
 

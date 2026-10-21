@@ -117,8 +117,9 @@ static class RootPropertyChecks
         var defaults = ImmAuthoringImporter.ImportFromFile(sample, Path.Combine(directory, "root-default-offset.log"));
         Require(defaults.Succeeded, defaults.Message);
         using (defaults.Document)
-            Require(!defaults.Issues.Any(x => x.Code == ImmAuthoringImportIssueCode.UnsupportedRootAnimation),
-                "The sole default zero offset was misdiagnosed as unsupported root animation.");
+            Require(!defaults.Issues.Any(x => x.Code == ImmAuthoringImportIssueCode.UnsupportedRootAnimation) &&
+                defaults.Document.CreateSnapshot().Value.RootAnimationKeys.Any(x => x.Property == ImmAuthoringAnimationProperty.Offset && x.Value.UIntValue == 0),
+                "The default zero offset was omitted or misdiagnosed as unsupported root animation.");
 
         // Change only the tracked sample's root Offset key value in an artifact
         // copy. All channel lengths and resource offsets remain unchanged.
@@ -146,13 +147,13 @@ static class RootPropertyChecks
         BitConverter.GetBytes(1u).CopyTo(bytes, offsetValue);
         string altered = Path.Combine(directory, "root-nondefault-offset.imm");
         File.WriteAllBytes(altered, bytes);
-        var unsupported = ImmAuthoringImporter.ImportFromFile(altered, Path.Combine(directory, "root-nondefault-offset.log"));
-        Require(unsupported.Succeeded, unsupported.Message);
-        using (unsupported.Document)
-            Require(unsupported.Lossiness == ImmAuthoringImportLossiness.Lossy &&
-                unsupported.Issues.Any(x => x.Code == ImmAuthoringImportIssueCode.UnsupportedRootAnimation),
-                "A nondefault root offset was silently dropped.");
-        Console.WriteLine("[IMM_ROOT_OFFSET_IMPORT_TEST] Passed default-zero offset recognition and explicit nondefault root-animation diagnostics.");
+        var nondefault = ImmAuthoringImporter.ImportFromFile(altered, Path.Combine(directory, "root-nondefault-offset.log"));
+        Require(nondefault.Succeeded, nondefault.Message);
+        using (nondefault.Document)
+            Require(!nondefault.Issues.Any(x => x.Code == ImmAuthoringImportIssueCode.UnsupportedRootAnimation) &&
+                nondefault.Document.CreateSnapshot().Value.RootAnimationKeys.Any(x => x.Property == ImmAuthoringAnimationProperty.Offset && x.Value.UIntValue == 1),
+                "The nondefault root offset was omitted or misdiagnosed.");
+        Console.WriteLine("[IMM_ROOT_OFFSET_IMPORT_TEST] Passed default and nondefault root-offset import.");
     }
 
     public static void AssertSerializedRoot(string path, ImmAuthoringLayerProperties expected)

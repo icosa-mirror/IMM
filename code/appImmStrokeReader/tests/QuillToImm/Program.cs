@@ -17,6 +17,7 @@ if (args.Length == 4 && args[0] == "--self-test")
         name == "ImmUnityPlugin" ? NativeLibrary.Load(exporterLibrary) : name == "ImmStrokeReader" ? NativeLibrary.Load(readerLibrary) : IntPtr.Zero);
     PaintRepeatChecks.Run(args[3]);
     RootPropertyChecks.Run(args[3]);
+    RootAnimationChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     return 0;
 }

@@ -256,6 +256,7 @@ binaries; availability is not inferred from legacy capability flags.
 | `ImmExporter_PaintAddFrame` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_LayerAddAnimationKey` | Export | `ImmAuthoringCompiler` |
 | `ImmExporter_SetRootLayerProperties` | Offline export, additive root properties | `ImmAuthoringCompiler` when snapshot root properties are explicit; matching native binary required; Windows locally verified, other-platform CI pending |
+| `ImmExporter_GetRootLayer` | Offline export, borrowed sequence-owned root handle | `ImmAuthoringCompiler` for `RootAnimationKeys`; do not destroy separately; Windows local round-trip checks pass, other-platform CI pending |
 | `ImmExporter_LayerSetTransformFlips` / `ImmExporter_LayerAddAnimationKeyWithFlip` | Export, additive reflection support | `ImmAuthoringCompiler`; requires matching native binaries, other-platform acceptance pending |
 | `ImmExporter_PaintSetMaxRepeatCount` | Export | `ImmAuthoringCompiler` |
 | `ImmExporter_ExportToFile` / `ExportToMemory` | Export | `ImmExporter` |
@@ -379,7 +380,8 @@ chapter count. It is a metadata query, not a root/chapter construction API.
 and static visibility using existing authoring info/float-transform structs. It is
 separate from indexed child layers. A sole constant None visibility key at time zero
 is exposed as static visibility. The importer retains these settings; nondefault
-root animation remains explicitly lossy. Windows query/lifetime/import/re-export
+root keys now use the graph's root-key operations, including native actions/comic
+construction. Obsolete component keys remain explicitly unsupported. Windows query/lifetime/import/re-export
 checks pass locally; other-platform CI for this additive API is pending.
 
 `GetBuildId` returns `IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-PROPERTIES` â€” the intended way to
@@ -640,7 +642,7 @@ package's `Runtime/ImmStrokeReader.cs`. Use
 `tests/tools/verify_unity_plugin_exports.py` to generate the exact declaration and
 binary-export inventory for a revision rather than maintaining a copied list.
 
-The current source declares 112 player/exporter and 41 reader entry points. Windows
+The current source declares 113 player/exporter and 41 reader entry points. Windows
 verification passes, including the additive root writer and reader calls. Other
 platform binaries for the new root-property reader still require CI publication
 and verification; earlier all-platform audit results do not prove those additions.

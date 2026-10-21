@@ -246,15 +246,9 @@ namespace ImmPlayer.Authoring
                             return DisposeAndFail(document, ImmAuthoringErrorCode.CorruptInput, "Source root key could not be read.", statistics);
                         rootKeys.Add(key);
                     }
-                    int visibilityKeys = rootKeys.FindAll(x => x.property == (int)ImmAuthoringAnimationProperty.Visibility).Count;
-                    int offsetKeys = rootKeys.FindAll(x => x.property == (int)ImmAuthoringAnimationProperty.Offset).Count;
-                    int unsupportedRootKeys = rootKeys.FindAll(key =>
-                        !(key.timeTicks == 0 && key.interpolation == (int)ImmAuthoringInterpolation.None &&
-                            ((key.property == (int)ImmAuthoringAnimationProperty.Visibility && visibilityKeys == 1) ||
-                             (key.property == (int)ImmAuthoringAnimationProperty.Offset && offsetKeys == 1 && key.intValue == 0)))).Count;
-                    if (unsupportedRootKeys != 0)
-                        issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedRootAnimation,
-                            $"The source root contains {unsupportedRootKeys} keys outside static visibility/default offset; root animation/chapter construction is not yet supported."));
+                    ImmAuthoringResult importRootKeys = ImportAnimationKeys(source, new SourceLayer(-1, rootInfo, rootTransform),
+                        editable, 0, issues, statistics, options, rootKeys.ToArray());
+                    if (!importRootKeys.Succeeded) return DisposeAndFail(document, importRootKeys.ErrorCode, importRootKeys.Message, statistics);
                     Dictionary<int, long> importedLayers = new Dictionary<int, long>();
                     Dictionary<int, SourceLayer> layersBySourceId = new Dictionary<int, SourceLayer>();
                     foreach (SourceLayer layer in sourceLayers)
@@ -534,10 +528,11 @@ namespace ImmPlayer.Authoring
             long importedLayerId,
             List<ImmAuthoringImportIssue> issues,
             ImmAuthoringImportStatistics statistics,
-            ImmAuthoringOperationOptions options)
+            ImmAuthoringOperationOptions options,
+            StrokeAnimationKey[] suppliedKeys = null)
         {
             options.CancellationToken.ThrowIfCancellationRequested();
-            StrokeAnimationKey[] keys = source.GetLayerAnimationKeys(sourceLayer.Index);
+            StrokeAnimationKey[] keys = suppliedKeys ?? source.GetLayerAnimationKeys(sourceLayer.Index);
             if (keys == null)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer animation keys could not be read.", importedLayerId);
             if ((long)statistics.ImportedAnimationKeyCount + keys.LongLength > options.Limits.MaxAnimationKeys)
@@ -555,7 +550,7 @@ namespace ImmPlayer.Authoring
                     sourceKey.property == (int)ImmAuthoringAnimationProperty.Visibility &&
                     sourceKey.timeTicks == 0 &&
                     sourceKey.interpolation == (int)ImmAuthoringInterpolation.None &&
-                    sourceKey.boolValue != 0)
+                    (sourceKey.boolValue != 0 || importedLayerId == 0))
                 {
                     continue;
                 }
@@ -785,9 +780,11 @@ namespace ImmPlayer.Authoring
                 return ExportSequenceType.Still;
             if (sourceType == (int)ExportSequenceType.Animated)
                 return ExportSequenceType.Animated;
+            if (sourceType == (int)ExportSequenceType.Comic)
+                return ExportSequenceType.Comic;
             issues.Add(new ImmAuthoringImportIssue(
                 ImmAuthoringImportIssueCode.UnsupportedSequenceType,
-                $"Sequence type {sourceType} is outside the supported still/animated paint subset and was converted to Animated."));
+                $"Sequence type {sourceType} is outside the supported still/animated/comic paint subset and was converted to Animated."));
             return ExportSequenceType.Animated;
         }
 

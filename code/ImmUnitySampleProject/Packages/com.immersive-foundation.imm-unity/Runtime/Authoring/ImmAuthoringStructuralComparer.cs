@@ -52,8 +52,8 @@ namespace ImmPlayer.Authoring
             Equal(differences, "document.frameRate", expected.FrameRate, actual.FrameRate);
             Near(differences, "document.backgroundColor", expected.BackgroundColor, actual.BackgroundColor, tolerance);
             CompareLayerProperties(differences, "document.root",
-                expected.RootProperties ?? ImmAuthoringLayerProperties.Default("Root"),
-                actual.RootProperties ?? ImmAuthoringLayerProperties.Default("Root"), tolerance);
+                EffectiveRootProperties(expected), EffectiveRootProperties(actual), tolerance);
+            CompareAnimationKeys(differences, "document.root", ComparableRootKeys(expected), ComparableRootKeys(actual), tolerance);
             if (expected.Layers.Count != actual.Layers.Count)
             {
                 Difference(differences, "document.layers", $"Expected {expected.Layers.Count}, actual {actual.Layers.Count}.");
@@ -75,6 +75,33 @@ namespace ImmPlayer.Authoring
                 CompareDrawings(differences, path, expectedLayer, actualLayer, tolerance);
             }
             return new ImmAuthoringStructuralComparison(differences);
+        }
+
+        private static ImmAuthoringLayerProperties EffectiveRootProperties(ImmAuthoringSnapshot snapshot)
+        {
+            var properties = snapshot.RootProperties ?? ImmAuthoringLayerProperties.Default("Root");
+            int count = 0;
+            ImmAuthoringAnimationKeySnapshot visibility = null;
+            foreach (var key in snapshot.RootAnimationKeys)
+                if (key.Property == ImmAuthoringAnimationProperty.Visibility) { count++; visibility = key; }
+            if (count == 1 && visibility.TimeTicks == 0 && visibility.Interpolation == ImmAuthoringInterpolation.None)
+                properties.Visible = visibility.Value.BoolValue;
+            else if (count != 0)
+                properties.Visible = true; // The file has no independent base visibility field for a keyed root.
+            return properties;
+        }
+
+        private static IReadOnlyList<ImmAuthoringAnimationKeySnapshot> ComparableRootKeys(ImmAuthoringSnapshot snapshot)
+        {
+            int visibilityCount = 0;
+            foreach (var key in snapshot.RootAnimationKeys)
+                if (key.Property == ImmAuthoringAnimationProperty.Visibility) visibilityCount++;
+            var keys = new List<ImmAuthoringAnimationKeySnapshot>();
+            foreach (var key in snapshot.RootAnimationKeys)
+                if (!(visibilityCount == 1 && key.Property == ImmAuthoringAnimationProperty.Visibility &&
+                    key.TimeTicks == 0 && key.Interpolation == ImmAuthoringInterpolation.None))
+                    keys.Add(key);
+            return keys;
         }
 
         private static void CompareLayerProperties(

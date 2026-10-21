@@ -203,7 +203,7 @@ namespace ImmPlayer.Authoring
             long strokes = 0;
             long points = 0;
             long frames = 0;
-            long keys = 0;
+            long keys = snapshot.RootAnimationKeys.Count;
             foreach (ImmAuthoringLayerSnapshot layer in snapshot.Layers)
             {
                 if (layer.Properties.Name != null && layer.Properties.Name.Length > limits.MaxLayerNameCharacters)

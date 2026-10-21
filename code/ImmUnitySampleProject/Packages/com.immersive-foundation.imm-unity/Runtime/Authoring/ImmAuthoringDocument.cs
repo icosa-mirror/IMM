@@ -163,6 +163,7 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
+        /// <summary>Create a key on a child layer, or on the document root when layerId is zero.</summary>
         public ImmAuthoringResult<long> CreateAnimationKey(
             long layerId,
             ImmAuthoringAnimationProperty property,
@@ -177,7 +178,8 @@ namespace ImmPlayer.Authoring
             return ApplyMutation(
                 state =>
                 {
-                    if (!state.Layers.TryGetValue(layerId, out LayerNode layer))
+                    LayerNode layer = FindAnimationLayer(state, layerId);
+                    if (layer == null)
                         return ImmAuthoringResult<long>.Failure(ImmAuthoringErrorCode.NotFound, "Layer was not found.", layerId);
                     if (FindAnimationKey(state, layer, property, timeTicks, 0) != null)
                         return ImmAuthoringResult<long>.Failure(
@@ -221,7 +223,7 @@ namespace ImmPlayer.Authoring
                     return Disposed();
                 if (!_state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key))
                     return NotFound("Animation key", keyId);
-                LayerNode layer = _state.Layers[key.LayerId];
+                LayerNode layer = FindAnimationLayer(_state, key.LayerId);
                 if (FindAnimationKey(_state, layer, property, timeTicks, keyId) != null)
                     return ImmAuthoringResult.Failure(
                         ImmAuthoringErrorCode.InvalidArgument,
@@ -249,7 +251,7 @@ namespace ImmPlayer.Authoring
                     return Disposed();
                 if (!_state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key))
                     return NotFound("Animation key", keyId);
-                _state.Layers[key.LayerId].AnimationKeyIds.Remove(keyId);
+                FindAnimationLayer(_state, key.LayerId).AnimationKeyIds.Remove(keyId);
                 _state.AnimationKeys.Remove(keyId);
                 change = AdvanceRevision(new[] { keyId, key.LayerId });
             }
@@ -1145,17 +1147,11 @@ namespace ImmPlayer.Authoring
                     "One or more strokes are unreachable from their drawing.");
             foreach (LayerNode layer in state.Layers.Values)
             {
-                foreach (long keyId in layer.AnimationKeyIds)
-                {
-                    if (!state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key) || key.LayerId != layer.Id)
-                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer contains an invalid animation key.", keyId);
-                    if (!reachableAnimationKeys.Add(keyId))
-                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Animation key appears more than once in the document.", keyId);
-                    ImmAuthoringResult keyResult = ValidateAnimationKey(key.Property, key.TimeTicks, key.Value, key.Interpolation, keyId);
-                    if (!keyResult.Succeeded)
-                        return keyResult;
-                }
+                ImmAuthoringResult keys = ValidateAnimationLayer(state, layer, reachableAnimationKeys);
+                if (!keys.Succeeded) return keys;
             }
+            ImmAuthoringResult rootKeys = ValidateAnimationLayer(state, state.RootAnimationLayer, reachableAnimationKeys);
+            if (!rootKeys.Succeeded) return rootKeys;
             if (reachableAnimationKeys.Count != state.AnimationKeys.Count)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "One or more animation keys are unreachable from their layer.");
             return ImmAuthoringResult.Success();
@@ -1211,6 +1207,23 @@ namespace ImmPlayer.Authoring
         private static bool IsFinite(Vector3 value) => IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static LayerNode FindAnimationLayer(ImmAuthoringState state, long layerId) =>
+            layerId == 0 ? state.RootAnimationLayer : (state.Layers.TryGetValue(layerId, out LayerNode layer) ? layer : null);
+
+        private static ImmAuthoringResult ValidateAnimationLayer(ImmAuthoringState state, LayerNode layer, HashSet<long> reachable)
+        {
+            foreach (long keyId in layer.AnimationKeyIds)
+            {
+                if (!state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key) || key.LayerId != layer.Id)
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer contains an invalid animation key.", keyId);
+                if (!reachable.Add(keyId))
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Animation key appears more than once in the document.", keyId);
+                ImmAuthoringResult result = ValidateAnimationKey(key.Property, key.TimeTicks, key.Value, key.Interpolation, keyId);
+                if (!result.Succeeded) return result;
+            }
+            return ImmAuthoringResult.Success();
+        }
 
         private static AnimationKeyNode FindAnimationKey(
             ImmAuthoringState state,
