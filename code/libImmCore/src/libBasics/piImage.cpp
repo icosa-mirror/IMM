@@ -900,16 +900,19 @@ bool piImage::ReadFromMemory( const piTArray<uint8_t> * data, const wchar_t *ext
     {
         const uint8_t *ptr;
         uint64_t pos;
+        uint64_t size;
     };
 
     static void iReadStream(png_structp png_ptr, png_bytep outBytes, png_size_t byteCountToRead)
     {
        png_voidp io_ptr = png_get_io_ptr(png_ptr);
-       if(io_ptr == NULL) return;
+       if(io_ptr == NULL) png_error(png_ptr, "[IMM_IMAGE_READ] Missing PNG input stream");
 
        // using pulsar::InputStream
        // -> replace with your own data source interface
        iMyStream *inputStream = (iMyStream*)io_ptr;
+       if (inputStream->pos > inputStream->size || byteCountToRead > inputStream->size - inputStream->pos)
+           png_error(png_ptr, "[IMM_IMAGE_READ] Truncated PNG input");
        //const size_t bytesRead = inputStream.Read( (byte*)outBytes, (size_t)byteCountToRead);
        memcpy( outBytes, inputStream->ptr + inputStream->pos, byteCountToRead);
        inputStream->pos += byteCountToRead;
@@ -917,6 +920,7 @@ bool piImage::ReadFromMemory( const piTArray<uint8_t> * data, const wchar_t *ext
 
     bool piImage::iPNGLoadFromMemory( piImage *img, const uint8_t *ptr, uint64_t size)
     {
+		if (!ptr || size < 8) return false;
 		const unsigned char *header = (const unsigned char*)ptr;
 		if (png_sig_cmp(header, 0, 8))
 			return false;
@@ -926,16 +930,24 @@ bool piImage::ReadFromMemory( const piTArray<uint8_t> * data, const wchar_t *ext
 		if (!png_ptr)
 			return false;
 
-        iMyStream myStream = { ptr, 0 };
+        iMyStream myStream = { ptr, 0, size - 8 };
         png_set_read_fn( png_ptr, &myStream, iReadStream );
 
 
 		png_infop info_ptr = png_create_info_struct(png_ptr);
 		if (!info_ptr)
+		{
+			png_destroy_read_struct(&png_ptr, nullptr, nullptr);
 			return false;
+		}
 
+		png_bytep* volatile row_pointers = nullptr;
 		if (setjmp(png_jmpbuf(png_ptr)))
+		{
+			free(row_pointers);
+			png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 			return false;
+		}
 
 		png_set_sig_bytes(png_ptr, 8);
 
@@ -947,25 +959,23 @@ bool piImage::ReadFromMemory( const piTArray<uint8_t> * data, const wchar_t *ext
 		const int bit_depth = png_get_bit_depth(png_ptr, info_ptr);
 
         if (bit_depth > 8) // currently do not support higher bit depth.
-            return false;
+            png_error(png_ptr, "[IMM_IMAGE_READ] Unsupported PNG bit depth");
 
 		piImage::Format format = piImage::Format::FORMAT_I_GREY;
 		if (color_type == PNG_COLOR_TYPE_GRAY) format = piImage::Format::FORMAT_I_GREY;
 		else if(color_type== PNG_COLOR_TYPE_RGB ) format = piImage::Format::FORMAT_I_RGB;
 		else if (color_type == PNG_COLOR_TYPE_RGB_ALPHA) format = piImage::Format::FORMAT_I_RGBA;
 		else
-			return false;
+			png_error(png_ptr, "[IMM_IMAGE_READ] Unsupported PNG color type");
 
 		if (!img->Init(piImage::TYPE_2D, xres, yres, 1, 1, &format))
-			return false;
+			png_error(png_ptr, "[IMM_IMAGE_READ] PNG image allocation failed");
 
 		const int number_of_passes = png_set_interlace_handling(png_ptr);
 		png_read_update_info(png_ptr, info_ptr);
 
-		if (setjmp(png_jmpbuf(png_ptr)))
-			return false;
-
-		png_bytep *row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * yres);
+		row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * yres);
+		if (!row_pointers) png_error(png_ptr, "[IMM_IMAGE_READ] PNG row allocation failed");
 		const png_bytep buffer = (png_bytep)img->GetData(0);
 		const int bpp = img->GetBpp(0);
 		for (int y = 0; y < yres; y++)
@@ -974,11 +984,11 @@ bool piImage::ReadFromMemory( const piTArray<uint8_t> * data, const wchar_t *ext
 		}
 
 		png_read_image(png_ptr, row_pointers);
+		png_read_end(png_ptr, nullptr);
 
 		free(row_pointers);
 
-        //png_destroy_write_struct(&png_ptr, &info_ptr);
-        png_destroy_info_struct(png_ptr, &info_ptr);
+        png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
 		return true;
     }

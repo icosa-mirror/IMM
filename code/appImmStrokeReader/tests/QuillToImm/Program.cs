@@ -23,6 +23,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     RootAnimationChecks.Run(args[3]);
     ViewpointConverterChecks.Run(args[3]);
     PreviewAssetChecks.Run(args[3]);
+    PngMemoryBoundsChecks.Run();
     ConverterChecks.Run(args[3]);
     return 0;
 }

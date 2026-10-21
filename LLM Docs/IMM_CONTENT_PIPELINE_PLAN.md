@@ -113,7 +113,7 @@ The preferred first candidate is:
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; final full CI blocked by Godot iOS capacity | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; final full CI blocked by Godot iOS capacity | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
-| C2: animation and navigation | Initial animated-paint conversion implemented: drawings/holds, layer keys and nested timing; local native synthetic checks and exact Fishgym paint/key metadata comparison pass. Viewpoints, root/chapter behavior and evaluated playback remain outstanding | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
+| C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata comparisons and default-camera capture pass within recorded scope. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
@@ -796,6 +796,25 @@ Status checked at 2026-10-21 14:36 UTC:
    export) and `39650746564` (encoded preview import). These do not close Android
    or remaining platform/device gates. Stored Quill preview conversion revision
    `7c4d90a0` is pushed and full validation run `39651826435` is queued.
+
+### 6.18. PNG memory-reader bounds regression (2026-10-21)
+
+1. C3 picture tests exposed an existing shared PNG decoder defect: its stream
+   callback copied requested bytes without checking the supplied input length,
+   and signature inspection also assumed at least eight bytes. New encoded image
+   entry points and existing imports both use this decoder.
+2. The callback now checks remaining bytes before copying; short inputs fail via
+   the decoder's error path. Successful reads require the complete PNG end record.
+   Decoder structs and row allocations are freed on success and decode errors.
+3. A Windows no-access-page regression test reproduces an access violation with
+   the old committed plugin. Rebuilt player and reader plugins reject seven PNG
+   prefixes ending at that page boundary and accept a complete PNG. The existing
+   preview, paint, root, animation, reflection and converter regression suite passes.
+   Cross-platform compiler/device validation remains pending.
+4. Picture graph work was retained separately while this fix was validated, so
+   the decoder correction and its matching binaries can be committed independently.
+   Offline picture construction/import/conversion and C3 media acceptance remain
+   outstanding; the entire pipeline goal is still active.
 
 ## 7. Consolidated documents
 

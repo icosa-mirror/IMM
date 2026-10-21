@@ -19,6 +19,12 @@ are covered. `--compare-project` includes preview presence/dimensions/encoding/
 color order, but does not compare decoded JPEG pixels. Fishgym's paired IMM has
 a preview absent from its source project, so it currently fails that stricter check.
 
+On Windows the suite also places complete/truncated PNG buffers immediately before
+a no-access memory page. The old decoder crashes on that fixture; the bounded
+reader rejects truncated prefixes and accepts the complete image. This check
+tests actual reads beyond the supplied length rather than relying on adjacent
+managed-array memory being inaccessible.
+
 1. Run the synthetic native regression suite from the repository root. Use a fresh
    artifact directory for each local run; Windows CI runs this with freshly built DLLs:
 
