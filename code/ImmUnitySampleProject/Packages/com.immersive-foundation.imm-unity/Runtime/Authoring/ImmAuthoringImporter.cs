@@ -24,7 +24,8 @@ namespace ImmPlayer.Authoring
         UnsupportedAnimationProperty,
         InvalidSourceValue,
         ReparentedLayer,
-        FrameRateChanged
+        FrameRateChanged,
+        UnsupportedRootProperties
     }
 
     public sealed class ImmAuthoringImportIssue
@@ -217,13 +218,6 @@ namespace ImmPlayer.Authoring
                     ImmAuthoringImportIssueCode.UnsupportedCapabilities,
                     $"Source capability bits 0x{documentInfo.capabilities:X} are not represented by the paint authoring model."));
             }
-            if (documentInfo.rootAnimationKeyCount != 0)
-            {
-                issues.Add(new ImmAuthoringImportIssue(
-                    ImmAuthoringImportIssueCode.UnsupportedRootAnimation,
-                    $"The source root contains {documentInfo.rootAnimationKeyCount} animation keys; root/comic animation is outside the supported paint subset."));
-            }
-
             try
             {
                 ImmAuthoringResult<ImmAuthoringTransaction> begin = document.BeginEdit(document.Revision);
@@ -232,6 +226,35 @@ namespace ImmPlayer.Authoring
                 using (ImmAuthoringTransaction transaction = begin.Value)
                 {
                     ImmAuthoringDocument editable = transaction.EditableDocument;
+                    if (!source.GetRootLayerProperties(out StrokeAuthoringLayerInfo rootInfo, out StrokeLayerTransform rootTransform))
+                        return DisposeAndFail(document, ImmAuthoringErrorCode.CorruptInput, "Source root properties could not be read.", statistics);
+                    if (rootInfo.type != SourceGroupLayerType)
+                        return DisposeAndFail(document, ImmAuthoringErrorCode.Unsupported, "The authoring model requires a group root.", statistics);
+                    var rootProperties = ConvertLayerProperties(source, new SourceLayer(-1, rootInfo, rootTransform), issues);
+                    if (rootProperties.Name != "Root")
+                    {
+                        issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedRootProperties,
+                            $"Root name '{rootProperties.Name}' is normalized to the canonical Root name."));
+                        rootProperties.Name = "Root";
+                    }
+                    ImmAuthoringResult setRoot = editable.SetRootProperties(rootProperties);
+                    if (!setRoot.Succeeded) return DisposeAndFail(document, setRoot.ErrorCode, setRoot.Message, statistics);
+                    var rootKeys = new List<StrokeAnimationKey>(documentInfo.rootAnimationKeyCount);
+                    for (int index = 0; index < documentInfo.rootAnimationKeyCount; index++)
+                    {
+                        if (!ImmStrokeReader.StrokeReader_GetRootAnimationKey(source.DocId, index, out StrokeAnimationKey key))
+                            return DisposeAndFail(document, ImmAuthoringErrorCode.CorruptInput, "Source root key could not be read.", statistics);
+                        rootKeys.Add(key);
+                    }
+                    int visibilityKeys = rootKeys.FindAll(x => x.property == (int)ImmAuthoringAnimationProperty.Visibility).Count;
+                    int offsetKeys = rootKeys.FindAll(x => x.property == (int)ImmAuthoringAnimationProperty.Offset).Count;
+                    int unsupportedRootKeys = rootKeys.FindAll(key =>
+                        !(key.timeTicks == 0 && key.interpolation == (int)ImmAuthoringInterpolation.None &&
+                            ((key.property == (int)ImmAuthoringAnimationProperty.Visibility && visibilityKeys == 1) ||
+                             (key.property == (int)ImmAuthoringAnimationProperty.Offset && offsetKeys == 1 && key.intValue == 0)))).Count;
+                    if (unsupportedRootKeys != 0)
+                        issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedRootAnimation,
+                            $"The source root contains {unsupportedRootKeys} keys outside static visibility/default offset; root animation/chapter construction is not yet supported."));
                     Dictionary<int, long> importedLayers = new Dictionary<int, long>();
                     Dictionary<int, SourceLayer> layersBySourceId = new Dictionary<int, SourceLayer>();
                     foreach (SourceLayer layer in sourceLayers)

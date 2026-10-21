@@ -152,8 +152,9 @@ C2 animated paint implementation checkpoint (2026-10-21)
    paired export and SharpQuill's existing root default. This emits an informational
    NormalizedRootTimeline diagnostic. The frame-8 difference drops from 17 pixels
    to one; combined precision probes remain inconclusive. Full animation parity
-   is not established. Root key/chapter construction and root property import
-   still need implementation and acceptance; see shared roadmap 6.7.
+   is not established. Static root property reading/import now passes local native
+   round-trip checks (roadmap 6.8). Root key/chapter construction and broader platform
+   acceptance remain incomplete.
 
 C1 static profile implementation and validation (2026-10-21)
 

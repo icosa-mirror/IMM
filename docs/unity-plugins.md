@@ -360,7 +360,7 @@ All are declared in `Runtime/ImmStrokeReader.cs`.
 |---|---|
 | Build/init | `StrokeReader_GetBuildId`, `Init`, `IsInitialized`, `End` (â€”), `GetDocumentCount` |
 | Load | `LoadFromFile`, `LoadFromMemory`, `Unload` |
-| Document | `GetDocumentInfo`, `GetRootAnimationKey` |
+| Document | `GetDocumentInfo`, `GetRootAnimationKey`, `GetRootLayerProperties` |
 | Layers | `GetLayerCount`, `GetLayerInfo`, `GetLayerTransform` |
 | Layers (authoring view) | `GetAuthoringLayerCount`, `GetAuthoringLayerInfo`, `GetAuthoringLayerTransform` |
 | Spawn area | `GetLayerSpawnAreaInfo` |
@@ -375,7 +375,14 @@ animation-key layout. Both count and query exclude implicit default visibility.
 Retained root keys may be offsets or other properties, so this is not an action or
 chapter count. It is a metadata query, not a root/chapter construction API.
 
-`GetBuildId` returns `IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-KEYS` â€” the intended way to
+`GetRootLayerProperties` returns root timing/repeats, opacity, transform/pivot/flips
+and static visibility using existing authoring info/float-transform structs. It is
+separate from indexed child layers. A sole constant None visibility key at time zero
+is exposed as static visibility. The importer retains these settings; nondefault
+root animation remains explicitly lossy. Windows query/lifetime/import/re-export
+checks pass locally; other-platform CI for this additive API is pending.
+
+`GetBuildId` returns `IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-PROPERTIES` â€” the intended way to
 confirm which native build Unity actually loaded.
 
 ### 3.2 Managed wrapper
@@ -624,53 +631,23 @@ compile (or `unity test` in EditMode) on push.
 
 ---
 
-## 7. Appendix â€” full export lists
+## 7. Export verification
 
-`ImmUnityPlugin` (97 on Windows, same API set on Android, iOS and macOS):
+The API tables above describe consumers and responsibilities. The current native
+entry-point declarations are authoritative in the player package's
+`Runtime/ImmExporter.cs` and `Runtime/ImmNativePlugin.cs`, and the stroke-reader
+package's `Runtime/ImmStrokeReader.cs`. Use
+`tests/tools/verify_unity_plugin_exports.py` to generate the exact declaration and
+binary-export inventory for a revision rather than maintaining a copied list.
 
+The current source declares 112 player/exporter and 41 reader entry points. Windows
+verification passes, including the additive root writer and reader calls. Other
+platform binaries for the new root-property reader still require CI publication
+and verification; earlier all-platform audit results do not prove those additions.
+
+```powershell
+python tests/tools/verify_unity_plugin_exports.py --platform windows --json artifacts/unity-plugin-exports-windows.json
 ```
-CancelDocumentLoad ClearCameraViewport ClearLayerTransformOverride ClearLayerVisibilityOverride
-ConfigureVulkanRenderEvent Continue Debug End
-GetActiveSpawnAreaId GetBoundingBox GetChapterCount GetChapterInfoEx
-GetCurrentChapter GetDocumentHasAudio GetDocumentInfoEx GetDocumentState
-GetInitialSpawnAreaId GetLayerCount GetLayerDiagnostics GetLayerInfoByIndex
-GetLoadTimeInMs GetPerformanceInfo GetPlayTime GetPlayerInfo
-GetRenderEventAndDataFunc GetRenderEventFunc GetSound GetSpawnAreaCount
-GetSpawnAreaInfo GetSpawnAreaList GetSpawnAreaNeedsUpdate GetSpawnAreaPose
-GetTime GlobalWork GlobalWorkEx Hide
-ImmExporter_ComputeDrawingBounds ImmExporter_ComputeElementBounds ImmExporter_CreateDrawing ImmExporter_CreateGroupLayer
-ImmExporter_CreatePaintLayer ImmExporter_CreateSequence ImmExporter_CreateSpawnAreaLayer ImmExporter_DestroyDrawing
-ImmExporter_DestroyMemory ImmExporter_DestroySequence ImmExporter_DrawingGetElement ImmExporter_DrawingInit
-ImmExporter_ElementInit ImmExporter_ElementSetPoint ImmExporter_ElementSetPoints ImmExporter_ExportToFile
-ImmExporter_ExportToMemory ImmExporter_GetDrawingIndex ImmExporter_GetMemoryData ImmExporter_GetMemorySize
-ImmExporter_LayerAddAnimationKey ImmExporter_PaintAddFrame ImmExporter_PaintSetMaxRepeatCount ImmExporter_SetInitialSpawnArea
-ImmExporter_SpawnAreaSetProperties Init IsDocumentActive IsReadyForDocumentLoad
-IsSequenceReady LoadFromFile LoadFromMemory Pause
-PauseAt PrepareCamera Restart Resume
-ResumeAt SetActiveSpawnAreaId SetCameraViewport SetCameraViewportEx
-SetChapter SetDocumentToWorld SetLayerOpacity SetLayerTransform
-SetLayerVisible SetMatrices SetPerformanceMeasurementEnabled SetRuntimeFlag
-SetSound SetSpawnAreaNeedsUpdate SetTime SetVulkanCameraEyeRenderBuffers
-SetVulkanCameraRenderBuffers SetVulkanDedicatedQueueAllowed Show SkipBack
-SkipForward UnityPluginLoad UnityPluginUnload Unload
-UnloadAll
-```
-
-`ImmStrokeReader` (38, identical on all four platforms):
-
-```
-StrokeReader_End StrokeReader_GetAuthoringDrawingCount StrokeReader_GetAuthoringFrameBuffer StrokeReader_GetAuthoringLayerAnimationInfo
-StrokeReader_GetAuthoringLayerCount StrokeReader_GetAuthoringLayerInfo StrokeReader_GetAuthoringLayerTransform StrokeReader_GetAuthoringStrokeCount
-StrokeReader_GetAuthoringStrokeInfo StrokeReader_GetAuthoringStrokePoints StrokeReader_GetBuildId StrokeReader_GetChapterCount
-StrokeReader_GetChapterCountFromFile StrokeReader_GetCurrentChapter StrokeReader_GetDocumentCount StrokeReader_GetDocumentInfo
-StrokeReader_GetDrawingBiggestStroke StrokeReader_GetDrawingCount StrokeReader_GetDrawingIndexForChapter StrokeReader_GetFrameBuffer
-StrokeReader_GetLayerAnimationInfo StrokeReader_GetLayerAnimationKey StrokeReader_GetLayerAnimationKeyCount StrokeReader_GetLayerCount
-StrokeReader_GetLayerInfo StrokeReader_GetLayerSpawnAreaInfo StrokeReader_GetLayerTransform StrokeReader_GetPictureInfo
-StrokeReader_GetPicturePixelData StrokeReader_GetRootAnimationKey StrokeReader_GetStrokeCount StrokeReader_GetStrokeInfo StrokeReader_GetStrokePoints
-StrokeReader_Init StrokeReader_IsInitialized StrokeReader_LoadFromFile StrokeReader_LoadFromMemory
-StrokeReader_SetChapter StrokeReader_Unload
-```
-
 
 ## Concurrent reference playback and crash symbols
 

@@ -51,9 +51,9 @@ namespace ImmPlayer.Authoring
             Equal(differences, "document.sequenceType", expected.SequenceType, actual.SequenceType);
             Equal(differences, "document.frameRate", expected.FrameRate, actual.FrameRate);
             Near(differences, "document.backgroundColor", expected.BackgroundColor, actual.BackgroundColor, tolerance);
-            Equal(differences, "document.hasRootProperties", expected.RootProperties.HasValue, actual.RootProperties.HasValue);
-            if (expected.RootProperties.HasValue && actual.RootProperties.HasValue)
-                CompareLayerProperties(differences, "document.root", expected.RootProperties.Value, actual.RootProperties.Value, tolerance);
+            CompareLayerProperties(differences, "document.root",
+                expected.RootProperties ?? ImmAuthoringLayerProperties.Default("Root"),
+                actual.RootProperties ?? ImmAuthoringLayerProperties.Default("Root"), tolerance);
             if (expected.Layers.Count != actual.Layers.Count)
             {
                 Difference(differences, "document.layers", $"Expected {expected.Layers.Count}, actual {actual.Layers.Count}.");

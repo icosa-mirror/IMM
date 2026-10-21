@@ -53,7 +53,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
-| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root-key value query implemented and locally verified on Windows; cross-platform CI pending. Chapter queries exist; authoring import still reports root keys unsupported | Complete root/comic/chapter authoring absent; comic compilation rejected | No complete chapter authoring claim | Inspect actual root keys and Quill export behavior, then extend required authoring APIs |
+| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys and static root properties exposed; static root import locally verified on Windows; cross-platform CI pending. Nondefault root animation still reported unsupported | Static root settings supported; complete root/comic/chapter authoring absent; comic compilation rejected | No complete chapter authoring claim | Inspect actual root keys and Quill export behavior, then extend required authoring APIs |
 | Viewpoints / spawn areas | Existing defaults and properties | Spawn metadata exposed; SharpQuill adapter skips spawn layers | Existing spawn graph/import/export/default selection | Spawn edits within limits | Map export flags, tracking, volume and defaults |
 | Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | No picture construction in current graph/Unity exporter ABI | Outside live scope | Add construction and map projection/viewer locking/assets |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
@@ -522,16 +522,47 @@ Status checked at 2026-10-21 14:36 UTC:
    Exact-transform probes do not monotonically improve raster equality (the newest
    combined probe differs by 18 pixels), so do not claim a complete precision cause
    or exact visual parity. Other animation boundaries/navigation remain open.
-6. Existing reader APIs expose root keys but not root layer properties. Root metadata
-   import/reverse conversion is therefore still incomplete; do not claim a full
-   authoring import/export round trip for this new capability. R1 must add root
-   property reading/import acceptance before closing that requirement.
+6. At this checkpoint the reader exposed root keys but not root layer properties.
+   Section 6.8 adds static root property reading/import acceptance; root animation,
+   reverse-converter consumption and full root/chapter round trips remain incomplete.
 7. One local self-test run (`c2-root-properties-05.log`) failed replacing an existing
    output in the pre-existing static partial-output check. The unchanged source
    passed on the next fresh directory (`c2-root-properties-06.log`); its cause is
    unproven. No retry logic or weaker assertion was added. Keep the failure recorded
    if it recurs. Windows CI for the preceding revision f18d77b4 now passes, including
    the corrected exporter bridge smoke; the full run remains incomplete.
+
+### 6.8 R1 static root reading/import (2026-10-21)
+
+1. Additive `StrokeReader_GetRootLayerProperties` returns the existing authoring-layer
+   info and float transform layouts for the root, separately from indexed child
+   layers. It exposes timing/repeats, opacity, transform/pivot/flips and static
+   visibility. A sole None visibility key at tick zero supplies static visibility,
+   since the file has no separate visibility field. Root keys remain separately
+   queryable. Metadata is copied once at import; playback and per-frame work are
+   unchanged. Null outputs, invalid documents and unloaded lifetimes return false.
+2. The authoring importer now populates shared root properties. Constant time-zero
+   visibility and the sole default None/zero Offset key are represented by static
+   settings/default clock behavior; other root keys still produce explicit lossy
+   `UnsupportedRootAnimation` diagnostics. Noncanonical root names are normalized
+   with `UnsupportedRootProperties`. Explicit default roots and unset legacy roots
+   compare semantically equal; nondefault root settings still participate in
+   structural comparison.
+3. Native tests pass for root query values, child-layer count stability, null/bounds/
+   lifetime handling, static-root import without root-loss diagnostics and exact
+   root metadata re-export. A copied tracked fixture proves default zero offsets
+   are accepted while nonzero root offsets remain explicitly lossy. The test uses
+   a paint child to expose the file's paint-level frame rate; codec-derived point
+   length/time are outside the exact pre-encoding root-property comparison.
+4. The complete local native converter/import/reflection/root suite, bridge smoke,
+   adapter checks and Windows export verification pass. The reader now declares
+   41 native entry points, with build ID `2026-10-21-ROOT-PROPERTIES`; both committed
+   Windows reader DLLs match. Other-platform publication and Unity CI remain
+   pending for this new API. The preceding root-writer run 39634328582 is still
+   active without a confirmed failed job at the last check.
+5. R1 is not complete: root animation/chapter construction, native double precision,
+   remaining consumer/adapter contracts and reverse-conversion acceptance retain
+   their scope. C2 still needs broader evaluated animation and navigation evidence.
 
 ## 7. Consolidated documents
 

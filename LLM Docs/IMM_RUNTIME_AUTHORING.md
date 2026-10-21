@@ -112,8 +112,12 @@ duration/repeats. Transactions, snapshots and structural comparison retain them;
 `ImmExporter_SetRootLayerProperties` serializes them without changing the legacy
 transform ABI. Unset properties retain the old compiler defaults. Windows native
 serialization and graph checks pass locally; other-platform/Unity CI is pending.
-Root key/chapter construction, root property import and direct live root mutation
-remain incomplete. This is not full root import/export or live-authoring acceptance.
+The reader's additive `GetRootLayerProperties` now supplies those settings to the
+authoring importer through the existing float layouts. Static root import/re-export
+passes locally, including hidden roots and reflected transforms/pivots. Default
+zero offsets are recognized; nondefault root keys remain explicitly lossy. Root
+key/chapter construction and direct live root mutation remain incomplete. This is
+not full root animation import/export or live-authoring acceptance.
 
 Paint round trips preserve the codec's representation, not arbitrary source floats: alpha and
 width are quantised, always-visible direction is omitted by the codec, and point length/time

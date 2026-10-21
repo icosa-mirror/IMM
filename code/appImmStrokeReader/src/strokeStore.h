@@ -196,6 +196,9 @@ struct StoredDocument
     uint32_t capabilities = 0;
     int rootAnimationKeyCount = 0;
     std::vector<StrokeAnimationKeyC> rootAnimationKeys;
+    bool hasRootProperties = false;
+    StrokeAuthoringLayerInfoC rootInfo{};
+    StrokeLayerTransformC rootTransform{};
     std::vector<StoredLayer> layers;
     std::vector<StoredLayer> authoringLayers;
     std::vector<ImmCore::piTick> chapterStartTimes;
@@ -261,6 +264,7 @@ public:
     void SetChapterStartTimes(const std::vector<ImmCore::piTick>& chapterStartTimes);
     int GetDrawingIndexForChapter(int layerIdx, int chapterIndex) const;
     void CaptureSequenceMetadata(ImmImporter::Sequence& sequence);
+    bool GetRootLayerProperties(StrokeAuthoringLayerInfoC* info, StrokeLayerTransformC* transform) const;
     bool GetDocumentInfo(StrokeDocumentInfoC* info) const;
     bool GetRootAnimationKey(int keyIdx, StrokeAnimationKeyC* key) const;
     int GetAuthoringLayerCount() const;

@@ -54,7 +54,10 @@ invalid-value rejection, native visibility read-back and exact binary root metad
 for opacity, timeline/duration/repeats, transforms/pivots and flips. The animated
 converter also checks the observed legacy zero-root normalization. The public reader
 does not yet expose root layer properties, so serialization checks explicitly parse
-the writer's version-1 Root descriptor; they do not imply root importer acceptance.
+the writer's version-1 Root descriptor. Native root-property queries and static root
+import/re-export are also checked, including root visibility, unchanged indexed
+child-layer counts, null/bounds/unload handling, default zero offsets and explicit
+nondefault root-key loss diagnostics. Full root animation/chapter import remains open.
 
 For fixed-observer native paint playback comparisons, the viewer capture script
 `code/appImmViewer/scripts/capture_windows_directx_baseline.ps1` accepts `-LockCamera`.

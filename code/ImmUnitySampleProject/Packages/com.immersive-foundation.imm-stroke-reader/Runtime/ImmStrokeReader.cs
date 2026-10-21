@@ -140,7 +140,7 @@ namespace ImmPlayer
         private static extern IntPtr StrokeReader_GetBuildId();
 
         /// <summary>
-        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-KEYS"),
+        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-PROPERTIES"),
         /// the intended way to confirm which stroke reader library a player actually loaded.
         /// </summary>
         /// <returns>The native build id string, or null when the plugin reports none.</returns>
@@ -267,6 +267,11 @@ namespace ImmPlayer
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_GetRootAnimationKey(int docId, int keyIdx, out StrokeAnimationKey key);
+
+        /// <summary>Root metadata, separate from the indexed child-layer view. Transform fields use the existing float ABI.</summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetRootLayerProperties(int docId, out StrokeAuthoringLayerInfo info, out StrokeLayerTransform transform);
 
         /// <summary>
         /// Get information about a layer.
@@ -799,6 +804,13 @@ namespace ImmPlayer
         {
             info = default;
             return _docId > 0 && ImmStrokeReader.StrokeReader_GetDocumentInfo(_docId, out info);
+        }
+
+        public bool GetRootLayerProperties(out StrokeAuthoringLayerInfo info, out StrokeLayerTransform transform)
+        {
+            info = default;
+            transform = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetRootLayerProperties(_docId, out info, out transform);
         }
 
         public int ChapterCount => _docId > 0 ? ImmStrokeReader.StrokeReader_GetChapterCount(_docId) : 0;

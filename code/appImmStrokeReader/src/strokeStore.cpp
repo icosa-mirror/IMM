@@ -771,10 +771,41 @@ void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
     mDocument.capabilities = sequence.GetCaps();
     mDocument.rootAnimationKeyCount = 0;
     mDocument.rootAnimationKeys.clear();
+    mDocument.hasRootProperties = false;
+    mDocument.rootInfo = {};
+    mDocument.rootTransform = {};
 
     ImmImporter::Layer* root = sequence.GetRoot();
     if (root != nullptr)
     {
+        auto& info = mDocument.rootInfo;
+        auto& legacy = info.legacy;
+        legacy.id = static_cast<int>(root->GetID());
+        legacy.type = static_cast<int>(root->GetType());
+        legacy.visible = root->GetVisible() ? 1 : 0;
+        legacy.opacity = static_cast<float>(root->GetOpacity());
+        const std::string name = ToUtf8(root->GetName().GetS());
+        std::memcpy(legacy.name, name.data(), std::min(name.size(), sizeof(legacy.name) - 1));
+        const auto pivot = ToTransformC(root->GetPivot());
+        std::copy(std::begin(pivot.rotation), std::end(pivot.rotation), std::begin(legacy.pivotRotation));
+        legacy.pivotScale = pivot.scale;
+        legacy.pivotFlip = pivot.flip;
+        std::copy(std::begin(pivot.translation), std::end(pivot.translation), std::begin(legacy.pivotTranslation));
+        info.parentId = -1;
+        info.isTimeline = root->GetIsTimeline() ? 1 : 0;
+        info.durationTicks = ImmCore::piTick::CastInt(root->GetDuration());
+        info.maxRepeatCount = root->GetMaxRepeatCount();
+        mDocument.rootTransform = ToTransformC(root->GetTransform());
+        mDocument.hasRootProperties = true;
+        // Static visibility has no Layerdes field. A sole constant time-zero
+        // visibility key is its serialized representation; preserve its value.
+        if (root->GetNumAnimKeys(ImmImporter::Layer::AnimProperty::Visibility) == 1)
+        {
+            const auto* key = root->GetAnimKey(ImmImporter::Layer::AnimProperty::Visibility, 0);
+            if (key && ImmCore::piTick::CastInt(key->mTime) == 0 &&
+                key->mInterpolation == ImmImporter::Layer::InterpolationType::None)
+                legacy.visible = key->mValue.mBool ? 1 : 0;
+        }
         for (int property = 0; property < static_cast<int>(ImmImporter::Layer::AnimProperty::MAX); property++)
         {
             const ImmImporter::Layer::AnimProperty animProperty =
@@ -925,6 +956,14 @@ bool StrokeStore::GetDocumentInfo(StrokeDocumentInfoC* info) const
     return true;
 }
 
+bool StrokeStore::GetRootLayerProperties(StrokeAuthoringLayerInfoC* info, StrokeLayerTransformC* transform) const
+{
+    if (!info || !transform || !mDocument.hasRootProperties) return false;
+    *info = mDocument.rootInfo;
+    *transform = mDocument.rootTransform;
+    return true;
+}
+
 bool StrokeStore::GetRootAnimationKey(int keyIdx, StrokeAnimationKeyC* key) const
 {
     if (key == nullptr || keyIdx < 0 || keyIdx >= static_cast<int>(mDocument.rootAnimationKeys.size()))
@@ -963,6 +1002,9 @@ void StrokeStore::Clear()
     mDocument.rootAnimationKeys.clear();
     mDocument.layers.clear();
     mDocument.authoringLayers.clear();
+    mDocument.hasRootProperties = false;
+    mDocument.rootInfo = {};
+    mDocument.rootTransform = {};
     mDocument.chapterStartTimes.clear();
     mDocument.currentChapter = 0;
     mCurrentLayer = nullptr;

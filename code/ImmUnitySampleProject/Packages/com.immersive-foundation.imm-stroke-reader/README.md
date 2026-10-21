@@ -29,6 +29,19 @@ default visibility; retained keys may be offsets or other properties rather than
 actions, so the count is not a chapter count. Invalid indices/documents return
 false. Use native binaries built from the same source version as the bindings.
 
+## Root layer properties
+
+`StrokeReader_GetRootLayerProperties(docId, out info, out transform)` returns root
+properties through the existing authoring-layer-info and float-transform layouts.
+It does not add the root to indexed child layers. Timing/repeats, opacity, pivots,
+flips and static visibility are available separately from root keys. A sole None
+visibility key at tick zero supplies static visibility; other key channels retain
+their separate query contract. The API returns false for invalid/unloaded documents
+or null native outputs. Use a native build marked `2026-10-21-ROOT-PROPERTIES` or newer.
+Windows query/lifetime and static root import/re-export checks pass locally;
+other-platform package CI for this addition remains pending. Transform values use
+float precision, consistent with existing layer APIs.
+
 ## Contents
 
 - `Plugins/`: native binaries (Windows/macOS/Android)
