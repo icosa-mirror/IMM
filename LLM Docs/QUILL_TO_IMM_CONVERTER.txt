@@ -243,6 +243,19 @@ C2 evaluation contract: source review, playback acceptance outstanding
    exported particular base values remains unknown. Preserve source static
    fields and keys as separate data pending those checks; do not bake arbitrary
    later-key values into the converter to make metadata fields match.
+5. Further metadata audit of the same large reference pair found 1,156 matched
+   visibility keys with identical count/time/value/interpolation. Opacity retained
+   133 keys with matching semantics; 914 source single opacity keys at time zero
+   were absent from the native key lists, but every value matched the native
+   static opacity (including non-unit values). Offset retained 684 keys with
+   matching semantics; 465 omitted source keys were all None/zero at time zero.
+   There were no other count differences or retained-key semantic differences in
+   these three channels among matched layers. This demonstrates constant-key
+   collapse in this reference pair, not permission to discard animated channels.
+   Extra equivalent constant keys need not be removed just to reproduce the
+   reference's serialized layout: acceptance concerns behavior, not binary identity.
+   Local evidence: artifacts/quill-reference/alex-other-key-recheck.json. Root
+   actions and playback behavior are outside this audit.
 
 C0 reference inspection and reuse decision (2026-10-21)
 
