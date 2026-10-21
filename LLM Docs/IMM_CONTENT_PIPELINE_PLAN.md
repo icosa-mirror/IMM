@@ -16,9 +16,11 @@ validation success for compiler correction ac34f4f1 (39645977224) and viewpoint
 revision 740eec8a (39646549914). These runs close the earlier Unity CS1061 and
 Godot iOS capacity failures with passing replacement gates, including Unity Android
 URP/non-XR Firebase, Android Vulkan, Windows DirectX/Vulkan and Godot iOS Metal.
-Later sound-import revision 179a9f30 is under validation in 39669262483; its Android build subsequently failed during SDK CMake installation before
-project compilation (section 6.28). Other gates are incomplete. A queued macOS
-build has no runner assigned. Later APIs still need their own platform/package acceptance;
+Sound-import run 39669262483 completed its first attempt with an Android SDK
+CMake archive failure before project compilation and missing dependent validation
+evidence. macOS/iOS builds and all three iOS visual gates passed. Its single
+targeted Android/dependents retry is now running as attempt 2 (section 6.47).
+Later APIs still need their own platform/package acceptance;
 hosted success does not establish skipped hardware gates or full content fidelity.
 Confirmed regressions take priority over new feature work. See section 6.26.
 
@@ -68,7 +70,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
-| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
+| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; native root-stop/seek controls locally checked, Quill semantics remain open | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed; project reader/writer retains raw RGB/RGBA previews | Spawn metadata, encoded previews and on-demand pixels exposed; hierarchy adapter maps spheres, previews and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; full common-property constructor with hidden startup visibility encoded as a key | Spawn edits within limits | Stored preview conversion implemented both directions; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D and full-sphere equirectangular mono/stereo RGB/RGBA pictures mapped structurally; explicit panorama FOV and depth remain unsupported | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels/metadata; real stereo panorama pixels/metadata match source qbin; orientation, eye order and playback acceptance remain open |
 | Sound | Project conversion maps observed mono/stereo PCM16, settings and keys; hidden sounds retained | Encoded WAV/Vorbis/Opus queries, metadata import and offline PCM16 decoding; hierarchy adapter maps supported mono/stereo sound | Offline PCM16 construction plus encoded sound import/passthrough | Outside live scope | 31 isolated paired sounds match settings/keys/timing metadata; audible timing, gain, looping and spatial playback remain open |
@@ -126,7 +128,7 @@ The preferred first candidate is:
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; hosted full CI subsequently passed in 39645977224 and 39646549914 | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
 | C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; hosted full CI subsequently passed in 39645977224 and 39646549914 | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
-| C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop correction locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
+| C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop and root stop/seek corrections locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D and structural equirectangular mono/stereo conversion, and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Panorama orientation/eye order and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
@@ -1698,6 +1700,54 @@ replacement-run closure in section 6.26 (20:23 UTC):
    now passed Unity iOS; Godot iOS remains active and the Android SDK archive
    infrastructure failure still awaits its eligible targeted retry. Fresh full
    validation is required for this native correction.
+
+### 6.47. Early root stops and nested playback clocks (2026-10-22)
+
+1. Reproduced native root Stop failures at ticks 0 and 1. Stop 0 shares its
+   stored timestamp with the initial no-stop sentinel; timestamp comparisons
+   cannot identify it. Introduced internal held-clock and authored-stop state,
+   with explicit clearing on restart, resume, Continue and playing seek. Real
+   pause/seek holds freeze time without requesting chapter input. Timeline clock
+   fields are initialized. File format and exported C ABI are unchanged.
+2. The root hold now freezes nested timeline evaluation, including grandchildren.
+   New child starts use the held parent clock. Continue shifts active/held nested
+   clocks by the root's start-time change, preserving local positions while leaving
+   dormant timelines untouched. Seek resets child playback through the existing
+   jump/reset path before restoring requested clocks; paused sound state is retained.
+   Pause/resume during an authored root hold leaves nested clocks aligned. Normal
+   unheld elapsed calculation keeps its direct path; no per-frame allocation or
+   cache was added. This is correctness evidence, not a performance measurement.
+3. Required Windows chapter/viewpoint harness now covers ticks 0/1 at zero/nonzero
+   epochs, no premature stop, reported position, root/nested/grandchild holds,
+   Continue without jumping ahead, delayed first evaluation after restart,
+   playing seeks past/onto stops, pause/resume, final completion and a future
+   visibility boundary. A no-action pause/zero-seek/resume check prevents held time
+   from being mistaken for chapter input. Existing paused-seek/viewpoint checks
+   also pass. Independent review identified the nested/dormant clock risks and
+   found no material remaining issue after correction.
+4. Windows player/reader build, full converter/native .NET suite and export checks
+   pass. Evaluated-state positive comparison passes 36 times across three modes
+   (108 samples), zero pair/history errors; deliberate mismatch remains rejected.
+   Fishgym and Snoopy pass 69 samples each, within the existing paint/group/root
+   scope and media/viewpoint exclusions. Evidence: ignored artifacts/early-stop-before.log,
+   early-stop-nested-before.log, early-stop-after.log, early-stop-native-build.log,
+   early-stop-suite.log, early-stop-evaluated.log, early-stop-evaluated-negative.log,
+   early-stop-fishgym.log, early-stop-snoopy.log and early-stop-exports.json.
+5. These native state checks close the early-stop defect recorded in 6.46 within
+   their tested scope. They do not establish Quill root action/startup mapping,
+   nonroot action semantics, audible playback, renderer/device behavior or live
+   authoring acceptance. Chapters' root MakeDefault and the missing paired official
+   export remain unresolved. The rest of C2-C4/R1-R2/A1-A3 remains as recorded.
+6. Panorama run 39694228185, finite-loop run 39693358402 and final-stop run
+   39694746959 have passed Windows. Full validation remains incomplete. Old run
+   39669262483 first attempt finished: its Android SDK archive failure prevented
+   dependent packaging/device/engine evidence; no independent source failure was
+   found in the evidence-report failure. macOS/iOS builds and all three iOS visual
+   gates passed. The one targeted Android job/dependents retry was accepted and
+   verified in progress as attempt 2, with successful independent jobs retained.
+   Evidence: artifacts/old-android-targeted-retry-state.json. A repeated failure
+   remains unresolved; do not retry again indefinitely. This clock correction
+   requires its own fresh full CI.
 
 ## 7. Consolidated documents
 

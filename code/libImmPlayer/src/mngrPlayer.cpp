@@ -167,14 +167,14 @@ namespace ImmPlayer
                 break;
             }
             case Layer::Type::Group:
-                // do not restop root if already waiting for input
-                if (layer == root && mIsWaitingForInput)
+                // Authored root holds already freeze all nested timeline clocks.
+                if (mIsWaitingForInput)
                     break;
                 // stop timelines
                 if ((layer == root || layer->GetIsTimeline()) && layer->GetPlaying())
                 {
                     layer->SetPlaying(false);
-                    layer->SetStopTime(now);
+                    layer->SetStopTime(layer->GetStartTime() + layer->GetTimelineElapsed(now));
                 }
                 break;
 
@@ -217,16 +217,16 @@ namespace ImmPlayer
                 break;
             }
             case Layer::Type::Group:
-                // do not restart root if waiting for input
-                if (layer == root && mIsWaitingForInput)
+                // Keep nested clocks aligned with an authored root hold.
+                if (mIsWaitingForInput)
                     break;
                 // restart timelines
                 if (layer->GetWorldVisible() && (layer == root || layer->GetIsTimeline()) && !layer->GetPlaying())
                 {
                     layer->SetPlaying(true);
-                    const piTick currentPosition = layer->GetStopTime() - layer->GetStartTime();
+                    const piTick currentPosition = layer->GetTimelineElapsed(now);
                     layer->SetStartTime(now - currentPosition );
-                    layer->SetStopTime(now - currentPosition - 1);
+                    layer->SetStopTime(now - currentPosition - 1, false);
                 }
                 break;
 
@@ -281,9 +281,22 @@ namespace ImmPlayer
             if (mIsPaused)
                 mIsPaused = false;
             Layer* root = mDocument->GetRoot();
-            const piTick rootTime = root->GetStopTime() - root->GetStartTime();
+            const piTick rootTime = root->GetTimelineElapsed(now);
+            const piTick shift = now - rootTime - root->GetStartTime();
+            // Continue moves the root clock past its hold. Keep active nested
+            // timelines at the same local position instead of adding the wait.
+            mDocument->Recurse([&](Layer* layer, int, int, bool) -> bool
+            {
+                if (layer != root && layer->GetType() == Layer::Type::Group && layer->GetIsTimeline() &&
+                    (layer->GetPlaying() || layer->HasStopTime()))
+                {
+                    layer->SetStartTime(layer->GetStartTime() + shift);
+                    layer->SetStopTime(layer->GetStopTime() + shift, layer->HasStopTime(), layer->IsStoppedByAction());
+                }
+                return true;
+            }, false, false, false, false);
             root->SetStartTime(now - rootTime);
-            root->SetStopTime(now - rootTime -1);
+            root->SetStopTime(now - rootTime -1, false);
             root->SetPlaying(true);
             mIsWaitingForInput = false;
         }
@@ -412,13 +425,13 @@ namespace ImmPlayer
 #ifdef _DEBUG
         mLog->Printf(LT_DEBUG, L"now: %lld, SetTime %lld %lld", now, timeSinceStart,timeSinceStop);
 #endif // _DEBUG
-        root->ResetActionStatesAt(timeSinceStart);
-        // Waiting belongs to the old stop position; Update recomputes it at the seek target.
-        mIsWaitingForInput = false;
+        // Reset nested timelines and resource playback before evaluating a seek.
+        // The paused state is preserved and reapplied by Update when needed.
+        iJumpAndReset(now, timeSinceStart);
 
         if (isPlaying)
         {
-            root->SetStopTime(now - timeSinceStart-1);
+            root->SetStopTime(now - timeSinceStart-1, false);
             root->SetStartTime(now - timeSinceStart);
             root->SetPlaying(true);
         }
@@ -516,14 +529,14 @@ namespace ImmPlayer
                     Restart(now);
                 }
 
-                // If root has stopped, wait for user input
-                if (root->GetStopTime() > root->GetStartTime())
+                // A paused seek also holds the clock, without requesting chapter input.
+                if (root->HasStopTime())
                 {
     #ifdef _DEBUG
-                    mLog->Printf(LT_DEBUG, L"Stop reached, waiting for user input");
+                    mLog->Printf(LT_DEBUG, L"[IMM_ROOT_STOP] Clock held; waiting for input=%d", root->IsStoppedByAction());
     #endif
                     root->SetPlaying(false);
-                    mIsWaitingForInput = true;
+                    mIsWaitingForInput = root->IsStoppedByAction();
                 }
             }
 
@@ -583,7 +596,7 @@ namespace ImmPlayer
             {
                 LayerSound *ls = (LayerSound*)layer->GetImplementation();
                 ls->SetPlaying(false);
-                ls->SetPaused(false);
+                ls->SetPaused(mIsPaused);
                 ls->SetForceRestart(true);
                 break;
             }
@@ -595,7 +608,7 @@ namespace ImmPlayer
             }
             case Layer::Type::Group:
                 layer->SetPlaying(false);
-                layer->SetStopTime(piTick(0));
+                layer->SetStopTime(piTick(0), false);
                 break;
 
             default:
@@ -612,7 +625,7 @@ namespace ImmPlayer
         root->ResetActionStatesAt(rootTime);
         root->SetVisible(true);
         root->SetPlaying(true);
-        root->SetStopTime(now - rootTime - 1);
+        root->SetStopTime(now - rootTime - 1, false);
         root->SetStartTime(now - rootTime);
         mIsWaitingForInput = false;
 

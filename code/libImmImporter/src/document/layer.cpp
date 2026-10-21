@@ -47,6 +47,11 @@ namespace ImmImporter
 	{
 		mType = type;
         mLoaded = false;
+        mStartTime = piTick(0);
+        mStopTime = piTick(0);
+        mIsPlaying = false;
+        mHasStopTime = false;
+        mStoppedByAction = false;
 	mVisible = visible;
 	mCanonicalVisible = visible;
     mVisibilityOverrideEnabled = false;
@@ -526,7 +531,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		return mIsTimeline;
 	}
 
-	Layer * Layer::GetTimeline()
+	Layer * Layer::GetTimeline() const
 	{
 		Layer* layer = mParent;
 		while (layer != nullptr && layer->GetIsTimeline() == false)
@@ -553,15 +558,46 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		return mStartTime;
 	}
 
-	void Layer::SetStopTime(piTick time)
+	void Layer::SetStopTime(piTick time, bool hasStopTime, bool stoppedByAction)
 	{
 		mStopTime = time;
+        mHasStopTime = hasStopTime;
+        mStoppedByAction = hasStopTime && stoppedByAction;
 	}
 
 	piTick Layer::GetStopTime() const
 	{
 		return mStopTime;
 	}
+
+
+    bool Layer::HasStopTime() const
+    {
+        return mHasStopTime;
+    }
+
+    bool Layer::IsStoppedByAction() const
+    {
+        return mStoppedByAction;
+    }
+
+    piTick Layer::GetTimelineElapsed(piTick now) const
+    {
+        const Layer* root = mSequence->GetRoot();
+        if (!mHasStopTime && !root->HasStopTime()) return now - mStartTime;
+        piTick clock = mHasStopTime ? mStopTime : now;
+        if (this != root && root->HasStopTime())
+        {
+            // Nested clocks must not advance beyond a held root. Ordinary playing
+            // roots take the direct path, without walking timeline ancestors.
+            Layer* timeline = GetTimeline();
+            const piTick parentClock = timeline->GetStartTime() + timeline->GetTimelineElapsed(now);
+            if (clock > parentClock) clock = parentClock;
+        }
+        // An authored Stop at tick zero is stored one tick before the start.
+        const piTick elapsed = clock - mStartTime;
+        return elapsed < piTick(0) ? piTick(0) : elapsed;
+    }
 
 
 	piTick Layer::GetDuration() const
@@ -713,9 +749,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             
 
         // handle stop frames to correct for stop time
-        piTick timeFromStart = timeline->GetStopTime() > timeline->GetStartTime() ?
-            timeline->GetStopTime() - timeline->GetStartTime()
-            : now - timeline->GetStartTime();
+        piTick timeFromStart = timeline->GetTimelineElapsed(now);
 
         const piTick timelineWrapped = (timelineDuration != 0) ? timeFromStart % timelineDuration : timeFromStart;
 
@@ -806,7 +840,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
                     if (action == AnimAction::Stop)
                     {
-                        SetStopTime(GetStartTime() + lastKey->mTime + piTick(-1));
+                        SetStopTime(GetStartTime() + lastKey->mTime + piTick(-1), true, true);
 #ifdef _DEBUG
                         log->Printf(LT_DEBUG, L"[LayerSetState] Stop action %s", mName.GetS());
 #endif
@@ -845,7 +879,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     if (offsetKey != nullptr) mStartOffset = piTick(int64_t(offsetKey->mValue.mInt));
 
                     timeSinceStart = (timelineTime - lastKey->mTime) + mStartOffset;
-                    const piTick startTime = now - timeSinceStart;
+                    const piTick startTime = timeline->GetStartTime() + timeFromStart - timeSinceStart;
 
                     if (!timeline->GetPlaying())
                         break;
@@ -861,8 +895,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     {
                         if ((ti == root || ti->GetIsTimeline()) && ti->GetMaxRepeatCount() != 1 && ti->GetDuration() != 0)
                         {
-                            const piTick elapsed = ti->GetStopTime() > ti->GetStartTime() ?
-                                ti->GetStopTime() - ti->GetStartTime() : now - ti->GetStartTime();
+                            const piTick elapsed = ti->GetTimelineElapsed(now);
                             const int64_t plays = piTick::CastInt(elapsed) / piTick::CastInt(ti->GetDuration());
                             if (ti->GetMaxRepeatCount() == 0 || plays < ti->GetMaxRepeatCount())
                             {
@@ -884,7 +917,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     {
                         SetPlaying(true);
                         SetStartTime(startTime);
-                        SetStopTime(startTime - 1);
+                        SetStopTime(startTime - 1, false);
 #ifdef _DEBUG
                         log->Printf(LT_DEBUG, L"[LayerSetState] Starting timeline %s", mName.GetS());
 #endif

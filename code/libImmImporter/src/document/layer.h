@@ -144,12 +144,15 @@ namespace ImmImporter
 		bool GetLayerUsesDrawin(void) const;
 		bool GetPlaying(void) const;
 		bool GetIsTimeline(void) const;
-		Layer* GetTimeline();
+		Layer* GetTimeline() const;
 		Layer* GetParent() const;                          // a group!
 		ImmCore::trans3d GetTransformToWorld(void) const;
 		KeepAlive * GetKeepAlive(void);
 		uint32_t GetMaxRepeatCount(void) const;
 		ImmCore::piTick GetStopTime() const;
+        bool HasStopTime() const;
+        bool IsStoppedByAction() const;
+        ImmCore::piTick GetTimelineElapsed(ImmCore::piTick now) const;
 		ImmCore::piTick GetDuration() const;
 		ImmCore::piTick GetStartTime() const;
 		uint32_t GetNumChildren(void) const;                    // if group
@@ -175,7 +178,7 @@ namespace ImmImporter
         void SetVisibilityOverride(bool enabled, bool visible);
 		void SetPotentiallyVisible(bool visible);
 		void SetStartTime(ImmCore::piTick time);
-		void SetStopTime(ImmCore::piTick time);
+		void SetStopTime(ImmCore::piTick time, bool hasStopTime = true, bool stoppedByAction = false);
 		void SetDrawInTime(double v);
 		void SetTransform(const ImmCore::trans3d & t);
 		void SetCanonicalTransform(const ImmCore::trans3d & t);
@@ -244,6 +247,8 @@ namespace ImmImporter
 		ImmCore::piTick mDuration;
 		ImmCore::piTick mStartTime;
 		ImmCore::piTick mStopTime;
+        bool mHasStopTime;
+        bool mStoppedByAction;
 		bool mIsPlaying;
 		bool mIsTimeline;
 		uint32_t mMaxRepeatCount;

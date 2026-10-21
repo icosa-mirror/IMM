@@ -100,6 +100,111 @@ static void checkChapterBoundaries(piLog* log)
     std::puts("[IMM_CHAPTER_BOUNDARY_TEST] passed");
 }
 
+static void checkEarlyStops(piLog* log)
+{
+    for (int stopTick : { 0, 1 })
+    for (int epoch : { 0, 10000 })
+    {
+        Sequence sequence;
+        require(sequence.Init(Sequence::Type::Comic, 0, vec3(0.0f)), "early-stop sequence init");
+        Layer* root = sequence.GetRoot();
+        require(root->Init(Layer::Type::Group, L"early-stop", true,
+            trans3d::identity(), trans3d::identity(), 1.0f, true, piTick(1000), 1, 0, log), "early-stop root init");
+        Layer::AnimValue value{}; value.init(); value.mBool = true;
+        root->AddKey(piTick(0), Layer::AnimProperty::Visibility, value, Layer::InterpolationType::None);
+        value.init(); value.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+        root->AddKey(piTick(stopTick), Layer::AnimProperty::Action, value, Layer::InterpolationType::None);
+        root->AddKey(piTick(100), Layer::AnimProperty::Action, value, Layer::InterpolationType::None);
+        Layer* child = sequence.CreateLayer(root);
+        require(child && child->Init(Layer::Type::Group, L"child", true,
+            trans3d::identity(), trans3d::identity(), 1.0f, true, piTick(1000), 1, 0, log), "early-stop child init");
+        value.init(); value.mBool = true;
+        child->AddKey(piTick(0), Layer::AnimProperty::Visibility, value, Layer::InterpolationType::None);
+        value.init(); value.mFloat = 0.25f;
+        child->AddKey(piTick(0), Layer::AnimProperty::Opacity, value, Layer::InterpolationType::None);
+        value.mFloat = 0.75f;
+        child->AddKey(piTick(2), Layer::AnimProperty::Opacity, value, Layer::InterpolationType::None);
+        value.mFloat = 1.0f;
+        child->AddKey(piTick(5), Layer::AnimProperty::Opacity, value, Layer::InterpolationType::None);
+        Layer* grandchild = sequence.CreateLayer(child);
+        require(grandchild && grandchild->Init(Layer::Type::Group, L"grandchild", true,
+            trans3d::identity(), trans3d::identity(), 1.0f, false, piTick(0), 1, 0, log), "early-stop grandchild init");
+        for (auto property : { Layer::AnimProperty::Visibility, Layer::AnimProperty::Opacity })
+        {
+            std::vector<Layer::AnimKey> copied;
+            require(child->CopyAnimKeys(property, copied), "copy nested fixture keys");
+            grandchild->ReplaceAnimKeys(property, std::move(copied));
+        }
+        Layer* dormant = sequence.CreateLayer(root);
+        require(dormant && dormant->Init(Layer::Type::Group, L"dormant", true,
+            trans3d::identity(), trans3d::identity(), 1.0f, true, piTick(1000), 1, 0, log), "dormant timeline init");
+        value.init(); value.mBool = true;
+        dormant->AddKey(piTick(5), Layer::AnimProperty::Visibility, value, Layer::InterpolationType::None);
+        MngrPlayer player;
+        require(player.Init(log), "early-stop player init");
+        piTick now(epoch);
+        player.Enter(&sequence, now);
+        player.Update(now);
+        require(player.GetIsWaiting() == (stopTick == 0), "startup does not invent a Stop before its key");
+        player.Update(now + piTick(stopTick));
+        if (!player.GetIsWaiting() || player.GetIsFinished())
+            std::fprintf(stderr, "[IMM_EARLY_STOP_TEST] stop=%d epoch=%d waiting=%d finished=%d valid=%d start=%lld stopTime=%lld\n",
+                stopTick, epoch, player.GetIsWaiting(), player.GetIsFinished(), root->HasStopTime(),
+                piTick::CastInt(root->GetStartTime()), piTick::CastInt(root->GetStopTime()));
+        require(player.GetIsWaiting() && !player.GetIsFinished(), "tick-zero/one Stop waits without finishing");
+        piTick position(0), stopped(0);
+        player.GetTime(now + piTick(stopTick), &position, &stopped);
+        require(position == piTick(stopTick), "early Stop reports authored position");
+        player.Update(now + piTick(50));
+        require(player.GetIsWaiting() && child->GetOpacity() == 0.25f && grandchild->GetOpacity() == 0.25f, "early Stop holds child state");
+        player.Pause(now + piTick(51));
+        player.Update(now + piTick(52));
+        player.Resume(now + piTick(53));
+        player.Update(now + piTick(54));
+        require(player.GetIsWaiting() && child->GetOpacity() == 0.25f && grandchild->GetOpacity() == 0.25f, "pause/resume preserves authored early Stop");
+        player.Continue(now + piTick(60));
+        player.Update(now + piTick(62));
+        require(!player.GetIsWaiting() && child->GetOpacity() == 0.75f && grandchild->GetOpacity() == 0.75f, "Continue crosses early Stop and advances child");
+        require(!dormant->GetPlaying() && !dormant->GetVisible(), "Continue leaves future timeline dormant");
+        player.Update(now + piTick(66));
+        require(dormant->GetPlaying() && dormant->GetVisible() && dormant->GetStartTime() == now + piTick(65),
+            "future timeline starts at its authored boundary after Continue");
+        player.Restart(now + piTick(200));
+        player.Update(now + piTick(220));
+        require(player.GetIsWaiting() && grandchild->GetOpacity() == 0.25f, "restart retriggers early Stop after delayed evaluation");
+        player.SetTime(now + piTick(300), piTick(2), piTick(0));
+        player.Update(now + piTick(300));
+        require(!player.GetIsWaiting() && child->GetOpacity() == 0.75f && grandchild->GetOpacity() == 0.75f, "playing seek past early Stop clears hold");
+        player.SetTime(now + piTick(400), piTick(stopTick), piTick(0));
+        player.Update(now + piTick(400));
+        require(player.GetIsWaiting() && child->GetOpacity() == 0.25f && grandchild->GetOpacity() == 0.25f, "seek onto early Stop rearms hold");
+        player.Exit();
+        std::vector<Layer::AnimKey> finalEarly{ *root->GetAnimKey(Layer::AnimProperty::Action, 0) };
+        root->ReplaceAnimKeys(Layer::AnimProperty::Action, std::move(finalEarly));
+        player.Enter(&sequence, now + piTick(500));
+        player.Update(now + piTick(500 + stopTick));
+        require(player.GetIsWaiting() && player.GetIsFinished(), "sole early Stop finishes the story");
+        player.Continue(now + piTick(600));
+        player.Update(now + piTick(602));
+        require(!player.GetIsWaiting() && !player.GetIsFinished(), "Continue clears early final completion");
+        player.Exit();
+        root->ReplaceAnimKeys(Layer::AnimProperty::Action, std::vector<Layer::AnimKey>{});
+        player.Enter(&sequence, now + piTick(700));
+        player.Update(now + piTick(700));
+        player.Pause(now + piTick(701));
+        player.SetTime(now + piTick(702), piTick(0), piTick(1));
+        player.Update(now + piTick(702), true);
+        require(!player.GetIsWaiting(), "paused seek to zero is not an authored Stop");
+        player.Resume(now + piTick(703));
+        player.Update(now + piTick(705));
+        player.GetTime(now + piTick(705), &position, &stopped);
+        require(!player.GetIsWaiting() && position >= piTick(2) && child->GetOpacity() == 0.75f && grandchild->GetOpacity() == 0.75f,
+            "resume after paused zero seek advances normally");
+        player.Exit(); player.Deinit(); sequence.Deinit(log);
+    }
+    std::puts("[IMM_EARLY_STOP_TEST] passed");
+}
+
 int wmain(int argc, wchar_t ** argv)
 {
     require(argc == 2, "expected spawn-only IMM fixture path");
@@ -121,6 +226,7 @@ int wmain(int argc, wchar_t ** argv)
     piLog log;
     require(log.Init(L"artifacts/viewpoint-policy-runtime.log", PILOG_TXT), "log init");
     checkChapterBoundaries(&log);
+    checkEarlyStops(&log);
     Document doc;
     require(doc.Init(L"viewpoint-policy", 0), "document init");
     auto tick = [&](double seconds, const Document::Command * command = nullptr)
