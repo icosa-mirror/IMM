@@ -11,13 +11,16 @@ remain open; none of these initial slices closes the full roadmap.
 
 Local native regressions and four paired paint/viewpoint metadata comparisons pass.
 Taperecorder's normal default-viewpoint DirectX capture is pixel-identical to its
-reference. Earlier reflection builds/exports passed all four platforms; newly added
-root APIs still require current platform/package acceptance. Full CI is unresolved:
-the root comic check introduced Unity CS1061, corrected in ac34f4f1 with a stricter
-local harness; fresh Unity/device validation is required. Godot iOS hosted macOS
-ARM64 capacity also remains unresolved after the earlier permitted retry. Confirmed
-source regressions take priority; independent work continues during infrastructure
-unavailability. Revision-specific evidence and limitations are recorded below.
+reference. Live GitHub status checked at 2026-10-21 20:23 UTC confirms full hosted
+validation success for compiler correction ac34f4f1 (39645977224) and viewpoint
+revision 740eec8a (39646549914). These runs close the earlier Unity CS1061 and
+Godot iOS capacity failures with passing replacement gates, including Unity Android
+URP/non-XR Firebase, Android Vulkan, Windows DirectX/Vulkan and Godot iOS Metal.
+Later sound-import revision 179a9f30 is under validation in 39669262483; it has no
+reported failed jobs at this check, but is incomplete. A queued macOS build has no
+runner assigned. Later APIs still need their own platform/package acceptance;
+hosted success does not establish skipped hardware gates or full content fidelity.
+Confirmed regressions take priority over new feature work. See section 6.26.
 
 ## 1. Objective and document ownership
 
@@ -111,8 +114,8 @@ The preferred first candidate is:
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
-| C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; final full CI blocked by Godot iOS capacity | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
-| C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; final full CI blocked by Godot iOS capacity | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
+| C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows regressions and Unity package compilation/tests pass; Unity player/device jobs pass; hosted full CI subsequently passed in 39645977224 and 39646549914 | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
+| C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI, four-platform builds/exports and Unity graph tests pass; hosted full CI subsequently passed in 39645977224 and 39646549914 | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata comparisons and default-camera capture pass within recorded scope. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D conversion and PCM16 sound construction implemented. Encoded sound queries/import implemented. Sound source mapping, stereo/panorama conversion and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
@@ -235,7 +238,8 @@ resolve confirmed defects and verify the result before advancing feature work.
 Do not interpret an infrastructure classifier or an unrelated passing job as
 closure of a failed gate.
 
-Status checked at 2026-10-21 14:36 UTC:
+Historical status checked at 2026-10-21 14:36 UTC; superseded by the
+replacement-run closure in section 6.26 (20:23 UTC):
 
 | Gate | Evidence and current disposition | Required next evidence |
 |---|---|---|
@@ -1014,6 +1018,32 @@ Status checked at 2026-10-21 14:36 UTC:
    ignored artifacts/sound-import-portable-* logs. The preceding sound-construction
    run 39664513588 passed native Windows job 119445872854; its remaining gates are
    pending. This milestone's full CI run has not yet been queued.
+
+### 6.26. Replacement CI closure and current regression audit (2026-10-21)
+
+1. Live GitHub verification at 20:23 UTC confirms compiler-fix run 39645977224
+   (ac34f4f1) and viewpoint run 39646549914 (740eec8a) both completed successfully.
+   Previous statements that these replacement gates were still pending were stale.
+   The earlier source/compiler regression is closed for the passing hosted gates.
+2. Compiler-fix evidence includes Unity Android URP/non-XR builds 119385387725 /
+   119385387418, corresponding Firebase validations 119394946887 / 119394946900,
+   Unity Android Vulkan 119399696727, Windows Vulkan/DirectX builds 119385655376 /
+   119385655431, and final Validation Evidence 119404707553, all successful.
+   The independent viewpoint run also passes all corresponding gates.
+3. Godot iOS package/Metal jobs 119381540258 and 119383528137 passed in those
+   fresh full runs. The old capacity failure and exhausted targeted retry remain
+   historical records, not an active blocker. No further old-run retry is needed.
+   VR/hardware and optional gates skipped in hosted mode remain unverified.
+4. Latest sound-import run 39669262483 (179a9f30) is incomplete with no failed jobs
+   at this check. Build/macOS job 119462462605 is queued with runner_id 0 and
+   macos-14 labels. Device/engine jobs depend on the build workflow completing;
+   their absence so far is not a new compiler failure. Do not treat older successes
+   as validation of the later sound APIs. Preserve required gates and inspect any
+   actual source failure before continuing implementation.
+5. The source sound-reference inspector has uncommitted observations in progress.
+   That independent work does not change the closure evidence above. Audio timing,
+   generated previews and animation fidelity are remaining acceptance gaps, not
+   newly observed CI source failures.
 
 ## 7. Consolidated documents
 
