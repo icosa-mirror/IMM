@@ -185,6 +185,17 @@ static class ConverterChecks
         try
         {
             Require(a > 0 && b > 0, "Both IMM files must load.");
+            if (compareAnimation)
+            {
+                Require(Reader.StrokeReader_GetRootLayerProperties(a, out var rootA, out var transformA) &&
+                    Reader.StrokeReader_GetRootLayerProperties(b, out var rootB, out var transformB) && rootA.Equals(rootB) && transformA.Equals(transformB),
+                    "Reader-exposed root metadata differs.");
+                Require(Reader.StrokeReader_GetDocumentInfo(a, out var docA) && Reader.StrokeReader_GetDocumentInfo(b, out var docB) &&
+                    docA.rootAnimationKeyCount == docB.rootAnimationKeyCount, "Root key counts differ.");
+                for (int index = 0; index < docA.rootAnimationKeyCount; index++)
+                    Require(Reader.StrokeReader_GetRootAnimationKey(a, index, out var ak) &&
+                        Reader.StrokeReader_GetRootAnimationKey(b, index, out var bk) && ak.Equals(bk), $"Stored root key differs at {index}.");
+            }
             var source = Layers(a);
             var target = Layers(b);
             var sourcePaint = source.Where(x => x.Value.Info.type == 1).ToArray();
@@ -249,7 +260,7 @@ static class ConverterChecks
                 }
             }
             Console.WriteLine($"[IMM_QUILL_CONVERTER_COMPARE] Exact paint subset match: {sourcePaint.Length} layers, {strokes} strokes, {points} points, hierarchy/transforms/pivots/frame buffers.");
-            if (compareAnimation) Console.WriteLine("[IMM_QUILL_ANIMATION_COMPARE] Exact stored layer animation keys and nested timeline metadata match; evaluated playback not checked.");
+            if (compareAnimation) Console.WriteLine("[IMM_QUILL_ANIMATION_COMPARE] Exact reader-exposed root metadata, root/layer keys and nested timing match; evaluated playback not checked.");
         }
         finally { if (a > 0) Reader.StrokeReader_Unload(a); if (b > 0) Reader.StrokeReader_Unload(b); Reader.StrokeReader_End(); }
     }

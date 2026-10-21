@@ -606,6 +606,24 @@ Status checked at 2026-10-21 14:36 UTC:
    other-platform/Unity acceptance remain pending; the old Godot capacity failure
    is still unresolved.
 
+### 6.10 C2 declared root-default preservation (2026-10-21)
+
+1. The animated converter now maps its already-accepted declared root visibility
+   and zero-offset defaults through the shared root-key operations. Root defaults
+   are no longer discarded while child keys are exported. Unverified source root
+   action channels still fail before output replacement; their diagnostic now
+   identifies the verified-root mapping boundary rather than calling it static paint.
+2. `--compare-animated-paint` additionally checks reader-exposed root properties
+   and every retained root key, alongside existing child keys/timing, paint geometry,
+   drawing scales and point length/time. All exact exposed-field comparisons pass
+   for taperecorder (114 strokes/2,068 points), consul-room (2,495/57,187) and
+   Fishgym (4,085/143,833) against their co-located Quill IMM exports. Root metadata
+   comparisons use the public float ABI and do not prove native double identity.
+3. The synthetic native suite passes with root-default preservation and unchanged
+   unsupported-root-action/output-preservation assertions. Logs remain under
+   ignored `artifacts/root-converter-*` / `root-compare-*`. This does not close
+   startup metadata, source chapter-action mapping, navigation or playback acceptance.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

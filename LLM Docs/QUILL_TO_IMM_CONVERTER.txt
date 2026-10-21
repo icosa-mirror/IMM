@@ -156,6 +156,12 @@ C2 animated paint implementation checkpoint (2026-10-21)
    round-trip checks (roadmap 6.8). Shared root-key/comic construction now also passes
    native stored-data/chapter-index round trips (6.9). Quill source root-action
    mapping, evaluated chapter playback and broader platform acceptance remain open.
+9. The animated converter also retains its accepted declared root visibility and
+   zero-offset defaults through shared root-key authoring. Strict comparisons now
+   include reader-exposed root properties and all root keys. Taperecorder,
+   consul-room and Fishgym pass those checks alongside paint/child-key/timing
+   comparisons. This uses float metadata APIs; source actions/startup/navigation
+   remain outside the verified mapping.
 
 C1 static profile implementation and validation (2026-10-21)
 

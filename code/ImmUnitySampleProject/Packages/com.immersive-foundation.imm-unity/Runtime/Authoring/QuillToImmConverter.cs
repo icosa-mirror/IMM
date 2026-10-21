@@ -116,6 +116,7 @@ namespace ImmPlayer.Authoring
                         }
                         rootProperties.MaxRepeatCount = checked((uint)ExactNonNegativeInteger(sequence.RootLayer.Animation.MaxRepeatCount, "/"));
                         Require(document.SetRootProperties(rootProperties), "/");
+                        MapAnimation(document, 0, sequence.RootLayer.Animation.Keys, root, "/");
                     }
                     using (var stream = File.OpenRead(sourceBinary))
                     using (var reader = new QBinReader(stream))
@@ -209,7 +210,7 @@ namespace ImmPlayer.Authoring
                             }
                         if (!defaults && !supported)
                             Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedAnimation", path,
-                                $"{channel.Name} keys are outside the static profile.");
+                                $"{channel.Name} keys are outside the {(animated && isRoot ? "verified root mapping" : "static profile")}.");
                     }
             }
             if (!(layer["Implementation"] is JObject implementation))

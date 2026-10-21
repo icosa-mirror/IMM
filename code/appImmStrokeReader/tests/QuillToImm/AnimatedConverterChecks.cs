@@ -43,6 +43,9 @@ static class AnimatedConverterChecks
         try
         {
             Require(doc > 0 && Reader.StrokeReader_GetAuthoringLayerCount(doc) == 2, "Animated hierarchy missing.");
+            Require(Reader.StrokeReader_GetDocumentInfo(doc, out var documentInfo) && documentInfo.rootAnimationKeyCount == 1 &&
+                Reader.StrokeReader_GetRootAnimationKey(doc, 0, out var rootKey) && rootKey.property == 8 && rootKey.timeTicks == 0 && rootKey.intValue == 0,
+                "Declared default root offset was omitted.");
             Require(Reader.StrokeReader_GetAuthoringLayerInfo(doc, 0, out var groupInfo) &&
                 groupInfo.isTimeline == 1 && groupInfo.durationTicks == 126000 && groupInfo.maxRepeatCount == 2, "Nested timeline timing changed.");
             Require(Reader.StrokeReader_GetAuthoringLayerAnimationInfo(doc, 1, out int rate, out int frames, out int repeat) &&
