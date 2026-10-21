@@ -74,7 +74,8 @@ The preferred first candidate is:
 
 1. Reuse graph transactions, validation, hierarchy, drawings, frames, keys, bounds
    compilation and export diagnostics where their contracts fit. The first static
-   mapping now uses this graph/compiler; animation/navigation/media remain outstanding.
+   static and initial animated paint mappings now use this graph/compiler;
+   animation acceptance, navigation and media remain outstanding.
 2. Keep Quill semantics in the mapping layer. Extend the shared graph/exporter only
    when a demonstrated source case needs a reusable capability. Do not introduce
    another full document model or route conversion through Open Brush strokes.
@@ -382,6 +383,16 @@ Status checked at 2026-10-21 14:36 UTC:
    `baa05c125ed0ca130760f1b76a8cde39a475f66a60e5b4e96644a1839b0b2095`).
    Local regressions pass with the tracked path; fresh full validation is required
    after this source fix. The older Godot iOS capacity failure remains unresolved.
+
+7. The reference CLI also supports `--inspect-root` without a paired source. It
+   performs a full native import and records input/library hashes, build ID,
+   native load duration, root keys and chapters. Report/log paths cannot replace
+   inputs or the native DLL; a public-sample overwrite rejection preserves the
+   input hash. Public sample inspection returns one Offset key and one chapter.
+   A local Bakery inspection returns 20 chapters and 21 root keys: 19 Play actions,
+   one Stop action and one Offset key. Its first Play/Stop actions are separated
+   by one tick (524/525). This is native-only evidence: no paired Quill source is
+   available, so it does not establish source action mapping or chapter authoring.
 
 ### 6.4 Paint repeat-count exporter repair (2026-10-21)
 

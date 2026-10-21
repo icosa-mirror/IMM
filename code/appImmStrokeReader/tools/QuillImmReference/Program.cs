@@ -8,6 +8,11 @@ using Reader = ImmPlayer.ImmStrokeReader;
 
 // Inspection only: neither project nor reference IMM is modified. Matching names
 // and indices are candidate correspondences, never proof of export provenance.
+if (args.Length == 4 && args[0] == "--inspect-root")
+{
+    InspectRootFile(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), Path.GetFullPath(args[3]));
+    return;
+}
 if (args.Length < 4 || args.Length > 5 || (args.Length == 5 && args[4] != "--metadata-only"))
     throw new ArgumentException("Expected Quill project directory, reference IMM, native reader DLL, report JSON, and optional --metadata-only.");
 bool metadataOnly = args.Length == 5;
@@ -15,6 +20,8 @@ string sourcePath = Path.GetFullPath(args[0]);
 string referencePath = Path.GetFullPath(args[1]);
 string libraryPath = Path.GetFullPath(args[2]);
 string reportPath = Path.GetFullPath(args[3]);
+ValidateReportPaths(reportPath, referencePath, libraryPath,
+    Path.Combine(sourcePath, "Quill.json"), Path.Combine(sourcePath, "Quill.qbin"));
 Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
 NativeLibrary.SetDllImportResolver(typeof(Reader).Assembly,
     (name, assembly, searchPath) => name == "ImmStrokeReader" ? NativeLibrary.Load(libraryPath) : IntPtr.Zero);
@@ -34,12 +41,7 @@ try
     finally { pinned.Free(); }
     Require(document > 0, "Reference IMM load failed.");
     Require(Reader.StrokeReader_GetDocumentInfo(document, out var info), "Document metadata query failed.");
-    var rootAnimationKeys = new List<StrokeAnimationKey>();
-    for (int index = 0; index < info.rootAnimationKeyCount; index++)
-    {
-        Require(Reader.StrokeReader_GetRootAnimationKey(document, index, out var key), $"Root key {index} query failed.");
-        rootAnimationKeys.Add(key);
-    }
+    var rootAnimationKeys = NativeRootKeys(document, info.rootAnimationKeyCount);
     var nativeLayers = new List<NativeLayer>();
     for (int index = 0; index < Reader.StrokeReader_GetAuthoringLayerCount(document); index++)
     {
@@ -124,6 +126,61 @@ finally
 {
     if (document > 0) Reader.StrokeReader_Unload(document);
     Reader.StrokeReader_End();
+}
+
+static void InspectRootFile(string inputPath, string nativeLibrary, string outputPath)
+{
+    ValidateReportPaths(outputPath, inputPath, nativeLibrary);
+    Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+    NativeLibrary.SetDllImportResolver(typeof(Reader).Assembly,
+        (name, assembly, searchPath) => name == "ImmStrokeReader" ? NativeLibrary.Load(nativeLibrary) : IntPtr.Zero);
+    Require(Reader.StrokeReader_Init(Path.ChangeExtension(outputPath, ".native.log")) == 0, "Native init failed.");
+    int document = 0;
+    try
+    {
+        byte[] bytes = File.ReadAllBytes(inputPath);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        var pinned = GCHandle.Alloc(bytes, GCHandleType.Pinned);
+        try { document = Reader.StrokeReader_LoadFromMemory(pinned.AddrOfPinnedObject(), bytes.Length); }
+        finally { pinned.Free(); }
+        timer.Stop();
+        Require(document > 0, "IMM load failed.");
+        Require(Reader.StrokeReader_GetDocumentInfo(document, out var info), "Document metadata query failed.");
+        var report = new
+        {
+            schema = "imm-root-inspection-v1",
+            input = Path.GetFileName(inputPath),
+            inputSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
+            librarySha256 = Hash(nativeLibrary),
+            nativeBuildId = Reader.GetBuildId(),
+            nativeLoadSeconds = timer.Elapsed.TotalSeconds,
+            document = info,
+            chapterCount = Reader.StrokeReader_GetChapterCount(document),
+            rootAnimationKeys = NativeRootKeys(document, info.rootAnimationKeyCount)
+        };
+        File.WriteAllText(outputPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true }));
+        Console.WriteLine($"[IMM_ROOT_INSPECT] Wrote {outputPath}; rootKeys={info.rootAnimationKeyCount}, chapters={report.chapterCount}.");
+    }
+    finally
+    {
+        if (document > 0) Reader.StrokeReader_Unload(document);
+        Reader.StrokeReader_End();
+    }
+}
+
+static void ValidateReportPaths(string reportPath, params string[] inputs)
+{
+    foreach (string output in new[] { reportPath, Path.ChangeExtension(reportPath, ".native.log") })
+        if (inputs.Any(input => string.Equals(Path.GetFullPath(input), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("Report and native log paths must not replace input files or the native library.");
+}
+
+static StrokeAnimationKey[] NativeRootKeys(int document, int count)
+{
+    var keys = new StrokeAnimationKey[count];
+    for (int index = 0; index < count; index++)
+        Require(Reader.StrokeReader_GetRootAnimationKey(document, index, out keys[index]), $"Root key {index} query failed.");
+    return keys;
 }
 
 static object Compare(int document, SourceLayer source, NativeLayer native, bool metadataOnly)

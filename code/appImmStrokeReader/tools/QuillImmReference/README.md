@@ -9,6 +9,18 @@ ordinary layers. Use a reader binary with `StrokeReader_GetRootAnimationKey`.
 The root-key count/query excludes implicit default visibility and does not imply
 that each retained key is an action or chapter marker.
 
+Inspect an IMM's root keys without a paired source project:
+
+```powershell
+dotnet run --project code/appImmStrokeReader/tools/QuillImmReference -- --inspect-root $referenceImm code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll artifacts/quill-reference/root.json
+```
+
+This loads the entire file through the native reader; it is not a streaming or
+metadata-only IMM import. The report records the input/library hashes, native build
+ID, native import duration, root keys and chapter count. The import duration excludes
+file reading and report serialization. Both modes reject report/log paths that
+replace their input files or native library.
+
 1. Inventory every source project's metadata and qbin stroke headers without loading
    vertices. Add reference roots to locate filename/asset-ID candidates:
 

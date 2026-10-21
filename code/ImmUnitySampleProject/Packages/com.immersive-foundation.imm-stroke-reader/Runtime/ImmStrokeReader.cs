@@ -140,7 +140,7 @@ namespace ImmPlayer
         private static extern IntPtr StrokeReader_GetBuildId();
 
         /// <summary>
-        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5"),
+        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-KEYS"),
         /// the intended way to confirm which stroke reader library a player actually loaded.
         /// </summary>
         /// <returns>The native build id string, or null when the plugin reports none.</returns>
