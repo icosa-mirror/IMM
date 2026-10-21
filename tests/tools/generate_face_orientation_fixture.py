@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import _ctypes
 import ctypes
 import os
 import shutil
 import tempfile
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,10 +62,10 @@ def runtime_dependencies(repo_root: Path) -> tuple[Path, ...]:
     reader = repo_root / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64"
     return tuple(
         unity / name
-        for name in ("Audio360.dll", "opusenc.dll", "opus.dll", "vorbisenc.dll")
+        for name in ("Audio360.dll", "opusenc.dll", "vorbisenc.dll")
     ) + tuple(
         reader / name
-        for name in ("zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll")
+        for name in ("zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "opus.dll")
     )
 
 
@@ -223,6 +224,7 @@ def generate(library: ctypes.CDLL, output_path: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plugin", type=Path)
+    parser.add_argument("--staged-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--output",
         type=Path,
@@ -235,6 +237,13 @@ def main() -> int:
         raise FileNotFoundError(f"Unity plugin not found: {plugin}")
     output_path = args.output.resolve()
 
+    if args.staged_worker:
+        # Process exit releases every dependency, including the plugin's explicit
+        # preload references. Do not guess Windows loader reference counts.
+        ctypes.windll.kernel32.SetDllDirectoryW(str(plugin.parent))
+        generate(ctypes.CDLL(str(plugin)), output_path)
+        return 0
+
     with tempfile.TemporaryDirectory(prefix="imm-face-orientation-") as temporary:
         staging = Path(temporary)
         staged_plugin = staging / plugin.name
@@ -243,24 +252,11 @@ def main() -> int:
             if not dependency.is_file():
                 raise FileNotFoundError(f"Runtime dependency not found: {dependency}")
             shutil.copy2(dependency, staging / dependency.name)
-        ctypes.windll.kernel32.SetDllDirectoryW(str(staging))
-        library = ctypes.CDLL(str(staged_plugin))
-        library_handle = library._handle
-        try:
-            generate(library, output_path)
-        finally:
-            del library
-            _ctypes.FreeLibrary(library_handle)
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            kernel32.GetModuleHandleW.restype = ctypes.c_void_p
-            kernel32.GetModuleHandleW.argtypes = [ctypes.c_wchar_p]
-            kernel32.FreeLibrary.restype = ctypes.c_bool
-            kernel32.FreeLibrary.argtypes = [ctypes.c_void_p]
-            for dependency in reversed(runtime_dependencies(repo_root)):
-                dependency_handle = kernel32.GetModuleHandleW(dependency.name)
-                if dependency_handle:
-                    kernel32.FreeLibrary(dependency_handle)
-            kernel32.SetDllDirectoryW(None)
+        subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--staged-worker",
+             "--plugin", str(staged_plugin), "--output", str(output_path)],
+            check=True, timeout=60,
+        )
 
     if not output_path.is_file() or output_path.stat().st_size == 0:
         raise RuntimeError(f"Fixture was not written: {output_path}")

@@ -1346,6 +1346,21 @@ replacement-run closure in section 6.26 (20:23 UTC):
    permitted retry remains deferred. Older compiler/Godot failures are closed by
    passing replacement runs (section 6.26). This milestone needs fresh full CI.
 
+### 6.36. Windows fixture dependency regression correction (2026-10-21)
+
+1. Decoder run 39685893797 failed Windows job 119519720370: the face-orientation
+   fixture generator still staged opus.dll from the player package after section
+   6.35 moved ownership to the reader. This is a source regression. Remaining work
+   in that run was cancelled; fresh full validation is required after the fix.
+2. The generator now stages Opus from the reader package. Local reproduction also
+   exposed loaded dependency references preventing temporary DLL deletion. Native
+   generation runs in a bounded child process; parent cleanup follows child exit
+   instead of guessing Windows loader reference counts. No validation gate changed.
+3. Local face-orientation generation passes (6,344 bytes), and the existing
+   urp_content_fixture_roundtrip CTest passes. Evidence: ignored
+   artifacts/sound-pcm16-face-orientation.log, sound-pcm16-urp-fixtures.log and
+   sound-pcm16-windows-failed.log. Hosted Windows acceptance remains pending.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
