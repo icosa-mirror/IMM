@@ -102,7 +102,7 @@ The preferred first candidate is:
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows CI gate passed; Unity/full CI pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
-| C1b: shared reflection preservation | Implemented locally for layer/pivot and offline transform keys, including importer/comparer; Windows native and converter regressions pass; other-platform/Unity CI pending | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
+| C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI regressions and Windows/Android/macOS/iOS native builds pass; packaging/Unity/device acceptance pending | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Extend C1 for shared drawings/holds, keys, nested timing, viewpoints, root/startup/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
@@ -258,8 +258,13 @@ Status checked at 2026-10-21 13:41 UTC:
    [run 39609583383](https://github.com/icosa-mirror/IMM/actions/runs/39609583383)
    is active. Core Matrix Status passed, including the Firebase wrapper's new
    large-log regression (confirmed in the job log). Baseline content and package
-   source layout gates also passed. Platform builds, Unity and device acceptance
-   remain pending; feature work remains paused until regression gates are resolved.
+   source layout gates also passed. Windows, Android, macOS and iOS native builds
+   have passed. Windows job 119254613009 explicitly passed the X/Y/Z
+   layer/pivot/key export/import/comparison and legacy ABI checks, the four-brush
+   converter and output-preservation checks, and reader/adapter regressions.
+   Packaging, Unity and device acceptance remain pending; feature work remains
+   paused until regression gates are resolved. These native build results do not
+   establish device rendering or Unity integration acceptance.
 
 ## 7. Consolidated documents
 
