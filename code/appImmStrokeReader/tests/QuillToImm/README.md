@@ -18,18 +18,13 @@ necessary for engine-specific compilation and behavior.
    ```
 
 2. Convert a private project using the same runtime API. The output parent directory
-   must exist. Add `--animated` for animated paint conversion. Omit `--paint-only`
-   to reject all omitted media/viewpoints/unknown layers:
+   must exist. Add `--animated` for animated paint or `--with-viewpoints` for the
+   project paint/animation/viewpoint entry. `--allow-omissions` permits diagnosed
+   partial output (legacy `--paint-only` also grants omission permission):
 
    ```powershell
    dotnet run --project code/appImmStrokeReader/tests/QuillToImm -- $projectFolder $outputImm code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll --paint-only
    ```
-
-   Use `--compare-animated-paint` instead of `--compare-paint` to additionally require
-   exact reader-exposed root properties and root keys, stored layer animation keys,
-   timeline flags/durations/repeats, point length/time
-   and drawing quantization scales. Evaluated
-   animation playback is outside both comparisons.
 
 3. Compare the decoded paint/group subset with a local reference export. This includes
    every stored stroke/point, rather than skipping source strokes affected by codec
@@ -38,6 +33,12 @@ necessary for engine-specific compilation and behavior.
    ```powershell
    dotnet run --project code/appImmStrokeReader/tests/QuillToImm -- --compare-paint $referenceImm $outputImm code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll
    ```
+
+   `--compare-animated-paint` additionally requires exact reader-exposed root
+   properties/keys, layer keys, timeline metadata, point length/time and drawing
+   scales. `--compare-project` also requires viewpoint transforms, tracking, volumes,
+   locomotion and default selection. Previews/media and actual playback/navigation
+   are outside these stored-data comparisons.
 
 The suite covers native brush/visibility mapping, nonidentity group transform/pivot,
 hierarchy, zero-width stroke tips through conversion and authoring import/re-export
@@ -68,6 +69,12 @@ ownership/lookup/transactions/replacement/removal/limits, and compare every nati
 after export/import/re-export. All four action values and the 524/525-tick Play/Stop
 separation survive; both files report Comic and three chapters. This does not validate
 actual chapter navigation, playback controls or Quill source action mapping.
+
+Viewpoint checks use a viewpoint-only synthetic project and exercise export flags,
+gizmo visibility, eye/floor tracking, nondefault sphere/movement mask, hierarchy and
+a non-first default. Unsupported preview omissions and default fallback require
+explicit permission and mark partial output; strict rejection preserves existing
+files. Unknown tracking values fail. The project API does not yet preserve previews.
 
 For fixed-observer native paint playback comparisons, the viewer capture script
 `code/appImmViewer/scripts/capture_windows_directx_baseline.ps1` accepts `-LockCamera`.

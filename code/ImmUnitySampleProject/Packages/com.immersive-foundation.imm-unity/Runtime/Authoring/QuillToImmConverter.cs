@@ -31,7 +31,8 @@ namespace ImmPlayer.Authoring
     public sealed class QuillToImmConversionResult
     {
         public bool Succeeded => Export != null && Export.Succeeded;
-        public bool IsPartial => Issues.Any(x => x.Code == "OmittedLayer" || x.Code == "OmittedStartupMetadata");
+        public bool IsPartial => Issues.Any(x => x.Code == "OmittedLayer" || x.Code == "OmittedStartupMetadata" ||
+            x.Code == "OmittedViewpointPreview" || x.Code == "OmittedDefaultViewpoint");
         public IReadOnlyList<QuillToImmIssue> Issues { get; }
         public ImmAuthoringExportResult Export { get; }
 
@@ -45,22 +46,27 @@ namespace ImmPlayer.Authoring
     /// <summary>
     /// Offline static and animated paint profiles. The static entry rejects animation;
     /// layer/pivot/key reflections use the additive offline exporter APIs.
-    /// Viewpoints/media/unknown layers require explicit omission permission and
-    /// produce partial-output diagnostics. No existing output is touched on failure.
+    /// The project entry maps exported viewpoints; paint entries retain their
+    /// subset contract. Unsupported content requires explicit omission permission
+    /// and produces partial-output diagnostics. Existing output is preserved on failure.
     /// </summary>
     public static class QuillToImmConverter
     {
         public static QuillToImmConversionResult ConvertStaticPaintProject(
             string projectFolder, string outputPath, bool allowOmittedLayers = false)
-            => ConvertPaintProject(projectFolder, outputPath, allowOmittedLayers, animated: false);
+            => ConvertProjectCore(projectFolder, outputPath, allowOmittedLayers, animated: false, includeViewpoints: false);
 
         /// <summary>Converts paint drawings and layer animation. Root animation and navigation remain unsupported.</summary>
         public static QuillToImmConversionResult ConvertAnimatedPaintProject(
             string projectFolder, string outputPath, bool allowOmittedLayers = false)
-            => ConvertPaintProject(projectFolder, outputPath, allowOmittedLayers, animated: true);
+            => ConvertProjectCore(projectFolder, outputPath, allowOmittedLayers, animated: true, includeViewpoints: false);
 
-        private static QuillToImmConversionResult ConvertPaintProject(
-            string projectFolder, string outputPath, bool allowOmittedLayers, bool animated)
+        /// <summary>Convert supported paint, animation and exported viewpoints. Unsupported content requires explicit omission permission.</summary>
+        public static QuillToImmConversionResult ConvertProject(string projectFolder, string outputPath, bool allowOmittedContent = false)
+            => ConvertProjectCore(projectFolder, outputPath, allowOmittedContent, animated: true, includeViewpoints: true);
+
+        private static QuillToImmConversionResult ConvertProjectCore(
+            string projectFolder, string outputPath, bool allowOmittedLayers, bool animated, bool includeViewpoints)
         {
             var issues = new List<QuillToImmIssue>();
             try
@@ -82,7 +88,7 @@ namespace ImmPlayer.Authoring
                 if ((int?)json["Version"] != 1 || !(json["Sequence"] is JObject settings) ||
                     !(settings["RootLayer"] is JObject root) || (string)root["Type"] != "Group")
                     throw new InvalidDataException("Expected a Version 1 Quill project with a Group root.");
-                Preflight(root, "", true, true, issues, allowOmittedLayers, animated);
+                Preflight(root, "", true, true, issues, allowOmittedLayers, animated, includeViewpoints);
                 if (settings["AnimateOnStart"] != null || settings["TrackingOrigin"] != null)
                     Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
                         "OmittedStartupMetadata", "/", "Startup/tracking metadata is outside the paint profiles.");
@@ -92,6 +98,7 @@ namespace ImmPlayer.Authoring
                 Sequence sequence = QuillSequenceReader.ReadMetadata(projectFolder);
                 if (sequence?.RootLayer == null)
                     throw new InvalidDataException("Quill hierarchy could not be parsed.");
+                var viewpoints = includeViewpoints ? new ViewpointMapping(sequence.DefaultViewpoint) : null;
                 if (!animated) CheckRoot(sequence.RootLayer);
                 var created = ImmAuthoringDocument.Create(animated ? ExportSequenceType.Animated : ExportSequenceType.Still, checked((uint)sequence.Framerate),
                     new UnityEngine.Color(sequence.BackgroundColor.R, sequence.BackgroundColor.G, sequence.BackgroundColor.B, 1f));
@@ -121,11 +128,18 @@ namespace ImmPlayer.Authoring
                     using (var stream = File.OpenRead(sourceBinary))
                     using (var reader = new QBinReader(stream))
                     {
-                        MapChildren(document, sequence.RootLayer, root, 0, $"/{sequence.RootLayer.Name}", true, reader, animated);
+                        MapChildren(document, sequence.RootLayer, root, 0, $"/{sequence.RootLayer.Name}", true, reader, animated, viewpoints);
+                    }
+                    if (viewpoints != null && viewpoints.DefaultPath.Length != 0 && viewpoints.DefaultMatches != 1)
+                    {
+                        Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
+                            "OmittedDefaultViewpoint", "/", "The declared default viewpoint is not uniquely exported; native fallback selection applies.");
+                        if (!allowOmittedLayers) return new QuillToImmConversionResult(issues);
                     }
                     var snapshot = Require(document.CreateSnapshot(), "/");
-                    if (!snapshot.Layers.Any(x => x.Type == ImmAuthoringLayerType.Paint && x.Drawings.Any(d => d.Strokes.Count > 0)))
-                        throw new InvalidDataException("The selected paint profile contains no exportable paint.");
+                    if (!snapshot.Layers.Any(x => (x.Type == ImmAuthoringLayerType.Paint && x.Drawings.Any(d => d.Strokes.Count > 0)) ||
+                        (includeViewpoints && x.Type == ImmAuthoringLayerType.SpawnArea)))
+                        throw new InvalidDataException("The selected mapping contains no exportable content.");
                     ImmAuthoringExportResult exported = ImmAuthoringCompiler.ExportToFile(snapshot, fullOutput);
                     if (!exported.Succeeded)
                         Issue(issues, QuillToImmIssueSeverity.Error, "ExportFailed", "/", exported.Message);
@@ -143,16 +157,35 @@ namespace ImmPlayer.Authoring
         }
 
         private static void Preflight(JObject layer, string parentPath, bool parentVisible, bool isRoot,
-            List<QuillToImmIssue> issues, bool allowOmittedLayers, bool animated)
+            List<QuillToImmIssue> issues, bool allowOmittedLayers, bool animated, bool includeViewpoints)
         {
             string path = $"{parentPath}/{(string)layer["Name"]}";
             string type = (string)layer["Type"];
             bool visible = parentVisible && PotentiallyVisible(layer, animated);
-            if (type != "Group" && type != "Paint")
+            if (!IsMappedType(type, includeViewpoints))
             {
                 Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
-                    "OmittedLayer", path, $"{type ?? "Unknown"} is outside the paint profiles.");
+                    "OmittedLayer", path, $"{type ?? "Unknown"} is outside the selected mapping.");
                 return;
+            }
+            if (type == "Viewpoint")
+            {
+                var viewSettings = layer["Implementation"] as JObject ?? throw new InvalidDataException($"Missing viewpoint settings at {path}.");
+                if ((bool?)viewSettings["Exporting"] == false)
+                {
+                    Issue(issues, QuillToImmIssueSeverity.Information, "ViewpointNotExported", path, "Source Exporting=false excludes this viewpoint.");
+                    return;
+                }
+                if (viewSettings["DataFileOffset"] != null && viewSettings["DataFileOffset"].Type != JTokenType.Null)
+                {
+                    string offset = ((string)viewSettings["DataFileOffset"]).Trim();
+                    if (offset.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) offset = offset.Substring(2);
+                    if (!ulong.TryParse(offset, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong value))
+                        throw new InvalidDataException($"Invalid viewpoint preview offset at {path}.");
+                    if (value != 0)
+                        Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
+                            "OmittedViewpointPreview", path, "Embedded viewpoint preview images are not yet supported.");
+                }
             }
             if (type == "Paint" && !visible)
             {
@@ -219,9 +252,9 @@ namespace ImmPlayer.Authoring
             {
                 if (!(implementation["Children"] is JArray children))
                     throw new InvalidDataException($"Missing group children at {path}.");
-                foreach (JObject child in children) Preflight(child, path, visible, false, issues, allowOmittedLayers, animated);
+                foreach (JObject child in children) Preflight(child, path, visible, false, issues, allowOmittedLayers, animated, includeViewpoints);
             }
-            else if (implementation["Drawings"] is JArray drawings)
+            else if (type == "Paint" && implementation["Drawings"] is JArray drawings)
             {
                 if (animated && (!(implementation["Frames"] is JArray frameMap) ||
                     frameMap.Count == 0 || frameMap.Any(x => !IsDrawingIndex(x, drawings.Count))))
@@ -231,7 +264,7 @@ namespace ImmPlayer.Authoring
                     Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedAnimation", path,
                         "Static paint requires one drawing and frame references to drawing zero.");
             }
-            else if (implementation["DataFileOffset"] == null)
+            else if (type == "Paint" && implementation["DataFileOffset"] == null)
                 throw new InvalidDataException($"Missing paint data declaration at {path}.");
         }
 
@@ -270,23 +303,33 @@ namespace ImmPlayer.Authoring
             return !defaultChannel && keys.Any(x => (bool?)x["Value"] == true);
         }
 
-        private static void MapChildren(ImmAuthoringDocument document, LayerGroup group, JObject source, long parentId,
-            string path, bool visible, QBinReader reader, bool animated)
+        private sealed class ViewpointMapping
         {
-            var layers = group.Children.Where(x => x is LayerGroup || x is LayerPaint).ToArray();
+            internal readonly string DefaultPath;
+            internal int DefaultMatches;
+            internal ViewpointMapping(string path) { DefaultPath = (path ?? "").Replace('\\', '/').Trim('/'); }
+        }
+
+        private static bool IsMappedType(string type, bool includeViewpoints) =>
+            type == "Group" || type == "Paint" || (includeViewpoints && type == "Viewpoint");
+
+        private static void MapChildren(ImmAuthoringDocument document, LayerGroup group, JObject source, long parentId,
+            string path, bool visible, QBinReader reader, bool animated, ViewpointMapping viewpoints)
+        {
+            var layers = group.Children.Where(x => x is LayerGroup || x is LayerPaint || (viewpoints != null && x is LayerViewpoint)).ToArray();
             var declarations = ((JArray)source["Implementation"]["Children"]).OfType<JObject>()
-                .Where(x => (string)x["Type"] == "Group" || (string)x["Type"] == "Paint").ToArray();
+                .Where(x => IsMappedType((string)x["Type"], viewpoints != null)).ToArray();
             if (layers.Length != declarations.Length) throw new InvalidDataException($"Parsed hierarchy differs at {path}.");
             for (int i = 0; i < layers.Length; i++)
-                MapLayer(document, layers[i], declarations[i], parentId, path, visible, reader, animated);
+                MapLayer(document, layers[i], declarations[i], parentId, path, visible, reader, animated, viewpoints);
         }
 
         private static void MapLayer(ImmAuthoringDocument document, Layer layer, JObject source, long parentId,
-            string parentPath, bool parentVisible, QBinReader reader, bool animated)
+            string parentPath, bool parentVisible, QBinReader reader, bool animated, ViewpointMapping viewpoints)
         {
             string path = $"{parentPath}/{layer.Name}";
             bool visible = parentVisible && PotentiallyVisible(source, animated);
-            if (!(layer is LayerGroup) && !(layer is LayerPaint)) return;
+            if (layer is LayerViewpoint excluded && !excluded.Exporting) return;
             if (layer is LayerPaint && !visible) return;
             var properties = ImmAuthoringLayerProperties.Default(layer.Name);
             properties.Visible = layer.Visible;
@@ -305,7 +348,27 @@ namespace ImmPlayer.Authoring
             {
                 long groupId = Require(document.CreateGroupLayer(parentId, properties), path);
                 if (animated) MapAnimation(document, groupId, layer.Animation.Keys, source, path);
-                MapChildren(document, group, source, groupId, path, visible, reader, animated);
+                MapChildren(document, group, source, groupId, path, visible, reader, animated, viewpoints);
+                return;
+            }
+            if (layer is LayerViewpoint viewpoint)
+            {
+                if (!IsIdentity(layer.Pivot) || layer.Opacity != 1 || properties.IsTimeline || properties.DurationTicks != 0 || properties.MaxRepeatCount != 0)
+                    throw new NotSupportedException($"Nondefault viewpoint pivot/opacity/timeline properties need shared exporter support at {path}.");
+                if (viewpoint.TypeStr != "FloorLevel" && viewpoint.TypeStr != "EyeLevel")
+                    throw new NotSupportedException($"Unknown viewpoint tracking level {viewpoint.TypeStr} at {path}.");
+                properties.Visible = true; // Viewpoint Visible controls the source gizmo; Exporting controls inclusion.
+                properties.SpawnAreaFloorLevel = viewpoint.TypeStr == "FloorLevel";
+                properties.SpawnAreaVolume = ExportSpawnAreaVolume.Sphere;
+                properties.SpawnAreaVolumeOffset = new UnityEngine.Vector3(viewpoint.Sphere.X, viewpoint.Sphere.Y, viewpoint.Sphere.Z);
+                properties.SpawnAreaVolumeExtent = new UnityEngine.Vector3(viewpoint.Sphere.W, viewpoint.Sphere.W, viewpoint.Sphere.W);
+                properties.SpawnAreaAllowTranslationX = viewpoint.AllowTranslationX;
+                properties.SpawnAreaAllowTranslationY = viewpoint.AllowTranslationY;
+                properties.SpawnAreaAllowTranslationZ = viewpoint.AllowTranslationZ;
+                properties.SpawnAreaIsDefault = path.Trim('/') == viewpoints.DefaultPath;
+                if (properties.SpawnAreaIsDefault) viewpoints.DefaultMatches++;
+                long viewpointId = Require(document.CreateSpawnAreaLayer(parentId, properties), path);
+                MapAnimation(document, viewpointId, layer.Animation.Keys, source, path);
                 return;
             }
             var paint = (LayerPaint)layer;

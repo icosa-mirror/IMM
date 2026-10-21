@@ -3,19 +3,21 @@
 Baseline source review: `ee5e02f3` on 2026-10-21; subsequent implementation and
 validation revisions are recorded below.
 This is the planning entry point for Quill conversion, IMM content extraction and
-runtime authoring. C0 has reference evidence. C1 has an offline static converter,
-exact native paint-subset comparisons, one identical DirectX reference capture and
-passing Windows converter regressions. Unity package compilation/tests pass;
-full engine/device CI remains pending.
-The static slice's Unity package-import job has passed. Both standalone Android
-gates now pass in fresh run 39609583383 after earlier dependency/capture failures.
-Full acceptance remains unresolved. The shared reflection extension is locally verified;
-native builds and packaged exports pass on all four platforms. Broader Unity/device
-acceptance is limited by the unresolved full-validation result. Regression investigation takes priority
-over further feature work when a source failure is confirmed. Independent roadmap
-work continues while infrastructure is unavailable. Unity player/device jobs now pass; final full acceptance
-is blocked by Godot iOS hosted-runner capacity: the original job and its one
-permitted retry never started. Zero-tip fix workflow 39616195981 completed successfully.
+runtime authoring. C1 static conversion and initial C2 paint animation, root defaults
+and viewpoint mapping use the shared offline graph/compiler. Native root-key/comic
+construction and import round trips also exist. Quill source chapter/startup mapping,
+broader playback/navigation, media, reverse conversion and live-authoring acceptance
+remain open; none of these initial slices closes the full roadmap.
+
+Local native regressions and four paired paint/viewpoint metadata comparisons pass.
+Taperecorder's normal default-viewpoint DirectX capture is pixel-identical to its
+reference. Earlier reflection builds/exports passed all four platforms; newly added
+root APIs still require current platform/package acceptance. Full CI is unresolved:
+the root comic check introduced Unity CS1061, corrected in ac34f4f1 with a stricter
+local harness; fresh Unity/device validation is required. Godot iOS hosted macOS
+ARM64 capacity also remains unresolved after the earlier permitted retry. Confirmed
+source regressions take priority; independent work continues during infrastructure
+unavailability. Revision-specific evidence and limitations are recorded below.
 
 ## 1. Objective and document ownership
 
@@ -54,7 +56,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; playback controls not yet accepted | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
-| Viewpoints / spawn areas | Existing defaults and properties | Spawn metadata exposed; SharpQuill adapter skips spawn layers | Existing spawn graph/import/export/default selection | Spawn edits within limits | Map export flags, tracking, volume and defaults |
+| Viewpoints / spawn areas | Legacy eye-level and versioned defaults parsed | Spawn metadata exposed; SharpQuill adapter skips spawn layers | Existing spawn graph/import/export/default selection | Spawn edits within limits | Export flags/tracking/volume/default mapping implemented and locally matched; previews and broader navigation acceptance open |
 | Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | No picture construction in current graph/Unity exporter ABI | Outside live scope | Add construction and map projection/viewer locking/assets |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
 | Models | Reader skips Model/Unknown | No model mesh query/conversion surface in stroke reader | No model construction in current graph/Unity exporter ABI | Outside live scope | Conditional on suitable Quill reference evidence |
@@ -680,9 +682,42 @@ Status checked at 2026-10-21 14:36 UTC:
    The corrected production sources build without warnings/errors and the native
    suite passes (`artifacts/unity-import-fixed-suite.log`). This does not substitute
    for Unity compilation; a fresh full validation run is required.
-4. Viewpoint mapping remains uncommitted while this regression fix is prioritized.
-   Its local native/reference evidence is retained; it will be committed as a
-   separate milestone after the compiler correction.
+4. Viewpoint mapping was held while this regression fix was prioritized. Its
+   separate implementation checkpoint follows in 6.14; no viewpoint changes were
+   included in compiler correction ac34f4f1.
+
+### 6.14 C2 viewpoint mapping and default camera (2026-10-21)
+
+1. `QuillToImmConverter.ConvertProject` maps paint/animation and exported viewpoints
+   through the shared graph/compiler. Existing paint-only entry points retain their
+   scopes. Viewpoint Exporting controls inclusion independently of gizmo visibility;
+   tracking, sphere centre/radius, translation mask, hierarchy and explicit default
+   path are retained. Viewpoint-only supported projects can export. Unknown tracking
+   and currently unrepresented pivot/opacity/timeline settings fail explicitly.
+2. Embedded previews remain unsupported image assets. Strict conversion rejects
+   them; explicit omission permission produces `OmittedViewpointPreview` and partial
+   output. An absent/ambiguous declared default similarly requires explicit fallback
+   permission and reports `OmittedDefaultViewpoint`. Exporting=false exclusion is an
+   intentional source export rule, not a lossy omission. Preview/full-fidelity and
+   broader navigation acceptance remain open.
+3. Native synthetic checks pass for hidden gizmos, non-exported viewpoints, eye/floor
+   tracking, nondefault sphere and locomotion mask, hierarchy, non-first default,
+   viewpoint-only output and failure/output-preservation diagnostics. The complete
+   native suite passes with implicit imports disabled.
+4. Strict reader-exposed project comparisons now pass all four paired references:
+   taperecorder (one viewpoint), consul-room (three), Fishgym (one) and Snoopy (three).
+   Comparisons include all paint data, root/layer keys/timing and viewpoint local
+   transforms, tracking, volume, locomotion and default selection. Float API limits
+   still apply. Native taperecorder capture uses normal automatic viewpoint selection
+   with camera locking disabled; candidate/reference are pixel-identical at frame
+   60, fixed dt=1/30, 960x540, SHA256
+   `92e422b899bd32de1f758110550d20b808eab9fcb1937d64078a109f08611455`.
+5. CLI `--with-viewpoints` selects the project entry; `--allow-omissions` permits
+   diagnosed partial output. `--compare-project` checks the exposed viewpoint data
+   as well as animated paint/root fields. Local logs use ignored `artifacts/viewpoint-*`.
+   Native navigation switching, floor-level camera controls, source startup/chapter
+   mapping and image previews need separate work. Fresh full CI must also validate
+   the LINQ correction and this revision; previous failures remain unresolved.
 
 ## 7. Consolidated documents
 

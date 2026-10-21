@@ -8,9 +8,10 @@ findings and evidence. Runtime authoring contracts remain in IMM_RUNTIME_AUTHORI
 Current review scope
 
 1. Rechecked the reader, writer, managed/native exporter entry points, authoring
-   compiler and local regression harnesses. A direct static paint/group entry point
-   now exists through QuillToImmConverter and the existing authoring compiler.
-   Animation, navigation and media remain outstanding. Shared reflection support
+   compiler and local regression harnesses. Static/animated paint entries and the
+   ConvertProject paint/viewpoint entry use the existing authoring compiler.
+   Full animation/navigation acceptance, startup/chapter source mapping and media
+   remain outstanding. Shared reflection support
    passes native builds and export checks on all four platforms, plus Windows
    regression CI and Unity package compilation/tests. Unity player integration
    and full device acceptance remain pending.
@@ -18,7 +19,7 @@ Current review scope
    the native IMM-to-Quill adapter regression against the bundled Windows DLL.
    These passed. Subsequent C0 work inspected five local candidate reference pairs;
    no controlled Quill re-export was run. Subsequent C1 visual evidence is below;
-   animated playback comparison remains outstanding.
+   broader animated playback acceptance remains outstanding.
 3. Detailed corpus statistics below describe the 2026-10-15 inventory. This review
    reconfirmed the test coverage totals, not every historical inventory count.
 4. C1 reader prerequisite implemented: QuillSequenceReader.ReadMetadata reads the
@@ -162,6 +163,18 @@ C2 animated paint implementation checkpoint (2026-10-21)
    consul-room and Fishgym pass those checks alongside paint/child-key/timing
    comparisons. This uses float metadata APIs; source actions/startup/navigation
    remain outside the verified mapping.
+10. ConvertProject now maps exported viewpoints, including hierarchy, eye/floor
+    tracking, sphere/movement limits and explicit default selection. Exporting is
+    independent of gizmo visibility. Eight viewpoints across all four local pairs
+    match native exposed fields, including Snoopy's third/default viewpoint. The
+    legacy colour-only Fishgym form defaults to EyeLevel; versioned/new viewpoints
+    retain their FloorLevel default. Native taperecorder's automatic default camera
+    capture is pixel-identical to the reference with no camera lock.
+11. Previews remain unsupported shared image assets: strict conversion rejects
+    them, explicit omission produces partial output. Missing/ambiguous declared
+    defaults require explicit fallback permission. Unknown tracking or unrepresented
+    viewpoint pivot/opacity/timeline values fail. Broader navigation, thumbnails,
+    startup/chapter source mapping and current full CI remain open (roadmap 6.14).
 
 C1 static profile implementation and validation (2026-10-21)
 

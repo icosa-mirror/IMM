@@ -4,12 +4,12 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using ImmPlayer.Authoring;
 
-if (args.Length == 4 && (args[0] == "--compare-paint" || args[0] == "--compare-animated-paint"))
+if (args.Length == 4 && (args[0] == "--compare-paint" || args[0] == "--compare-animated-paint" || args[0] == "--compare-project"))
 {
     string library = Path.GetFullPath(args[3]);
     NativeLibrary.SetDllImportResolver(typeof(QuillToImmConverter).Assembly, (name, assembly, searchPath) =>
         name == "ImmStrokeReader" ? NativeLibrary.Load(library) : IntPtr.Zero);
-    ConverterChecks.ComparePaint(args[1], args[2], args[0] == "--compare-animated-paint");
+    ConverterChecks.ComparePaint(args[1], args[2], args[0] != "--compare-paint", args[0] == "--compare-project");
     return 0;
 }
 if (args.Length == 4 && args[0] == "--self-test")
@@ -21,18 +21,21 @@ if (args.Length == 4 && args[0] == "--self-test")
     PaintRepeatChecks.Run(args[3]);
     RootPropertyChecks.Run(args[3]);
     RootAnimationChecks.Run(args[3]);
+    ViewpointConverterChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     return 0;
 }
-if (args.Length < 4 || args.Length > 6)
-    throw new ArgumentException("Expected project folder, output IMM, exporter DLL, reader DLL, and optional --paint-only and --animated.");
-if (args.Skip(4).Any(x => x != "--paint-only" && x != "--animated")) throw new ArgumentException("Unknown option.");
+if (args.Length < 4 || args.Length > 7)
+    throw new ArgumentException("Expected project folder, output IMM, exporter DLL, reader DLL, and optional --animated, --with-viewpoints, --allow-omissions (legacy --paint-only).");
+if (args.Skip(4).Any(x => x != "--paint-only" && x != "--animated" && x != "--with-viewpoints" && x != "--allow-omissions")) throw new ArgumentException("Unknown option.");
 string exporter = Path.GetFullPath(args[2]);
 string reader = Path.GetFullPath(args[3]);
 NativeLibrary.SetDllImportResolver(typeof(QuillToImmConverter).Assembly, (name, assembly, searchPath) =>
     name == "ImmUnityPlugin" ? NativeLibrary.Load(exporter) : name == "ImmStrokeReader" ? NativeLibrary.Load(reader) : IntPtr.Zero);
-bool allowOmittedLayers = args.Skip(4).Contains("--paint-only");
-var result = args.Skip(4).Contains("--animated")
+bool allowOmittedLayers = args.Skip(4).Contains("--paint-only") || args.Skip(4).Contains("--allow-omissions");
+var result = args.Skip(4).Contains("--with-viewpoints")
+    ? QuillToImmConverter.ConvertProject(args[0], args[1], allowOmittedLayers)
+    : args.Skip(4).Contains("--animated")
     ? QuillToImmConverter.ConvertAnimatedPaintProject(args[0], args[1], allowOmittedLayers)
     : QuillToImmConverter.ConvertStaticPaintProject(args[0], args[1], allowOmittedLayers);
 foreach (var issue in result.Issues)

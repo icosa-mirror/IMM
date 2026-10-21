@@ -179,7 +179,7 @@ static class ConverterChecks
         finally { if (doc > 0) Reader.StrokeReader_Unload(doc); Reader.StrokeReader_End(); }
     }
 
-    public static void ComparePaint(string reference, string actual, bool compareAnimation = false)
+    public static void ComparePaint(string reference, string actual, bool compareAnimation = false, bool compareViewpoints = false)
     {
         Require(Reader.StrokeReader_Init(Path.ChangeExtension(actual, ".comparison.log")) == 0, "Reader init failed.");
         int a = Reader.StrokeReader_LoadFromFile(Path.GetFullPath(reference));
@@ -205,7 +205,9 @@ static class ConverterChecks
             var sourcePaint = source.Where(x => x.Value.Info.type == 1).ToArray();
             Require(source.Count(x => x.Value.Info.type == 0) == target.Count(x => x.Value.Info.type == 0), "Group count differs.");
             Require(sourcePaint.Length == target.Count(x => x.Value.Info.type == 1), "Paint layer count differs.");
-            foreach (var (path, layer) in source.Where(x => x.Value.Info.type == 0 || x.Value.Info.type == 1))
+            if (compareViewpoints)
+                Require(source.Count(x => x.Value.Info.type == 8) == target.Count(x => x.Value.Info.type == 8), "Viewpoint count differs.");
+            foreach (var (path, layer) in source.Where(x => x.Value.Info.type == 0 || x.Value.Info.type == 1 || (compareViewpoints && x.Value.Info.type == 8)))
             {
                 Require(target.TryGetValue(path, out var other), $"Missing hierarchy path {path}.");
                 Require(layer.Info.type == other.Info.type && layer.Info.visible == other.Info.visible && layer.Info.opacity == other.Info.opacity &&
@@ -215,6 +217,11 @@ static class ConverterChecks
                     layer.Info.pivotRotY == other.Info.pivotRotY && layer.Info.pivotRotZ == other.Info.pivotRotZ &&
                     layer.Info.pivotRotW == other.Info.pivotRotW && layer.Info.pivotScale == other.Info.pivotScale &&
                     layer.Info.pivotFlip == other.Info.pivotFlip, $"Pivot differs at {path}.");
+                if (compareViewpoints && layer.Info.type == 8)
+                    Require(layer.Info.isDefaultSpawn == other.Info.isDefaultSpawn &&
+                        Reader.StrokeReader_GetLayerSpawnAreaInfo(a, layer.Index, out var spawnA) &&
+                        Reader.StrokeReader_GetLayerSpawnAreaInfo(b, other.Index, out var spawnB) && spawnA.Equals(spawnB),
+                        $"Viewpoint tracking/volume/locomotion/default differs at {path}.");
                 if (compareAnimation)
                 {
                     Require(layer.Info.isTimeline == other.Info.isTimeline && layer.Info.durationTicks == other.Info.durationTicks &&
@@ -265,6 +272,7 @@ static class ConverterChecks
             }
             Console.WriteLine($"[IMM_QUILL_CONVERTER_COMPARE] Exact paint subset match: {sourcePaint.Length} layers, {strokes} strokes, {points} points, hierarchy/transforms/pivots/frame buffers.");
             if (compareAnimation) Console.WriteLine("[IMM_QUILL_ANIMATION_COMPARE] Exact reader-exposed root metadata, root/layer keys and nested timing match; evaluated playback not checked.");
+            if (compareViewpoints) Console.WriteLine($"[IMM_QUILL_VIEWPOINT_COMPARE] Exact reader-exposed viewpoint transforms/tracking/volumes/locomotion/defaults match for {source.Count(x => x.Value.Info.type == 8)} viewpoints; previews/navigation not checked.");
         }
         finally { if (a > 0) Reader.StrokeReader_Unload(a); if (b > 0) Reader.StrokeReader_Unload(b); Reader.StrokeReader_End(); }
     }
