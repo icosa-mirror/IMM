@@ -12,8 +12,9 @@ necessary for engine-specific compilation and behavior.
 
 The suite also exercises immutable viewpoint preview bytes, native RGBA-to-JPEG
 encoding, unchanged encoded JPEG export, structural comparison, and malformed-image
-and image-budget output guards. Preview reader/import and Quill payload mapping
-are separate outstanding work.
+and image-budget output guards. Reader checks cover file/memory encoded JPEG/PNG,
+version-1 BGR metadata, absent previews, query bounds and exact import/re-export
+payloads. Quill preview payload mapping remains outstanding.
 
 1. Run the synthetic native regression suite from the repository root. Use a fresh
    artifact directory for each local run; Windows CI runs this with freshly built DLLs:

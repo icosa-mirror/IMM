@@ -92,6 +92,7 @@ namespace ImmImporter
 #else
         if( !mScreenshot.ReadFromMemory(&data, ext) )
             return false;
+        mHasAsset = true;
         return true;
 #endif
     }

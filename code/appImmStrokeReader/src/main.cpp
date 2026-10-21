@@ -7,6 +7,7 @@
 #include <cstring>
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libBasics/piTArray.h"
+#include "libImmCore/src/libBasics/piFile.h"
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 
@@ -33,8 +34,8 @@ using namespace ImmStrokeReader;
 #endif
 
 // Bump this when you need to confirm Unity loaded the new dylib.
-static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-PROPERTIES";
-static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-PROPERTIES";
+static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-10-21-PREVIEW-ASSETS";
+static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-10-21-PREVIEW-ASSETS";
 
 extern "C" UNITY_INTERFACE_EXPORT const char* UNITY_INTERFACE_API StrokeReader_GetBuildId()
 {
@@ -209,7 +210,29 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromF
         return -3;
     }
 
-    store->CaptureSequenceMetadata(seq);
+    piFile assetFile;
+    bool assetFileOpen = false;
+    const bool captured = store->CaptureSequenceMetadata(seq,
+        [&](uint64_t offset, uint64_t length, std::vector<uint8_t>& bytes) -> bool
+        {
+            if (!assetFileOpen)
+            {
+                if (!assetFile.Open(pistr2ws(fileName), L"rb")) return false;
+                assetFileOpen = true;
+            }
+            const uint64_t fileLength = assetFile.GetLength();
+            if (offset > fileLength || length > fileLength - offset || !assetFile.Seek(offset, piFile::SET)) return false;
+            bytes.resize(static_cast<size_t>(length));
+            return assetFile.Read(bytes.data(), length) == length;
+        });
+    if (assetFileOpen) assetFile.Close();
+    if (!captured)
+    {
+        gStrokeReader.mLog.Printf(LT_ERROR, L"[IMM_PREVIEW_READ] Failed to preserve declared preview asset");
+        seq.Deinit(&gStrokeReader.mLog);
+        delete store;
+        return -3;
+    }
 
     // Store and return document ID
     std::vector<piTick> chapterStartTimes;
@@ -271,7 +294,20 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromM
         return -3;
     }
 
-    store->CaptureSequenceMetadata(seq);
+    if (!store->CaptureSequenceMetadata(seq,
+        [&](uint64_t offset, uint64_t length, std::vector<uint8_t>& bytes) -> bool
+        {
+            if (offset > static_cast<uint64_t>(size) || length > static_cast<uint64_t>(size) - offset) return false;
+            const auto* begin = static_cast<const uint8_t*>(data) + offset;
+            bytes.assign(begin, begin + length);
+            return true;
+        }))
+    {
+        gStrokeReader.mLog.Printf(LT_ERROR, L"[IMM_PREVIEW_READ] Failed to preserve declared preview asset");
+        seq.Deinit(&gStrokeReader.mLog);
+        delete store;
+        return -3;
+    }
 
     // Store and return document ID
     std::vector<piTick> chapterStartTimes;
@@ -394,6 +430,24 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayer
 
     auto it = gStrokeReader.mDocuments.find(docId);
     return it != gStrokeReader.mDocuments.end() && it->second->GetLayerSpawnAreaInfo(layerIdx, info);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetSpawnAreaPreviewInfo(
+    int docId, int layerIdx, StrokeImageAssetInfoC* info)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || !info) return false;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() && it->second->GetSpawnAreaPreviewInfo(layerIdx, info);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetSpawnAreaPreviewData(
+    int docId, int layerIdx, uint8_t* bytes, int maxBytes)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || !bytes || maxBytes <= 0) return 0;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it == gStrokeReader.mDocuments.end() ? 0 : it->second->GetSpawnAreaPreviewData(layerIdx, bytes, maxBytes);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringLayerTransform(

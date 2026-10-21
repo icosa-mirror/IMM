@@ -640,6 +640,18 @@ namespace ImmPlayer.Authoring
 
             if (sourceLayer.Info.type == SourceSpawnAreaLayerType)
             {
+                if (ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewInfo(source.DocId, sourceLayer.Index, out StrokeImageAssetInfo preview))
+                {
+                    if (preview.byteCount <= 0 || (preview.sourceVersion != 1 && preview.sourceVersion != 2))
+                        throw new InvalidOperationException($"Spawn area '{properties.Name}' has invalid preview metadata.");
+                    byte[] bytes = new byte[preview.byteCount];
+                    if (ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewData(source.DocId, sourceLayer.Index, bytes, bytes.Length) != bytes.Length)
+                        throw new InvalidOperationException($"Spawn area '{properties.Name}' preview bytes could not be read.");
+                    var image = ImmAuthoringImage.Create(preview.width, preview.height, preview.channels,
+                        (ImmAuthoringImageEncoding)preview.encoding, bytes, preview.sourceVersion == 1);
+                    if (!image.Succeeded) throw new InvalidOperationException(image.Message);
+                    properties.SpawnAreaPreview = image.Value;
+                }
                 properties.SpawnAreaIsDefault = sourceLayer.Info.isDefaultSpawn != 0;
                 if (ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(
                         source.DocId,

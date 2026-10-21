@@ -63,6 +63,8 @@ namespace ImmImporter
         inline bool GetTranslationY(void) const { return mVolume.mAllowTranslationY; }
         inline bool GetTranslationZ(void) const { return mVolume.mAllowTranslationZ; }
         const AssetFormat GetAssetFormat() const;
+        void SetDeclaredScreenshot(bool present) { mDeclaredScreenshot = present; }
+        bool HasDeclaredScreenshot() const { return mDeclaredScreenshot; }
 
     private:
 
@@ -73,5 +75,6 @@ namespace ImmImporter
         ImmCore::piImage     mScreenshot;
         bool        mHasAsset;
         AssetFormat mFormat;
+        bool mDeclaredScreenshot = false;
     };
 }

@@ -2,9 +2,12 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Runtime.InteropServices;
+using ImmPlayer;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
 using UnityEngine;
+using Reader = ImmPlayer.ImmStrokeReader;
 
 static class PreviewAssetChecks
 {
@@ -46,6 +49,28 @@ static class PreviewAssetChecks
         string encodedPath = Path.Combine(directory, "preview-encoded.imm");
         exported = ImmAuthoringCompiler.ExportToFile(document, encodedPath);
         Require(exported.Succeeded && ReadAsset(encodedPath, 2).SequenceEqual(jpeg), "Encoded JPEG was recompressed or altered.");
+        CheckReadBack(directory, encodedPath, jpeg, false);
+        properties.SpawnAreaPreview = ImmAuthoringImage.Create(16, 16, 3, ImmAuthoringImageEncoding.Jpeg, jpeg, true).Value;
+        Require(document.SetLayerProperties(id, properties).Succeeded, "BGR fixture setup failed.");
+        string bgrPath = Path.Combine(directory, "preview-bgr.imm");
+        Require(ImmAuthoringCompiler.ExportToFile(document, bgrPath).Succeeded, "BGR fixture export failed.");
+        CheckReadBack(directory, bgrPath, jpeg, true);
+        byte[] png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGO4oxH1HwAFoAJeZn+M9QAAAABJRU5ErkJggg==");
+        properties.SpawnAreaPreview = ImmAuthoringImage.Create(1, 1, 4, ImmAuthoringImageEncoding.Png, png).Value;
+        Require(document.SetLayerProperties(id, properties).Succeeded, "PNG fixture setup failed.");
+        string pngPath = Path.Combine(directory, "preview-png.imm");
+        Require(ImmAuthoringCompiler.ExportToFile(document, pngPath).Succeeded, "PNG fixture export failed.");
+        CheckReadBack(directory, pngPath, png, false, 1, 1, 4, 2);
+        properties.SpawnAreaPreview = null;
+        Require(document.SetLayerProperties(id, properties).Succeeded, "Absent preview fixture setup failed.");
+        string absentPath = Path.Combine(directory, "preview-absent.imm");
+        Require(ImmAuthoringCompiler.ExportToFile(document, absentPath).Succeeded, "Absent fixture export failed.");
+        Require(Reader.StrokeReader_Init(Path.Combine(directory, "preview-absent.log")) == 0, "Reader init failed.");
+        int absentDoc = Reader.StrokeReader_LoadFromFile(absentPath);
+        try { Require(absentDoc > 0 && !Reader.StrokeReader_GetSpawnAreaPreviewInfo(absentDoc, 0, out _), "Implicit blank became a declared preview."); }
+        finally { if (absentDoc > 0) Reader.StrokeReader_Unload(absentDoc); Reader.StrokeReader_End(); }
+        properties.SpawnAreaPreview = encoded.Value;
+        Require(document.SetLayerProperties(id, properties).Succeeded, "Image budget fixture reset failed.");
         var limited = new ImmAuthoringOperationOptions(limits: new ImmAuthoringLimits(maxInputBytes: 1));
         byte[] saved = File.ReadAllBytes(encodedPath);
         Require(!ImmAuthoringCompiler.ExportToFile(document, encodedPath, limited).Succeeded &&
@@ -57,7 +82,54 @@ static class PreviewAssetChecks
         Require(document.SetLayerProperties(id, properties).Succeeded, "Malformed codec fixture setup failed.");
         Require(!ImmAuthoringCompiler.ExportToFile(document, encodedPath).Succeeded &&
             saved.SequenceEqual(File.ReadAllBytes(encodedPath)), "Malformed image replaced existing output.");
-        Console.WriteLine("[IMM_PREVIEW_ASSETS] immutable bytes, native encoding, exact encoded export, comparison and output guards passed.");
+        Console.WriteLine("[IMM_PREVIEW_ASSETS] immutable bytes, native encoding, exact JPEG/PNG file/memory read-back and import/re-export, BGR version, absent previews and output guards passed.");
+    }
+
+    private static void CheckReadBack(string directory, string path, byte[] expected, bool bgr,
+        int width = 16, int height = 16, int channels = 3, int encoding = 3)
+    {
+        Require(Marshal.SizeOf<StrokeImageAssetInfo>() == 24 &&
+            !Reader.StrokeReader_GetSpawnAreaPreviewInfo(-1, 0, out _), "Preview ABI/init guard failed.");
+        Require(Reader.StrokeReader_Init(Path.Combine(directory, "preview-reader.log")) == 0, "Reader init failed.");
+        byte[] file = File.ReadAllBytes(path);
+        var pinned = GCHandle.Alloc(file, GCHandleType.Pinned);
+        int disk = 0, memory = 0;
+        try
+        {
+            disk = Reader.StrokeReader_LoadFromFile(path);
+            memory = Reader.StrokeReader_LoadFromMemory(pinned.AddrOfPinnedObject(), file.Length);
+            foreach (int doc in new[] { disk, memory })
+            {
+                Require(doc > 0 && Reader.StrokeReader_GetSpawnAreaPreviewInfo(doc, 0, out var info) &&
+                    info.width == width && info.height == height && info.channels == channels && info.encoding == encoding &&
+                    info.sourceVersion == (bgr ? 1 : 2) && info.byteCount == expected.Length, "Preview metadata changed.");
+                byte[] bytes = new byte[expected.Length];
+                Require(Reader.StrokeReader_GetSpawnAreaPreviewData(doc, 0, bytes, bytes.Length) == bytes.Length && bytes.SequenceEqual(expected),
+                    "Original preview bytes changed.");
+                bytes[0] = 42;
+                Require(Reader.StrokeReader_GetSpawnAreaPreviewData(doc, 0, bytes, bytes.Length - 1) == 0 && bytes[0] == 42 &&
+                    Reader.StrokeReader_GetSpawnAreaPreviewData(doc, 0, null, 0) == 0 &&
+                    !Reader.StrokeReader_GetSpawnAreaPreviewInfo(doc, -1, out _) &&
+                    !Reader.StrokeReader_GetSpawnAreaPreviewInfo(doc, 1, out _), "Preview bounds/buffer guard failed.");
+            }
+        }
+        finally
+        {
+            if (disk > 0) Reader.StrokeReader_Unload(disk);
+            if (memory > 0) Reader.StrokeReader_Unload(memory);
+            pinned.Free(); Reader.StrokeReader_End();
+        }
+        Require(!Reader.StrokeReader_GetSpawnAreaPreviewInfo(disk, 0, out _), "Preview query survived shutdown.");
+        var imported = ImmAuthoringImporter.ImportFromFile(path, Path.Combine(directory, "preview-import.log"));
+        Require(imported.Succeeded, imported.Message);
+        using (imported.Document)
+        {
+            var image = imported.Document.CreateSnapshot().Value.Layers.Single().Properties.SpawnAreaPreview;
+            Require(image != null && image.EncodedBgr == bgr && image.CopyData().SequenceEqual(expected), "Import omitted or changed preview.");
+            string roundTrip = Path.Combine(directory, $"{Path.GetFileNameWithoutExtension(path)}-roundtrip.imm");
+            Require(ImmAuthoringCompiler.ExportToFile(imported.Document, roundTrip).Succeeded && ReadAsset(roundTrip, encoding == 2 ? 1u : 2u).SequenceEqual(expected),
+                "Import/re-export altered encoded preview.");
+        }
     }
 
     private static byte[] ReadAsset(string path, uint expectedFormat)

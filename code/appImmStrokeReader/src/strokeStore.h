@@ -4,6 +4,7 @@
 #include <string>
 #include <cstdint>
 #include <cstddef>
+#include <functional>
 #include "libImmImporter/src/fromImmersive/strokeCollector.h"
 #include "libImmImporter/src/document/layerPaint/element.h"
 #include "libImmCore/src/libBasics/piVecTypes.h"
@@ -131,6 +132,13 @@ struct StrokePictureInfoC
     int dataSize;
 };
 
+// Encoded preview asset, indexed by authoring-layer index. Encoding: PNG=2, JPEG=3.
+struct StrokeImageAssetInfoC
+{
+    int width, height, channels, encoding, sourceVersion, byteCount;
+};
+static_assert(sizeof(StrokeImageAssetInfoC) == 24, "StrokeImageAssetInfoC layout changed");
+
 // Internal storage structures
 struct StoredStroke
 {
@@ -172,6 +180,8 @@ struct StoredLayer
     float spawnVolumeOffset[3] = { 0.0f, 0.0f, 0.0f };
     float spawnVolumeExtent[3] = { 0.0f, 0.0f, 0.0f };  // sphere: [0] is the radius
     int spawnLocomotion = 0;                            // bit2 = X, bit1 = Y, bit0 = Z
+    StrokeImageAssetInfoC spawnPreviewInfo{};
+    std::vector<uint8_t> spawnPreviewBytes;
     int32_t parentId = 0;
     int32_t childIndex = 0;
     bool isTimeline = false;
@@ -263,7 +273,10 @@ public:
     bool SetCurrentChapter(int chapterIndex);
     void SetChapterStartTimes(const std::vector<ImmCore::piTick>& chapterStartTimes);
     int GetDrawingIndexForChapter(int layerIdx, int chapterIndex) const;
-    void CaptureSequenceMetadata(ImmImporter::Sequence& sequence);
+    using AssetReader = std::function<bool(uint64_t, uint64_t, std::vector<uint8_t>&)>;
+    bool CaptureSequenceMetadata(ImmImporter::Sequence& sequence, const AssetReader& readAsset);
+    bool GetSpawnAreaPreviewInfo(int layerIdx, StrokeImageAssetInfoC* info) const;
+    int GetSpawnAreaPreviewData(int layerIdx, uint8_t* bytes, int maxBytes) const;
     bool GetRootLayerProperties(StrokeAuthoringLayerInfoC* info, StrokeLayerTransformC* transform) const;
     bool GetDocumentInfo(StrokeDocumentInfoC* info) const;
     bool GetRootAnimationKey(int keyIdx, StrokeAnimationKeyC* key) const;

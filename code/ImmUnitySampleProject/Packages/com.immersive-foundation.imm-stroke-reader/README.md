@@ -2,6 +2,14 @@
 
 This package provides the IMM stroke reader runtime for Unity and exposes a C API with managed bindings.
 
+`StrokeReader_GetSpawnAreaPreviewInfo` and `StrokeReader_GetSpawnAreaPreviewData`
+copy original encoded viewpoint previews using an **authoring-layer index**.
+Metadata reports dimensions, channels, PNG/JPEG encoding and source version
+(1 = BGR, 2 = RGB). Info returns false when no preview is present; data returns
+zero for invalid indices or a buffer smaller than the complete payload. The
+document wrapper provides the same queries. These bytes are encoded assets,
+distinct from decoded picture-layer pixels.
+
 ## Install in a new Unity project
 
 1. Install the package:

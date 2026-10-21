@@ -760,7 +760,7 @@ bool StrokeStore::GetAuthoringStrokePoints(
     return true;
 }
 
-void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
+bool StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence, const AssetReader& readAsset)
 {
     mDocument.sequenceType = static_cast<int>(sequence.GetType());
     mDocument.frameRate = sequence.GetFrameRate();
@@ -839,9 +839,10 @@ void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
     }
 
     std::vector<StoredLayer> capturedLayers;
+    bool assetsValid = true;
     capturedLayers.reserve(mDocument.layers.size());
     sequence.Recurse(
-        [this, root, &capturedLayers](ImmImporter::Layer* layer, int, int childIndex, bool) -> bool
+        [this, root, &capturedLayers, &sequence, &readAsset, &assetsValid](ImmImporter::Layer* layer, int, int childIndex, bool) -> bool
         {
             if (layer == root)
                 return true;
@@ -865,6 +866,35 @@ void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
                     reinterpret_cast<const ImmImporter::LayerSpawnArea*>(layer->GetImplementation());
                 if (spawnArea != nullptr)
                 {
+                    if (spawnArea->HasDeclaredScreenshot() && layer->GetAssetID() != 0xffffffff)
+                    {
+                        const auto* image = spawnArea->GetScreenshot();
+                        const auto* asset = sequence.GetAsset(layer->GetAssetID());
+                        std::vector<uint8_t> encoded;
+                        if (!asset || asset->mSize < 4 || asset->mSize > INT32_MAX ||
+                            !readAsset || !readAsset(asset->mFileOffset, asset->mSize, encoded) || encoded.size() != asset->mSize)
+                        { assetsValid = false; return false; }
+                        // IMM asset headers are little endian; keep the original payload, not decoded/recompressed pixels.
+                        const uint32_t format = uint32_t(encoded[0]) | (uint32_t(encoded[1]) << 8) |
+                            (uint32_t(encoded[2]) << 16) | (uint32_t(encoded[3]) << 24);
+                        // The native importer accepts legacy resources with no PNG/JPEG thumbnail.
+                        // Their screenshot flag can be set even though no image was loaded.
+                        if (format != 1 && format != 2)
+                        {
+                            if (image) { assetsValid = false; return false; }
+                        }
+                        else
+                        {
+                            if (!image || encoded.size() <= 12 || (spawnArea->GetVersion() != 1 && spawnArea->GetVersion() != 2))
+                            { assetsValid = false; return false; }
+                            const int channels = image->GetFormat(0) == ImmCore::piImage::FORMAT_I_RGB ? 3 :
+                                image->GetFormat(0) == ImmCore::piImage::FORMAT_I_RGBA ? 4 : 0;
+                            if (channels == 0) { assetsValid = false; return false; }
+                            captured.spawnPreviewInfo = { image->GetXRes(), image->GetYRes(), channels,
+                                format == 1 ? 2 : 3, spawnArea->GetVersion(), static_cast<int>(encoded.size() - 12) };
+                            captured.spawnPreviewBytes.assign(encoded.begin() + 12, encoded.end());
+                        }
+                    }
                     captured.isFloorLevel =
                         spawnArea->GetTracking() == ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
                     const ImmImporter::LayerSpawnArea::Volume& volume = spawnArea->GetVolume();
@@ -940,6 +970,25 @@ void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
     mDocument.authoringLayers = std::move(capturedLayers);
     mCurrentLayer = nullptr;
     mCurrentDrawing = nullptr;
+    return assetsValid;
+}
+
+bool StrokeStore::GetSpawnAreaPreviewInfo(int layerIdx, StrokeImageAssetInfoC* info) const
+{
+    if (!info || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size())) return false;
+    const auto& layer = mDocument.authoringLayers[layerIdx];
+    if (layer.spawnPreviewBytes.empty()) return false;
+    *info = layer.spawnPreviewInfo;
+    return true;
+}
+
+int StrokeStore::GetSpawnAreaPreviewData(int layerIdx, uint8_t* bytes, int maxBytes) const
+{
+    if (!bytes || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size())) return 0;
+    const auto& data = mDocument.authoringLayers[layerIdx].spawnPreviewBytes;
+    if (data.empty() || maxBytes < static_cast<int>(data.size())) return 0;
+    std::memcpy(bytes, data.data(), data.size());
+    return static_cast<int>(data.size());
 }
 
 bool StrokeStore::GetDocumentInfo(StrokeDocumentInfoC* info) const

@@ -344,6 +344,15 @@ namespace ImmPlayer
         public static extern bool StrokeReader_GetLayerSpawnAreaInfo(
             int docId, int layerIdx, out StrokeSpawnAreaInfo info);
 
+        /// <summary>Original encoded preview; index belongs to the authoring-layer array. False means no declared preview.</summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetSpawnAreaPreviewInfo(int docId, int layerIdx, out StrokeImageAssetInfo info);
+
+        /// <summary>Copy the complete encoded preview; returns zero for missing data or an undersized buffer.</summary>
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetSpawnAreaPreviewData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
+
         /// <summary>
         /// Largest single-element bounding-box extent in a drawing, in document units.
         /// </summary>
@@ -669,6 +678,13 @@ namespace ImmPlayer
         public StrokeLayerTransform transformValue;
     }
 
+    /// <summary>Encoded preview metadata: encoding PNG=2/JPEG=3; version 1=BGR, 2=RGB.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeImageAssetInfo
+    {
+        public int width, height, channels, encoding, sourceVersion, byteCount;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct StrokePictureInfo
     {
@@ -861,6 +877,20 @@ namespace ImmPlayer
         {
             info = default;
             return _docId > 0 && ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>Original encoded preview metadata, indexed by authoring layer.</summary>
+        public bool GetSpawnAreaPreviewInfo(int layerIdx, out StrokeImageAssetInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>Copy a complete encoded preview into a caller-owned buffer; returns zero on failure.</summary>
+        public int GetSpawnAreaPreviewData(int layerIdx, byte[] bytes)
+        {
+            return _docId > 0 && bytes != null
+                ? ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewData(_docId, layerIdx, bytes, bytes.Length) : 0;
         }
 
         /// <summary>

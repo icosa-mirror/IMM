@@ -741,6 +741,27 @@ Status checked at 2026-10-21 14:36 UTC:
    failures and iOS Metal validation was running. Earlier Unity compiler failures
    remain unresolved until the replacement platform gates pass.
 
+### 6.16. Encoded viewpoint preview import (2026-10-21)
+
+1. Added reader preview-info/data queries indexed by the authoring-layer array.
+   File and memory loads retain original JPEG/PNG payloads, dimensions, channels
+   and IMM v1 BGR/v2 RGB version. Managed import attaches immutable image assets;
+   re-export preserves their encoded bytes without another JPEG generation.
+2. Declared previews are distinguished from exporter-generated blank resources.
+   Legacy non-image resources and missing asset IDs remain absent, matching the
+   native importer's existing behavior. Unreadable declared image assets fail
+   the load instead of silently losing their contents.
+3. This exposed an existing native importer defect: successful thumbnail decoding
+   never set `mHasAsset`, so `GetScreenshot()` returned null. The load now marks
+   the asset available, enabling thumbnail access and version-1 channel swapping.
+4. Local native/managed regression checks pass for file and memory JPEG/PNG
+   queries, exact import/re-export bytes, v1 BGR metadata, absent previews,
+   buffer/index/init/lifetime guards, and the existing sample/root/paint suite.
+   Both Windows plugins are rebuilt together; Windows export verification sees
+   114 player/exporter and 43 reader declarations. Platform CI remains pending.
+5. Quill qbin preview mapping is still the next step. This does not close C3
+   media support, runtime thumbnail display acceptance or cross-platform gates.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

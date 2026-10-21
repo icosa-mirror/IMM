@@ -27,6 +27,7 @@ namespace ImmImporter
             LayerSpawnArea::Volume volume;
 
             bool isFloorLevel = false;
+            bool declaredScreenshot = false;
 
             if (0 == version)
             {
@@ -65,7 +66,7 @@ namespace ImmImporter
                 volume.mAllowTranslationY = (0x2 == (flags & 0x2));
                 volume.mAllowTranslationZ = (0x4 == (flags & 0x4));
 
-                (void)fp->ReadUInt8();
+                declaredScreenshot = fp->ReadUInt8() != 0;
                 (void)fp->ReadUInt8();
 
                 isFloorLevel = (0 != fp->ReadUInt8());
@@ -73,6 +74,7 @@ namespace ImmImporter
 
             if (!me->Init(volume, isFloorLevel ? LayerSpawnArea::TrackingLevel::Floor : LayerSpawnArea::TrackingLevel::Eye, version))
                 return nullptr;
+            me->SetDeclaredScreenshot(declaredScreenshot);
          
             return me;
         }
