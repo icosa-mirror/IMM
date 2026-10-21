@@ -34,6 +34,12 @@ try
     finally { pinned.Free(); }
     Require(document > 0, "Reference IMM load failed.");
     Require(Reader.StrokeReader_GetDocumentInfo(document, out var info), "Document metadata query failed.");
+    var rootAnimationKeys = new List<StrokeAnimationKey>();
+    for (int index = 0; index < info.rootAnimationKeyCount; index++)
+    {
+        Require(Reader.StrokeReader_GetRootAnimationKey(document, index, out var key), $"Root key {index} query failed.");
+        rootAnimationKeys.Add(key);
+    }
     var nativeLayers = new List<NativeLayer>();
     for (int index = 0; index < Reader.StrokeReader_GetAuthoringLayerCount(document); index++)
     {
@@ -91,6 +97,8 @@ try
         native = new
         {
             document = info,
+            rootAnimationKeys,
+            chapterCount = Reader.StrokeReader_GetChapterCount(document),
             counts = nativeLayers.GroupBy(x => x.Info.type).ToDictionary(x => x.Key, x => x.Count()),
             layers = nativeLayers.Select(x => new { x.Index, x.Path, info = x.Info, transform = x.Transform,
                 animationKeys = NativeKeys(document, x.Index) })

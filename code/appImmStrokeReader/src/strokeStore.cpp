@@ -770,6 +770,7 @@ void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
     mDocument.backgroundColor[2] = background.z;
     mDocument.capabilities = sequence.GetCaps();
     mDocument.rootAnimationKeyCount = 0;
+    mDocument.rootAnimationKeys.clear();
 
     ImmImporter::Layer* root = sequence.GetRoot();
     if (root != nullptr)
@@ -788,8 +789,20 @@ void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
                     ImmCore::piTick::CastInt(key->mTime) == 0 &&
                     key->mValue.mBool &&
                     key->mInterpolation == ImmImporter::Layer::InterpolationType::None;
-                if (!isImplicitDefaultVisibility)
+                if (key != nullptr && !isImplicitDefaultVisibility)
+                {
+                    StrokeAnimationKeyC captured{};
+                    captured.property = property;
+                    captured.timeTicks = ImmCore::piTick::CastInt(key->mTime);
+                    captured.interpolation = static_cast<int>(key->mInterpolation);
+                    captured.boolValue = key->mValue.mBool ? 1 : 0;
+                    captured.intValue = key->mValue.mInt;
+                    captured.floatValue = key->mValue.mFloat;
+                    captured.doubleValue = key->mValue.mDouble;
+                    captured.transformValue = ToTransformC(key->mValue.mTransform);
+                    mDocument.rootAnimationKeys.push_back(captured);
                     mDocument.rootAnimationKeyCount++;
+                }
             }
         }
     }
@@ -912,6 +925,14 @@ bool StrokeStore::GetDocumentInfo(StrokeDocumentInfoC* info) const
     return true;
 }
 
+bool StrokeStore::GetRootAnimationKey(int keyIdx, StrokeAnimationKeyC* key) const
+{
+    if (key == nullptr || keyIdx < 0 || keyIdx >= static_cast<int>(mDocument.rootAnimationKeys.size()))
+        return false;
+    *key = mDocument.rootAnimationKeys[keyIdx];
+    return true;
+}
+
 int StrokeStore::GetLayerAnimationKeyCount(int layerIdx) const
 {
     if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
@@ -939,6 +960,7 @@ void StrokeStore::Clear()
     mDocument.backgroundColor[2] = 0.0f;
     mDocument.capabilities = 0;
     mDocument.rootAnimationKeyCount = 0;
+    mDocument.rootAnimationKeys.clear();
     mDocument.layers.clear();
     mDocument.authoringLayers.clear();
     mDocument.chapterStartTimes.clear();

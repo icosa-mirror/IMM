@@ -261,6 +261,14 @@ namespace ImmPlayer
         public static extern bool StrokeReader_GetDocumentInfo(int docId, out StrokeDocumentInfo info);
 
         /// <summary>
+        /// Query the root keys counted by StrokeDocumentInfo.rootAnimationKeyCount.
+        /// The implicit default visibility key is excluded, matching that count.
+        /// </summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetRootAnimationKey(int docId, int keyIdx, out StrokeAnimationKey key);
+
+        /// <summary>
         /// Get information about a layer.
         /// </summary>
         /// <param name="docId">Document ID</param>

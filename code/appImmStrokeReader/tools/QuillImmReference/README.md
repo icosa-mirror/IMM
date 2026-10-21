@@ -4,6 +4,11 @@ Read-only C0 investigation tools. They do not implement conversion or certify vi
 parity. Inputs and generated reports may contain private scene content: keep reports
 under ignored `artifacts/`, not in public fixtures or CI.
 
+Reports include native root animation keys and chapter count separately from
+ordinary layers. Use a reader binary with `StrokeReader_GetRootAnimationKey`.
+The root-key count/query excludes implicit default visibility and does not imply
+that each retained key is an action or chapter marker.
+
 1. Inventory every source project's metadata and qbin stroke headers without loading
    vertices. Add reference roots to locate filename/asset-ID candidates:
 

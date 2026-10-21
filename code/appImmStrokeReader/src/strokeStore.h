@@ -195,6 +195,7 @@ struct StoredDocument
     float backgroundColor[3] = { 0.0f, 0.0f, 0.0f };
     uint32_t capabilities = 0;
     int rootAnimationKeyCount = 0;
+    std::vector<StrokeAnimationKeyC> rootAnimationKeys;
     std::vector<StoredLayer> layers;
     std::vector<StoredLayer> authoringLayers;
     std::vector<ImmCore::piTick> chapterStartTimes;
@@ -261,6 +262,7 @@ public:
     int GetDrawingIndexForChapter(int layerIdx, int chapterIndex) const;
     void CaptureSequenceMetadata(ImmImporter::Sequence& sequence);
     bool GetDocumentInfo(StrokeDocumentInfoC* info) const;
+    bool GetRootAnimationKey(int keyIdx, StrokeAnimationKeyC* key) const;
     int GetAuthoringLayerCount() const;
     bool GetAuthoringLayerInfo(int layerIdx, StrokeAuthoringLayerInfoC* info) const;
     bool GetAuthoringStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, StrokeAuthoringPointC* points, int maxPoints) const;

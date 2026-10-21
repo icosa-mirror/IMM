@@ -33,8 +33,8 @@ using namespace ImmStrokeReader;
 #endif
 
 // Bump this when you need to confirm Unity loaded the new dylib.
-static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5";
-static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5";
+static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-KEYS";
+static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-KEYS";
 
 extern "C" UNITY_INTERFACE_EXPORT const char* UNITY_INTERFACE_API StrokeReader_GetBuildId()
 {
@@ -408,6 +408,15 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAutho
     auto it = gStrokeReader.mDocuments.find(docId);
     return it != gStrokeReader.mDocuments.end() &&
         it->second->GetLayerTransform(layerIdx, localTransform, worldTransform, true);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetRootAnimationKey(int docId, int keyIdx, StrokeAnimationKeyC* key)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || key == nullptr)
+        return false;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() && it->second->GetRootAnimationKey(keyIdx, key);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerAnimationKeyCount(int docId, int layerIdx)

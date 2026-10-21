@@ -268,8 +268,12 @@ C2 evaluation contract: source review, playback acceptance outstanding
    StrokeDocumentInfo.rootAnimationKeyCount sums keys across root properties,
    excluding only an implicit single visible/None key at time zero. It does not
    identify actions or count chapters. Existing public reader APIs expose chapter
-   selection/count but no root-key value query; C2 root mapping needs that data
-   before structural or playback parity can be assessed.
+   selection/count initially lacked a root-key value query. The additive
+   StrokeReader_GetRootAnimationKey query now exposes values using the existing
+   count/layout, with local Windows build/test/export verification. The reference
+   inspector records rootAnimationKeys and chapterCount. The public sample's one
+   counted key is Offset=0 at time zero, not an action. Root authoring and importer
+   behavior remain unchanged; other-platform CI and Quill startup parity are open.
    The local Chapters project contains Stop keys at ticks 0, 3675 and 26775, plus
    MakeDefault at 50400. Its folder contains source JSON/qbin/state only. Recursive
    IMM filename search in the source collection and external IMM collection found only unrelated

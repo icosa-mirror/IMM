@@ -47,6 +47,7 @@ static class ConverterChecks
         Require(baseline.Export.Statistics.StrokeCount == 4 && baseline.Export.Statistics.PointCount == 12, "Four brush sections were not exported.");
         NativeFixture(output);
         CheckZeroWidthImportRoundTrip(output, root);
+        RootKeyChecks.Run(output, root);
 
         string jsonFile = Path.Combine(project, "Quill.json");
         string json = File.ReadAllText(jsonFile);

@@ -20,6 +20,15 @@ This package provides the IMM stroke reader runtime for Unity and exposes a C AP
 
 For visible IMM playback in a scene, install `ImmPlayerPlugin-Unity`; this package only reads IMM document data.
 
+## Root animation metadata
+
+Read `StrokeReader_GetDocumentInfo` and iterate `rootAnimationKeyCount` with
+`StrokeReader_GetRootAnimationKey(docId, keyIndex, out key)`. These read-only keys
+use the same layout as layer animation keys. The count/query excludes implicit
+default visibility; retained keys may be offsets or other properties rather than
+actions, so the count is not a chapter count. Invalid indices/documents return
+false. Use native binaries built from the same source version as the bindings.
+
 ## Contents
 
 - `Plugins/`: native binaries (Windows/macOS/Android)

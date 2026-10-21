@@ -52,7 +52,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Key query APIs exist; SharpQuill adapter does not populate key channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
-| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Chapter queries and aggregate root-key count exist; root-key values are not queryable; authoring import reports root keys unsupported | Complete root/comic/chapter authoring absent; comic compilation rejected | No complete chapter authoring claim | Inspect actual root keys and Quill export behavior, then extend only required shared APIs |
+| Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root-key value query implemented and locally verified on Windows; cross-platform CI pending. Chapter queries exist; authoring import still reports root keys unsupported | Complete root/comic/chapter authoring absent; comic compilation rejected | No complete chapter authoring claim | Inspect actual root keys and Quill export behavior, then extend required authoring APIs |
 | Viewpoints / spawn areas | Existing defaults and properties | Spawn metadata exposed; SharpQuill adapter skips spawn layers | Existing spawn graph/import/export/default selection | Spawn edits within limits | Map export flags, tracking, volume and defaults |
 | Pictures and panoramas | Metadata and embedded picture input exist | Picture metadata/pixels exposed; optional adapter layers | No picture construction in current graph/Unity exporter ABI | Outside live scope | Add construction and map projection/viewer locking/assets |
 | Sound | Spatial metadata and observed 16-bit PCM-to-WAV input exist | No sound-content query surface in stroke-reader C API | No sound construction in current graph/Unity exporter ABI | Outside live scope | Map embedded audio, timing, gain, looping and spatial properties |
@@ -140,9 +140,11 @@ The preferred first candidate is:
    midpoint, seek/restart and nested timing behavior before declaring animation
    parity. The converter findings record the source-level contract and remaining
    reference questions. This investigation adds no production animation support.
-7. C2 root/startup reference inspection needs root-key values, not just the current
-   aggregate count and chapter selection API. The count excludes implicit default
-   visibility but includes other properties; it is not an action/chapter count.
+7. C2 root/startup reference inspection now has a root-key value query, locally
+   verified on Windows; other-platform CI is pending. It uses the existing count,
+   which excludes implicit default visibility but includes other properties and
+   is not an action/chapter count. The public sample's counted key is Offset=0
+   at time zero, not an action. No root construction or importer acceptance changed.
    The local Chapters source supplies Stop/MakeDefault cases. A matching Quill IMM
    export has not been located by project/name search; the user has been asked for
    a possible path. Continue other C2 work independently of that optional lookup.
@@ -288,8 +290,8 @@ Status checked at 2026-10-21 14:36 UTC:
    Unity packaging/export verification also passed on all four platforms; the
    existing iOS registration function is supplied by Objective-C glue. Subsequent
    Unity player/device jobs passed; final full-run acceptance remains blocked by
-   Godot iOS capacity. Feature work remains
-   paused until regression gates are resolved. These native build results do not
+   Godot iOS capacity. Converter feature work remains held while independent
+   reader inspection work proceeds with separate validation. These native build results do not
    establish device rendering or Unity integration acceptance.
 7. Both standalone Android jobs in the fresh run are now complete and successful.
    Their job logs are retained locally as `artifacts/quill-scanner-fix-gles.log`
@@ -341,6 +343,34 @@ Status checked at 2026-10-21 14:36 UTC:
    run's still-missing Godot iOS evidence.
 4. This closes one R1 data-loss defect locally, not the broader reader/consumer or
    reverse-conversion tracks. No player/rendering code or native binary changed.
+
+### 6.3 C2 root-key inspection prerequisite
+
+1. Added `StrokeReader_GetRootAnimationKey(docId, keyIndex, out key)`, using the
+   existing `StrokeAnimationKey` layout and `StrokeDocumentInfo.rootAnimationKeyCount`.
+   The implicit default visibility key remains excluded from both count and query.
+   No existing public layout or count policy changed.
+2. The reader retains root key values while capturing metadata; this adds no
+   player/rendering code or per-frame work. The reference inspector now records
+   those keys and chapter count separately from ordinary layers. It requires a
+   reader binary built with the new export.
+3. Windows native build, all QuillToImm self-tests and Windows export verification
+   pass locally (40 reader P/Invokes). New checks cover a root with no non-default
+   keys, the public sample's Offset=0 key, invalid index/document/null-output
+   queries and unload lifetime. Existing zero-tip/reflection/converter checks pass.
+   Evidence: `artifacts/quill-root-key-regressions.log`,
+   `artifacts/quill-root-exports-windows.json`, `artifacts/quill-root-reader-build.log`.
+4. Matching Windows DLLs are included with source. Other-platform compilation,
+   packaging/export verification and CI for this addition remain pending. This
+   diagnostic API does not implement chapter/root authoring, prove Quill startup
+   mapping or close the unrelated Godot iOS capacity failure.
+5. Native build ID is now `2026-10-21-ROOT-KEYS` to distinguish the new query from
+   older binaries. The existing adapter check passes (30 paint layers, zero/one
+   pictures). Read-only checks of the four earlier small pairs found only a root
+   Offset=0 key at time zero in taperecorder, consul-room and Snoopy, and no counted
+   root keys in Fishgym; all report one chapter. This does not supply a chapter-
+   action reference or establish startup behavior. Reports remain under ignored
+   `artifacts/quill-reference/*-root-metadata.json`.
 
 ## 7. Consolidated documents
 

@@ -351,7 +351,7 @@ Source: `code/appImmStrokeReader/src/main.cpp` + `strokeStore.cpp/.h`. It links 
 file into a plain in-memory stroke/layer graph. All 38 entry points exist on all four
 platforms.
 
-### 3.1 Native API (38 entry points)
+### 3.1 Native API (40 entry points)
 
 All are declared in `Runtime/ImmStrokeReader.cs`.
 
@@ -359,7 +359,7 @@ All are declared in `Runtime/ImmStrokeReader.cs`.
 |---|---|
 | Build/init | `StrokeReader_GetBuildId`, `Init`, `IsInitialized`, `End` (â€”), `GetDocumentCount` |
 | Load | `LoadFromFile`, `LoadFromMemory`, `Unload` |
-| Document | `GetDocumentInfo` |
+| Document | `GetDocumentInfo`, `GetRootAnimationKey` |
 | Layers | `GetLayerCount`, `GetLayerInfo`, `GetLayerTransform` |
 | Layers (authoring view) | `GetAuthoringLayerCount`, `GetAuthoringLayerInfo`, `GetAuthoringLayerTransform` |
 | Spawn area | `GetLayerSpawnAreaInfo` |
@@ -369,7 +369,12 @@ All are declared in `Runtime/ImmStrokeReader.cs`.
 | Pictures | `GetPictureInfo`, `GetPicturePixelData` |
 | Chapters | `GetChapterCount`, `GetChapterCountFromFile`, `GetCurrentChapter`, `SetChapter` |
 
-`GetBuildId` returns `IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5` â€” the intended way to
+`GetRootAnimationKey` uses `GetDocumentInfo().rootAnimationKeyCount` and the existing
+animation-key layout. Both count and query exclude implicit default visibility.
+Retained root keys may be offsets or other properties, so this is not an action or
+chapter count. It is a metadata query, not a root/chapter construction API.
+
+`GetBuildId` returns `IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-KEYS` â€” the intended way to
 confirm which native build Unity actually loaded.
 
 ### 3.2 Managed wrapper
@@ -660,7 +665,7 @@ StrokeReader_GetChapterCountFromFile StrokeReader_GetCurrentChapter StrokeReader
 StrokeReader_GetDrawingBiggestStroke StrokeReader_GetDrawingCount StrokeReader_GetDrawingIndexForChapter StrokeReader_GetFrameBuffer
 StrokeReader_GetLayerAnimationInfo StrokeReader_GetLayerAnimationKey StrokeReader_GetLayerAnimationKeyCount StrokeReader_GetLayerCount
 StrokeReader_GetLayerInfo StrokeReader_GetLayerSpawnAreaInfo StrokeReader_GetLayerTransform StrokeReader_GetPictureInfo
-StrokeReader_GetPicturePixelData StrokeReader_GetStrokeCount StrokeReader_GetStrokeInfo StrokeReader_GetStrokePoints
+StrokeReader_GetPicturePixelData StrokeReader_GetRootAnimationKey StrokeReader_GetStrokeCount StrokeReader_GetStrokeInfo StrokeReader_GetStrokePoints
 StrokeReader_Init StrokeReader_IsInitialized StrokeReader_LoadFromFile StrokeReader_LoadFromMemory
 StrokeReader_SetChapter StrokeReader_Unload
 ```

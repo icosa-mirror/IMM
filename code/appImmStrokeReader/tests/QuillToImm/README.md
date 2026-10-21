@@ -42,6 +42,12 @@ partial mutation, and the unchanged 32-byte legacy transform ABI. No-flip keys
 continue through the original export entry point. The local Windows DLL must be
 built from source containing the two additive reflection exports.
 
+Root-query checks require the additive `StrokeReader_GetRootAnimationKey` export.
+They verify implicit-root visibility exclusion, the public sample's Offset=0 key,
+invalid index/document/null-output guards and unloaded-document lifetime. The
+public fixture is `code/ImmGodotXRSampleProject/sample1.imm`; private projects are
+not required for these checks.
+
 Private projects and generated artifacts remain local. Console prefixes are
 `[IMM_QUILL_CONVERTER]`, `[IMM_QUILL_CONVERTER_TEST]` and
 `[IMM_QUILL_CONVERTER_COMPARE]`.
