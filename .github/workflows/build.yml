@@ -162,7 +162,10 @@ jobs:
 
     - name: Smoke test Unity exporter bridge
       shell: pwsh
-      run: python code/appImmUnity/tests/exporter_bridge_smoke.py
+      run: |
+        python tests/tools/test_windows_runtime_dependencies.py
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python code/appImmUnity/tests/exporter_bridge_smoke.py
 
     - name: Smoke test stroke-reader authoring API
       shell: pwsh

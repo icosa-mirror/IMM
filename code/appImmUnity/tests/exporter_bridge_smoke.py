@@ -172,7 +172,6 @@ def runtime_dependencies(repo_root: Path) -> tuple[Path, ...]:
             for name in (
                 "Audio360.dll",
                 "opusenc.dll",
-                "opus.dll",
                 "vorbisenc.dll",
             )
         ),
@@ -184,6 +183,7 @@ def runtime_dependencies(repo_root: Path) -> tuple[Path, ...]:
                 "libpng16.dll",
                 "ogg.dll",
                 "vorbis.dll",
+                "opus.dll",
             )
         ),
     )

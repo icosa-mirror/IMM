@@ -1348,10 +1348,11 @@ replacement-run closure in section 6.26 (20:23 UTC):
 
 ### 6.36. Windows fixture dependency regression correction (2026-10-21)
 
-1. Decoder run 39685893797 failed Windows job 119519720370: the face-orientation
-   fixture generator still staged opus.dll from the player package after section
-   6.35 moved ownership to the reader. This is a source regression. Remaining work
-   in that run was cancelled; fresh full validation is required after the fix.
+1. Decoder run 39685893797 failed Windows job 119519720370 with a stale player
+   Opus staging path after section 6.35 moved ownership to the reader. This was
+   initially attributed to the face-orientation generator; section 6.38 corrects
+   that diagnosis using the actual traceback. Remaining work was cancelled;
+   fresh full validation is required after the source correction.
 2. The generator now stages Opus from the reader package. Local reproduction also
    exposed loaded dependency references preventing temporary DLL deletion. Native
    generation runs in a bounded child process; parent cleanup follows child exit
@@ -1393,6 +1394,27 @@ replacement-run closure in section 6.26 (20:23 UTC):
    support is locally verified; cross-platform gates and reader-only iOS linking
    remain pending. Regression correction aa1e334f is in fresh full run 39686518984;
    its passing replacement Windows gate must be verified, not inferred locally.
+
+### 6.38. Complete shared Opus test-staging correction (2026-10-21)
+
+1. Replacement run 39686518984 Windows job 119521854740 failed with the same stale
+   Opus dependency path. The traceback identifies exporter_bridge_smoke.py, not
+   the face-orientation generator corrected in section 6.36. That earlier fix was
+   incomplete; its locally passing fixture checks did not cover the failing harness.
+2. The exporter bridge dependency list now stages reader-owned Opus. Its benchmark,
+   Unicode-path, logging and viewpoint test consumers share this list. A targeted
+   scan of Windows test/build staging found no other obsolete player Opus path.
+   Godot has separate unchanged dependency packaging. A new CI check verifies that
+   bridge and fixture staging agree, have unique DLL names, resolve existing files
+   and select reader-owned Opus. No gate was weakened.
+3. Actual exporter bridge export/read-back (11,696 bytes), Unicode-path and native
+   logging checks pass locally, as does the new dependency check. Evidence: ignored
+   artifacts/opus-owner-exporter-smoke.log, opus-owner-unicode-smoke.log,
+   opus-owner-native-logging.log and opus-owner-dependency-test.log.
+4. Cancelled remaining runs 39686518984 and 39686749499 because both contain this
+   source defect. A fresh full run is required; the regression remains unaccepted
+   until replacement Windows validation passes. This is separate from the older
+   Android SDK installation infrastructure failure and its deferred isolated retry.
 
 ## 7. Consolidated documents
 
