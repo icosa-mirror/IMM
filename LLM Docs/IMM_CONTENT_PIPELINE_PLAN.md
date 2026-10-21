@@ -110,7 +110,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Reference metadata audit: 35,213 transform keys in 403 layers retain count/time/value/interpolation; base/startup evaluation remains unresolved. Extend C1 for shared drawings/holds, keys, nested timing, viewpoints and root/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| R1: reader and consumer contract | Reconcile authoring/legacy views and consumer coverage; follow up on importer still sanitizing valid zero-width tips | Reader extraction and selected adapter output preserve intended content or report loss |
+| R1: reader and consumer contract | Zero-width tip import loss fixed and locally verified through export/import/export; CI pending for that fix. Reconcile remaining authoring/legacy views and consumer coverage | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Address SharpQuill adapter hierarchy/keys and Quill writer media limits when full IMM-to-Quill delivery is selected | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
 | A2: live breadth and save | Authoring M2 then M3 | Resource-owning layer lifecycle and revision-selected save accepted |
@@ -301,6 +301,24 @@ Status checked at 2026-10-21 14:17 UTC:
    evidence: `artifacts/quill-godot-ios-cancelled-annotations.json` and
    `artifacts/quill-scanner-fix-validation-evidence.log`. Full-run acceptance
    remains open until this retry and final aggregation are complete.
+
+### 6.2 R1 zero-width importer fidelity checkpoint
+
+1. The importer changed valid zero-width tips to 0.000001 despite the graph and
+   codec supporting zero. A new native four-brush fixture failed before the fix
+   with "Importer changed valid zero-width tips."
+2. Width sanitization now accepts finite values greater than or equal to zero.
+   Negative/nonfinite fallback behavior remains unchanged. Import preserves zero
+   without an invalid-width diagnostic; re-export/native read-back preserves both
+   zero tips and a positive middle width on all four brush sections.
+3. The full local QuillToImm self-test passes, including existing reflection,
+   converter, negative-width rejection and output-preservation checks. Evidence:
+   `artifacts/quill-zero-tip-import-before-fix.log` and
+   `artifacts/quill-zero-tip-import-fixed.log`. The expanded test runs in Windows
+   build CI. This managed importer fix is subsequent to run 39609583383's source
+   revision; that full run does not validate this new change. Its own CI is pending.
+4. This closes one R1 data-loss defect locally, not the broader reader/consumer or
+   reverse-conversion tracks. No player/rendering code or native binary changed.
 
 ## 7. Consolidated documents
 

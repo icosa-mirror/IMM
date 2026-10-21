@@ -28,7 +28,8 @@ does not replace Unity compilation or visual playback acceptance.
    ```
 
 The suite covers native brush/visibility mapping, nonidentity group transform/pivot,
-hierarchy, zero-width stroke tips, invalid zero-extent/negative-width strokes,
+hierarchy, zero-width stroke tips through conversion and authoring import/re-export
+(without invalid-width diagnostics), invalid zero-extent/negative-width strokes,
 string-valued held frames,
 X/Y/Z reflection preservation, unknown reflection/animation rejection, unknown source layers/brushes, explicit partial
 output, source-file overwrite protection and preservation of existing output on failure.

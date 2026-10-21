@@ -46,6 +46,7 @@ static class ConverterChecks
         Require(baseline.Succeeded && !baseline.IsPartial, Describe(baseline));
         Require(baseline.Export.Statistics.StrokeCount == 4 && baseline.Export.Statistics.PointCount == 12, "Four brush sections were not exported.");
         NativeFixture(output);
+        CheckZeroWidthImportRoundTrip(output, root);
 
         string jsonFile = Path.Combine(project, "Quill.json");
         string json = File.ReadAllText(jsonFile);
@@ -120,6 +121,27 @@ static class ConverterChecks
             Require(!result.Succeeded && result.Issues.Any(x => x.Code == code), Describe(result));
             Require(File.ReadAllBytes(output).SequenceEqual(marker), "Rejected conversion changed existing output.");
         }
+    }
+
+    private static void CheckZeroWidthImportRoundTrip(string path, string root)
+    {
+        var imported = ImmAuthoringImporter.ImportFromFile(path, Path.Combine(root, "zero-tip-import.log"));
+        Require(imported.Succeeded, "Zero-tip fixture import failed.");
+        using var document = imported.Document;
+        var strokes = document.CreateSnapshot().Value.Layers.SelectMany(layer => layer.Drawings)
+            .SelectMany(drawing => drawing.Strokes).ToArray();
+        Require(strokes.Length == 4, "Import changed the four-brush fixture stroke count.");
+        foreach (var stroke in strokes)
+            Require(stroke.Points.Count == 3 && stroke.Points[0].Width == 0 &&
+                stroke.Points[2].Width == 0 && stroke.Points[1].Width > 0,
+                "Importer changed valid zero-width tips.");
+        Require(!imported.Issues.Any(issue => issue.Code == ImmAuthoringImportIssueCode.InvalidSourceValue &&
+            issue.Message.Contains("Width")), "Valid zero widths were diagnosed as invalid metadata.");
+        string roundTrip = Path.Combine(root, "zero-tip-import-roundtrip.imm");
+        var exported = ImmAuthoringCompiler.ExportToFile(document, roundTrip);
+        Require(exported.Succeeded, exported.Message);
+        NativeFixture(roundTrip);
+        Console.WriteLine("[IMM_QUILL_IMPORT_TEST] Passed four-brush zero-width tip export/import/export checks.");
     }
 
     private static void NativeFixture(string path)

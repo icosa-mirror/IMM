@@ -413,7 +413,7 @@ namespace ImmPlayer.Authoring
                             SanitizeUnitValue(ref green, 1f) |
                             SanitizeUnitValue(ref blue, 1f)) adjustedPointMetadata |= PointAdjustment.Color;
                         if (SanitizeUnitValue(ref alpha, 1f)) adjustedPointMetadata |= PointAdjustment.Alpha;
-                        if (SanitizePositive(ref width, 0.000001f)) adjustedPointMetadata |= PointAdjustment.Width;
+                        if (SanitizeNonNegative(ref width, 0.000001f)) adjustedPointMetadata |= PointAdjustment.Width;
                         if (SanitizeFinite(ref length, 0f)) adjustedPointMetadata |= PointAdjustment.Length;
                         if (SanitizeFinite(ref time, 0f)) adjustedPointMetadata |= PointAdjustment.Time;
 
@@ -841,9 +841,9 @@ namespace ImmPlayer.Authoring
             return true;
         }
 
-        private static bool SanitizePositive(ref float value, float fallback)
+        private static bool SanitizeNonNegative(ref float value, float fallback)
         {
-            if (IsFinite(value) && value > 0f)
+            if (IsFinite(value) && value >= 0f)
                 return false;
             value = fallback;
             return true;
