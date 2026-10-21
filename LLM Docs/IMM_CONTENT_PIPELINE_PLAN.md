@@ -478,6 +478,19 @@ Status checked at 2026-10-21 14:36 UTC:
    `92e422b899bd32de1f758110550d20b808eab9fcb1937d64078a109f08611455`.
    Next C2 work must resolve remaining raster/precision differences and exercise
    transform interpolation, boundary/startup/seek/restart and navigation behavior.
+6. Follow-up comparisons also require exact decoded point length/time and drawing
+   quantization scales; Fishgym passes. All 12 original/candidate drawing headers
+   and all 16 decompressed codec streams per drawing are byte-identical. The raster
+   discrepancy is therefore outside the encoded paint data. The ignored inspection
+   script/report are `artifacts/c2-playback/inspect_paint_streams.py` and
+   `paint-stream-differences.json`.
+7. Binary inspection additionally exposed missing root timing: the reference root
+   is a timeline of 45,360,000 ticks, while the graph/compiler default root is not a
+   timeline and has duration zero. A controlled probe restoring this root timing
+   on top of the transform probe leaves the same ten differing pixels, so it is
+   not the cause of that discrepancy. Nevertheless, root timing must be represented
+   through the shared graph/compiler rather than silently dropped by C2. This is
+   the next implementation prerequisite for root/chapter acceptance.
 
 ## 7. Consolidated documents
 

@@ -21,7 +21,8 @@ does not replace Unity compilation or visual playback acceptance.
    ```
 
    Use `--compare-animated-paint` instead of `--compare-paint` to additionally require
-   exact stored animation keys and timeline flags/durations/repeats. Evaluated
+   exact stored animation keys, timeline flags/durations/repeats, point length/time
+   and drawing quantization scales. Evaluated
    animation playback is outside both comparisons.
 
 3. Compare the decoded paint/group subset with a local reference export. This includes

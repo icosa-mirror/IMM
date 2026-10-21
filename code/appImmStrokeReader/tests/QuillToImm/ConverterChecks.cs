@@ -224,6 +224,9 @@ static class ConverterChecks
                     Reader.StrokeReader_GetAuthoringFrameBuffer(b, other.Index, framesB, af) == af && framesA.SequenceEqual(framesB), "Frame buffers differ.");
                 for (int d = 0; d < drawings; d++)
                 {
+                    if (compareAnimation)
+                        Require(DrawingScale(a, layer.Info.id, d) == DrawingScale(b, other.Info.id, d),
+                            $"Drawing quantization scale differs at {path}/{d}.");
                     int count = Reader.StrokeReader_GetAuthoringStrokeCount(a, layer.Index, d);
                     Require(count == Reader.StrokeReader_GetAuthoringStrokeCount(b, other.Index, d), "Stroke count differs.");
                     for (int s = 0; s < count; s++)
@@ -235,7 +238,12 @@ static class ConverterChecks
                         Require(Reader.StrokeReader_GetAuthoringStrokePoints(a, layer.Index, d, s, ap, ap.Length) &&
                             Reader.StrokeReader_GetAuthoringStrokePoints(b, other.Index, d, s, bp, bp.Length), "Point query failed.");
                         for (int p = 0; p < ap.Length; p++)
+                        {
                             Require(ap[p].legacy.Equals(bp[p].legacy), $"Decoded point differs at {path}/{d}/{s}/{p}.");
+                            if (compareAnimation)
+                                Require(ap[p].length == bp[p].length && ap[p].time == bp[p].time,
+                                    $"Decoded point length/time differs at {path}/{d}/{s}/{p}.");
+                        }
                         points += ap.Length; strokes++;
                     }
                 }
@@ -247,6 +255,13 @@ static class ConverterChecks
     }
 
     private record NativeLayer(int Index, StrokeAuthoringLayerInfo Info, StrokeLayerTransform Transform);
+    private static float DrawingScale(int document, int layerId, int drawing)
+    {
+        for (int i = 0; i < Reader.StrokeReader_GetLayerCount(document); i++)
+            if (Reader.StrokeReader_GetLayerInfo(document, i, out var info) && info.id == layerId)
+                return Reader.StrokeReader_GetDrawingBiggestStroke(document, i, drawing);
+        throw new InvalidOperationException($"Paint layer {layerId} is absent from the drawing-scale reader view.");
+    }
     private static Dictionary<string, NativeLayer> Layers(int doc)
     {
         var all = new List<NativeLayer>();
