@@ -15,6 +15,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     string readerLibrary = Path.GetFullPath(args[2]);
     NativeLibrary.SetDllImportResolver(typeof(QuillToImmConverter).Assembly, (name, assembly, searchPath) =>
         name == "ImmUnityPlugin" ? NativeLibrary.Load(exporterLibrary) : name == "ImmStrokeReader" ? NativeLibrary.Load(readerLibrary) : IntPtr.Zero);
+    PaintRepeatChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     return 0;
 }

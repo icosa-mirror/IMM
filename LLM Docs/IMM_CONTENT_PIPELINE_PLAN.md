@@ -381,6 +381,23 @@ Status checked at 2026-10-21 14:36 UTC:
    Local regressions pass with the tracked path; fresh full validation is required
    after this source fix. The older Godot iOS capacity failure remains unresolved.
 
+### 6.4 Paint repeat-count exporter repair (2026-10-21)
+
+1. C2's first native animated-paint test exposed a shared offline exporter defect:
+   `ImmExporter_PaintSetMaxRepeatCount` updated the layer's timeline repeat field
+   instead of its paint implementation. A requested paint repeat count of three
+   read back as one. The setter now updates `LayerPaint`, preserving the independent
+   timeline repeat count.
+2. A focused native export/read-back regression covers drawing repeat counts
+   zero (infinite), one and three, each with an independent timeline repeat count
+   of seven. All pass with the rebuilt Windows plugin; existing static conversion,
+   zero-width import, root-key and reflection checks also pass locally. Windows
+   export verification passes. Other platforms and runtime playback require CI.
+3. Full validation run 39624464050 is still running; its Godot iOS job was cancelled
+   before this repair was committed. The prior hosted-runner capacity failure
+   remains unresolved. Confirmed source regressions retain priority over features;
+   independent C2 implementation continues while infrastructure is unavailable.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

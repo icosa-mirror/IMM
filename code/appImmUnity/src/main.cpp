@@ -4080,7 +4080,10 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_PaintSetM
     if (layer == nullptr || layer->GetType() != ImmExporter::Layer::Type::Paint)
         return false;
 
-    layer->SetMaxRepeatCount(maxRepeatCount);
+    auto* paint = reinterpret_cast<ImmExporter::LayerPaint*>(layer->GetImplementation());
+    if (paint == nullptr)
+        return false;
+    paint->SetMaxRepeatCount(maxRepeatCount);
     return true;
 }
 
