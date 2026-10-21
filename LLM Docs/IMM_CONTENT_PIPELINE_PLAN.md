@@ -8,8 +8,9 @@ passing Windows converter regressions. Unity compilation and full CI remain pend
 The static slice's Unity package-import job has passed. Full acceptance is unresolved:
 one Android GLES job failed dependency resolution and Vulkan timed out before the
 required capture frame. The shared reflection extension is now locally verified;
-its broader platform/Unity acceptance awaits fresh full validation. Regression investigation takes
-priority over further feature work; neither Android failure is closed.
+native builds and packaged exports pass on all four platforms. Broader Unity/device
+acceptance awaits fresh full validation. Regression investigation takes priority
+over further feature work; neither original Android failure is closed.
 
 ## 1. Objective and document ownership
 
@@ -76,7 +77,8 @@ The preferred first candidate is:
    additive offline layer/pivot and transform-key exports. The legacy 32-byte native
    transform structure and exports are unchanged. Windows native build, X/Y/Z
    export/import/comparison checks and the existing two reference subsets pass.
-   Other-platform binaries/CI and Unity acceptance remain pending; this does not
+   Native builds and packaged exports pass on all four platforms in run 39609583383.
+   Unity/device acceptance remains pending; this does not
    extend the live mutation ABI's scope.
 4. `ImmAuthoringCompiler` uses the snapshot's document frame rate. The existing
    importer reports mismatched layer rates. C0 references normalize paint rates to
@@ -102,7 +104,7 @@ The preferred first candidate is:
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
 | C1: static paint conversion | Implemented in d0e7ea31; exact decoded paint-subset matches for two cases; identical taperecorder DirectX capture; Windows CI gate passed; Unity/full CI pending | Four brushes, hierarchy and static properties compared to Quill export; safe output and actionable diagnostics; native visual check |
-| C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI regressions and Windows/Android/macOS/iOS native builds pass; packaging/Unity/device acceptance pending | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
+| C1b: shared reflection preservation | Implemented for layer/pivot and offline transform keys, including importer/comparer; Windows reflection/converter CI regressions and Windows/Android/macOS/iOS native builds and package exports pass; Unity/device acceptance pending | Valid X/Y/Z retained without legacy ABI changes or live-scope expansion; platform exports and regression gates pass |
 | C2: animation and navigation | Extend C1 for shared drawings/holds, keys, nested timing, viewpoints, root/startup/chapter behavior | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Add required offline picture/sound graph and ABI construction; preserve assets and spatial settings | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
@@ -262,7 +264,9 @@ Status checked at 2026-10-21 13:41 UTC:
    have passed. Windows job 119254613009 explicitly passed the X/Y/Z
    layer/pivot/key export/import/comparison and legacy ABI checks, the four-brush
    converter and output-preservation checks, and reader/adapter regressions.
-   Packaging, Unity and device acceptance remain pending; feature work remains
+   Unity packaging/export verification also passed on all four platforms; the
+   existing iOS registration function is supplied by Objective-C glue. Unity and
+   device acceptance remain pending; feature work remains
    paused until regression gates are resolved. These native build results do not
    establish device rendering or Unity integration acceptance.
 

@@ -11,11 +11,13 @@ Current review scope
    compiler and local regression harnesses. A direct static paint/group entry point
    now exists through QuillToImmConverter and the existing authoring compiler.
    Animation, navigation and media remain outstanding. Shared reflection support
-   is now locally implemented/verified; platform and Unity CI acceptance is pending.
+   passes native builds and export checks on all four platforms, plus Windows
+   regression CI. Unity integration and full device acceptance remain pending.
 2. Reran reader regressions and the 21-project metadata/media corpus check, plus
    the native IMM-to-Quill adapter regression against the bundled Windows DLL.
    These passed. Subsequent C0 work inspected five local candidate reference pairs;
-   no controlled Quill re-export or visual/playback comparison was run.
+   no controlled Quill re-export was run. Subsequent C1 visual evidence is below;
+   animated playback comparison remains outstanding.
 3. Detailed corpus statistics below describe the 2026-10-15 inventory. This review
    reconfirmed the test coverage totals, not every historical inventory count.
 4. C1 reader prerequisite implemented: QuillSequenceReader.ReadMetadata reads the
@@ -25,7 +27,7 @@ Current review scope
    rejects truncated data. Corpus mode and the reference inspector use this API.
    Synthetic regressions and all 21 metadata/media corpus checks passed locally;
    Windows CI invokes the synthetic reader checks. That gate and the adapter gate
-   passed in run 39600334760; the overall pipeline was still running at this check.
+   passed in run 39600334760, which completed successfully.
 5. C1 static mapping now exports taperecorder and consul-room paint subsets. Exact
    decoded native comparisons pass for all paint/group paths, transforms/pivots,
    brush/visibility modes, frame metadata/buffers and stored point attributes:
@@ -167,7 +169,7 @@ C1b shared reflection preservation (2026-10-21)
    These are offline exporter additions, not new native live-edit operations.
 3. The Quill static converter maps N/X/Y/Z explicitly and rejects unknown strings.
    Windows native solution target appImmUnity built successfully, refreshing the
-   package Windows DLL. Other-platform binaries still require CI rebuild. Windows
+   package Windows DLL. CI has since rebuilt all four platform binaries. Local Windows
    DLL SHA-256: 05eeba927afc0bd4cbfcafffc35794a592503692209105e2d2e73236cbcb7579.
 4. Extended the existing native converter gate with all three axes, layer/pivot
    and transform-key export/read-back, real importer/comparer checks, invalid enum
@@ -175,20 +177,31 @@ C1b shared reflection preservation (2026-10-21)
    The legacy transform ABI size and ordinary key entry point are checked. Tests
    pass locally with production source and native DLLs; Unity types remain stand-ins
    in this .NET harness. A Unity NUnit graph/comparison test is also added, unrun locally.
-5. Windows export verification passes: 111 declared player-plugin P/Invokes and 39
-   reader P/Invokes are present in the checked Windows binaries. This is not an
-   all-platform result. Both original native paint-subset comparisons still match
+5. Full-validation run 39609583383 passed Windows, Android, macOS and iOS native
+   builds and Unity package export verification: 111 declared player-plugin
+   P/Invokes and 39 reader P/Invokes are accounted for on all four platforms.
+   The existing iOS registration function is supplied by Objective-C glue rather
+   than the archive. Windows reflection and converter regression CI also passed.
+   These are build/export/data checks; Unity/device acceptance remains pending.
+   Both original native paint-subset comparisons still match
    exactly (taperecorder 114 strokes/2068 points; consul-room 2495/57187).
 6. Broader source coverage remains gated by animation. The existing Stone Racer
    source includes reflected static paint alongside multi-drawing animated layers;
    the static profile correctly rejects that whole project rather than flattening
    or silently dropping animation. These are available local C2 reference candidates.
-7. C1 full-validation run 39603480459 passed Unity package import but remains active
+7. C1 full-validation run 39603480459 passed Unity package import but completed
    with GLES dependency-resolution failure and a separate Vulkan capture timeout.
    GLES could not resolve Kotlin artifacts before compiling. Vulkan reached player
    frame 38 at the 90-second deadline while rendering 37 paint calls/645802 triangles,
    short of required frame 60. Targeted retry was rejected while the run was active;
-   no successful retry is claimed and required gates remain unchanged.
+   no successful targeted retry is claimed and required gates remain unchanged.
+   Reflection run 39607327739 passed standalone Vulkan before cancellation.
+   A further URP evidence failure exposed a scanner defect: logs larger than
+   25 MiB were skipped, despite all 11 required markers being present. Scanner fix
+   452d2629 streams large logs and passes its regression in fresh full-validation
+   run 39609583383. That run is active. The main roadmap owns current failure
+   disposition and full acceptance; feature work remains paused pending regression
+   resolution.
 8. R1 follow-up found during importer coverage: zero-width tips are valid in the
    graph/exporter, but importer SanitizePositive still substitutes them. Fix and
    validate that separately; reflection tests use positive widths and do not claim
