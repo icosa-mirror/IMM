@@ -28,6 +28,7 @@ if (args.Length == 4 && args[0] == "--self-test")
     PictureAuthoringChecks.Run(args[3]);
     SoundAuthoringChecks.Run(args[3]);
     PictureConverterChecks.Run(args[3]);
+    SoundConverterChecks.Run(args[3]);
     ConverterChecks.Run(args[3]);
     return 0;
 }

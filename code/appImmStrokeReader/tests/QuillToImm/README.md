@@ -143,3 +143,10 @@ not required for these checks.
 Private projects and generated artifacts remain local. Console prefixes are
 `[IMM_QUILL_CONVERTER]`, `[IMM_QUILL_CONVERTER_TEST]` and
 `[IMM_QUILL_CONVERTER_COMPARE]`.
+
+Quill sound conversion checks cover sound-only mono/stereo PCM16, all observed
+spatial settings, hidden retention, visibility/offset keys, omission of redundant
+static-opacity keys and preservation of differing keys. Truncated/invalid qbin and
+unknown settings reject without replacing output. Project comparisons include
+sound settings/channels/legacy metadata and keys; codec/rate may differ and decoded
+audio samples/playback are not compared. See shared plan section 6.29.

@@ -209,9 +209,10 @@ static class ConverterChecks
             {
                 Require(source.Count(x => x.Value.Info.type == 8) == target.Count(x => x.Value.Info.type == 8), "Viewpoint count differs.");
                 Require(source.Count(x => x.Value.Info.type == 4) == target.Count(x => x.Value.Info.type == 4), "Picture count differs.");
+                Require(source.Count(x => x.Value.Info.type == 5) == target.Count(x => x.Value.Info.type == 5), "Sound count differs.");
             }
             foreach (var (path, layer) in source.Where(x => x.Value.Info.type == 0 || x.Value.Info.type == 1 ||
-                (compareViewpoints && (x.Value.Info.type == 8 || x.Value.Info.type == 4))))
+                (compareViewpoints && (x.Value.Info.type == 8 || x.Value.Info.type == 4 || x.Value.Info.type == 5))))
             {
                 Require(target.TryGetValue(path, out var other), $"Missing hierarchy path {path}.");
                 Require(layer.Info.type == other.Info.type && layer.Info.visible == other.Info.visible && layer.Info.opacity == other.Info.opacity &&
@@ -244,6 +245,15 @@ static class ConverterChecks
                         imageA.image.width == imageB.image.width && imageA.image.height == imageB.image.height &&
                         PicturePixels(a, layer.Info.id).SequenceEqual(PicturePixels(b, other.Info.id)),
                         $"Picture projection/viewer-lock/dimensions/decoded pixels differ at {path}.");
+                }
+                if (compareViewpoints && layer.Info.type == 5)
+                {
+                    Require(Reader.StrokeReader_GetSoundAssetInfo(a, layer.Index, out var soundA) &&
+                        Reader.StrokeReader_GetSoundAssetInfo(b, other.Index, out var soundB) &&
+                        soundA.properties.Equals(soundB.properties) && soundA.channels == soundB.channels &&
+                        soundA.sourceDuration == soundB.sourceDuration && soundA.initiallyPlaying == soundB.initiallyPlaying &&
+                        soundA.sampleRate > 0 && soundB.sampleRate > 0 && soundA.byteCount > 0 && soundB.byteCount > 0,
+                        $"Sound settings/channels/legacy metadata differ or asset is unsupported at {path}.");
                 }
                 if (compareAnimation)
                 {
@@ -297,6 +307,7 @@ static class ConverterChecks
             if (compareAnimation) Console.WriteLine("[IMM_QUILL_ANIMATION_COMPARE] Exact reader-exposed root metadata, root/layer keys and nested timing match; evaluated playback not checked.");
             if (compareViewpoints) Console.WriteLine($"[IMM_QUILL_VIEWPOINT_COMPARE] Exact reader-exposed viewpoint transforms/tracking/volumes/locomotion/defaults and preview presence/dimensions/encoding/color order match for {source.Count(x => x.Value.Info.type == 8)} viewpoints; preview pixels/navigation not checked.");
             if (compareViewpoints) Console.WriteLine($"[IMM_QUILL_PICTURE_COMPARE] Exact picture projection/viewer-lock/dimensions/decoded pixels match for {source.Count(x => x.Value.Info.type == 4)} pictures; evaluated playback not checked.");
+            if (compareViewpoints) Console.WriteLine($"[IMM_QUILL_SOUND_COMPARE] Exact sound settings/channels/legacy metadata match for {source.Count(x => x.Value.Info.type == 5)} sounds; codec/rate may differ, decoded samples and playback not checked.");
         }
         finally { if (a > 0) Reader.StrokeReader_Unload(a); if (b > 0) Reader.StrokeReader_Unload(b); Reader.StrokeReader_End(); }
     }

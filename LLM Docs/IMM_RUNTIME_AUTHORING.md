@@ -30,7 +30,8 @@ conversion is implemented with isolated reference pixel matches (section 6.22).
 Offline PCM16 sound construction now supports spatial settings and native Opus/Ogg
 encoding; section 6.24 records local file/decoder checks and the unresolved timing
 acceptance. Encoded WAV/Vorbis/Opus sound import and exact passthrough are implemented
-(section 6.25). Sound source mapping, stereo/panorama conversion and playback
+(section 6.25). Quill mono/stereo PCM16 sound mapping is implemented with isolated
+paired settings/key checks (section 6.29). Stereo/panorama conversion and playback
 acceptance remain outstanding. This
 does not add picture mutation to the native live path.
 
@@ -90,7 +91,7 @@ acceptance requirements. It does not redefine exported types or claim planned AP
 
 ## 3. Delivered managed engine and compatibility path
 
-The original Phases 0–6 delivered the following:
+The original Phases 0â€“6 delivered the following:
 
 1. A runtime-safe mutable document independent of editor UI and Unity scene objects, with
    document metadata, nested group/paint hierarchy, drawings, strokes, frame mappings,
@@ -339,7 +340,7 @@ identity by index. Legacy index-based `DrawingAdd` and `FrameSet` remain exporte
 
 ### 8.1 Geometry and frame operations
 
-Version 1 supports static paint drawings with 1–65,536 elements, 2–8,192 points per element,
+Version 1 supports static paint drawings with 1â€“65,536 elements, 2â€“8,192 points per element,
 and at most 1,048,576 total points per drawing. Point brush sections and pretessellated drawing
 mutation are unsupported. Validation covers counts/overflow, finite values, brush, visibility,
 color space, flip, alpha, and width. A non-positive `biggestStroke` requests computation; a

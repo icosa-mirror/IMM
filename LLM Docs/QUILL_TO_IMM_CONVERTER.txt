@@ -89,7 +89,8 @@ What exists
    keys through the low-level exporter bindings. Its graph supports Group, Paint,
    SpawnArea and offline Picture construction, with shared immutable image assets.
    Offline PCM16 sound construction and encoded WAV/Vorbis/Opus import are
-   implemented; sound source mapping and model construction remain absent. Reuse that work
+   implemented; project conversion also maps observed mono/stereo PCM16 sounds
+   with spatial settings and keys. Model construction remains absent. Reuse that work
    where appropriate instead of treating all managed animation support as absent.
 7. The first implementation candidate is SharpQuill -> ImmAuthoringDocument ->
    ImmAuthoringCompiler. The graph now preserves reflection flags through additive
@@ -119,8 +120,9 @@ Remaining work for a basic converter
    Alex reference pictures match decoded pixels and exposed metadata. Stereo/
    panorama source mappings and runtime appearance remain unverified; unsupported
    projections require explicit omission permission. Offline PCM16 sound
-   construction and encoded sound extraction/import exist; sound source mapping
-   remains open, and model construction is absent. Preserve projection/viewer locking,
+   construction, encoded sound extraction/import and mono/stereo PCM16 source
+   conversion exist. Isolated paired sound metadata checks pass (shared plan 6.29);
+   audible playback/timing remains unaccepted, and model construction is absent. Preserve projection/viewer locking,
    embedded data, audio gain/loop/spatial properties and timing as Quill exports them.
    The reader fixes below address input, not this output/conversion work.
 6. Reference checks: compare representative source projects with IMM files produced

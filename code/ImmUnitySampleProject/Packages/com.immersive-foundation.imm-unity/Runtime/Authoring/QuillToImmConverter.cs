@@ -61,7 +61,7 @@ namespace ImmPlayer.Authoring
             string projectFolder, string outputPath, bool allowOmittedLayers = false)
             => ConvertProjectCore(projectFolder, outputPath, allowOmittedLayers, animated: true, includeProjectContent: false);
 
-        /// <summary>Convert supported paint, animation, exported viewpoints and 2D pictures. Unsupported content requires explicit omission permission.</summary>
+        /// <summary>Convert supported paint, animation, exported viewpoints, 2D pictures and PCM16 sounds. Unsupported content requires explicit omission permission.</summary>
         public static QuillToImmConversionResult ConvertProject(string projectFolder, string outputPath, bool allowOmittedContent = false)
             => ConvertProjectCore(projectFolder, outputPath, allowOmittedContent, animated: true, includeProjectContent: true);
 
@@ -146,7 +146,7 @@ namespace ImmPlayer.Authoring
                     }
                     var snapshot = Require(document.CreateSnapshot(), "/");
                     if (!snapshot.Layers.Any(x => (x.Type == ImmAuthoringLayerType.Paint && x.Drawings.Any(d => d.Strokes.Count > 0)) ||
-                        (includeProjectContent && (x.Type == ImmAuthoringLayerType.SpawnArea || x.Type == ImmAuthoringLayerType.Picture))))
+                        (includeProjectContent && (x.Type == ImmAuthoringLayerType.SpawnArea || x.Type == ImmAuthoringLayerType.Picture || x.Type == ImmAuthoringLayerType.Sound))))
                         throw new InvalidDataException("The selected mapping contains no exportable content.");
                     ImmAuthoringExportResult exported = ImmAuthoringCompiler.ExportToFile(snapshot, fullOutput, options);
                     if (!exported.Succeeded)
@@ -209,6 +209,7 @@ namespace ImmPlayer.Authoring
                     "OmittedLayer", path, "Picture projection is outside the verified 2D source mapping.");
                 return;
             }
+            if (type == "Sound") SoundSettings((JObject)layer["Implementation"], path);
             string keepAlive = (string)layer["KeepAlive"]?["Type"];
             if (keepAlive != null && keepAlive != "None")
                 Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedKeepAlive", path,
@@ -330,7 +331,7 @@ namespace ImmPlayer.Authoring
         }
 
         private static bool IsMappedType(string type, bool includeProjectContent) =>
-            type == "Group" || type == "Paint" || (includeProjectContent && (type == "Viewpoint" || type == "Picture"));
+            type == "Group" || type == "Paint" || (includeProjectContent && (type == "Viewpoint" || type == "Picture" || type == "Sound"));
 
         private static bool IsTwoDimensionalPicture(JToken type) =>
             string.Equals((string)type, "2D", StringComparison.OrdinalIgnoreCase) ||
@@ -340,7 +341,7 @@ namespace ImmPlayer.Authoring
             string path, bool visible, QBinReader reader, bool animated, ProjectMapping projectMapping)
         {
             var layers = group.Children.Where(x => x is LayerGroup || x is LayerPaint ||
-                (projectMapping != null && (x is LayerViewpoint || x is LayerPicture))).ToArray();
+                (projectMapping != null && (x is LayerViewpoint || x is LayerPicture || x is LayerSound))).ToArray();
             var declarations = ((JArray)source["Implementation"]["Children"]).OfType<JObject>()
                 .Where(x => IsMappedType((string)x["Type"], projectMapping != null)).ToArray();
             if (layers.Length != declarations.Length) throw new InvalidDataException($"Parsed hierarchy differs at {path}.");
@@ -407,6 +408,14 @@ namespace ImmPlayer.Authoring
                 MapAnimation(document, pictureId, layer.Animation.Keys, source, path);
                 return;
             }
+            if (layer is LayerSound sound)
+            {
+                properties.Sound = SoundSettings((JObject)source["Implementation"], path);
+                properties.SoundAudio = ReadQbinSound(reader, sound.DataFileOffset, path);
+                long soundId = Require(document.CreateSoundLayer(parentId, properties), path);
+                MapAnimation(document, soundId, layer.Animation.Keys, source, path);
+                return;
+            }
             var paint = (LayerPaint)layer;
             properties.PaintMaxRepeatCount = checked((uint)paint.MaxRepeatCount);
             long paintId = Require(document.CreatePaintLayer(parentId, properties), path);
@@ -454,6 +463,49 @@ namespace ImmPlayer.Authoring
             return checked((long)value);
         }
 
+        private static ExportSoundProperties SoundSettings(JObject source, string path)
+        {
+            if (source == null) throw new InvalidDataException($"Missing sound settings at {path}.");
+            string type = (string)source["Type"], attenuation = (string)source["Attenuation"]?["Mode"];
+            if ((type != "Flat" && type != "Positional") ||
+                (attenuation != "None" && attenuation != "Linear" && attenuation != "Logarithmic"))
+                throw new NotSupportedException($"Unsupported sound spatial type or attenuation at {path}.");
+            var modifiers = source["Modifiers"] as JArray;
+            if (modifiers == null || modifiers.Count != 1 ||
+                ((string)modifiers[0]["Type"] != "None" && (string)modifiers[0]["Type"] != "Cone"))
+                throw new NotSupportedException($"Expected one None or Cone sound modifier at {path}.");
+            bool cone = (string)modifiers[0]["Type"] == "Cone";
+            return new ExportSoundProperties
+            {
+                SpatialType = type == "Flat" ? ExportSoundSpatialType.Flat : ExportSoundSpatialType.Positional,
+                Gain = (float)source["Gain"], Loop = (bool)source["Loop"] ? 1 : 0,
+                Attenuation = attenuation == "None" ? ExportSoundAttenuationType.None :
+                    attenuation == "Linear" ? ExportSoundAttenuationType.Linear : ExportSoundAttenuationType.Logarithmic,
+                DistanceMin = (float)source["Attenuation"]["Minimum"], DistanceMax = (float)source["Attenuation"]["Maximum"],
+                Modifier = cone ? ExportSoundModifierType.DirectionalCone : ExportSoundModifierType.None,
+                AngleInX = cone ? (float)modifiers[0]["AngleIn"] : 0,
+                AngleBand = cone ? (float)modifiers[0]["AngleBand"] : 0,
+                AttenuationOutside = cone ? (float)modifiers[0]["AttenOut"] : 0
+            };
+        }
+
+        private static ImmAuthoringAudio ReadQbinSound(QBinReader reader, long offset, string path)
+        {
+            if (offset < 4 || offset > reader.BaseStream.Length - 20)
+                throw new InvalidDataException($"Sound offset is outside qbin at {path}.");
+            reader.BaseStream.Position = offset;
+            byte[] header = reader.ReadBytes(20);
+            int channels = header[6];
+            uint rate = BitConverter.ToUInt32(header, 8), frames = BitConverter.ToUInt32(header, 12);
+            if (header[5] != 0 || header[7] != 16 || (channels != 1 && channels != 2) ||
+                rate < 8000 || rate > 192000 || frames == 0)
+                throw new NotSupportedException($"Expected nonempty mono/stereo PCM16 sound at {path}.");
+            long count = (long)frames * channels * 2;
+            if (count > int.MaxValue || count > reader.BaseStream.Length - reader.BaseStream.Position)
+                throw new InvalidDataException($"Truncated or oversized sound samples at {path}.");
+            return Require(ImmAuthoringAudio.CreatePcm16((int)rate, channels, reader.ReadBytes((int)count)), path);
+        }
+
         private static ImmAuthoringImage ReadViewpointPreview(QBinReader reader, long offset, string path)
             => ReadQbinImage(reader, offset, path, required: false);
 
@@ -476,6 +528,11 @@ namespace ImmPlayer.Authoring
                 channels == 3 ? ImmAuthoringImageEncoding.Rgb8 : ImmAuthoringImageEncoding.Rgba8, reader.ReadBytes(count)), path);
         }
 
+        private static bool IsStaticSoundOpacity(JArray values, JObject source) =>
+            values != null && values.Count == 1 && (double?)values[0]["Time"] == 0 &&
+            (double?)values[0]["Value"] == ((double?)source["Opacity"] ?? 1) &&
+            (string)values[0]["Interpolation"] == "None";
+
         private static bool IsIdentityRootOpacity(JArray values, JObject source) =>
             values != null && values.Count == 1 && (double?)values[0]["Time"] == 0 &&
             (double?)values[0]["Value"] == 1 && (string)values[0]["Interpolation"] == "None" &&
@@ -487,7 +544,9 @@ namespace ImmPlayer.Authoring
             if (channels?["Visibility"] != null)
                 foreach (var key in keys.Visibility)
                     Add(ImmAuthoringAnimationProperty.Visibility, key.Time, ImmAuthoringAnimationValue.FromBool(key.Value), key.Interpolation);
-            if (channels?["Opacity"] != null && !(layerId == 0 && IsIdentityRootOpacity(channels["Opacity"] as JArray, source)))
+            if (channels?["Opacity"] != null &&
+                !(layerId == 0 && IsIdentityRootOpacity(channels["Opacity"] as JArray, source)) &&
+                !((string)source["Type"] == "Sound" && IsStaticSoundOpacity(channels["Opacity"] as JArray, source)))
                 foreach (var key in keys.Opacity)
                     Add(ImmAuthoringAnimationProperty.Opacity, key.Time, ImmAuthoringAnimationValue.FromFloat(key.Value), key.Interpolation);
             if (channels?["Transform"] != null)
