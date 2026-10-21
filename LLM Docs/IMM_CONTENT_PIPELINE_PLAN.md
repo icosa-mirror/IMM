@@ -398,6 +398,13 @@ Status checked at 2026-10-21 14:36 UTC:
    before this repair was committed. The prior hosted-runner capacity failure
    remains unresolved. Confirmed source regressions retain priority over features;
    independent C2 implementation continues while infrastructure is unavailable.
+4. Run 39628344285 failed Windows job 119319527234 in the existing exporter bridge
+   smoke test: it asserted that the paint setter overwrote the timeline repeat field.
+   The remaining run was cancelled. The smoke fixture now independently authors and
+   checks timeline repeats=7 and paint repeats=3 through their respective reader
+   APIs. Its local native round trip passes (`artifacts/c2-bridge-smoke.log`). This
+   retains the gate and checks both fields rather than accepting the old corruption.
+   A new full run is required after this test-source correction.
 
 ### 6.5 C2 animated-paint implementation checkpoint (2026-10-21)
 

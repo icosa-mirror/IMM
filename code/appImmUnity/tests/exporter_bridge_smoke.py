@@ -136,6 +136,7 @@ INTERPOLATION_LINEAR = 1
 
 PAINT_LAYER_NAME = b"Smoke Paint"
 PAINT_REPEAT_COUNT = 3
+TIMELINE_REPEAT_COUNT = 7
 DRAW_IN_TIME_SECONDS = 0.25
 FIRST_VIEWPOINT_NAME = b"Smoke Viewpoint"
 SECOND_VIEWPOINT_NAME = b"Smoke Viewpoint 2"
@@ -365,7 +366,7 @@ def export_smoke_file(library: ctypes.CDLL, output_path: Path) -> None:
                 ctypes.byref(identity),
                 1,
                 420,
-                0,
+                TIMELINE_REPEAT_COUNT,
             ),
             "ImmExporter_CreatePaintLayer",
         )
@@ -577,6 +578,16 @@ def _verify_export_round_trip(reader: ctypes.CDLL, staging: Path, output_path: P
     get_key_count = bind(
         reader, "StrokeReader_GetLayerAnimationKeyCount", ctypes.c_int, ctypes.c_int, ctypes.c_int
     )
+    get_paint_animation_info = bind(
+        reader,
+        "StrokeReader_GetAuthoringLayerAnimationInfo",
+        ctypes.c_bool,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.c_uint32),
+    )
     get_key = bind(
         reader,
         "StrokeReader_GetLayerAnimationKey",
@@ -622,8 +633,21 @@ def _verify_export_round_trip(reader: ctypes.CDLL, staging: Path, output_path: P
         require(paint_layer is not None, "authored paint layer read-back")
         index, info = paint_layer
         require(
-            info.maxRepeatCount == PAINT_REPEAT_COUNT,
-            f"round-trip maxRepeatCount ({info.maxRepeatCount} != {PAINT_REPEAT_COUNT})",
+            info.maxRepeatCount == TIMELINE_REPEAT_COUNT,
+            f"round-trip timeline repeats ({info.maxRepeatCount} != {TIMELINE_REPEAT_COUNT})",
+        )
+        frame_rate = ctypes.c_uint32()
+        frame_count = ctypes.c_uint32()
+        paint_repeats = ctypes.c_uint32()
+        require(
+            get_paint_animation_info(
+                document_id, index, ctypes.byref(frame_rate), ctypes.byref(frame_count), ctypes.byref(paint_repeats)
+            ),
+            "round-trip paint animation info",
+        )
+        require(
+            paint_repeats.value == PAINT_REPEAT_COUNT,
+            f"round-trip paint repeats ({paint_repeats.value} != {PAINT_REPEAT_COUNT})",
         )
 
         key_count = get_key_count(document_id, index)
