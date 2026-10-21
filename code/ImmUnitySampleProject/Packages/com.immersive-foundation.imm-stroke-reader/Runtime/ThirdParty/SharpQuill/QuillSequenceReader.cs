@@ -483,7 +483,9 @@ namespace SharpQuill
             lv.AllowTranslationZ = ParseBool(impl["AllowTranslationZ"], lv.AllowTranslationZ);
             lv.Exporting = ParseBool(impl["Exporting"], lv.Exporting);
             lv.ShowingVolume = ParseBool(impl["ShowingVolume"], lv.ShowingVolume);
-            lv.TypeStr = impl["TypeStr"]?.ToObject<string>() ?? lv.TypeStr;
+            // Legacy colour-only viewpoints export at eye level (Fishgym pair).
+            // Versioned viewpoints retain the newer floor-level default.
+            lv.TypeStr = impl["TypeStr"]?.ToObject<string>() ?? (impl["Version"] == null ? "EyeLevel" : lv.TypeStr);
             break;
           }
         case LayerType.Camera:

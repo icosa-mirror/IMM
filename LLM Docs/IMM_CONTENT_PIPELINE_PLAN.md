@@ -624,6 +624,24 @@ Status checked at 2026-10-21 14:36 UTC:
    ignored `artifacts/root-converter-*` / `root-compare-*`. This does not close
    startup metadata, source chapter-action mapping, navigation or playback acceptance.
 
+### 6.11 C2 viewpoint reference/default audit (2026-10-21)
+
+1. Reference reports now include native spawn tracking, volume and locomotion fields.
+   The four paired projects contain eight exported viewpoints: eye-level cases in
+   taperecorder/consul-room/Fishgym and floor-level cases in Snoopy. Sphere centre
+   (0,1,0), radius 2, locomotion mask 7 and source default-path selection match.
+   Snoopy's default is the third viewpoint, so creation-order fallback is insufficient.
+2. All 37 local source viewpoints have identity pivots and opacity one. Exporting
+   flags select 24 for export and exclude 13 independently of gizmo visibility.
+   Fifteen source declarations contain preview offsets; managed preview assets
+   are not yet represented and must be diagnosed until the shared model supports them.
+3. Fishgym's colour-only legacy viewpoint has neither Version nor TypeStr and its
+   paired IMM uses eye-level tracking. SharpQuill previously supplied FloorLevel.
+   The reader now defaults this legacy form to EyeLevel while retaining FloorLevel
+   for versioned/new viewpoints and preserving explicit settings. Reader regressions
+   and all 21 source metadata trees, 34 PCM sounds and 35 picture settings pass.
+   Mapping/navigation acceptance remains in progress.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

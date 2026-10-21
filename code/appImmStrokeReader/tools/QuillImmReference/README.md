@@ -6,6 +6,8 @@ under ignored `artifacts/`, not in public fixtures or CI.
 
 Reports include native root animation keys and chapter count separately from
 ordinary layers. Use a reader binary with `StrokeReader_GetRootAnimationKey`.
+Spawn layers also report tracking level, locomotion volume and translation mask
+through `StrokeReader_GetLayerSpawnAreaInfo` for viewpoint mapping comparisons.
 The root-key count/query excludes implicit default visibility and does not imply
 that each retained key is an action or chapter marker.
 

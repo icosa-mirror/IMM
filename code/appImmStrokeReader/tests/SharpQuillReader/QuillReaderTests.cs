@@ -108,11 +108,14 @@ internal static class QuillReaderTests
         {
             ["Color"] = new JArray(0.6, 0.1, 0.5)
         });
-        Require(minimal.Version == 1 && minimal.Sphere.W == 2 && minimal.Exporting,
+        Require(minimal.Version == 1 && minimal.Sphere.W == 2 && minimal.Exporting && minimal.TypeStr == "EyeLevel",
             "Minimal viewpoint did not receive usable spawn defaults.");
         Require(minimal.AllowTranslationX && minimal.AllowTranslationY && minimal.AllowTranslationZ,
             "Minimal viewpoint unexpectedly restricts movement.");
         Require(Math.Abs(minimal.Color.R - 0.6f) < 0.00001f, "Viewpoint colour was lost.");
+        var versioned = ReadLayer<LayerViewpoint>("Viewpoint", new JObject { ["Version"] = 1 });
+        Require(versioned.TypeStr == "FloorLevel" && LayerViewpoint.CreateDefault().TypeStr == "FloorLevel",
+            "Legacy eye-level handling changed versioned/new viewpoint defaults.");
         var explicitValues = ReadLayer<LayerViewpoint>("Viewpoint", new JObject
         {
             ["Version"] = 0,

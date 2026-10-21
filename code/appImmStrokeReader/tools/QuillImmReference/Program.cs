@@ -103,7 +103,7 @@ try
             chapterCount = Reader.StrokeReader_GetChapterCount(document),
             counts = nativeLayers.GroupBy(x => x.Info.type).ToDictionary(x => x.Key, x => x.Count()),
             layers = nativeLayers.Select(x => new { x.Index, x.Path, info = x.Info, transform = x.Transform,
-                animationKeys = NativeKeys(document, x.Index) })
+                animationKeys = NativeKeys(document, x.Index), spawnArea = NativeSpawnInfo(document, x.Index, x.Info.type) })
         },
         layerComparisons = sourceLayers.Where(x => x.Layer != sequence.RootLayer).Select(x =>
         {
@@ -173,6 +173,13 @@ static void ValidateReportPaths(string reportPath, params string[] inputs)
     foreach (string output in new[] { reportPath, Path.ChangeExtension(reportPath, ".native.log") })
         if (inputs.Any(input => string.Equals(Path.GetFullPath(input), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Report and native log paths must not replace input files or the native library.");
+}
+
+static StrokeSpawnAreaInfo? NativeSpawnInfo(int document, int index, int type)
+{
+    if (type != 8) return null;
+    Require(Reader.StrokeReader_GetLayerSpawnAreaInfo(document, index, out var info), "Spawn-area query failed.");
+    return info;
 }
 
 static StrokeAnimationKey[] NativeRootKeys(int document, int count)
