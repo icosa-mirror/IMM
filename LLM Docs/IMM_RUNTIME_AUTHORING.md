@@ -123,7 +123,9 @@ The managed/exporter scope includes still and animated sequences; groups, paint,
 areas; transforms/pivots/visibility/opacity; drawing/frame operations; supported stroke brush
 sections and visibility modes; and supported layer animation keys. Legacy component
 position/rotation/scale keys are not a substitute for supported transform-key authoring.
-Managed/exporter key breadth is greater than the live ABI's visibility/opacity/transform subset.
+Managed/exporter key breadth is greater than the live ABI's visibility/opacity/transform
+and static-paint stepped Loop/Offset subset. Other live layer implementations reject
+the new Loop/Offset channels.
 
 The offline graph/exporter now has explicit `ImmAuthoringFlip` values for layer,
 pivot and transform-key reflections. Import and structural comparison retain them.
@@ -342,8 +344,13 @@ swaps a detached, validated table without replacing geometry resources and resel
 at the held local time. Playback intent survives zero/one-frame clips. Native-created
 paint receives the time-zero visibility key that offline export/import already
 synthesizes; growing that paint can therefore animate without a caller-authored key.
-Existing explicitly keyless paint retains its semantics. Repeat/Loop/Offset live
-controls and managed transaction mapping remain open. Roadmap 6.67 separates stored
+Existing explicitly keyless paint retains its semantics. Static-paint Loop/Offset
+key insertion, replacement and removal now pass local Windows CPU and six rendered
+publication/rollback/unload cases (roadmap 6.70). Publication reselects at the held
+parent clock, including latent selection while hidden, without a seek or changing
+playback intent/root actions. Canonical repeat property editing and managed
+transaction mapping remain open. Full hosted CI for this live-key milestone is
+pending; the earlier a0f71bd4 full CI pass does not cover it. Roadmap 6.67 separates stored
 paint repeat metadata from Loop-evaluated frame selection for both implementations,
 and resets/resolves tick Offset before visibility evaluation. CPU regressions cover
 key removal/backward seeks and sound span restart metadata; content-offset changes
@@ -413,8 +420,15 @@ The header is the exact declaration source and is included by the plugin impleme
 Exports return signed `int32_t` result codes; Windows uses `__stdcall`, other supported targets
 use the header's platform visibility/calling convention. Structures use fixed-width scalar
 fields and explicit pointer/count spans, without C++ containers or `bool`. Versioned descriptors
-start with `structSize`/`structVersion`; current callers supply version 1 and at least the
-required size. Do not assume arbitrary older structure prefixes are accepted.
+start with `structSize`/`structVersion`; callers supply a supported version and at least
+its required size. Most descriptors remain version 1. `ImmAuthoringKey` V1 retains
+its 80-byte layout; additive `ImmAuthoringKeyV2` is 96 bytes and carries exact
+uint32 Offset ticks in `uintValue` at byte 80. Offset requires V2; Loop uses a strict
+0/1 boolean. Both channels require `None` interpolation and zero reserved fields.
+V2 size is checked before reading its extension. No new export is required.
+Local ABI tests cover layout/rejection; successful V2 delivery through the exported
+C ABI is source-reviewed rather than exercised on a loaded document. Do not assume
+arbitrary older structure prefixes are accepted.
 
 Pointer-backed mutation data is copied before return. Strings are explicitly sized UTF-8 spans.
 Reserved input fields must meet the declared validation; readback normalizes reserved/inactive

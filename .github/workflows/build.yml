@@ -360,6 +360,28 @@ jobs:
           artifacts/gpu-prepared-unload-ci/*/settings.json
           artifacts/gpu-prepared-unload-ci/*/stdout.log
 
+    - name: Verify static paint playback keys and versioned key ABI
+      shell: pwsh
+      run: |
+        python code/appImmUnity/tests/authoring_key_abi_smoke.py
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python code/appImmUnity/tests/paint_playback_keys_smoke.py --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/paint-playback-keys-ci
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Upload Windows paint playback key evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: WindowsPaintPlaybackKeys
+        if-no-files-found: ignore
+        path: |
+          artifacts/authoring-key-abi/report.json
+          artifacts/paint-playback-keys-ci/report.json
+          artifacts/paint-playback-keys-ci/*/debug.txt
+          artifacts/paint-playback-keys-ci/*/stdout.log
+          artifacts/paint-playback-keys-ci/*/settings.json
+          artifacts/paint-playback-keys-ci/*/capture.ppm
+
     - name: Verify D3D11 structured buffer ownership
       shell: pwsh
       run: python code/appImmUnity/tests/d3d11_buffer_ownership_smoke.py --msbuild (Get-Command msbuild).Source

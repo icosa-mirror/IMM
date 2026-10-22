@@ -39,6 +39,11 @@ namespace ExePlayer
         void TickFrameSequenceBundle(Viewer & viewer, ImmCore::piLog * log, uint64_t frame);
         void TickNewPaintFrameSequence(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
         void TickGPUPreparedUnload(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        void TickPaintPlaybackKeys(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        bool mPaintPlaybackKeysEnabled = false;
+        int mPaintPlaybackKeysStage = 0;
+        uint32_t mPaintPlaybackSeen = 0;
+        bool mPaintPlaybackReloaded = false;
         struct SubtreeLayerSnapshot
         {
             int id = -1;

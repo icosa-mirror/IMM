@@ -47,6 +47,7 @@ typedef enum ImmAuthoringCommitState
 enum
 {
     IMM_AUTHORING_STRUCT_VERSION_1 = 1,
+    IMM_AUTHORING_STRUCT_VERSION_2 = 2,
     IMM_AUTHORING_MIN_POINTS_PER_ELEMENT = 2,
     IMM_AUTHORING_MAX_POINTS_PER_ELEMENT = 8192,
     IMM_AUTHORING_MAX_ELEMENTS_PER_DRAWING = 65536,
@@ -72,6 +73,8 @@ typedef enum ImmAuthoringAnimProperty
 {
     IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY = 0,
     IMM_AUTHORING_ANIM_PROPERTY_OPACITY = 1,
+    IMM_AUTHORING_ANIM_PROPERTY_LOOP = 7,
+    IMM_AUTHORING_ANIM_PROPERTY_OFFSET = 8,
     IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM = 9
 } ImmAuthoringAnimProperty;
 
@@ -191,6 +194,14 @@ typedef struct ImmAuthoringKey
     uint32_t reserved[4];
 } ImmAuthoringKey;
 
+// V1 remains unchanged. Offset values are exact IMM ticks, never float seconds.
+typedef struct ImmAuthoringKeyV2
+{
+    ImmAuthoringKey base;
+    uint32_t uintValue;
+    uint32_t reserved3[3];
+} ImmAuthoringKeyV2;
+
 typedef struct ImmAuthoringSpawnArea
 {
     uint32_t structSize;
@@ -227,6 +238,9 @@ static_assert(sizeof(ImmAuthoringCommitStatus) == 40, "ImmAuthoringCommitStatus 
 static_assert(sizeof(ImmAuthoringLayerProperties) == 64,
     "ImmAuthoringLayerProperties ABI changed");
 static_assert(sizeof(ImmAuthoringKey) == 80, "ImmAuthoringKey ABI changed");
+static_assert(offsetof(ImmAuthoringKeyV2, base) == 0, "ImmAuthoringKeyV2 prefix changed");
+static_assert(offsetof(ImmAuthoringKeyV2, uintValue) == 80, "ImmAuthoringKeyV2 value offset changed");
+static_assert(sizeof(ImmAuthoringKeyV2) == 96, "ImmAuthoringKeyV2 ABI changed");
 static_assert(sizeof(ImmAuthoringSpawnArea) == 112, "ImmAuthoringSpawnArea ABI changed");
 #endif
 

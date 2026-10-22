@@ -6,6 +6,7 @@
 #include "layerInstance.h"
 #include "layerModel3d.h"
 #include "layerPaint.h"
+#include "layerPaintStatic.h"
 #include "layerPicture.h"
 #include "layerSound.h"
 #include "layerSpawnArea.h"
@@ -767,6 +768,17 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
     void Layer::SetStateAt(piTick now, piLog* log)
     {
+        SetStateAtImpl(now, log, false);
+    }
+
+    void Layer::ReevaluatePaintPlaybackAt(piTick now, piLog * log)
+    {
+        if (mType == Type::Paint && dynamic_cast<LayerPaintStatic *>((LayerPaint *)GetImplementation()) != nullptr)
+            SetStateAtImpl(now, log, true);
+    }
+
+    void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint)
+    {
         Layer* root = mSequence->GetRoot();
         const bool isRoot = this == root;
         const bool isGroup = mType == Type::Group;
@@ -780,7 +792,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         Layer* timeline = GetTimeline();
         const piTick timelineDuration = timeline->GetDuration();
 
-        if (mParent && !mParent->GetWorldVisible())
+        if (!reevaluatePaint && mParent && !mParent->GetWorldVisible())
         {
             if (isSoundLayer) ls->SetPlaying(false);
             return;
@@ -852,6 +864,8 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         {
             const AnimProperty prop = static_cast<AnimProperty>(i);
             if (prop == AnimProperty::Offset || prop == AnimProperty::Loop)
+                continue;
+            if (reevaluatePaint && prop != AnimProperty::Visibility)
                 continue;
 
             const int numKeys = GetNumAnimKeys(prop);
@@ -956,6 +970,14 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     timeSinceStart = (timelineTime - lastKey->mTime) + mStartOffset;
                     const piTick startTime = timeline->GetStartTime() + timeFromStart - timeSinceStart;
 
+                    if (reevaluatePaint)
+                    {
+                        // Select a held paint frame without starting playback,
+                        // touching action flags or retiming any timeline.
+                        mVisible = true;
+                        break;
+                    }
+
                     if (!timeline->GetPlaying())
                         break;
                     
@@ -1024,6 +1046,11 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                 }
                 else if (!lastKey->mValue.mBool)
                 {
+                    if (reevaluatePaint)
+                    {
+                        mVisible = false;
+                        break;
+                    }
                     const piTick timeSinceStop = (timelineTime - lastKey->mTime) + mStartOffset;
                     const piTick stopTime = now - timeSinceStop;
 
@@ -1087,6 +1114,14 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         } // props loop
 
 
+        // A published paint key must also refresh latent selection while hidden,
+        // so later unhide does not expose the previous key's frame. Visibility
+        // spans still define local time; inactive/keyless spans retain local0.
+        if (reevaluatePaint)
+        {
+            static_cast<LayerPaintStatic *>(lp)->SelectFrameAtTime(timeSinceStart);
+            return;
+        }
         // Handle layerpaint animations
         if (GetWorldVisible())
         {

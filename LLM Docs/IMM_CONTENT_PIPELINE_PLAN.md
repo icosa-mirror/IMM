@@ -19,13 +19,14 @@ validated baseline. CI-built/package macOS and all-platform export checks pass.
 Tracked local non-Windows binaries were not refreshed by the skipped binary-sync
 step; CI artifact acceptance does not claim they were updated in this checkout.
 
-Live static-paint Loop/Offset work (6.70) remains uncommitted and outside this CI
-pass. Its hidden-parent correction still needs a rebuild and revalidation. Full
+Live static-paint Loop/Offset key editing (6.70) now passes final local rebuild,
+hidden-parent CPU regression, six viewer cases and regression checks. This
+milestone remains outside the a0f71bd4 CI pass; its full hosted CI is pending. Full
 M1/M2, revision-selected save, managed live cutover, converter chapter/media/reverse
 fidelity and broader platform acceptance remain open. Hardware-only Unity Windows
 Vulkan evidence is incomplete; the full hosted workflow does not accept that row.
 Earlier numbered checkpoints retain historical results; use this checkpoint and
-6.71 for current CI acceptance.
+6.70 for current live-key evidence and 6.71 for current CI acceptance.
 
 ## 1. Objective and document ownership
 
@@ -61,8 +62,8 @@ These are source-level assessments, not new platform or visual acceptance result
 | Paint and four brush sections | Existing | Existing point/brush extraction and SharpQuill mapping | Existing; zero-width tips accepted with nonzero stroke extent | Geometry replacement exists | Static mapping implemented; two local reference paint subsets match exactly after decode |
 | Groups and hierarchy | Existing | Authoring reader exposes hierarchy; legacy adapter flattens, opt-in hierarchy mode retains local groups/pivots | Existing group/paint graph | Group hierarchy operations within limits | Map local structure without flattening |
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
-| Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Stable-handle drawing/frame edits and atomic whole tables pass local Windows checks; live repeat controls remain open | Preserve reuse; resolve mixed source rates explicitly |
-| Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
+| Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Stable-handle drawing/frame edits, atomic whole tables and static-paint Loop/Offset keys pass local Windows checks; canonical repeat property editing remains open | Preserve reuse; resolve mixed source rates explicitly |
+| Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform keys plus static-paint stepped Loop/Offset keys; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; native root-stop/seek controls locally checked, Quill semantics remain open | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed; project reader/writer retains raw RGB/RGBA previews | Spawn metadata, encoded previews and on-demand pixels exposed; hierarchy adapter maps spheres, previews and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; full common-property constructor with hidden startup visibility encoded as a key | Spawn edits within limits | Stored preview conversion implemented both directions; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D and full-sphere equirectangular mono/stereo RGB/RGBA pictures mapped structurally; explicit panorama FOV and depth remain unsupported | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels/metadata; real stereo panorama pixels/metadata match source qbin; orientation, eye order and playback acceptance remain open |
@@ -2501,7 +2502,7 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    The group/root playback checks in 6.68 remain valid
    for their declared Windows/CPU scope; Android/platform acceptance stays open.
 
-### 6.70. Live static-paint Loop/Offset keys (in progress)
+### 6.70. Live static-paint Loop/Offset keys (local milestone complete)
 
 1. Extend the existing atomic key edit path to static-paint Loop/Offset insertion,
    replacement and removal. Both channels are stepped; other layer implementations
@@ -2511,17 +2512,39 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    its boolean payload. Offset requires an additive 96-byte version 2 key carrying
    an exact uint32 tick value, with explicit size/version/reserved validation; no
    float or reserved-field reinterpretation. No new export is required.
-3. Publication must reselect at the current held parent clock without another
+3. Publication reselects at the current held parent clock without another
    seek, changing playback intent, resetting root actions or retriggering unrelated
-   sounds. A targeted static-paint evaluator path is being implemented. Queued and
-   prepared unload, CPU/presentation rejection, stable handles/mappings/tokens and
-   visible A/B selection need independent acceptance evidence.
-4. Six real viewer cases, C ABI validation, converter/policy/sequence regressions
-   and initial Windows/NDK importer builds pass locally. Subsequent audit reproduced
-   stale selection after a hidden paused edit then unhide. The targeted helper now
-   updates latent selection while hidden, but that final source correction has NOT
-   been rebuilt/retested yet. Work is frozen uncommitted while 6.71 takes priority.
-   No live-key, M2, managed-cutover or full-platform acceptance is claimed.
+   sounds. The targeted static-paint evaluator also updates latent selection while
+   hidden, so unhide cannot expose the previous key's frame. Ordinary hidden-layer
+   playback policy is unchanged; inactive/keyless spans retain local-zero selection.
+4. Final Windows Unity/viewer/Godot/reader rebuild and matching Windows package
+   binaries pass. CPU regressions cover held add/replace/remove, hidden edit then
+   unhide, keyless/inactive selection and preserved root action/playback state.
+   All six real viewer cases pass: normal, CPU rejection, GPU-failure flag (no GPU
+   preparation stage), presentation rejection, queued unload and prepared unload.
+   They check rendered A/B selection, stable handles/mappings/selected renderer
+   tokens and sibling state, rollback, session invalidation and reload.
+5. ABI checks pass 16 layout/rejection cases. V1 remains 80 bytes; V2 is 96 bytes.
+   Successful V2 Offset delivery through the exported C ABI is source-reviewed,
+   not exercised on a loaded document by these checks; viewer edits use the native
+   player API. This is not complete upload accounting or audible sound acceptance.
+6. Converter, whole-frame sequence, chapter/viewpoint, strict Windows exports,
+   53-job workflow matrix and changed build-workflow lint checks pass. Android
+   NDK 26.1 strict arm64/Android26 compilation passes for changed importer/player
+   translation units; no new Android runtime acceptance is claimed. Repo-wide
+   actionlint additionally reports five custom runner-label diagnostics and one
+   constant-false condition in unchanged ci-gpu/ci-ios workflows; these are not
+   failures in the changed build workflow and remain outside this milestone.
+7. Evidence: artifacts/paint-playback-milestone-build.log,
+   artifacts/authoring-failure/report.json and run.log,
+   artifacts/paint-playback-milestone-viewer/report.json,
+   artifacts/authoring-key-abi/report.json,
+   artifacts/paint-playback-milestone-ndk/report.json and the matching
+   paint-playback-milestone converter/sequence/policy/exports/workflow/lint logs.
+   CI requires the ABI and six viewer cases and uploads WindowsPaintPlaybackKeys.
+   Full hosted CI for this milestone is pending; 6.71 accepts only a0f71bd4.
+   Canonical paint-repeat property editing, full M2, managed cutover and broader
+   platform acceptance remain open.
 
 ### 6.71. Full hosted CI acceptance restored (2026-10-22)
 

@@ -49,6 +49,7 @@ def main() -> None:
     ET.SubElement(items, f"{{{ns['m']}}}ClCompile", Include='tests/array_reserve_failure_test.cpp')
     ET.SubElement(items, f"{{{ns['m']}}}ClCompile", Include='tests/layer_paint_frame_table_test.cpp')
     ET.SubElement(items, f"{{{ns['m']}}}ClCompile", Include='tests/layer_timeline_repeat_test.cpp')
+    ET.SubElement(items, f"{{{ns['m']}}}ClCompile", Include='tests/paint_playback_selection_test.cpp')
     temporary = ROOT / f'code/appImmUnity/.authoring-failure-{uuid.uuid4().hex}.vcxproj'
     tree.write(temporary, encoding='utf-8', xml_declaration=True)
     try:

@@ -285,6 +285,7 @@ namespace ImmPlayer {
         bool mEditing = false;
         void GetSpawnAreaPoseState(int spawnAreaId, SpawnAreaPoseState & pose);
         uint64_t mEvaluationRevision = 0;
+        ImmCore::piTick mLastCPUTime = ImmCore::piTick(0);
         uint64_t mRequestedPlaybackCommand = 0;
         uint64_t mCompletedPlaybackCommand = 0;
         PlaybackRequestStatus mPlaybackRequestStatus = PlaybackRequestStatus::None;

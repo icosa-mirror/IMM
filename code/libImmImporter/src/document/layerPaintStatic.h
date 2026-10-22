@@ -36,6 +36,7 @@ namespace ImmImporter
 
 		// playback controlls
 		void SetTime(ImmCore::piTick time) override; // sets current time during playback
+        void SelectFrameAtTime(ImmCore::piTick time) noexcept;
         // Retains intent even with zero/one frame. No frame-table edit starts
         // keyless paint; playback is still driven by the existing visibility keys.
 		void SetPlaying(bool playing) override;

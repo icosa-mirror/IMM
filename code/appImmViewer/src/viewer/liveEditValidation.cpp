@@ -764,6 +764,248 @@ namespace ExePlayer
         }
     }
 
+    void LiveEditValidation::TickPaintPlaybackKeys(Viewer & viewer, ImmCore::piLog * log,
+        uint64_t frame, uint64_t requestedFrame)
+    {
+        if (mMeasured || frame < requestedFrame) return;
+        const auto fail = [&](const wchar_t * reason) {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=0 stage=%d step=%d reason=%ls",
+                mPaintPlaybackKeysStage, mFrameSequenceIndex, reason);
+            mMeasured = true;
+        };
+        if (frame - requestedFrame > 10000) { fail(L"timeout"); return; }
+        auto * player = viewer.GetPlayer();
+        if (mPaintPlaybackKeysStage == 6)
+        {
+            ImmPlayer::Player::DocumentState state;
+            player->GetDocumentState(state, mDocumentId);
+            if (state.mLoadingState != ImmPlayer::Player::LoadingState::Unloaded) return;
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            ImmPlayer::Document::AuthoringCommitStatus status;
+            if (player->GetAuthoringRevisions(mDocumentId, revisions) ||
+                player->GetAuthoringCommitStatus(mDocumentId, mRevision, status))
+            { fail(L"unloaded session remains valid"); return; }
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS_UNLOAD] sessionInvalid=1 beforeReload=1");
+#if defined(_WIN32)
+            _putenv_s("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS", "");
+#else
+            unsetenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS");
+#endif
+            mFrameSequenceReload = player->Load(L"playback-keys.imm");
+            if (mFrameSequenceReload < 0) { fail(L"reload"); return; }
+            mPaintPlaybackReloaded = true;
+            mStandaloneLayers.clear(); mStandaloneTarget = -1;
+            mFrameSequenceIndex = 0; mRevision = 0;
+            mPaintPlaybackKeysStage = 0;
+            return;
+        }
+        const int doc = mPaintPlaybackReloaded ? mFrameSequenceReload : viewer.GetPrimaryDocumentId();
+        if (doc < 0) return;
+        ImmPlayer::Player::DocumentState documentState;
+        player->GetDocumentState(documentState, doc);
+        if (documentState.mLoadingState != ImmPlayer::Player::LoadingState::Loaded) return;
+        std::vector<ImmPlayer::Player::LayerInfo> infos;
+        for (int index = 0; index < player->GetLayerCount(doc); ++index)
+        {
+            ImmPlayer::Player::LayerInfo info;
+            if (!player->GetLayerInfoByIndex(doc, index, info)) { fail(L"enumeration"); return; }
+            if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint) &&
+                (!info.isLoaded || info.paintNumStrokes != info.paintNumDrawings)) return;
+            infos.push_back(info);
+        }
+        const auto find = [&](int id) -> const ImmPlayer::Player::LayerInfo * {
+            for (const auto & info : infos) if (info.id == id) return &info;
+            return nullptr;
+        };
+        if (mPaintPlaybackKeysStage == 0)
+        {
+            if (!player->AttachEditing(doc)) { fail(L"attach"); return; }
+            mDocumentId = doc;
+            player->Pause(doc);
+            mPaintPlaybackKeysStage = 1;
+            return;
+        }
+        if (mPaintPlaybackKeysStage == 1)
+        {
+            player->SetTime(doc, ImmCore::piTick::FromFrames(4, 30) + ImmCore::piTick(1), ImmCore::piTick(1));
+            mStandaloneTerminalFrame = frame;
+            mPaintPlaybackKeysStage = 2;
+            return;
+        }
+        if (mPaintPlaybackKeysStage == 2)
+        {
+            if (frame < mStandaloneTerminalFrame + 3) return;
+            mStandaloneLayerCount = static_cast<int>(infos.size());
+            for (const auto & info : infos)
+            {
+                if (info.type != static_cast<int>(ImmImporter::Layer::Type::Paint)) continue;
+                SubtreeLayerSnapshot snapshot;
+                snapshot.id = info.id; snapshot.parent = info.parentId; snapshot.child = info.childIndex;
+                snapshot.hasBox = info.hasBBox; snapshot.box = info.bbox;
+                snapshot.strokes = info.paintNumStrokes;
+                snapshot.target = std::wstring(info.name) == L"KeepPaint";
+                for (int index = 0; index < info.paintNumDrawings; ++index)
+                {
+                    uint64_t handle = 0; ImmCore::bound3 box;
+                    if (!player->GetDrawingHandle(doc, info.id, index, handle) ||
+                        !player->GetDrawingBBox(doc, info.id, index, box)) { fail(L"drawing snapshot"); return; }
+                    snapshot.handles.push_back(handle); snapshot.boxes.push_back(box);
+                }
+                if (snapshot.target) mStandaloneTarget = info.id;
+                mStandaloneLayers.push_back(std::move(snapshot));
+            }
+            const auto * target = find(mStandaloneTarget);
+            if (!target || target->paintNumFrames != 2 || target->paintNumDrawings != 2)
+            { fail(L"fixture target"); return; }
+            const auto perf = player->GetRenderPerformanceSnapshot();
+            mFrameSequenceTrianglesB = perf.numTriangles;
+            mFrameSequenceDrawCalls = perf.numPaintDrawCalls;
+            mStandaloneExpectRejection = std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr ||
+                std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr;
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            if (!player->GetAuthoringRevisions(doc, revisions)) { fail(L"baseline revision"); return; }
+            mStandaloneOldRevision = revisions.mPresented;
+            mPaintPlaybackKeysStage = 3;
+            mRevision = 0;
+        }
+        const SubtreeLayerSnapshot * target = nullptr;
+        if (static_cast<int>(infos.size()) != mStandaloneLayerCount) { fail(L"layer count"); return; }
+        for (const auto & snapshot : mStandaloneLayers)
+        {
+            const auto * info = find(snapshot.id);
+            if (snapshot.target) target = &snapshot;
+            if (!info || info->parentId != snapshot.parent || info->childIndex != snapshot.child ||
+                info->paintNumDrawings != static_cast<int>(snapshot.handles.size()) ||
+                info->paintNumStrokes != snapshot.strokes ||
+                (!snapshot.target && (info->hasBBox != snapshot.hasBox ||
+                    (snapshot.hasBox && !iSubtreeBoxesMatch(info->bbox, snapshot.box)))))
+            { fail(L"sibling or hierarchy"); return; }
+            for (size_t index = 0; index < snapshot.handles.size(); ++index)
+            {
+                uint64_t handle = 0; ImmCore::bound3 box;
+                if (!player->GetDrawingHandle(doc, snapshot.id, static_cast<int>(index), handle) ||
+                    !player->GetDrawingBBox(doc, snapshot.id, static_cast<int>(index), box) ||
+                    handle != snapshot.handles[index] || !iSubtreeBoxesMatch(box, snapshot.boxes[index]))
+                { fail(L"stable geometry"); return; }
+            }
+            for (int index = 0; index < info->paintNumFrames; ++index)
+            {
+                uint64_t handle = 0;
+                const auto expected = snapshot.handles[snapshot.target ? index : 0];
+                if (!player->GetFrameDrawingHandle(doc, snapshot.id, index, handle) || handle != expected)
+                { fail(L"stable frame mapping"); return; }
+            }
+        }
+        if (!target) { fail(L"missing target"); return; }
+        const auto * current = find(target->id);
+        if (mPaintPlaybackKeysStage == 3)
+        {
+            ImmCore::piTick position(0), stopped(0);
+            player->GetTime(doc, &position, &stopped);
+            if (ImmCore::piTick::ToFramesFloor(position, 30) != 4 || stopped <= ImmCore::piTick(0))
+            { fail(L"held clock changed during publication"); return; }
+        }
+        if (mPaintPlaybackKeysStage == 4)
+        {
+            if (frame < mStandaloneTerminalFrame + 3) return;
+            if (!current->hasBBox || !iSubtreeBoxesMatch(current->bbox, target->boxes[0]))
+            { fail(L"backward seek before key"); return; }
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS_SAMPLE] step=6 revision=%llu selected=0 backwardSeek=1", mRevision);
+            player->Resume(doc);
+            mStandaloneTerminalFrame = frame;
+            mPaintPlaybackKeysStage = 5;
+            return;
+        }
+        if (mPaintPlaybackKeysStage == 5)
+        {
+            if (iSubtreeBoxesMatch(current->bbox, target->boxes[0])) mPaintPlaybackSeen |= 1;
+            else if (iSubtreeBoxesMatch(current->bbox, target->boxes[1])) mPaintPlaybackSeen |= 2;
+            else { fail(L"playing selection"); return; }
+            ImmCore::piTick position(0), stopped(0);
+            player->GetTime(doc, &position, &stopped);
+            if (mPaintPlaybackSeen == 3 && position > ImmCore::piTick::FromFrames(8, 30))
+            {
+                mStandaloneSuccessful = true; mMeasured = true;
+                log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=1 edits=6 heldWithoutSeek=1 restoredFiniteClamp=1 backwardSeek=1 playingBoth=1 stableGeometry=1 siblingStable=1 reloaded=%d", mPaintPlaybackReloaded ? 1 : 0);
+            }
+            return;
+        }
+        if (mRevision == 0)
+        {
+            const bool offset = mFrameSequenceIndex >= 3;
+            const auto property = offset ? ImmImporter::Layer::AnimProperty::Offset : ImmImporter::Layer::AnimProperty::Loop;
+            const auto keyTime = ImmCore::piTick::FromFrames(1, 30);
+            int32_t queued = -99;
+            if (mFrameSequenceIndex == 1 || mFrameSequenceIndex == 5)
+                queued = player->QueueAnimationKeyRemoval(doc, target->id, property, keyTime);
+            else
+            {
+                ImmImporter::Layer::AnimValue value{};
+                if (offset) value.mInt = static_cast<uint32_t>(ImmCore::piTick::CastInt(
+                    ImmCore::piTick::FromFrames(mFrameSequenceIndex == 3 ? 1 : 2, 30)));
+                else value.mBool = true;
+                queued = player->QueueAnimationKey(doc, target->id, property, keyTime, value,
+                    ImmImporter::Layer::InterpolationType::None);
+            }
+            if (queued == -7) return;
+            if (queued != 0) { fail(L"queue"); return; }
+            int32_t result = -99;
+            mRevision = player->CommitEdits(doc, &result);
+            if (mRevision == 0 || result != 0) { fail(L"commit"); return; }
+            mStandaloneTerminalFrame = 0;
+            const char * unload = std::getenv("IMM_VIEWER_LIVE_PAINT_PLAYBACK_KEYS_UNLOAD");
+            if (!mPaintPlaybackReloaded && unload != nullptr && std::string(unload) == "queued")
+            {
+                player->Unload(doc); mPaintPlaybackKeysStage = 6;
+            }
+            return;
+        }
+        ImmPlayer::Document::AuthoringCommitStatus status;
+        if (!player->GetAuthoringCommitStatus(doc, mRevision, status)) { fail(L"status"); return; }
+        const char * unload = std::getenv("IMM_VIEWER_LIVE_PAINT_PLAYBACK_KEYS_UNLOAD");
+        if (!mPaintPlaybackReloaded && unload != nullptr && std::string(unload) == "prepared" &&
+            status.mState == ImmPlayer::Document::AuthoringCommitState::Prepared)
+        {
+            if (!iSubtreeBoxesMatch(current->bbox, target->boxes[1])) { fail(L"prepared mutation"); return; }
+            player->Unload(doc); mPaintPlaybackKeysStage = 6; return;
+        }
+        const bool rejected = status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected;
+        if (!rejected && status.mState != ImmPlayer::Document::AuthoringCommitState::Presented) return;
+        if (mStandaloneTerminalFrame == 0) mStandaloneTerminalFrame = frame;
+        if (frame < mStandaloneTerminalFrame + 3) return;
+        ImmPlayer::Document::AuthoringRevisions revisions;
+        if (!player->GetAuthoringRevisions(doc, revisions)) { fail(L"revisions"); return; }
+        const auto perf = player->GetRenderPerformanceSnapshot();
+        if (rejected)
+        {
+            mStandaloneSuccessful = mStandaloneExpectRejection && status.mResult == -10 &&
+                revisions.mPresented == mStandaloneOldRevision && current->hasBBox &&
+                iSubtreeBoxesMatch(current->bbox, target->boxes[1]) &&
+                perf.numTriangles == mFrameSequenceTrianglesB && perf.numPaintDrawCalls == mFrameSequenceDrawCalls;
+            mMeasured = true;
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=%d rejected=1 result=%d unchanged=1",
+                mStandaloneSuccessful ? 1 : 0, status.mResult);
+            return;
+        }
+        const int selected = mFrameSequenceIndex == 1 || mFrameSequenceIndex == 3 ? 1 : 0;
+        if (mStandaloneExpectRejection || revisions.mPresented != mRevision || !current->hasBBox ||
+            !iSubtreeBoxesMatch(current->bbox, target->boxes[selected]) || perf.numPaintDrawCalls != mFrameSequenceDrawCalls ||
+            (selected == 1 && perf.numTriangles != mFrameSequenceTrianglesB))
+        { fail(L"presented selection"); return; }
+        if (mFrameSequenceIndex == 0) mFrameSequenceTrianglesA = perf.numTriangles;
+        if (selected == 0 && (perf.numTriangles != mFrameSequenceTrianglesA ||
+            mFrameSequenceTrianglesA == mFrameSequenceTrianglesB)) { fail(L"rendered A selection"); return; }
+        log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS_SAMPLE] step=%d revision=%llu selected=%d layer=%d heldWithoutSeek=1 triangles=%d stableGeometry=1 siblingStable=1",
+            mFrameSequenceIndex, mRevision, selected, target->id, perf.numTriangles);
+        ++mFrameSequenceIndex;
+        if (mFrameSequenceIndex == 6)
+        {
+            player->SetTime(doc, ImmCore::piTick(1), ImmCore::piTick(1));
+            mPaintPlaybackKeysStage = 4; mStandaloneTerminalFrame = frame;
+        }
+        else mRevision = 0;
+    }
+
     void LiveEditValidation::TickPaintCreation(Viewer & viewer, ImmCore::piLog * log, uint64_t frame,
         uint64_t requestedFrame)
     {
@@ -2300,6 +2542,8 @@ namespace ExePlayer
         if (!mStandaloneConfigured)
         {
             mStandaloneConfigured = true;
+            const char * playback = std::getenv("IMM_VIEWER_LIVE_PAINT_PLAYBACK_KEYS");
+            mPaintPlaybackKeysEnabled = playback != nullptr && std::string(playback) == "1";
             const char * value = std::getenv("IMM_VIEWER_LIVE_DELETE_SUBTREE");
             mStandaloneEnabled = value != nullptr && std::string(value) == "1";
             const char * paint = std::getenv("IMM_VIEWER_LIVE_CREATE_PAINT");
@@ -2313,16 +2557,20 @@ namespace ExePlayer
             const char * unload = std::getenv("IMM_VIEWER_LIVE_CREATE_PAINT_UNLOAD");
             mPaintCreationUnload = unload != nullptr && std::string(unload) == "1";
             if (static_cast<int>(mStandaloneEnabled) + static_cast<int>(mPaintCreationEnabled) +
-                static_cast<int>(mFrameSequenceEnabled) + static_cast<int>(mGPUPreparedUnloadEnabled) > 1)
+                static_cast<int>(mFrameSequenceEnabled) + static_cast<int>(mGPUPreparedUnloadEnabled) +
+                static_cast<int>(mPaintPlaybackKeysEnabled) > 1)
             {
                 log->Printf(LT_ERROR, L"[IMM_LIVE_PAINT_CREATE] pass=0 stage=0 reason=conflicting standalone modes");
                 mMeasured = true;
             }
-            mStandaloneEnabled = mStandaloneEnabled || mPaintCreationEnabled || mFrameSequenceEnabled || mGPUPreparedUnloadEnabled;
+            mStandaloneEnabled = mStandaloneEnabled || mPaintCreationEnabled || mFrameSequenceEnabled ||
+                mGPUPreparedUnloadEnabled || mPaintPlaybackKeysEnabled;
         }
         if (mStandaloneEnabled)
         {
-            if (mGPUPreparedUnloadEnabled)
+            if (mPaintPlaybackKeysEnabled)
+                TickPaintPlaybackKeys(viewer, log, frame, requestedFrame);
+            else if (mGPUPreparedUnloadEnabled)
                 TickGPUPreparedUnload(viewer, log, frame, requestedFrame);
             else if (mFrameSequenceEnabled)
                 TickFrameSequence(viewer, log, frame, requestedFrame);

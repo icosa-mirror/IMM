@@ -85,8 +85,12 @@ namespace ImmImporter
 	void LayerPaintStatic::SetTime(piTick time)
 	{
 		if (!mIsPlaying) return;
+        SelectFrameAtTime(time);
+    }
 
-		mTime = time;
+    void LayerPaintStatic::SelectFrameAtTime(piTick time) noexcept
+    {
+        mTime = time;
         iSelectFrame();
     }
 

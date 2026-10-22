@@ -2492,8 +2492,18 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
 {
     if (layerId < 0 || key == nullptr)
         return IMM_AUTHORING_INVALID_ARGUMENT;
-    if (key->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
+    if (key->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 &&
+        key->structVersion != IMM_AUTHORING_STRUCT_VERSION_2)
         return IMM_AUTHORING_UNSUPPORTED;
+    const ImmAuthoringKeyV2 * keyV2 = nullptr;
+    if (key->structVersion == IMM_AUTHORING_STRUCT_VERSION_2)
+    {
+        if (key->structSize < sizeof(ImmAuthoringKeyV2))
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        keyV2 = reinterpret_cast<const ImmAuthoringKeyV2 *>(key);
+        if (keyV2->reserved3[0] != 0 || keyV2->reserved3[1] != 0 || keyV2->reserved3[2] != 0)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+    }
     const double maximumTimeSeconds = static_cast<double>(INT64_MAX) /
         static_cast<double>(ImmCore::piTick::FromOneSecond());
     if (key->structSize < sizeof(ImmAuthoringKey) || !std::isfinite(key->timeSeconds) ||
@@ -2523,6 +2533,21 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
             return IMM_AUTHORING_INVALID_ARGUMENT;
         property = ImmImporter::Layer::AnimProperty::Opacity;
         value.mFloat = key->floatValue;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_LOOP:
+        if ((key->boolValue != 0 && key->boolValue != 1) ||
+            key->interpolation != IMM_AUTHORING_INTERPOLATION_NONE)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        property = ImmImporter::Layer::AnimProperty::Loop;
+        value.mBool = key->boolValue != 0;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_OFFSET:
+        if (keyV2 == nullptr)
+            return IMM_AUTHORING_UNSUPPORTED;
+        if (key->interpolation != IMM_AUTHORING_INTERPOLATION_NONE)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        property = ImmImporter::Layer::AnimProperty::Offset;
+        value.mInt = keyV2->uintValue;
         break;
     case IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM:
     {
@@ -2579,6 +2604,12 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyRe
         break;
     case IMM_AUTHORING_ANIM_PROPERTY_OPACITY:
         property = ImmImporter::Layer::AnimProperty::Opacity;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_LOOP:
+        property = ImmImporter::Layer::AnimProperty::Loop;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_OFFSET:
+        property = ImmImporter::Layer::AnimProperty::Offset;
         break;
     case IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM:
         property = ImmImporter::Layer::AnimProperty::Transform;

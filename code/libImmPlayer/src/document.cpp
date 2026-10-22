@@ -136,6 +136,7 @@ namespace ImmPlayer
         mSequenceReady = false;
         mEditing = false;
         mEvaluationRevision = 0;
+        mLastCPUTime = piTick(0);
         mRequestedPlaybackCommand = 0;
         mCompletedPlaybackCommand = 0;
         mPlaybackRequestStatus = PlaybackRequestStatus::None;
@@ -149,6 +150,7 @@ namespace ImmPlayer
 
     void Document::End(void)
     {
+        mLastCPUTime = piTick(0);
 		mOpenDrawingCreations.clear();
         mOpenGeometryEdits.clear();
         mOpenFrameMappings.clear();
@@ -376,6 +378,7 @@ namespace ImmPlayer
         // before a subsequent queued Pause can suppress the ordinary update.
         // Update also preserves an existing pause, as the tracked seek path does.
         mPlayerManager.Update(now, true);
+        mLastCPUTime = now;
         ++mEvaluationRevision;
     }
 
@@ -422,6 +425,7 @@ namespace ImmPlayer
         piSoundEngine* soundEngine, piLog *log, const piTick now,
         const Command * command, const Command * queuedCommand)
     {
+        mLastCPUTime = now;
         const bool trackedCommand = mPlaybackRequestStatus == PlaybackRequestStatus::Pending &&
             command != nullptr &&
             (command->mType == Command::Type::RequestSetChapter ||
@@ -1011,6 +1015,16 @@ namespace ImmPlayer
             {
                 Layer * layer = mPendingPresentation.mLayer;
                 const uint64_t layerId = mPendingPresentation.mObject;
+                const Layer::AnimProperty property = mPendingPresentation.mAnimationProperty;
+                const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
+                if (paintPlaybackKey && std::getenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS") != nullptr)
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                if (paintPlaybackKey && std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
+                {
+                    iRejectCommit(revision, -10, 0, layerId);
+                    mPendingPresentation = PendingPresentation{};
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                }
                 if (layer == nullptr)
                 {
                     iRejectCommit(revision, -1, 0, layerId);
@@ -1018,10 +1032,13 @@ namespace ImmPlayer
                 }
                 else
                 {
-                    const Layer::AnimProperty property =
-                        mPendingPresentation.mAnimationProperty;
                     layer->ReplaceAnimKeys(
                         property, std::move(mPendingPresentation.mAnimationKeys));
+                    if (paintPlaybackKey)
+                    {
+                        layer->ReevaluatePaintPlaybackAt(mLastCPUTime, log);
+                        ++mEvaluationRevision;
+                    }
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         iSetCommitState(status, AuthoringCommitState::Presented);
@@ -1748,7 +1765,11 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
-        if (property != Layer::AnimProperty::Visibility &&
+        const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
+        if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||
+            dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
+            return -3;
+        if (!paintPlaybackKey && property != Layer::AnimProperty::Visibility &&
             property != Layer::AnimProperty::Opacity &&
             property != Layer::AnimProperty::Transform)
             return -3;
@@ -1756,6 +1777,8 @@ namespace ImmPlayer
             return -2;
         if (interpolation < Layer::InterpolationType::None ||
             interpolation >= Layer::InterpolationType::MAX)
+            return -2;
+        if (paintPlaybackKey && interpolation != Layer::InterpolationType::None)
             return -2;
         if (property == Layer::AnimProperty::Opacity &&
             (!std::isfinite(value.mFloat) || value.mFloat < 0.0f || value.mFloat > 1.0f))
@@ -1797,9 +1820,14 @@ namespace ImmPlayer
             !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
             !mOpenLayerReparents.empty())
             return -7;
-        if (iFindAuthoringLayerById(mSequence.GetRoot(), layerId) == nullptr)
+        Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
+        if (layer == nullptr)
             return -1;
-        if (property != Layer::AnimProperty::Visibility &&
+        const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
+        if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||
+            dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
+            return -3;
+        if (!paintPlaybackKey && property != Layer::AnimProperty::Visibility &&
             property != Layer::AnimProperty::Opacity &&
             property != Layer::AnimProperty::Transform)
             return -3;
@@ -2762,6 +2790,23 @@ namespace ImmPlayer
             if (layer == nullptr)
             {
                 iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
+                return;
+            }
+            const bool paintPlaybackKey = edit.mProperty == Layer::AnimProperty::Loop || edit.mProperty == Layer::AnimProperty::Offset;
+            if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||
+                dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
+            {
+                iRejectCommit(batch.mRevision, -3, 0, edit.mLayerId);
+                return;
+            }
+            if (paintPlaybackKey && edit.mInterpolation != Layer::InterpolationType::None)
+            {
+                iRejectCommit(batch.mRevision, -2, 0, edit.mLayerId);
+                return;
+            }
+            if (paintPlaybackKey && std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
+            {
+                iRejectCommit(batch.mRevision, -10, 0, edit.mLayerId);
                 return;
             }
             if (!layer->CopyAnimKeys(edit.mProperty, keys))
