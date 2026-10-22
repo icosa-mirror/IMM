@@ -41,6 +41,17 @@ namespace ImmPlayer
         return false;
     }
 
+    static bool iSubtreeHasSpawnArea(Layer * layer)
+    {
+        if (layer->GetType() == Layer::Type::SpawnArea)
+            return true;
+        if (layer->GetType() == Layer::Type::Group)
+            for (uint32_t index = 0; index < layer->GetNumChildren(); index++)
+                if (iSubtreeHasSpawnArea(layer->GetChild(index)))
+                    return true;
+        return false;
+    }
+
     Document::PreparedLayerFullName::~PreparedLayerFullName()
     {
         if (mInitialized)
@@ -726,6 +737,14 @@ namespace ImmPlayer
         {
             const uint64_t revision = mPendingPresentation.mRevision;
             AuthoringCommitStatus * status = iFindCommitStatus(revision);
+            if (mPendingPresentation.mHasPreparedSpawnAreas &&
+                !mPlayerManager.PrepareSpawnAreaPublication(
+                    static_cast<uint32_t>(mPendingPresentation.mPreparedSpawnAreas.size())))
+            {
+                iRejectCommit(revision, -5, 0, mPendingPresentation.mObject);
+                iDiscardPendingPresentation(layerPaintRender, renderer, log);
+                return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+            }
             if (mPendingPresentation.mIsLayerReparent)
             {
                 Layer * layer = mPendingPresentation.mLayer;
@@ -767,6 +786,7 @@ namespace ImmPlayer
                         mPendingPresentation.mPreparedLayerFullNames)
                         prepared->Publish();
                     const bool changedParent = parent != previousParent;
+                    iPublishPreparedSpawnAreaCache();
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         iSetCommitState(status, AuthoringCommitState::Presented);
@@ -812,6 +832,7 @@ namespace ImmPlayer
                 }
                 else
                 {
+                    iPublishPreparedSpawnAreaCache();
                     for (Layer * deleted : mPendingPresentation.mDeletedLayers)
                     {
                         if (deleted->GetType() == Layer::Type::Paint)
@@ -895,12 +916,18 @@ namespace ImmPlayer
                             mPendingPresentation.mCreatedPaintDrawingHandle, created, 0 });
                         mPendingPresentation.mReplacement->Deinit();
                     }
+                    const bool spawnCreation = created->GetType() == Layer::Type::SpawnArea;
+                    iPublishPreparedSpawnAreaCache();
                     mPendingPresentation.mCreatedLayer.release();
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
-                    if (paintCreation)
+                    if (spawnCreation)
+                        log->Printf(LT_MESSAGE,
+                            L"[IMM_LIVE_EDIT] presented revision=%llu createdSpawnLayer=%llu",
+                            static_cast<unsigned long long>(revision), static_cast<unsigned long long>(layerId));
+                    else if (paintCreation)
                         log->Printf(LT_MESSAGE,
                             L"[IMM_LIVE_EDIT] presented revision=%llu createdPaintLayer=%llu",
                             static_cast<unsigned long long>(revision), static_cast<unsigned long long>(layerId));
@@ -1716,6 +1743,12 @@ namespace ImmPlayer
         return iQueueLayerCreation(parentLayerId, std::move(name), Layer::Type::Paint, layerIdOut);
     }
 
+    int32_t Document::QueueSpawnLayerCreation(uint32_t parentLayerId,
+        std::wstring name, uint32_t * layerIdOut)
+    {
+        return iQueueLayerCreation(parentLayerId, std::move(name), Layer::Type::SpawnArea, layerIdOut);
+    }
+
     int32_t Document::iQueueLayerCreation(uint32_t parentLayerId,
         std::wstring name, Layer::Type type, uint32_t * layerIdOut)
     {
@@ -1766,6 +1799,8 @@ namespace ImmPlayer
         std::function<bool(Layer *)> isDeletableGroupSubtree;
         isDeletableGroupSubtree = [&](Layer * current)
         {
+            if (current->GetType() == Layer::Type::SpawnArea && !current->GetIsTimeline())
+                return current->GetImplementation() != nullptr;
             if (current->GetType() == Layer::Type::Paint && !current->GetIsTimeline())
                 return dynamic_cast<LayerPaintStatic *>(
                     static_cast<LayerPaint *>(current->GetImplementation())) != nullptr;
@@ -1905,6 +1940,74 @@ namespace ImmPlayer
         mEditing = false;
     }
 
+    bool Document::iPrepareSpawnAreaCache(Layer * removed, Layer * inserted,
+        Layer * insertionParent, uint32_t insertionIndex, std::vector<Layer *> & prepared)
+    {
+        try
+        {
+            prepared.reserve(static_cast<size_t>(mPlayerManager.GetSpawnAreaCount()) + (inserted != nullptr ? 1 : 0));
+            bool insertionVisited = inserted == nullptr;
+            std::function<bool(Layer *, bool)> visit;
+            visit = [&](Layer * current, bool isInserted)
+            {
+                if (current == removed && !isInserted)
+                    return true;
+                if (current->GetType() == Layer::Type::SpawnArea)
+                {
+                    if (current->GetImplementation() == nullptr)
+                        return false;
+                    prepared.push_back(current);
+                }
+                if (current->GetType() != Layer::Type::Group)
+                    return true;
+                uint32_t finalIndex = 0;
+                const auto insertHere = [&]()
+                {
+                    if (current != insertionParent || finalIndex != insertionIndex || insertionVisited)
+                        return true;
+                    insertionVisited = true;
+                    finalIndex++;
+                    return visit(inserted, true);
+                };
+                for (uint32_t index = 0; index < current->GetNumChildren(); index++)
+                {
+                    Layer * child = current->GetChild(index);
+                    if (child == removed)
+                        continue;
+                    if (!insertHere() || !visit(child, false))
+                        return false;
+                    finalIndex++;
+                }
+                return insertHere();
+            };
+            if (!visit(mSequence.GetRoot(), false) || !insertionVisited || prepared.size() > UINT32_MAX)
+                return false;
+            return mPlayerManager.PrepareSpawnAreaPublication(static_cast<uint32_t>(prepared.size()));
+        }
+        catch (const std::bad_alloc &)
+        {
+            return false;
+        }
+    }
+
+    void Document::iPublishPreparedSpawnAreaCache(void)
+    {
+        if (!mPendingPresentation.mHasPreparedSpawnAreas)
+            return;
+        const Layer * active = mPlayerManager.GetSpawnAreaLayer(mPlayerManager.GetSpawnArea());
+        const Layer * preferred = mSequence.GetInitialSpawnArea();
+        bool preferredSurvives = preferred == nullptr;
+        for (const Layer * layer : mPendingPresentation.mPreparedSpawnAreas)
+            preferredSurvives = preferredSurvives || layer == preferred;
+        if (!preferredSurvives)
+            mSequence.SetInitialSpawnArea(nullptr);
+        mPlayerManager.PublishPreparedSpawnAreas(mPendingPresentation.mPreparedSpawnAreas.data(),
+            static_cast<uint32_t>(mPendingPresentation.mPreparedSpawnAreas.size()), active);
+        mSequence.SetSpawnAreaNeedsUpdate(true);
+        // Structural ordinal changes invalidate checked selection even while paused.
+        ++mEvaluationRevision;
+    }
+
     void Document::iPrepareAuthoringCommit(LayerRendererPaint * layerPaintRender, piLog * log)
     {
         if (mSealedBatches.empty() || mPendingPresentation.mRevision != 0)
@@ -1993,11 +2096,12 @@ namespace ImmPlayer
                         if (!prepared->Init(current, fullName.c_str()))
                             return false;
                         preparedFullNames.push_back(std::move(prepared));
-                        for (uint32_t index = 0; index < current->GetNumChildren(); index++)
-                        {
-                            if (!prepareSubtree(current->GetChild(index), fullName))
-                                return false;
-                        }
+                        if (current->GetType() == Layer::Type::Group)
+                            for (uint32_t index = 0; index < current->GetNumChildren(); index++)
+                            {
+                                if (!prepareSubtree(current->GetChild(index), fullName))
+                                    return false;
+                            }
                         return true;
                     };
                     if (!prepareSubtree(layer, parent->GetFullName()->GetS()))
@@ -2012,6 +2116,16 @@ namespace ImmPlayer
                     return;
                 }
             }
+            std::vector<Layer *> preparedSpawnAreas;
+            const bool spawnCacheChanged = iSubtreeHasSpawnArea(layer);
+            if (spawnCacheChanged && !iPrepareSpawnAreaCache(layer, layer, parent,
+                reparent.mChildIndex, preparedSpawnAreas))
+            {
+                iRejectCommit(batch.mRevision, -5, 0, reparent.mLayerId);
+                return;
+            }
+            mPendingPresentation.mHasPreparedSpawnAreas = spawnCacheChanged;
+            mPendingPresentation.mPreparedSpawnAreas = std::move(preparedSpawnAreas);
             if (status != nullptr)
             {
                 iSetCommitState(status, AuthoringCommitState::Prepared);
@@ -2068,6 +2182,13 @@ namespace ImmPlayer
                 {
                     if (current->GetIsTimeline())
                         return false;
+                    if (current->GetType() == Layer::Type::SpawnArea)
+                    {
+                        if (current->GetImplementation() == nullptr)
+                            return false;
+                        deletedLayers.push_back(current);
+                        return true;
+                    }
                     if (current->GetType() == Layer::Type::Paint)
                     {
                         auto * paint = dynamic_cast<LayerPaintStatic *>(
@@ -2113,6 +2234,15 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -5, 0, deletion.mLayerId);
                 return;
             }
+            std::vector<Layer *> preparedSpawnAreas;
+            const bool spawnCacheChanged = iSubtreeHasSpawnArea(layer);
+            if (spawnCacheChanged && !iPrepareSpawnAreaCache(layer, nullptr, nullptr, 0, preparedSpawnAreas))
+            {
+                iRejectCommit(batch.mRevision, -5, 0, deletion.mLayerId);
+                return;
+            }
+            mPendingPresentation.mHasPreparedSpawnAreas = spawnCacheChanged;
+            mPendingPresentation.mPreparedSpawnAreas = std::move(preparedSpawnAreas);
             if (status != nullptr)
             {
                 iSetCommitState(status, AuthoringCommitState::Prepared);
@@ -2166,6 +2296,29 @@ namespace ImmPlayer
             {
                 iRejectCommit(batch.mRevision, -5, 0, creation.mLayerId);
                 return;
+            }
+            std::vector<Layer *> preparedSpawnAreas;
+            const bool spawnCreation = creation.mType == Layer::Type::SpawnArea;
+            if (spawnCreation)
+            {
+                std::unique_ptr<LayerSpawnArea> spawn(new (std::nothrow) LayerSpawnArea());
+                LayerSpawnArea::Volume volume = {};
+                volume.mType = LayerSpawnArea::Volume::Type::Sphere;
+                volume.mShape.mSphere = vec4(0.0f, 0.0f, 0.0f, 0.01f);
+                if (!spawn || !spawn->Init(volume, LayerSpawnArea::TrackingLevel::Floor))
+                {
+                    layer->Deinit(log);
+                    iRejectCommit(batch.mRevision, -5, 0, creation.mLayerId);
+                    return;
+                }
+                layer->SetImplementation(spawn.release());
+                layer->SetLoaded(true);
+                if (!iPrepareSpawnAreaCache(nullptr, layer.get(), parent, parent->GetNumChildren(), preparedSpawnAreas))
+                {
+                    layer->Deinit(log);
+                    iRejectCommit(batch.mRevision, -5, 0, creation.mLayerId);
+                    return;
+                }
             }
             std::unique_ptr<DrawingStatic> prepared;
             bool preparedInitialized = false;
@@ -2222,12 +2375,14 @@ namespace ImmPlayer
             }
             if (status != nullptr)
             {
-                if (creation.mType == Layer::Type::Group)
+                if (creation.mType != Layer::Type::Paint)
                     iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = creation.mLayerId;
             }
-            if (creation.mType == Layer::Type::Group)
+            if (creation.mType != Layer::Type::Paint)
                 mPreparedRevision = batch.mRevision;
+            mPendingPresentation.mHasPreparedSpawnAreas = spawnCreation;
+            mPendingPresentation.mPreparedSpawnAreas = std::move(preparedSpawnAreas);
             mPendingPresentation.mHasPaintCreationRendererToken = creation.mType == Layer::Type::Paint;
             mPendingPresentation.mRendererToken = rendererToken;
             mPendingPresentation.mReplacement = std::move(prepared);

@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include "libImmImporter/src/document/layer.h"
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/document/layerSound.h"
@@ -282,6 +283,23 @@ namespace ImmPlayer
 
 
     // continue playback from a stop
+    bool MngrPlayer::PrepareSpawnAreaPublication(uint32_t count)
+    {
+        if (std::getenv("IMM_LIVE_EDIT_FAIL_SPAWN_CACHE") != nullptr)
+            return false;
+        return mSpawnAreas.SetMaxLengthNoShrink(count);
+    }
+
+    void MngrPlayer::PublishPreparedSpawnAreas(Layer * const * layers, uint32_t count,
+        const Layer * activeLayer)
+    {
+        // Capacity was reserved before publication; only pointer copies remain.
+        mSpawnAreas.SetLength(count);
+        for (uint32_t index = 0; index < count; index++)
+            mSpawnAreas.Set(layers[index], index);
+        mCurrentSpawnAreaId = activeLayer != nullptr ? FindSpawnAreaIdByLayer(activeLayer) : -1;
+    }
+
     void MngrPlayer::Continue(const ImmCore::piTick now)
     {
         if (mIsWaitingForInput)

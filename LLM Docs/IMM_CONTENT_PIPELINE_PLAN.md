@@ -2042,9 +2042,12 @@ replacement-run closure in section 6.26 (20:23 UTC):
    spawn-lifecycle-native-tests.log). This does not assert every preview decode or
    allocator failure path is covered.
 
-### 6.58. Spawn lifecycle implementation in progress (2026-10-22)
+### 6.58. Spawn lifecycle implementation (2026-10-22)
 
-1. Native creation and static subtree deletion are being extended to Spawn layers.
+1. Native creation accepts SPAWN_AREA=2 in the existing LayerCreate ABI, and static
+   subtree deletion now accepts Spawn descendants alongside Group/Paint layers.
+   New spawns are visible/identity/opacity 1, non-timeline, Floor tracking, a sphere
+   at the origin with radius .01, no translation axes and no preview asset.
    Prospective depth-first cache lists prepare before hierarchy mutation, preserving
    surviving active/default layer identity across ordinal changes. Publication must
    clear deleted references and invalidate stale ordinal snapshots without resetting
@@ -2054,14 +2057,24 @@ replacement-run closure in section 6.26 (20:23 UTC):
    rejection and queued/CPU-prepared unload. Existing DirectX paint creation and
    deletion regressions pass. Review found piTArray reserve could discard its live
    buffer after a real realloc failure; the correction and forced allocator
-   rejection regression now pass (6.59). The lifecycle changes await their focused
-   commit and replacement CI. No new spawn runtime/backend acceptance is claimed.
+   rejection regression now pass (6.59). Local checks also cover an empty cache,
+   first creation without implicit selection, deletion of an earlier ordinal while
+   preserving the surviving active identity, and stale ordinal-snapshot rejection.
+   No new spawn renderer/backend acceptance is claimed.
 3. The next paint-timeline gap is whole-table frame replacement: current frame edits
    cannot grow the initial one-frame paint. Managed append/insert/move/remove/resize
    require atomic table publication, handle/reference checks, paused frame reselection
    and a safe zero-frame path. Keyless paint playback, repeat/Loop/Offset controls,
    presented-revision save and managed cutover remain outstanding; frame growth alone
    would not close timeline authoring.
+4. Final source-matched build, native lifecycle/reserve and viewpoint policy tests,
+   full converter suite, bridge and Windows bindings pass. Eight DirectX paint
+   creation/deletion cases pass against the rebuilt binaries. Evidence:
+   artifacts/spawn-reserve-final-build.log, spawn-reserve-native-tests.log,
+   spawn-reserve-policy.log, spawn-reserve-converter.log, spawn-reserve-bridge.log,
+   spawn-reserve-exports.* and spawn-reserve-paint-{create,delete}/. Native exports
+   remain 147 player/51 reader, with 121 declared player bindings checked. Broader
+   backend lifetime, GPU/in-flight cancellation and full M2 acceptance remain open.
 
 ### 6.59. Failure-atomic reserve helpers (2026-10-22)
 

@@ -313,7 +313,7 @@ Current supported batch shapes are:
 | Animation key insertion/replacement/removal | One key edit |
 | Default spawn selection | One existing spawn layer |
 | Spawn state update | One existing spawn layer |
-| Group/paint creation, static group/paint-subtree deletion, or reparent | One hierarchy operation per batch; lifecycle/type restrictions in 8.3 |
+| Group/paint/spawn creation, static group/paint/spawn-subtree deletion, or reparent | One hierarchy operation per batch; lifecycle/type restrictions in 8.3 |
 
 The `DependencyFailed` result is reserved in the ABI. Its presence does not imply an implemented
 multi-commit dependency queue. Managed expected-revision transactions likewise must not be
@@ -430,7 +430,7 @@ player-wide submission telemetry, not per-document or GPU-presentation acceptanc
 Native concurrent snapshot and DirectX lifecycle checks pass locally (roadmap 6.56);
 the unresolved Android readiness failure still requires replacement device evidence.
 
-Layer creation supports `Group=0` and `Paint=1`, with an existing group parent and bounded
+Layer creation supports `Group=0`, `Paint=1` and `SpawnArea=2`, with an existing group parent and bounded
 UTF-8 name. Paint begins visible/identity/opacity 1, non-timeline, with one empty
 drawing and frame zero mapped to it, repeat 1, version 1, and the document frame
 rate (30 when unset). Preparation initializes a detached layer, reserves sequence,
@@ -446,15 +446,27 @@ indices, and non-group destinations. Cross-parent preparation builds all affecte
 names and destination capacity; presentation updates topology/names together with rollback on
 unexpected insertion failure.
 
-Deletion supports a non-root subtree containing ordinary non-timeline groups and static
-paint layers. Preparation collects every drawing; publication validates all renderer slots
+Spawn creation starts visible/identity/opacity 1, non-timeline, Floor tracking, a
+sphere centered at the origin with radius .01, no translation axes and no preview.
+Creation preserves default/active selection, including none; select explicitly with
+existing APIs. Spawn properties remain editable through SpawnAreaSet.
+
+Spawn-containing creation/deletion/reparent prepares the prospective depth-first
+viewpoint list and cache capacity before publication. Publication copies the list
+without allocation, preserves surviving active/default layer identity across ordinal
+changes, clears deleted references, marks the spawn cache dirty and invalidates stale
+ordinal snapshots. It does not restart playback/chapter state. CPU lifecycle, injected
+cache rejection and pending unload checks pass locally (roadmap 6.58-6.59).
+
+Deletion supports a non-root subtree containing ordinary non-timeline groups, static
+paint and non-timeline spawn layers. Preparation collects every drawing; publication validates all renderer slots
 and reserves retirement capacity before detaching hierarchy/storage. All drawings transfer
 to deferred retirement, including frame-referenced drawings, and their handles are invalidated
 before empty layers are destroyed. Active asynchronous import returns busy; instance links
-into the target subtree reject deletion. Spawn, sound, picture, model, instance and timeline
+into the target subtree reject deletion. Sound, picture, model, instance and timeline
 descendants remain unsupported. Windows DirectX nested-paint deletion, retirement and
 injected rollback pass locally (roadmap 6.53); other backends need replacement evidence.
-Spawn and media layer creation remain outside the delivered live layer-creation ABI.
+Preview-asset construction and media layer creation remain outside the delivered live layer-creation ABI.
 
 ### 8.4 Result taxonomy and diagnostics
 
@@ -580,7 +592,8 @@ Cancellation during an in-flight GPU upload and broader backend accounting remai
 2. Static paint/group subtree deletion now has local DirectX lifecycle evidence. Complete
    agreed lifecycle coverage for other descendants and reference handling with explicit
    resource retirement; keep unaccepted types unsupported. Paint creation now prepares
-   implementation/renderer resources before publication; spawn creation remains open.
+   implementation/renderer resources before publication. Spawn creation/deletion and
+   atomic cache updates now pass CPU checks (6.58); their backend acceptance remains open.
 3. Complete the agreed M2 scope, then implement presented-revision save/publish and managed
    cutover in that order. Preserve the original compatibility path until the relevant live
    surface/backend is accepted.

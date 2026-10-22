@@ -33,6 +33,8 @@ namespace ImmPlayer
         int  GetInitialSpawnArea();
         void SetSpawnArea(int spawnAreaId);
         Layer * GetSpawnAreaLayer(int spawnAreaId);
+        bool PrepareSpawnAreaPublication(uint32_t count);
+        void PublishPreparedSpawnAreas(Layer * const * layers, uint32_t count, const Layer * activeLayer);
 
         // Stories/Comics
         size_t GetCurrentChapter(void) const;

@@ -264,6 +264,8 @@ namespace ImmPlayer {
             uint32_t * layerIdOut);
         int32_t QueuePaintLayerCreation(uint32_t parentLayerId, std::wstring name,
             uint32_t * layerIdOut);
+        int32_t QueueSpawnLayerCreation(uint32_t parentLayerId, std::wstring name,
+            uint32_t * layerIdOut);
         int32_t QueueLayerDeletion(uint32_t layerId);
         int32_t QueueLayerReparent(uint32_t layerId, uint32_t parentLayerId,
             uint32_t childIndex);
@@ -442,6 +444,8 @@ namespace ImmPlayer {
             uint64_t mCreatedPaintDrawingHandle = 0;
             bool mIsLayerDeletion = false;
             bool mIsLayerReparent = false;
+            bool mHasPreparedSpawnAreas = false;
+            std::vector<ImmImporter::Layer *> mPreparedSpawnAreas;
             ImmImporter::LayerSpawnArea::Volume mSpawnAreaVolume = {};
             ImmImporter::LayerSpawnArea::TrackingLevel mSpawnAreaTracking =
                 ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
@@ -483,6 +487,10 @@ namespace ImmPlayer {
         void iSetCommitState(AuthoringCommitStatus * status, AuthoringCommitState state);
         void iRejectCommit(uint64_t revision, int32_t result, uint32_t failingCommand, uint64_t object);
         void iInvalidateAuthoringSession(void);
+        bool iPrepareSpawnAreaCache(ImmImporter::Layer * removed, ImmImporter::Layer * inserted,
+            ImmImporter::Layer * insertionParent, uint32_t insertionIndex,
+            std::vector<ImmImporter::Layer *> & prepared);
+        void iPublishPreparedSpawnAreaCache(void);
         void iPrepareAuthoringCommit(LayerRendererPaint * layerPaintRender, ImmCore::piLog * log);
         void iDiscardPendingPresentation(LayerRendererPaint * layerPaintRender,
             ImmCore::piRenderer * renderer, ImmCore::piLog * log);

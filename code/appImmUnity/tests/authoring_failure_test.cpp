@@ -243,6 +243,14 @@ int wmain(int argc, wchar_t** argv)
         require(doc.QueueLayerDeletion(0) == -4, "mutation rejected while detached");
     };
     Document::Command commit{}; commit.mType = Document::Command::Type::AuthoringCommit;
+    auto findLayer = [&](uint32_t id) {
+        Layer * found = nullptr;
+        doc.GetSequence()->Recurse([&](Layer * layer, int, int, bool) {
+            if (layer->GetID() == id) found = layer;
+            return true;
+        }, false, false, false, false);
+        return found;
+    };
     for (int prepared = 0; prepared != 2; ++prepared)
     {
         loadFixture();
@@ -255,7 +263,8 @@ int wmain(int argc, wchar_t** argv)
         Layer* group = root->GetChild(0);
         require(group != nullptr && group->GetType() == Layer::Type::Group && group->GetNumChildren() != 0, "fixture group with viewpoint child");
         require(doc.QueueLayerReparent(group->GetID(), group->GetID(), 0) == -3, "ancestor cycle rejected");
-        require(doc.QueueLayerDeletion(group->GetID()) == -3, "group containing non-group reference rejected");
+        require(doc.QueueLayerReparent(group->GetID(), group->GetChild(0)->GetID(), 0) == -3,
+            "non-group destination rejected");
         require(root->GetNumChildren() == count, "invalid operations preserve hierarchy");
         require(doc.QueueGroupLayerCreation(rootId, L"cancelled-group", &createdId) == 0, "queue group creation");
         int32_t result = -99;
@@ -289,7 +298,140 @@ int wmain(int argc, wchar_t** argv)
         require(root->GetNumChildren() == count && doc.QueueLayerDeletion(createdId) == -1, "deleted layer ID rejected");
         unload(deletedRevision);
     }
+    for (int prepared = 0; prepared != 2; ++prepared)
+    {
+        loadFixture();
+        uint32_t createdId = 0;
+        require(doc.QueueSpawnLayerCreation(doc.GetSequence()->GetRoot()->GetID(),
+            L"cancelled-spawn", &createdId) == 0, "queue cancellable spawn");
+        int32_t result = -99;
+        const uint64_t revision = doc.CommitEdits(&result);
+        require(revision != 0 && result == 0, "commit cancellable spawn");
+        if (prepared) cpu(&commit);
+        require(doc.GetSpawnAreaCount() == 3 && findLayer(createdId) == nullptr,
+            "pending spawn not published in hierarchy or cache");
+        unload(revision);
+    }
+    loadFixture();
+    auto present = [&]() {
+        int32_t result = -99;
+        const uint64_t revision = doc.CommitEdits(&result);
+        require(revision != 0 && result == 0, "commit spawn lifecycle operation");
+        cpu(&commit); gpu();
+        Document::AuthoringCommitStatus status{};
+        require(doc.GetAuthoringCommitStatus(revision, &status) &&
+            status.mState == Document::AuthoringCommitState::Presented, "spawn lifecycle operation presented");
+        return revision;
+    };
+    auto ordinalOf = [&](uint32_t id) {
+        Layer * target = findLayer(id);
+        for (int ordinal = 0; ordinal < doc.GetSpawnAreaCount(); ordinal++)
+        {
+            Document::SpawnAreaInfo info{};
+            doc.GetSpawnAreaInfo(info, ordinal);
+            if (target != nullptr && info.mName == target->GetName().GetS()) return ordinal;
+        }
+        return -1;
+    };
+    Layer * root = doc.GetSequence()->GetRoot();
+    Layer * group = root->GetChild(0);
+    const uint32_t defaultId = static_cast<uint32_t>(doc.GetInitialSpawnAreaLayerId());
+    const uint32_t selectedId = root->GetChild(2)->GetID();
+    const int chapter = doc.GetCurrentChapter();
+    Document::AuthoringRevisions beforeFailure{};
+    require(doc.GetAuthoringRevisions(&beforeFailure), "revisions before cache failure");
+    for (int failAtPublication = 0; failAtPublication != 2; ++failAtPublication)
+    {
+        uint32_t failedId = 0;
+        require(doc.QueueSpawnLayerCreation(root->GetID(), L"rejected-spawn", &failedId) == 0,
+            "queue cache allocation failure case");
+        int32_t result = -99;
+        const uint64_t revision = doc.CommitEdits(&result);
+        require(revision != 0 && result == 0, "commit cache failure case");
+        if (!failAtPublication) _putenv_s("IMM_LIVE_EDIT_FAIL_SPAWN_CACHE", "1");
+        cpu(&commit);
+        if (failAtPublication) _putenv_s("IMM_LIVE_EDIT_FAIL_SPAWN_CACHE", "1");
+        gpu();
+        _putenv_s("IMM_LIVE_EDIT_FAIL_SPAWN_CACHE", "");
+        Document::AuthoringCommitStatus status{};
+        Document::AuthoringRevisions revisions{};
+        const bool haveStatus = doc.GetAuthoringCommitStatus(revision, &status);
+        const bool haveRevisions = doc.GetAuthoringRevisions(&revisions);
+        if (!haveStatus || !haveRevisions || status.mState != Document::AuthoringCommitState::Rejected ||
+            status.mResult != -5 || revisions.mPresented != beforeFailure.mPresented)
+            std::fprintf(stderr, "[IMM_LIVE_SPAWN_LIFECYCLE_TEST] failureStage=%d status=%d result=%d presented=%llu\n",
+                failAtPublication, static_cast<int>(status.mState), status.mResult,
+                static_cast<unsigned long long>(revisions.mPresented));
+        require(haveStatus &&
+            status.mState == Document::AuthoringCommitState::Rejected && status.mResult == -5 &&
+            haveRevisions && revisions.mPresented == beforeFailure.mPresented,
+            "cache preparation/publication rejection preserves presented revision");
+        require(findLayer(failedId) == nullptr && doc.GetSpawnAreaCount() == 3 &&
+            doc.GetInitialSpawnAreaLayerId() == static_cast<int>(defaultId) &&
+            doc.GetSpawnArea() == ordinalOf(selectedId), "cache failure preserves hierarchy and active/default identities");
+    }
+    uint32_t spawnedId = 0;
+    require(doc.QueueSpawnLayerCreation(group->GetID(), L"live-spawn", &spawnedId) == 0,
+        "queue nested spawn creation");
+    require(doc.GetSpawnAreaCount() == 3, "queue does not expose spawn cache");
+    present();
+    Layer * created = findLayer(spawnedId);
+    require(created != nullptr && created->GetType() == Layer::Type::SpawnArea &&
+        doc.GetSpawnAreaCount() == 4 && doc.GetInitialSpawnAreaLayerId() == static_cast<int>(defaultId) &&
+        doc.GetSpawnArea() == ordinalOf(selectedId), "creation preserves active/default identities across cache shift");
+    Document::SpawnAreaInfo createdInfo{};
+    doc.GetSpawnAreaInfo(createdInfo, ordinalOf(spawnedId));
+    require(createdInfo.mIsFloorLevel && createdInfo.mVolume.mType == LayerSpawnArea::Volume::Type::Sphere &&
+        createdInfo.mVolume.mShape.mSphere.w == 0.01f &&
+        doc.GetSpawnAreaScreenshot(ordinalOf(spawnedId)) == nullptr,
+        "spawn creation defaults and absent preview");
+    require(doc.QueueInitialSpawnArea(spawnedId) == 0, "set created spawn as authored default");
+    present();
+    doc.SetSpawnArea(ordinalOf(spawnedId));
+    SpawnAreaSnapshot beforeReparent{};
+    require(doc.GetSpawnAreaSnapshot(beforeReparent, 0, nullptr) >= 0, "spawn snapshot before reparent");
+    require(doc.QueueLayerReparent(spawnedId, root->GetID(), 0) == 0, "reparent spawn to first root child");
+    present();
+    require(doc.GetSpawnArea() == 0 && doc.GetInitialSpawnArea() == 0 &&
+        ordinalOf(spawnedId) == 0 && doc.GetCurrentChapter() == chapter,
+        "reparent publishes ordered cache without resetting active/default or chapter");
+    SpawnAreaSnapshot afterReparent{};
+    SpawnAreaPoseState stalePose{};
+    require(doc.GetSpawnAreaSnapshot(afterReparent, 0, nullptr) >= 0 &&
+        afterReparent.evaluationRevision > beforeReparent.evaluationRevision &&
+        !doc.TrySetActiveSpawnAreaId(0, beforeReparent.evaluationRevision, stalePose),
+        "cache publication invalidates stale ordinal snapshot selections");
+    require(doc.QueueLayerDeletion(spawnedId) == 0, "delete active/default spawn");
+    present();
+    require(doc.GetSpawnAreaCount() == 3 && doc.GetSpawnArea() == -1 && doc.GetInitialSpawnArea() == -1 &&
+        doc.GetInitialSpawnAreaLayerId() == -1 && findLayer(spawnedId) == nullptr &&
+        doc.QueueLayerDeletion(spawnedId) == -1, "deletion clears deleted active/default references and stale layer IDs");
+    const uint32_t nestedSpawnId = group->GetChild(0)->GetID();
+    require(doc.QueueInitialSpawnArea(nestedSpawnId) == 0, "set nested spawn as default before subtree deletion");
+    present();
+    doc.SetSpawnArea(ordinalOf(nestedSpawnId));
+    require(doc.QueueLayerDeletion(group->GetID()) == 0, "delete group containing spawn descendant");
+    present();
+    require(doc.GetSpawnAreaCount() == 2 && doc.GetCurrentChapter() == chapter &&
+        doc.GetSpawnArea() == -1 && doc.GetInitialSpawnArea() == -1,
+        "group deletion clears descendant active/default without resetting chapter");
+    doc.SetSpawnArea(1);
+    require(doc.QueueLayerDeletion(root->GetChild(0)->GetID()) == 0, "delete earlier spawn ordinal");
+    present();
+    require(doc.GetSpawnAreaCount() == 1 && doc.GetSpawnArea() == 0 && ordinalOf(selectedId) == 0,
+        "deleting an earlier spawn preserves surviving active identity");
+    require(doc.QueueLayerDeletion(selectedId) == 0, "delete last spawn");
+    present();
+    require(doc.GetSpawnAreaCount() == 0 && doc.GetSpawnArea() == -1 && doc.GetInitialSpawnArea() == -1,
+        "deleting last spawn publishes an empty cache");
+    require(doc.QueueSpawnLayerCreation(root->GetID(), L"first-explicit-spawn", &spawnedId) == 0,
+        "create first spawn in empty cache");
+    const uint64_t firstSpawn = present();
+    require(doc.GetSpawnAreaCount() == 1 && doc.GetSpawnArea() == -1 && doc.GetInitialSpawnArea() == -1,
+        "first creation does not implicitly select active or default spawn");
+    unload(firstSpawn);
     doc.End(); load.mStrArg.End(); log.End();
+    std::puts("[IMM_LIVE_SPAWN_LIFECYCLE_TEST] create, reparent, default/active deletion, subtree cleanup and pending unload passed (CPU-only)");
     std::puts("[IMM_SPAWN_CACHE_TEST] unload invalid queries, safe bounds, active ordinal reset passed (CPU-only)");
     std::puts("[IMM_AUTHORING_FAILURE_TEST] queued/prepared group unload, invalid parents, root reparent, reload, deleted IDs passed (CPU-only; no GPU cancellation evidence)");
     return 0;

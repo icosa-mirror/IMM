@@ -63,7 +63,8 @@ typedef enum ImmAuthoringLayerPropertyMask
 typedef enum ImmAuthoringLayerType
 {
     IMM_AUTHORING_LAYER_GROUP = 0,
-    IMM_AUTHORING_LAYER_PAINT = 1
+    IMM_AUTHORING_LAYER_PAINT = 1,
+    IMM_AUTHORING_LAYER_SPAWN_AREA = 2
 } ImmAuthoringLayerType;
 
 typedef enum ImmAuthoringAnimProperty
