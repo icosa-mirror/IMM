@@ -12,12 +12,14 @@ remain open; none of these initial slices closes the full roadmap.
 Current live checkpoint (2026-10-22): static paint/group subtree deletion and
 empty paint creation/population/deletion now have local DirectX lifecycle and
 failure checks (6.53-6.55). Subtree run 39704338933 passed Windows and Android
-builds; Apple jobs remain queued. Paint creation and the ownership correction
+builds; their queued Apple remainder was cancelled after replacement validation
+was launched. Paint creation and the ownership correction
 are pushed in 50efa422/97ee60b0. Full run 39708054202 was cancelled after review
 found stale spawn-cache pointers across unload; the focused correction passes local
 regressions (6.56). The render-counter synchronization correction also passes local
 checks. Both fixes are pushed in 56521cae/6272e87a; replacement full validation run
-39709116389 is queued. Android runtime and Apple acceptance remain open.
+39709116389 has passed Android build and ten completed jobs; Windows/web continue
+and Apple jobs await runners. Android runtime and Apple acceptance remain open.
 The older Android readiness failure and stale packaged macOS
 exports remain unresolved; full A1-A3 and the converter acceptance gaps stay open.
 
@@ -2044,6 +2046,41 @@ replacement-run closure in section 6.26 (20:23 UTC):
    validate these fixes. Windows export/binding verification also passes locally
    (artifacts/perf-snapshot-exports.*). Android readiness and stale macOS exports
    remain unresolved until successful replacement runtime/package gates.
+5. Superseded own runs 39704338933 and 39701694123 were rechecked: each had eleven
+   successful completed jobs, five queued Apple jobs and no running work. Their queued
+   remainders were cancelled to avoid competing with replacement 39709116389;
+   completed artifacts/evidence remain available. No unknown runs were changed.
+
+### 6.57. Asset-free spawn cleanup prerequisite (2026-10-22)
+
+1. Lifecycle review found LayerSpawnArea's no-preview path could call piImage::Free
+   with uninitialized channel/ownership fields. Its screenshot member is now value
+   initialized before Init/Deinit. A poisoned-storage no-preview regression was added
+   to the existing required native harness. Source-matched native build and the
+   poisoned-storage cleanup test pass (artifacts/spawn-lifecycle-build.log and
+   spawn-lifecycle-native-tests.log). This does not assert every preview decode or
+   allocator failure path is covered.
+
+### 6.58. Spawn lifecycle implementation in progress (2026-10-22)
+
+1. Native creation and static subtree deletion are being extended to Spawn layers.
+   Prospective depth-first cache lists prepare before hierarchy mutation, preserving
+   surviving active/default layer identity across ordinal changes. Publication must
+   clear deleted references and invalidate stale ordinal snapshots without resetting
+   playback/chapter state. No implicit first-spawn default/active selection is added.
+2. Native code builds and CPU integration coverage passes for create,
+   reparent, active/default deletion, subtree cleanup, cache preparation/publication
+   rejection and queued/CPU-prepared unload. Existing DirectX paint creation and
+   deletion regressions pass. Review found piTArray reserve could discard its live
+   buffer after a real realloc failure; a failure-atomic correction and forced
+   allocator rejection regression are in progress before this lifecycle work is
+   committed. No new spawn runtime/backend acceptance is claimed.
+3. The next paint-timeline gap is whole-table frame replacement: current frame edits
+   cannot grow the initial one-frame paint. Managed append/insert/move/remove/resize
+   require atomic table publication, handle/reference checks, paused frame reselection
+   and a safe zero-frame path. Keyless paint playback, repeat/Loop/Offset controls,
+   presented-revision save and managed cutover remain outstanding; frame growth alone
+   would not close timeline authoring.
 
 ## 7. Consolidated documents
 

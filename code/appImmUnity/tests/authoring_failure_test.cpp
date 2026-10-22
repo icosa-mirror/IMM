@@ -3,18 +3,37 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <new>
 #include <thread>
 #include <type_traits>
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 #include "libImmPlayer/src/document.h"
 #include "libImmPlayer/src/mngrPlayer.h"
 #include "libImmPlayer/src/renderPerformanceSnapshot.h"
+#include "libImmImporter/src/document/layerSpawnArea.h"
 using namespace ImmCore;
 using namespace ImmImporter;
 using namespace ImmPlayer;
 static void require(bool ok, const char* message)
 {
     if (!ok) { std::fprintf(stderr, "[IMM_AUTHORING_FAILURE_TEST] %s\n", message); std::exit(1); }
+}
+
+static void checkEmptySpawnCleanup()
+{
+    // Heap contents must not determine whether an absent preview is freed.
+    alignas(LayerSpawnArea) unsigned char storage[sizeof(LayerSpawnArea)];
+    std::memset(storage, 0xa5, sizeof(storage));
+    auto * spawn = new (storage) LayerSpawnArea;
+    LayerSpawnArea::Volume volume{};
+    volume.mType = LayerSpawnArea::Volume::Type::Sphere;
+    volume.mShape.mSphere = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    require(spawn->Init(volume, LayerSpawnArea::TrackingLevel::Floor), "empty spawn initialization");
+    require(spawn->GetScreenshot() == nullptr, "empty spawn has no preview");
+    spawn->Deinit();
+    spawn->~LayerSpawnArea();
+    std::puts("[IMM_SPAWN_PREVIEW_LIFECYCLE_TEST] no-preview cleanup ignores prior storage contents");
 }
 
 static void checkRenderPerformanceSnapshots()
@@ -165,6 +184,7 @@ int wmain(int argc, wchar_t** argv)
     require(log.Init(L"artifacts/authoring-failure-runtime.log", PILOG_TXT), "log init");
     checkLayerInitialization(&log);
     checkSpawnCacheLifecycle(&log);
+    checkEmptySpawnCleanup();
     checkRenderPerformanceSnapshots();
     Document doc;
     require(doc.Init(L"authoring-failures", 0), "document init");

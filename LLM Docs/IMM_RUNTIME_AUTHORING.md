@@ -164,8 +164,10 @@ enables authoring on 64-bit processes; that check alone is not a backend validat
 The formerly missing `ImmExporter_LayerAddAnimationKey` and
 `ImmExporter_PaintSetMaxRepeatCount` exports were also implemented.
 
-Pictures, sound, models, effects and references/instances remain outside the delivered
-managed scope. Root-key and comic file construction now exist, while full chapter
+Managed offline picture and PCM16 sound construction, encoded sound import and
+picture/sound import/export now exist; their fidelity/playback limits are recorded
+in the shared roadmap. Models, effects and references/instances remain outside the
+delivered managed graph scope. Root-key and comic file construction now exist, while full chapter
 playback/control acceptance remains open. These are separate from live paint editing.
 
 ## 4. Measured motivation and acceptance budget
@@ -311,7 +313,7 @@ Current supported batch shapes are:
 | Animation key insertion/replacement/removal | One key edit |
 | Default spawn selection | One existing spawn layer |
 | Spawn state update | One existing spawn layer |
-| Group creation, group-subtree deletion, or reparent | One hierarchy operation per batch |
+| Group/paint creation, static group/paint-subtree deletion, or reparent | One hierarchy operation per batch; lifecycle/type restrictions in 8.3 |
 
 The `DependencyFailed` result is reserved in the ABI. Its presence does not imply an implemented
 multi-commit dependency queue. Managed expected-revision transactions likewise must not be

@@ -6,7 +6,7 @@ using namespace ImmCore;
 
 namespace ImmImporter
 {
-	LayerSpawnArea::LayerSpawnArea() {}
+	LayerSpawnArea::LayerSpawnArea() : mScreenshot{} {}
 
 	LayerSpawnArea::~LayerSpawnArea() {}
 
