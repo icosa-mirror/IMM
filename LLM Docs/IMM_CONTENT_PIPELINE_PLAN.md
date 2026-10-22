@@ -9,47 +9,28 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
-Current live checkpoint (2026-10-22): static paint/group subtree deletion and
-empty paint creation/population/deletion now have local DirectX lifecycle and
-failure checks (6.53-6.55). Subtree run 39704338933 passed Windows and Android
-builds; their queued Apple remainder was cancelled after replacement validation
-was launched. Paint creation and the ownership correction
-are pushed in 50efa422/97ee60b0. Full run 39708054202 was cancelled after review
-found stale spawn-cache pointers across unload; the focused correction passes local
-regressions (6.56). The render-counter synchronization correction also passes local
-checks. Both fixes are pushed in 56521cae/6272e87a; replacement full validation run
-39709116389 has passed Android build and ten completed jobs; Windows/web continue
-and Apple jobs await runners. Android runtime and Apple acceptance remain open.
-The older Android readiness failure and stale packaged macOS
-exports remain unresolved; full A1-A3 and the converter acceptance gaps stay open.
+Current checkpoint (2026-10-22): static paint/group subtree deletion and empty
+paint creation/population/deletion pass local DirectX lifecycle/failure checks
+(6.53-6.55). Spawn-cache lifetime and render-counter synchronization fixes are
+pushed in 56521cae/6272e87a (6.56). Their full validation run 39709116389 has
+passed eleven jobs including Windows, Android and web builds; five Apple jobs
+await runners. Engine/device gates depend on the complete build workflow and
+have not accepted these revisions. Full CI is not passing yet.
 
-Local native regressions and four paired paint/viewpoint metadata comparisons pass.
-Taperecorder's normal default-viewpoint DirectX capture is pixel-identical to its
-reference. Live GitHub status checked at 2026-10-21 20:23 UTC confirms full hosted
-validation success for compiler correction ac34f4f1 (39645977224) and viewpoint
-revision 740eec8a (39646549914). These runs close the earlier Unity CS1061 and
-Godot iOS capacity failures with passing replacement gates, including Unity Android
-URP/non-XR Firebase, Android Vulkan, Windows DirectX/Vulkan and Godot iOS Metal.
-Sound-import run 39669262483 completed its first attempt with an Android SDK
-CMake archive failure before project compilation and missing dependent validation
-evidence. macOS/iOS builds and all three iOS visual gates passed. Its single
-targeted retry has passed Android, but downstream Android Vulkan validation now
-fails because required Firebase log markers and captures are absent despite both
-Firebase jobs reporting success. This remains unresolved and is under investigation;
-no further retry has been requested (sections 6.49-6.50).
-Later APIs still need their own platform/package acceptance;
-hosted success does not establish skipped hardware gates or full content fidelity.
-Confirmed regressions take priority over new feature work. See section 6.26.
+Spawn creation/deletion/cache publication and its reserve-failure prerequisite pass
+local checks (6.57-6.59). No new spawn renderer/backend acceptance is claimed. Whole-table paint
+timeline editing, presented-revision save, managed live cutover and full A1-A3
+acceptance remain open, alongside the converter/reader fidelity gaps below.
 
-Replacement run 39688086871 has passed its complete Windows job and Android,
-closing the earlier Windows staging/adapter failures with replacement evidence.
-macOS/iOS remain queued, so full validation is incomplete. Later viewpoint and
-spawn-property runs have no reported failures but are still incomplete (6.42-6.43).
-The preview run has now passed Windows too. Headless animation comparisons found
-and locally verified a finite-loop playback correction, now under validation (6.44).
-Hierarchy sound, reviewed editor menus and spherical
-viewpoint mapping are implemented; the offline spawn compiler now retains common
-properties through the additive constructor recorded in section 6.42.
+The unresolved Android Vulkan failure from 39669262483 lacks required Firebase
+readiness/composition/capture evidence. Its one infrastructure retry cleared the
+earlier SDK download failure; no further infrastructure retry has been requested.
+The counter race correction still needs replacement device evidence. Packaged
+macOS exports also remain stale until replacement builds/gates succeed.
+Earlier Unity CS1061 and Godot iOS failures were closed by complete hosted runs
+39645977224/39646549914; those historical passes do not accept later APIs.
+Confirmed regressions take priority over new feature work (6.26). Detailed source,
+local, hosted and hardware evidence is recorded separately in section 6.
 
 ## 1. Objective and document ownership
 
@@ -2072,15 +2053,32 @@ replacement-run closure in section 6.26 (20:23 UTC):
    reparent, active/default deletion, subtree cleanup, cache preparation/publication
    rejection and queued/CPU-prepared unload. Existing DirectX paint creation and
    deletion regressions pass. Review found piTArray reserve could discard its live
-   buffer after a real realloc failure; a failure-atomic correction and forced
-   allocator rejection regression are in progress before this lifecycle work is
-   committed. No new spawn runtime/backend acceptance is claimed.
+   buffer after a real realloc failure; the correction and forced allocator
+   rejection regression now pass (6.59). The lifecycle changes await their focused
+   commit and replacement CI. No new spawn runtime/backend acceptance is claimed.
 3. The next paint-timeline gap is whole-table frame replacement: current frame edits
    cannot grow the initial one-frame paint. Managed append/insert/move/remove/resize
    require atomic table publication, handle/reference checks, paused frame reselection
    and a safe zero-frame path. Keyless paint playback, repeat/Loop/Offset controls,
    presented-revision save and managed cutover remain outstanding; frame growth alone
    would not close timeline authoring.
+
+### 6.59. Failure-atomic reserve helpers (2026-10-22)
+
+1. Typed and untyped SetMaxLengthNoShrink now retain the original live buffer until
+   realloc succeeds and reject byte-count overflow. Untyped reserve also rejects
+   zero-sized elements and starts zeroing after all live bytes, correcting an offset
+   that could overwrite existing values when element size exceeded one byte.
+2. The existing required native harness now compiles an isolated test translation
+   unit against the actual helpers with allocator rejection forced inside realloc.
+   It verifies preserved pointer/length/capacity/live values after failure, overflow
+   rejection before allocation, successful subsequent growth and zeroed unused
+   storage. No production allocator substitution is introduced.
+3. Source-matched Windows Unity/viewer/reader/Godot builds and the combined native
+   lifecycle/reserve tests pass. Initial local build failed in Microsoft's PDB API
+   (C1090/RPC); a serialized retry passed, followed by the final build. No source
+   compiler failure remains. Evidence: artifacts/spawn-reserve-final-build.log,
+   spawn-lifecycle-final-build-retry.log and spawn-reserve-native-tests.log.
 
 ## 7. Consolidated documents
 

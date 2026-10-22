@@ -392,16 +392,20 @@ namespace ImmCore {
 	{
 		piAssert(mInited == INITED_MARK);
 
+		if (mObjectsize == 0) return false;
 		if (maxLength <= mMax) return true;
 
 		uint64_t newmax = maxLength;
 		if (newmax<4) newmax = 4;
-		mBuffer = (unsigned char*)realloc(mBuffer, newmax * mObjectsize);
-		if (!mBuffer)
+		if (newmax > SIZE_MAX / mObjectsize)
 			return false;
+		unsigned char *newBuffer = (unsigned char*)realloc(mBuffer, static_cast<size_t>(newmax) * mObjectsize);
+		if (!newBuffer)
+			return false;
+		mBuffer = newBuffer;
 		mMax = newmax;
 		if (mDoZero)
-			memset(mBuffer + mNum, 0, (mMax-mNum)*mObjectsize);
+			memset(mBuffer + mNum * mObjectsize, 0, (mMax-mNum)*mObjectsize);
 		return true;
 	}
 

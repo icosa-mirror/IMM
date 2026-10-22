@@ -291,9 +291,12 @@ bool piTArray<piArrayType>::SetMaxLengthNoShrink(uint64_t maxLength)
 
 	uint64_t newmax = maxLength;
 	if (newmax<4) newmax = 4;
-	mBuffer = (piArrayType*)realloc(mBuffer, newmax * sizeof(piArrayType));
-	if (!mBuffer)
+	if (newmax > SIZE_MAX / sizeof(piArrayType))
 		return false;
+	piArrayType *newBuffer = (piArrayType*)realloc(mBuffer, static_cast<size_t>(newmax) * sizeof(piArrayType));
+	if (!newBuffer)
+		return false;
+	mBuffer = newBuffer;
 	mMax = newmax;
 	if (mDoZero)
 		memset(mBuffer + mNum, 0, (mMax - mNum) * sizeof(piArrayType));
