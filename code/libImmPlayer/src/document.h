@@ -488,6 +488,7 @@ namespace ImmPlayer {
             ImmImporter::Drawing * mActive = nullptr;
             std::unique_ptr<ImmImporter::Drawing> mReplacement;
             uint64_t mRendererToken = 0;
+            bool mGPUPrepared = false;
         };
         PendingPresentation mPendingPresentation;
 

@@ -38,6 +38,7 @@ namespace ExePlayer
         void TickFrameSequence(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
         void TickFrameSequenceBundle(Viewer & viewer, ImmCore::piLog * log, uint64_t frame);
         void TickNewPaintFrameSequence(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        void TickGPUPreparedUnload(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
         struct SubtreeLayerSnapshot
         {
             int id = -1;
@@ -52,6 +53,14 @@ namespace ExePlayer
         };
         bool mStandaloneConfigured = false;
         bool mStandaloneEnabled = false;
+        bool mGPUPreparedUnloadEnabled = false;
+        bool mGPUPreparedCaptureOnly = false;
+        bool mGPUPreparedSessionInvalid = false;
+        int mGPUPreparedUnloadStage = 0;
+        int mGPUPreparedReloadDocument = -1;
+        int mGPUPreparedBaseDrawCalls = 0;
+        int mGPUPreparedBaseTriangles = 0;
+        uint64_t mGPUPreparedHeldFrame = 0;
         bool mPaintCreationEnabled = false;
         bool mFrameSequenceEnabled = false;
         bool mFrameSequenceReadinessLogged = false;

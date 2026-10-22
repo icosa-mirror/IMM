@@ -1440,6 +1440,408 @@ namespace ExePlayer
     }
 
 
+    void LiveEditValidation::TickGPUPreparedUnload(Viewer & viewer, ImmCore::piLog * log,
+        uint64_t frame, uint64_t requestedFrame)
+    {
+        if (mMeasured || frame < requestedFrame)
+            return;
+        const auto fail = [&](const wchar_t * reason) {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_GPU_UNLOAD] pass=0 stage=%d reason=%ls", mGPUPreparedUnloadStage, reason);
+            mMeasured = true;
+        };
+        if (frame - requestedFrame > 10000)
+        {
+            fail(L"timeout");
+            return;
+        }
+        ImmPlayer::Player * player = viewer.GetPlayer();
+        const auto queueGeometry = [&](float shift) {
+            std::vector<ImmPlayer::Document::AuthoringElementGeometry> elements(1);
+            auto & element = elements[0];
+            element.mBrush = ImmImporter::Element::BrushSectionType::Circle;
+            element.mVisibility = ImmImporter::Element::VisibilityType::Always;
+            element.mPoints.resize(16);
+            for (uint32_t index = 0; index < 16; ++index)
+            {
+                const float t = static_cast<float>(index) / 15.0f;
+                auto & point = element.mPoints[index];
+                point.mPos = ImmCore::vec3(2.0f + shift + t * 0.5f, 1.5f, 0.0f);
+                point.mNor = ImmCore::vec3(0.0f, 1.0f, 0.0f);
+                point.mDir = ImmCore::vec3(0.0f, 0.0f, 1.0f);
+                point.mCol = ImmCore::vec3(1.0f, 0.1f, 0.1f);
+                point.mAlpha = 1.0f;
+                point.mWidth = 0.03f;
+                point.mLength = t;
+                point.mTime = t;
+            }
+            return player->QueueDrawingGeometry(mDocumentId, mLayerId, mOriginalDrawingId,
+                std::move(elements), ImmImporter::Drawing::ColorSpace::Gamma, false, 0.03f);
+        };
+        const auto snapshotStable = [&](float targetShift) {
+            if (player->GetLayerCount(mDocumentId) != mStandaloneLayerCount)
+                return false;
+            for (const auto & before : mStandaloneLayers)
+            {
+                uint64_t mapped = 0;
+                if (!player->GetFrameDrawingHandle(mDocumentId, before.id, 0, mapped) || mapped != before.handles[0])
+                    return false;
+                for (size_t drawing = 0; drawing < before.handles.size(); ++drawing)
+                {
+                    uint64_t handle = 0;
+                    ImmCore::bound3 box;
+                    auto expected = before.boxes[drawing];
+                    if (before.target && drawing == 0 && targetShift != 0.0f)
+                    {
+                        // New raw geometry uses width 0.03, whereas the imported
+                        // control's saved bounds retain codec quantization.
+                        expected.mMinX = 2.0f + targetShift - 0.03f;
+                        expected.mMaxX = 2.0f + targetShift + 0.5f + 0.03f;
+                        expected.mMinY = 1.5f - 0.03f;
+                        expected.mMaxY = 1.5f + 0.03f;
+                        expected.mMinZ = -0.03f;
+                        expected.mMaxZ = 0.03f;
+                    }
+                    if (!player->GetDrawingHandle(mDocumentId, before.id, static_cast<int>(drawing), handle) ||
+                        handle != before.handles[drawing] ||
+                        !player->GetDrawingBBox(mDocumentId, before.id, static_cast<int>(drawing), box))
+                        return false;
+                    if (!iSubtreeBoxesMatch(box, expected))
+                    {
+                        log->Printf(LT_ERROR,
+                            L"[IMM_LIVE_GPU_UNLOAD] boundsMismatch layer=%d drawing=%u actual=%f,%f,%f,%f,%f,%f expected=%f,%f,%f,%f,%f,%f",
+                            before.id, static_cast<unsigned>(drawing),
+                            box.mMinX, box.mMinY, box.mMinZ, box.mMaxX, box.mMaxY, box.mMaxZ,
+                            expected.mMinX, expected.mMinY, expected.mMinZ, expected.mMaxX, expected.mMaxY, expected.mMaxZ);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        if (mGPUPreparedUnloadStage == 4)
+        {
+            ImmPlayer::Player::DocumentState state;
+            player->GetDocumentState(state, mDocumentId);
+            if (state.mLoadingState == ImmPlayer::Player::LoadingState::Failed)
+            {
+                fail(L"uploaded pending document unload failed");
+                return;
+            }
+            if (state.mLoadingState != ImmPlayer::Player::LoadingState::Unloaded)
+                return;
+            bool editing = false;
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            ImmPlayer::Document::AuthoringCommitStatus status;
+            mGPUPreparedSessionInvalid = (!player->GetEditingState(mDocumentId, editing) || !editing) &&
+                !player->GetAuthoringRevisions(mDocumentId, revisions) &&
+                !player->GetAuthoringCommitStatus(mDocumentId, mRevision, status);
+            if (!mGPUPreparedSessionInvalid)
+            {
+                fail(L"old authoring session remains accessible before slot reuse");
+                return;
+            }
+#if defined(WINDOWS) || defined(_WIN32)
+            const int cleared = _putenv_s("IMM_LIVE_EDIT_HOLD_GPU_PREPARED", "");
+#else
+            const int cleared = unsetenv("IMM_LIVE_EDIT_HOLD_GPU_PREPARED");
+#endif
+            if (cleared != 0)
+            {
+                fail(L"could not clear owned process hold for recovery");
+                return;
+            }
+            mGPUPreparedReloadDocument = player->Load(L"gpu-unload.imm");
+            if (mGPUPreparedReloadDocument < 0)
+            {
+                fail(L"recovery reload failed");
+                return;
+            }
+            mGPUPreparedUnloadStage = 5;
+            return;
+        }
+        if (mGPUPreparedUnloadStage == 5)
+        {
+            ImmPlayer::Player::DocumentState state;
+            player->GetDocumentState(state, mGPUPreparedReloadDocument);
+            if (state.mLoadingState == ImmPlayer::Player::LoadingState::Failed)
+            {
+                fail(L"recovery document failed loading");
+                return;
+            }
+            if (state.mLoadingState != ImmPlayer::Player::LoadingState::Loaded)
+                return;
+            std::vector<ImmPlayer::Player::LayerInfo> paints;
+            for (int index = 0; index < player->GetLayerCount(mGPUPreparedReloadDocument); ++index)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (!player->GetLayerInfoByIndex(mGPUPreparedReloadDocument, index, info))
+                {
+                    fail(L"recovery layer enumeration failed");
+                    return;
+                }
+                if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint))
+                {
+                    if (!info.isLoaded || info.paintNumStrokes != info.paintNumDrawings)
+                        return;
+                    paints.push_back(info);
+                }
+            }
+            if (paints.size() != 2 || !player->AttachEditing(mGPUPreparedReloadDocument))
+            {
+                fail(L"recovery corpus or editing attach mismatch");
+                return;
+            }
+            mDocumentId = mGPUPreparedReloadDocument;
+            for (auto & before : mStandaloneLayers)
+            {
+                const auto & info = paints[std::wstring(paints[0].name) ==
+                    (before.target ? L"PropertyTarget" : L"PropertySibling1") ? 0 : 1];
+                if (std::wstring(info.name) != (before.target ? L"PropertyTarget" : L"PropertySibling1") ||
+                    info.paintNumDrawings != static_cast<int>(before.handles.size()))
+                {
+                    fail(L"recovery named corpus changed");
+                    return;
+                }
+                before.id = info.id;
+                for (size_t drawing = 0; drawing < before.handles.size(); ++drawing)
+                    if (!player->GetDrawingHandle(mDocumentId, info.id, static_cast<int>(drawing), before.handles[drawing]))
+                    {
+                        fail(L"recovery fresh drawing handle missing");
+                        return;
+                    }
+                if (before.target)
+                {
+                    mLayerId = info.id;
+                    mOriginalDrawingId = before.handles[0];
+                }
+            }
+            if (!snapshotStable(0.0f))
+            {
+                fail(L"recovery reloaded pending geometry or changed sibling");
+                return;
+            }
+            player->Pause(mDocumentId);
+            mGPUPreparedUnloadStage = 6;
+            return;
+        }
+        if (mGPUPreparedUnloadStage == 6)
+        {
+            if (!mBenchmarkSeeked)
+            {
+                player->SetTime(mDocumentId, ImmCore::piTick(0), ImmCore::piTick(1));
+                mBenchmarkSeeked = true;
+                return;
+            }
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            ImmCore::piTick position(0), stopped(0);
+            player->GetTime(mDocumentId, &position, &stopped);
+            if (position != ImmCore::piTick(0) || stopped <= ImmCore::piTick(0) ||
+                !iSubtreeBoxesMatch(player->GetDocumentBBox(mDocumentId), mStandaloneBoxBefore) ||
+                !player->GetAuthoringRevisions(mDocumentId, revisions) || revisions.mPresented != 0)
+            {
+                fail(L"fresh recovery session state or bounds mismatch");
+                return;
+            }
+            const int32_t queued = queueGeometry(0.15f);
+            if (queued == -7) return; // Import may still own drawing storage after residency.
+            if (queued != 0 || (mRevision = player->CommitEdits(mDocumentId)) == 0)
+            {
+                log->Printf(LT_ERROR, L"[IMM_LIVE_GPU_UNLOAD] queueResult=%d stage=6", queued);
+                fail(L"fresh recovery session could not queue or commit healthy replacement");
+                return;
+            }
+            mGPUPreparedHeldFrame = 0;
+            mGPUPreparedUnloadStage = 7;
+            return;
+        }
+        if (mGPUPreparedUnloadStage == 7)
+        {
+            ImmPlayer::Document::AuthoringCommitStatus status;
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            if (!player->GetAuthoringCommitStatus(mDocumentId, mRevision, status) ||
+                !player->GetAuthoringRevisions(mDocumentId, revisions) ||
+                status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected)
+            {
+                fail(L"healthy replacement failed");
+                return;
+            }
+            if (status.mState != ImmPlayer::Document::AuthoringCommitState::Presented)
+                return;
+            if (mGPUPreparedHeldFrame == 0)
+                mGPUPreparedHeldFrame = frame;
+            if (frame < mGPUPreparedHeldFrame + 2)
+                return;
+            const auto & performance = viewer.GetPerformanceInfoForFrame();
+            mStandaloneSuccessful = status.mResult == 0 && revisions.mPresented == mRevision &&
+                revisions.mPrepared == mRevision && snapshotStable(0.15f) &&
+                performance.numPaintDrawCalls == mGPUPreparedBaseDrawCalls &&
+                performance.numTriangles == mGPUPreparedBaseTriangles && mGPUPreparedSessionInvalid;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_GPU_UNLOAD] pass=%d stage=6 heldCapture=0 uploadedUnpublished=1 sessionInvalid=%d reloaded=1 healthyPresented=1 stableSibling=1 layer=%d revision=%llu",
+                mStandaloneSuccessful ? 1 : 0, mGPUPreparedSessionInvalid ? 1 : 0,
+                mLayerId, static_cast<unsigned long long>(mRevision));
+            mMeasured = true;
+            return;
+        }
+        const int doc = viewer.GetPrimaryDocumentId();
+        if (doc < 0 || !viewer.IsDocumentLoaded(doc))
+            return;
+        if (mGPUPreparedUnloadStage == 0)
+        {
+            std::vector<ImmPlayer::Player::LayerInfo> paints;
+            int loaded = 0;
+            for (int index = 0; index < player->GetLayerCount(doc); ++index)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (!player->GetLayerInfoByIndex(doc, index, info))
+                {
+                    fail(L"source layer enumeration failed");
+                    return;
+                }
+                if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint))
+                {
+                    if (!info.isLoaded)
+                        return;
+                    loaded += info.paintNumStrokes;
+                    paints.push_back(info);
+                }
+            }
+            if (loaded != 10)
+                return;
+            if (paints.size() != 2 || !player->AttachEditing(doc))
+            {
+                fail(L"expected two-paint Small property fixture");
+                return;
+            }
+            mDocumentId = doc;
+            mStandaloneLayerCount = player->GetLayerCount(doc);
+            mStandaloneBoxBefore = player->GetDocumentBBox(doc);
+            for (const auto & info : paints)
+            {
+                SubtreeLayerSnapshot snapshot;
+                snapshot.id = info.id;
+                snapshot.target = std::wstring(info.name) == L"PropertyTarget";
+                if ((!snapshot.target && std::wstring(info.name) != L"PropertySibling1") || info.paintNumDrawings != 5)
+                {
+                    fail(L"source named fixture mismatch");
+                    return;
+                }
+                for (int drawing = 0; drawing < info.paintNumDrawings; ++drawing)
+                {
+                    uint64_t handle = 0;
+                    ImmCore::bound3 box;
+                    if (!player->GetDrawingHandle(doc, info.id, drawing, handle) ||
+                        !player->GetDrawingBBox(doc, info.id, drawing, box))
+                    {
+                        fail(L"source drawing snapshot failed");
+                        return;
+                    }
+                    snapshot.handles.push_back(handle);
+                    snapshot.boxes.push_back(box);
+                }
+                if (snapshot.target)
+                {
+                    mLayerId = info.id;
+                    mOriginalDrawingId = snapshot.handles[0];
+                }
+                mStandaloneLayers.push_back(std::move(snapshot));
+            }
+            if (mLayerId < 0)
+            {
+                fail(L"source target absent");
+                return;
+            }
+            player->Pause(doc);
+            mGPUPreparedUnloadStage = 1;
+            return;
+        }
+        if (mGPUPreparedUnloadStage == 1)
+        {
+            player->SetTime(doc, ImmCore::piTick(0), ImmCore::piTick(1));
+            mGPUPreparedHeldFrame = frame;
+            mGPUPreparedUnloadStage = 2;
+            return;
+        }
+        ImmCore::piTick position(0), stopped(0);
+        player->GetTime(doc, &position, &stopped);
+        if (position != ImmCore::piTick(0) || stopped <= ImmCore::piTick(0))
+        {
+            fail(L"source playback was not held at frame zero");
+            return;
+        }
+        if (mGPUPreparedUnloadStage == 2)
+        {
+            if (frame < mGPUPreparedHeldFrame + 2)
+                return;
+            const auto & performance = viewer.GetPerformanceInfoForFrame();
+            mGPUPreparedBaseDrawCalls = performance.numPaintDrawCalls;
+            mGPUPreparedBaseTriangles = performance.numTriangles;
+            mStandaloneBoxBefore = player->GetDocumentBBox(doc);
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            if (mGPUPreparedBaseDrawCalls != 2 || mGPUPreparedBaseTriangles <= 0 ||
+                !player->GetAuthoringRevisions(doc, revisions))
+            {
+                fail(L"baseline revisions or render failed");
+                return;
+            }
+            const int32_t queued = queueGeometry(0.30f);
+            if (queued == -7) return; // Full CPU residency can precede worker ownership release.
+            if (queued != 0 || (mRevision = player->CommitEdits(doc)) == 0)
+            {
+                log->Printf(LT_ERROR, L"[IMM_LIVE_GPU_UNLOAD] queueResult=%d stage=2", queued);
+                fail(L"nonempty replacement queue or commit failed");
+                return;
+            }
+            mStandaloneOldRevision = revisions.mPresented;
+            mGPUPreparedHeldFrame = 0;
+            mGPUPreparedUnloadStage = 3;
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_GPU_UNLOAD] queued=1 layer=%d revision=%llu oldPresented=%llu",
+                mLayerId, static_cast<unsigned long long>(mRevision), static_cast<unsigned long long>(mStandaloneOldRevision));
+            return;
+        }
+        ImmPlayer::Document::AuthoringCommitStatus status;
+        ImmPlayer::Document::AuthoringRevisions revisions;
+        if (!player->GetAuthoringCommitStatus(doc, mRevision, status) || !player->GetAuthoringRevisions(doc, revisions) ||
+            status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected ||
+            status.mState == ImmPlayer::Document::AuthoringCommitState::Presented)
+        {
+            fail(L"held replacement unexpectedly became terminal");
+            return;
+        }
+        if (status.mState != ImmPlayer::Document::AuthoringCommitState::Prepared)
+            return;
+        const auto & performance = viewer.GetPerformanceInfoForFrame();
+        if (revisions.mPrepared != mRevision || revisions.mPresented != mStandaloneOldRevision ||
+            !snapshotStable(0.0f) || !iSubtreeBoxesMatch(player->GetDocumentBBox(doc), mStandaloneBoxBefore) ||
+            performance.numPaintDrawCalls != mGPUPreparedBaseDrawCalls || performance.numTriangles != mGPUPreparedBaseTriangles)
+        {
+            fail(L"uploaded unpublished geometry changed old model or render selection");
+            return;
+        }
+        if (mGPUPreparedHeldFrame == 0)
+            mGPUPreparedHeldFrame = frame;
+        const uint64_t heldFrames = frame - mGPUPreparedHeldFrame + 1;
+        log->Printf(LT_MESSAGE,
+            L"[IMM_LIVE_GPU_UNLOAD] stage=3 heldFrames=%llu oldState=1 prepared=%llu presented=%llu layer=%d",
+            static_cast<unsigned long long>(heldFrames), static_cast<unsigned long long>(revisions.mPrepared),
+            static_cast<unsigned long long>(revisions.mPresented), mLayerId);
+        if (heldFrames < 3)
+            return;
+        if (mGPUPreparedCaptureOnly)
+        {
+            mStandaloneSuccessful = true;
+            mMeasured = true;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_GPU_UNLOAD] pass=1 stage=3 heldCapture=1 uploadedUnpublished=1 heldFrames=%llu stableSibling=1",
+                static_cast<unsigned long long>(heldFrames));
+            return;
+        }
+        log->Printf(LT_MESSAGE, L"[IMM_LIVE_GPU_UNLOAD] unloadQueued=1 revision=%llu",
+            static_cast<unsigned long long>(mRevision));
+        player->Unload(doc);
+        mGPUPreparedUnloadStage = 4;
+    }
+
     void LiveEditValidation::TickPropertyBenchmark(Viewer & viewer, ImmCore::piLog * log,
         uint64_t frame, uint64_t requestedFrame)
     {
@@ -1904,18 +2306,25 @@ namespace ExePlayer
             mPaintCreationEnabled = paint != nullptr && std::string(paint) == "1";
             const char * sequence = std::getenv("IMM_VIEWER_LIVE_FRAME_SEQUENCE");
             mFrameSequenceEnabled = sequence != nullptr && std::string(sequence) == "1";
+            const char * gpuUnload = std::getenv("IMM_VIEWER_LIVE_GPU_PREPARED_UNLOAD");
+            mGPUPreparedUnloadEnabled = gpuUnload != nullptr &&
+                (std::string(gpuUnload) == "1" || std::string(gpuUnload) == "held");
+            mGPUPreparedCaptureOnly = gpuUnload != nullptr && std::string(gpuUnload) == "held";
             const char * unload = std::getenv("IMM_VIEWER_LIVE_CREATE_PAINT_UNLOAD");
             mPaintCreationUnload = unload != nullptr && std::string(unload) == "1";
-            if (static_cast<int>(mStandaloneEnabled) + static_cast<int>(mPaintCreationEnabled) + static_cast<int>(mFrameSequenceEnabled) > 1)
+            if (static_cast<int>(mStandaloneEnabled) + static_cast<int>(mPaintCreationEnabled) +
+                static_cast<int>(mFrameSequenceEnabled) + static_cast<int>(mGPUPreparedUnloadEnabled) > 1)
             {
                 log->Printf(LT_ERROR, L"[IMM_LIVE_PAINT_CREATE] pass=0 stage=0 reason=conflicting standalone modes");
                 mMeasured = true;
             }
-            mStandaloneEnabled = mStandaloneEnabled || mPaintCreationEnabled || mFrameSequenceEnabled;
+            mStandaloneEnabled = mStandaloneEnabled || mPaintCreationEnabled || mFrameSequenceEnabled || mGPUPreparedUnloadEnabled;
         }
         if (mStandaloneEnabled)
         {
-            if (mFrameSequenceEnabled)
+            if (mGPUPreparedUnloadEnabled)
+                TickGPUPreparedUnload(viewer, log, frame, requestedFrame);
+            else if (mFrameSequenceEnabled)
                 TickFrameSequence(viewer, log, frame, requestedFrame);
             else if (mPaintCreationEnabled)
                 TickPaintCreation(viewer, log, frame, requestedFrame);

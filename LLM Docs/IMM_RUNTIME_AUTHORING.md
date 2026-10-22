@@ -630,12 +630,21 @@ now covers CPU-prepared paint-creation cancellation/unload/reload and renderer-s
 release locally, while 6.53 covers stale handles after paint-subtree deletion.
 Cancellation during an in-flight GPU upload and broader backend accounting remain open.
 
+Roadmap 6.64 adds a passing Windows D3D11 test after nonempty GPU preparation and
+before publication. Held/control RGB images match exactly; the old selected
+geometry/token stays active, the unpublished token is cancelled once, old session
+queries fail before reuse, and reload supports a healthy visible replacement.
+`IMM_LIVE_EDIT_HOLD_GPU_PREPARED` is an opt-in diagnostic hold; preparation runs
+once across held frames. This covers uploaded, unpublished resources, not resources
+already submitted for rendering, fence completion, leak counts or other backends.
+
 Roadmap 6.65 fixes legacy seek-then-immediate-pause ordering: a valid loaded,
 entered document now evaluates its requested pose during SetTime, before a queued
 Pause can suppress evaluation. Paused seeks remain paused. The new CPU regression
 fails before the fix and passes afterward. Static/pretessellated draw counters now
 clear even when no paint layers are visible. An Android producer exposed the
-missing-paint failure; replacement device pixel evidence is still required.
+missing-paint failure; its replacement non-XR producer now passes with visible IMM
+content and unchanged occlusion thresholds. URP and strict/full CI remain pending.
 
 1. Close the acceptance evidence gap for the implemented vertical slice: add matched live-edit
    measurements and audit the regression/failure matrix before claiming M1 completion.

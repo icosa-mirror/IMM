@@ -27,12 +27,12 @@ and five jobs queued, with no failures observed. Full timeline/backend acceptanc
 presented-revision save, managed live cutover and full A1-A3
 acceptance remain open, alongside the converter/reader fidelity gaps below.
 
-The unresolved Android Vulkan failure now has fresh evidence in 39716790347:
-readiness succeeds and six captures exist, but IMM content is absent and the
-rear-occlusion composition probe fails. The producer JSON says passed=false despite
-its job appearing green; section 6.65 supersedes that apparent pass. Its native
-payload matches the same-run build. The one earlier infrastructure retry cleared
-the SDK failure; this is a runtime source failure, not another infrastructure retry.
+The Android non-XR missing-paint failure is corrected in 1d31040d: fresh run
+39721181625 has actual producer passed=true, six captures, visible IMM paint and
+passing rear occlusion at the unchanged threshold. The APK native payload matches
+the same-run build. URP and the strict collector remain pending, so full Android
+acceptance is not established. Section 6.65 records the preceding false-green job,
+source fix and actual replacement evidence. No extra infrastructure retry was used.
 Packaged
 macOS exports also remain stale until replacement builds/gates succeed.
 Earlier Unity CS1061 and Godot iOS failures were closed by complete hosted runs
@@ -2254,31 +2254,44 @@ replacement-run closure in section 6.26 (20:23 UTC):
    failure (6.65). Production mutation behavior and APIs are unchanged; full hosted
    acceptance remains pending.
 
-### 6.64. Uploaded replacement cancellation in progress (2026-10-22)
+### 6.64. Uploaded replacement cancellation: Windows milestone (2026-10-22)
 
-1. Existing queued/CPU-prepared unload cases do not establish cancellation after
-   actual GPU resource preparation. The current paint-creation hold is before
-   upload, and empty paint allocates no geometry buffers. Add a nonempty static
-   drawing replacement probe on Windows DirectX (the factory selects D3D11).
-2. Introduce an opt-in hold after successful GPU preparation and Prepared revision
+1. Added a nonempty static drawing replacement probe on Windows DirectX/D3D11.
+   Existing queued/CPU-prepared cases and empty-paint creation do not establish
+   cancellation after geometry resource upload.
+2. Added an opt-in hold after successful GPU preparation and Prepared revision
    assignment, before model mutation/presentation. Record that GPU preparation
    happened once: repeated Upload is not idempotent and could overwrite handles.
    Normal publication and public ABI semantics must remain unchanged.
-3. While held across rendered frames, require the old drawing/model/renderer pair
-   and old image to remain active. Unload must cancel the unpublished token once
-   before CPU replacement destruction; old-session queries must fail before slot
-   reuse. Reload and a healthy replacement must demonstrate a reusable session.
-4. This can establish cleanup of uploaded but unpublished resources. That token
+3. Three owned cases pass: control, held capture, and unload/reload recovery. The
+   old RGB image matches its control exactly across the hold; three consecutive
+   held states retain the original geometry revision and renderer token while the
+   new nonempty token is Prepared, not Presented. Exactly one cancellation occurs
+   with no old-session swap. Session queries fail before reuse, reload restores the
+   original geometry, and a healthy visible replacement moves only the red target.
+   Blue sibling pixels and unchanged drawing bounds/handles remain stable.
+4. This establishes cleanup of uploaded but unpublished resources. That token
    was never drawn, so it cannot establish retirement of in-flight replacement
    work, GPU completion/fence behavior, exact resource leak counts or other-backend
    acceptance. Existing D3D12 submitted-work lifetime checks remain separate.
-5. Android run 39716790347 now has both player builds passed and non-XR/URP Firebase
-   jobs 119627721787/119627721755 running, with no failures observed. Device and
-   strict evidence results retain priority over this local acceptance work.
-6. Work is suspended for the confirmed Android source failure (6.65). The new
-   Document hold and viewer probe are uncommitted work; the viewer probe is not
-   compiled/validated and its Python harness is not yet written. Preserve it while
-   building the regression fix from staged source, then restore it exactly.
+5. Windows Unity/viewer/Godot builds, native failure/policy tests, strict exports,
+   eleven sequence cases and Small property/control rendering checks pass. Evidence:
+   artifacts/gpu-prepared-final-build.log, gpu-prepared-viewer-payload-bounds-build.log,
+   gpu-prepared-unload-run4/, gpu-prepared-final-{native,policy}-tests.log,
+   gpu-prepared-final-exports.*, gpu-prepared-{sequence,property}-regression/ and
+   gpu-prepared-parser-tests.log. Parser negative checks reject empty payloads,
+   duplicate/missing held frames, stale renderer traces, publication before cancel,
+   missing/double cancellation and missing invalidation/recovery evidence.
+6. Work was preserved during the priority Android fix (6.65). Exploratory recovery
+   checks then exposed test assumptions: fully resident drawing data can still be
+   import-owned, and a new raw geometry payload has different quantization from
+   imported bounds. The probe now honors QueueFull, logs exact failures, and checks
+   the new payload's bounds without loosening the original 1e-6 tolerance. The first
+   generic queue failure did not log its return code, so its cause is not proven.
+7. Windows CI now requires the three-case smoke and uploads reports/captures.
+   Workflow wiring/syntax checks pass; replacement CI for this milestone is pending.
+   The preceding seek-fix run now has an actual accepted non-XR producer (6.65);
+   full Android acceptance still requires URP and the strict collector.
 
 ### 6.65. Android freeze failure and truthful producer status (2026-10-22)
 
@@ -2329,8 +2342,17 @@ replacement-run closure in section 6.26 (20:23 UTC):
    for byte; seek-staged-build-provenance.json records both hashes and restoration.
    Matching Windows plugin output is included with the staged seek/counter fix.
 9. Pushed counter correction 0ff06a7a and seek fix 1d31040d. Fresh full validation
-   run 39721181625 is queued. Do not close the Android failure until fresh native
-   readiness, rendered IMM pixels, rear occlusion and strict collector gates pass.
+   run 39721181625 is running. Full Android acceptance still requires its strict
+   collector, not only successful native/player builds or producer job conclusions.
+10. Actual non-XR artifact 12401164243 reports passed=true, errors=[], six captures
+   and gcloud exit zero (not ignored). Its APK .so matches same-run native artifact
+   12401595945: SHA256 88c116c46e2ebbd52f689088000a084a4ab2ac7027c210caa9dc5975934a0a57.
+   Readiness reports 39 paint calls/723,866 triangles; scene composition passes and
+   rear occlusion has 271 matched pixels, below the unchanged limit. Render-only
+   and composition captures contain actual IMM paint. Evidence:
+   artifacts/ci-agent-39721181625-nonxr-* and android-seek-fix-accepted.png.
+   The earlier non-XR missing-paint failure is superseded by this producer evidence;
+   URP/strict collector/full-run acceptance remain pending.
 
 ## 7. Consolidated documents
 

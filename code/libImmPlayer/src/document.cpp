@@ -1177,17 +1177,47 @@ namespace ImmPlayer
                 }
             }
             else if (layerPaintRender == nullptr ||
-                !layerPaintRender->PrepareDrawingReplacementInGPU(
-                    renderer, mPendingPresentation.mRendererToken, log))
+                (!mPendingPresentation.mGPUPrepared &&
+                    !layerPaintRender->PrepareDrawingReplacementInGPU(
+                        renderer, mPendingPresentation.mRendererToken, log)))
             {
                 iRejectCommit(revision, -10, 0, mPendingPresentation.mObject);
                 iDiscardPendingPresentation(layerPaintRender, renderer, log);
             }
             else
             {
-                if (status != nullptr)
-                    iSetCommitState(status, AuthoringCommitState::Prepared);
-                mPreparedRevision = revision;
+                const bool holdGPUPrepared = std::getenv("IMM_LIVE_EDIT_HOLD_GPU_PREPARED") != nullptr;
+                if (!mPendingPresentation.mGPUPrepared)
+                {
+                    // Upload owns graphics resources already. A diagnostic hold must
+                    // retain that slot rather than upload over its handles each frame.
+                    mPendingPresentation.mGPUPrepared = true;
+                    if (status != nullptr)
+                        iSetCommitState(status, AuthoringCommitState::Prepared);
+                    mPreparedRevision = revision;
+                    if (holdGPUPrepared)
+                    {
+                        uint64_t points = 0;
+                        uint64_t indices = 0;
+                        const auto * drawing = dynamic_cast<const DrawingStatic *>(mPendingPresentation.mReplacement.get());
+                        const auto * geometry = drawing != nullptr ? drawing->GetGeometry() : nullptr;
+                        if (geometry != nullptr)
+                            for (const auto & buffer : geometry->mBuffers)
+                            {
+                                points += buffer.mPoints.GetLength();
+                                indices += buffer.mIndices.GetLength();
+                            }
+                        log->Printf(LT_MESSAGE,
+                            L"[IMM_LIVE_GPU_PREPARED] revision=%llu object=%llu token=%llu points=%llu indices=%llu",
+                            static_cast<unsigned long long>(revision),
+                            static_cast<unsigned long long>(mPendingPresentation.mObject),
+                            static_cast<unsigned long long>(mPendingPresentation.mRendererToken),
+                            static_cast<unsigned long long>(points),
+                            static_cast<unsigned long long>(indices));
+                    }
+                }
+                if (holdGPUPrepared)
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
 
                 Drawing * replacement = mPendingPresentation.mReplacement.get();
                 Drawing * created = nullptr;
