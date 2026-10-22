@@ -20,8 +20,9 @@ the fix and direct COM lifetime regression are pushed in b4a2c595. Fresh full
 validation run 39724027590 was cancelled after the playback regressions in 6.67
 were established. Playback correction 86fd4645 is now pushed with passing local
 regressions (6.67). Full run 39724961901 is completed/cancelled after the additional root/group
-repeat regressions in 6.68 were reproduced. Their local correction and regression
-checks now pass; replacement hosted acceptance remains pending.
+repeat regressions in 6.68 were reproduced. Correction 3b8589b1 is pushed with
+passing local regressions; fresh full run 39725916624 is queued. Hosted acceptance
+remains pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
 39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
@@ -2482,8 +2483,9 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    authoring-failure/{run.log,report.json}, timeline-repeat-policy-tests.log,
    timeline-repeat-converter/, timeline-repeat-evaluated-compare.log,
    timeline-repeat-sequence-regression/ and timeline-repeat-exports.*.
-7. Run 39724961901 is terminal completed/cancelled. A fresh full validation run must
-   accept the corrected source. No M1/M2 or full-roadmap completion is claimed.
+7. Run 39724961901 is terminal completed/cancelled. Corrected source 3b8589b1 is
+   pushed; fresh full validation run 39725916624 is queued. No hosted pass, M1/M2
+   or full-roadmap completion is claimed.
 
 ## 7. Consolidated documents
 
