@@ -421,6 +421,13 @@ return empty defaults; invalid ordinals cannot change a valid selection. Native 
 viewpoint policy and DirectX paint regressions pass locally (roadmap 6.56). Returned
 names remain borrowed; this does not establish concurrent query/teardown safety.
 
+External Unity/Godot performance queries return a synchronized numeric snapshot of
+the latest completed display counters, rather than partially reset working counters.
+No-document rendering clears it; disabling also rejects late publication. This is
+player-wide submission telemetry, not per-document or GPU-presentation acceptance.
+Native concurrent snapshot and DirectX lifecycle checks pass locally (roadmap 6.56);
+the unresolved Android readiness failure still requires replacement device evidence.
+
 Layer creation supports `Group=0` and `Paint=1`, with an existing group parent and bounded
 UTF-8 name. Paint begins visible/identity/opacity 1, non-timeline, with one empty
 drawing and frame zero mapped to it, repeat 1, version 1, and the document frame
@@ -561,7 +568,10 @@ queued and CPU-prepared group creation can be interrupted by unload without
 publication; session queries are invalidated and reload supports fresh edits.
 Invalid parent/cycle/root references and deleted group IDs are rejected. It is
 required in Windows CI. Paint geometry/GPU-resource cancellation, stale drawing
-handles and resource-release accounting still need separate evidence.
+handles and resource-release accounting require separate evidence: roadmap 6.54
+now covers CPU-prepared paint-creation cancellation/unload/reload and renderer-slot
+release locally, while 6.53 covers stale handles after paint-subtree deletion.
+Cancellation during an in-flight GPU upload and broader backend accounting remain open.
 
 1. Close the acceptance evidence gap for the implemented vertical slice: add matched live-edit
    measurements and audit the regression/failure matrix before claiming M1 completion.

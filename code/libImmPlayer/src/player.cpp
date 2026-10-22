@@ -96,6 +96,8 @@ namespace ImmPlayer
 
     bool Player::Init(piRenderer* renderer, piSoundEngine* sound, piLog* log, piTimer *timer, const Configuration * configuration)
     {
+        mRenderPerformanceSnapshot.SetEnabled(false);
+        mRenderPerformanceSnapshot.SetEnabled(true);
         log->Printf(LT_MESSAGE, L"Player Init...");
 
 #if !defined(ANDROID)
@@ -235,6 +237,7 @@ namespace ImmPlayer
 
     void Player::Deinit(void)
     {
+        mRenderPerformanceSnapshot.SetEnabled(false);
         const uint64_t num = mDocuments.GetMaxLength();
         for(uint64_t i=0; i<num; i++)
         {
@@ -1264,6 +1267,8 @@ namespace ImmPlayer
             const bool needDisable = (mEnabled && !enabled);
             const bool needEnable = (!mEnabled && enabled);
             mEnabled = enabled;
+            if (needDisable || needEnable)
+                mRenderPerformanceSnapshot.SetEnabled(enabled);
 
 
             // send commands to documents
@@ -1391,7 +1396,11 @@ namespace ImmPlayer
 
     void Player::GlobalRender(const trans3d & vr_to_head, const trans3d & world_to_head, const mat4x4 & projection, const StereoMode & stereoMode)
     {
-        if (!mEnabled) return;
+        if (!mEnabled)
+        {
+            mRenderPerformanceSnapshot.Clear();
+            return;
+        }
 
         iTraceUnityGlobalRender("enter");
         //mLog->Printf(LT_MESSAGE, L"GlobalRender(%d)", mFrameState.mFrameID);
@@ -1519,6 +1528,8 @@ namespace ImmPlayer
         }
         mMutex.unlock();
         iTraceUnityGlobalRender("exit");
+        if (!mAnyDocToRender)
+            mRenderPerformanceSnapshot.Clear();
 
         //log->Printf(LT_MESSAGE, L"Global Done!");
     }
@@ -1753,6 +1764,24 @@ namespace ImmPlayer
             }
         }
 #endif
+        // Publish only complete numeric results. GlobalRender's working resets
+        // and draw accumulation must never be exposed to another thread.
+        RenderPerformanceSnapshot snapshot;
+        snapshot.cpuLoadTimeMS = mCurrentPerfInfo.cpuLoadTimeMS;
+        snapshot.numDrawCalls = mCurrentPerfInfo.numDrawCalls;
+        snapshot.numDrawCallsCulled = mCurrentPerfInfo.numDrawCallsCulled;
+        snapshot.numPaintDrawCalls = mCurrentPerfInfo.numPaintDrawCalls;
+        snapshot.numPictureDrawCalls = mCurrentPerfInfo.numPictureDrawCalls;
+        snapshot.numPicture2DDrawCalls = mCurrentPerfInfo.numPicture2DDrawCalls;
+        snapshot.numPicture360DrawCalls = mCurrentPerfInfo.numPicture360DrawCalls;
+        snapshot.numPicture360EquirectDrawCalls = mCurrentPerfInfo.numPicture360EquirectDrawCalls;
+        snapshot.numPicture360CubemapDrawCalls = mCurrentPerfInfo.numPicture360CubemapDrawCalls;
+        snapshot.numModelDrawCalls = mCurrentPerfInfo.numModelDrawCalls;
+        snapshot.numTriangles = mCurrentPerfInfo.numTriangles;
+        snapshot.numTrianglesCulled = mCurrentPerfInfo.numTrianglesCulled;
+        snapshot.validationTimeFrame = mCurrentPerfInfo.validationTimeFrame;
+        snapshot.gpuTimeAverageMs = mCurrentPerfInfo.gpuTimeAverageMs;
+        mRenderPerformanceSnapshot.Publish(snapshot);
     }
 
     //-----------------------------------------------------------------------------------------------------------------

@@ -453,7 +453,7 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_GetRenderPerformanceInfo(ImmGodotRenderP
     if (info == nullptr || !gBridge.IsInitialized() || gBridge.GetPlayer() == nullptr)
         return -1;
 
-    const Player::PerformanceInfo &nativeInfo = iPlayer().GetPerformanceInfoForFrame();
+    const ImmPlayer::RenderPerformanceSnapshot nativeInfo = iPlayer().GetRenderPerformanceSnapshot();
     info->numDrawCalls = nativeInfo.numDrawCalls;
     info->numDrawCallsCulled = nativeInfo.numDrawCallsCulled;
     info->numPaintDrawCalls = nativeInfo.numPaintDrawCalls;

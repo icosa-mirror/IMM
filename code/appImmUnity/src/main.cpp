@@ -3176,7 +3176,7 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetPerformanceInfo(Im
     if (info == nullptr)
         return;
 
-    const Player::PerformanceInfo& perf = iPlayer().GetPerformanceInfoForFrame();
+    const ImmPlayer::RenderPerformanceSnapshot perf = iPlayer().GetRenderPerformanceSnapshot();
     info->cpuLoadTimeMS = perf.cpuLoadTimeMS;
     info->numDrawCalls = perf.numDrawCalls;
     info->numDrawCallsCulled = perf.numDrawCallsCulled;

@@ -15,7 +15,8 @@ failure checks (6.53-6.55). Subtree run 39704338933 passed Windows and Android
 builds; Apple jobs remain queued. Paint creation and the ownership correction
 are pushed in 50efa422/97ee60b0. Full run 39708054202 was cancelled after review
 found stale spawn-cache pointers across unload; the focused correction passes local
-regressions (6.56). The render-counter synchronization correction is in progress.
+regressions (6.56). The render-counter synchronization correction also passes local
+checks; both fixes await a fresh full CI run.
 The older Android readiness failure and stale packaged macOS
 exports remain unresolved; full A1-A3 and the converter acceptance gaps stay open.
 
@@ -2000,7 +2001,7 @@ replacement-run closure in section 6.26 (20:23 UTC):
    paint-create-deletion-regression/ and paint-create-renderer-run2/.
 4. Commits 50efa422 and 97ee60b0 were pulled/pushed together; fresh full validation
    run 39708054202 was cancelled after review found a spawn-cache lifetime defect
-   exposed by actually deleting owned layers. The correction is in progress; no
+   exposed by actually deleting owned layers. The correction passes local checks; no
    full-platform acceptance is claimed. Queue audit
    found Apple jobs awaiting runner assignment, no pending approvals/deployments,
    and an older macos-14 job actively running. This supports allocation backlog;
@@ -2008,7 +2009,7 @@ replacement-run closure in section 6.26 (20:23 UTC):
    Evidence: artifacts/apple-queue-*.json. Regression monitoring, Android readiness
    diagnosis and the next lifecycle audit run in parallel; no required gate is weakened.
 
-### 6.56. Regression follow-up in progress (2026-10-22)
+### 6.56. Regression follow-up (2026-10-22)
 
 1. Spawn lifecycle review found cached raw Layer pointers surviving manager Exit,
    unsafe negative/out-of-range queries and stale selection across reload without
@@ -2023,9 +2024,19 @@ replacement-run closure in section 6.26 (20:23 UTC):
    spawn-cache-policy-tests.log and spawn-cache-paint-regression/.
 2. Android readiness review found unsynchronized external reads of working render
    counters while GlobalRender resets triangles and display rendering updates the
-   other fields. A completed numeric snapshot is being added for external Unity/
-   Godot performance queries. This is a concrete data race; its contribution to
-   the observed Android readiness failure remains unproven until device validation.
+   other fields. External Unity/Godot performance queries now read a completed
+   numeric snapshot by value under a short dedicated mutex. Publication follows
+   complete display counters; no-document rendering clears it and disabling clears
+   and rejects late publication. No string allocation or exported layout changes
+   are involved. The legacy reference getter remains render-thread-only.
+3. Windows Unity/viewer/Godot native builds, concurrent snapshot publication/reset/
+   disable tests in the required authoring harness, exporter bridge and five DirectX
+   paint-creation cases pass. Evidence: artifacts/perf-snapshot-build.log,
+   perf-snapshot-native-tests.log, perf-snapshot-bridge.log and
+   perf-snapshot-paint-regression/. The snapshot is player-wide, from the latest
+   completed display submission; it does not certify a specific document, GPU
+   completion or presentation. The race is concrete, but its contribution to the
+   Android readiness failure remains unproven until replacement device validation.
 
 ## 7. Consolidated documents
 

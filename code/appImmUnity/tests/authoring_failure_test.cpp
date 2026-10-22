@@ -1,17 +1,84 @@
 // Real Document lifecycle/authoring test; groups/viewpoints only, no GPU resources.
 #include <chrono>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
+#include <type_traits>
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 #include "libImmPlayer/src/document.h"
 #include "libImmPlayer/src/mngrPlayer.h"
+#include "libImmPlayer/src/renderPerformanceSnapshot.h"
 using namespace ImmCore;
 using namespace ImmImporter;
 using namespace ImmPlayer;
 static void require(bool ok, const char* message)
 {
     if (!ok) { std::fprintf(stderr, "[IMM_AUTHORING_FAILURE_TEST] %s\n", message); std::exit(1); }
+}
+
+static void checkRenderPerformanceSnapshots()
+{
+    static_assert(std::is_trivially_copyable<RenderPerformanceSnapshot>::value,
+        "render performance publication must own no allocation");
+    RenderPerformanceSnapshotStore store;
+    require(store.Get().numPaintDrawCalls == 0 && store.Get().numTriangles == 0,
+        "performance snapshot starts empty");
+    std::atomic<bool> started(false), done(false), invalid(false);
+    std::atomic<unsigned int> readersReady(0);
+    std::atomic<uint64_t> observations(0);
+    const auto read = [&]() {
+        readersReady.fetch_add(1);
+        while (!started.load())
+            std::this_thread::yield();
+        do
+        {
+            const auto snapshot = store.Get();
+            // One publication's fields encode the same value. Any partial copy
+            // or a reset interleaved with a read violates these relationships.
+            const int value = snapshot.numPaintDrawCalls;
+            if (snapshot.numDrawCalls != value * 2 || snapshot.numTriangles != value * 8 ||
+                snapshot.validationTimeFrame != static_cast<uint64_t>(value))
+                invalid.store(true);
+            observations.fetch_add(1);
+        } while (!done.load());
+    };
+    std::thread first(read), second(read);
+    while (readersReady.load() != 2)
+        std::this_thread::yield();
+    started.store(true);
+    for (int index = 0; index < 50000; index++)
+    {
+        RenderPerformanceSnapshot snapshot;
+        const int value = index % 4096 + 1;
+        snapshot.numPaintDrawCalls = value;
+        snapshot.numDrawCalls = value * 2;
+        snapshot.numTriangles = value * 8;
+        snapshot.validationTimeFrame = static_cast<uint64_t>(value);
+        store.Publish(snapshot);
+        if (index % 31 == 0)
+            store.Clear();
+    }
+    done.store(true);
+    first.join();
+    second.join();
+    require(!invalid.load() && observations.load() >= 2, "concurrent completed snapshots stay coherent");
+    store.SetEnabled(false);
+    RenderPerformanceSnapshot nonzero;
+    nonzero.numPaintDrawCalls = 9;
+    nonzero.numTriangles = 72;
+    store.Publish(nonzero);
+    require(store.Get().numPaintDrawCalls == 0 && store.Get().numTriangles == 0,
+        "disabled snapshot rejects an in-flight render publication");
+    store.SetEnabled(true);
+    require(store.Get().numPaintDrawCalls == 0, "reenabling cannot resurrect old render metrics");
+    store.Publish(nonzero);
+    require(store.Get().numPaintDrawCalls == 9 && store.Get().numTriangles == 72,
+        "reenabled snapshot accepts a fresh completed render");
+    store.Clear();
+    require(store.Get().numPaintDrawCalls == 0 && store.Get().numTriangles == 0,
+        "empty scene snapshot clears completed metrics");
+    std::puts("[IMM_RENDER_PERFORMANCE_SNAPSHOT_TEST] coherent concurrent publication, empty reset and disabled publication gate passed");
 }
 
 static void checkLayerInitialization(piLog * log)
@@ -98,6 +165,7 @@ int wmain(int argc, wchar_t** argv)
     require(log.Init(L"artifacts/authoring-failure-runtime.log", PILOG_TXT), "log init");
     checkLayerInitialization(&log);
     checkSpawnCacheLifecycle(&log);
+    checkRenderPerformanceSnapshots();
     Document doc;
     require(doc.Init(L"authoring-failures", 0), "document init");
     auto cpu = [&](const Document::Command* command = nullptr) {

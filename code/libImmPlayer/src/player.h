@@ -16,6 +16,7 @@
 #include "layerRenderers/layerRendererPaint/layerRendererPaint.h"
 
 #include "document.h"
+#include "renderPerformanceSnapshot.h"
 #include "libImmImporter/src/document/layer.h"
 
 namespace ImmPlayer {
@@ -253,8 +254,10 @@ namespace ImmPlayer {
             int numFramesMeasured = 0;
         };
 
-        // Stats for this frame populated after Render*() method.
+        // Render-thread-only working stats, populated after Render*(). Other
+        // threads must use the completed numeric snapshot returned by value.
         const PerformanceInfo & GetPerformanceInfoForFrame() { return mCurrentPerfInfo; }
+        RenderPerformanceSnapshot GetRenderPerformanceSnapshot() const { return mRenderPerformanceSnapshot.Get(); }
         int GetLoadTimeInMs();
 
         enum class LoadingState : int
@@ -459,6 +462,7 @@ namespace ImmPlayer {
         int     mDeltaCap;
 
         PerformanceInfo mCurrentPerfInfo;
+        RenderPerformanceSnapshotStore mRenderPerformanceSnapshot;
         std::chrono::system_clock::time_point mCPULoadStartTimeMS;
 
         bool mEnablePerformanceMeasurement = false;
