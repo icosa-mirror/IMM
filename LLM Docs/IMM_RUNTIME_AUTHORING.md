@@ -381,7 +381,9 @@ Retirement belongs to the renderer backend:
 2. GPU destruction then uses the backend's submitted-work lifetime mechanism.
 3. Vulkan uses its fence-backed deferred-destroy submission ring. Metal retains vertex/index
    buffers until the owning command buffer completes, including externally owned command buffers.
-4. DirectX and OpenGL rely on native deferred resource-deletion semantics.
+4. The normal Windows `DirectX` factory selects D3D11; it and OpenGL rely on their
+   native resource-deletion semantics. D3D12 submission ownership checks are a
+   separate path and must not be inferred from a `DirectX` viewer pass.
 5. There is no player-level fixed three-frame delay or guessed `maxFramesInFlight` fallback.
    A new backend must meet the same lifetime contract before live authoring is enabled.
 
@@ -627,6 +629,13 @@ handles and resource-release accounting require separate evidence: roadmap 6.54
 now covers CPU-prepared paint-creation cancellation/unload/reload and renderer-slot
 release locally, while 6.53 covers stale handles after paint-subtree deletion.
 Cancellation during an in-flight GPU upload and broader backend accounting remain open.
+
+Roadmap 6.65 fixes legacy seek-then-immediate-pause ordering: a valid loaded,
+entered document now evaluates its requested pose during SetTime, before a queued
+Pause can suppress evaluation. Paused seeks remain paused. The new CPU regression
+fails before the fix and passes afterward. Static/pretessellated draw counters now
+clear even when no paint layers are visible. An Android producer exposed the
+missing-paint failure; replacement device pixel evidence is still required.
 
 1. Close the acceptance evidence gap for the implemented vertical slice: add matched live-edit
    measurements and audit the regression/failure matrix before claiming M1 completion.

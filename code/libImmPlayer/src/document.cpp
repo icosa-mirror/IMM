@@ -368,14 +368,15 @@ namespace ImmPlayer
 
     void Document::SetTime(piTick now, piTick timeSinceStart, piTick timeSinceStop)
     {
+        if (mState.mLoadingState != LoadingState::Loaded ||
+            !mPlayerManager.GetIsPlaying() || mSequence.GetRoot() == nullptr)
+            return;
         mPlayerManager.SetTime(now, timeSinceStart, timeSinceStop);
-        if (mPlayerManager.GetIsPaused())
-        {
-            // SetTime starts the root timeline so keys can be visited. Evaluate
-            // the new pose and reapply pause, as the tracked seek path does.
-            mPlayerManager.Update(now, true);
-            ++mEvaluationRevision;
-        }
+        // A seek resets keyed playback state. Evaluate its requested pose now,
+        // before a subsequent queued Pause can suppress the ordinary update.
+        // Update also preserves an existing pause, as the tracked seek path does.
+        mPlayerManager.Update(now, true);
+        ++mEvaluationRevision;
     }
 
     //----------------------------------------------------

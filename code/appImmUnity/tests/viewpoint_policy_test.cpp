@@ -353,6 +353,17 @@ int wmain(int argc, wchar_t ** argv)
     tick(18);
     doc.GetTime(piTick::FromSeconds(18), &positionAfter, &stoppedAfter);
     require(positionAfter > positionBefore, "resume restarts the root clock after a paused seek");
+    // The legacy Unity smoke queues Pause immediately after seeking a playing
+    // document. SetTime resets keyed visibility, so it must evaluate the new
+    // pose before Pause can suppress the next ordinary manager update.
+    require(doc.GetPlaybackState() == Document::PlaybackState::Playing,
+        "immediate-pause seek starts from playing state");
+    doc.SetTime(piTick::FromSeconds(18), seekPosition, piTick(1));
+    tick(18, &pause);
+    require(doc.GetPlaybackState() == Document::PlaybackState::Paused,
+        "immediate-pause seek applies queued Pause");
+    require(doc.GetAvailableSpawnAreaIds(0, nullptr) == 3,
+        "playing legacy seek followed immediately by Pause evaluates keyed visibility");
     doc.UnloadSync(nullptr, nullptr, nullptr, nullptr, Drawing::ColorSpace::Linear,
         Drawing::PaintRenderingTechnique::Static, nullptr, nullptr, &log, piTick::FromSeconds(10));
     require(!doc.IsSpawnAreaAvailable(visible), "unloaded viewpoint unavailable");

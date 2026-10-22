@@ -2312,7 +2312,22 @@ replacement-run closure in section 6.26 (20:23 UTC):
    successful independent evidence is retained. No infrastructure retry is used.
    Evidence: artifacts/ci-agent-39716790347-nonxr-*, android-composition-failure.png,
    triage-unity-android-vulkan-render.png, seek-immediate-pause-before.log and
-   android-producer-verdict-controls/. Fix validation and replacement CI are pending.
+   android-producer-verdict-controls/. The producer verdict is committed in
+   0d02624b; replacement live acceptance remains pending.
+7. Legacy SetTime now validates loaded/entered/root state and immediately evaluates
+   the requested pose whether playing or paused. An already paused document stays
+   paused. The regression's keyed-viewpoint visibility assertion fails before the
+   fix and passes afterward; chapter boundaries, early stops and prior policy cases
+   pass too. This is native CPU ordering evidence, not Android pixel acceptance.
+8. The staged runtime fix builds Windows Unity/viewer/Godot successfully. Exporter
+   bridge, strict exports, eleven sequence cases, Small three-property/control
+   captures and the existing geometry benchmark smoke pass against that build.
+   Evidence: artifacts/seek-pause-staged-native-build.log,
+   seek-immediate-pause-after.log, seek-fix-{sequence,property,geometry}-regression/,
+   seek-fix-exports.* and seek-fix-exporter-bridge.log. Unfinished GPU diagnostic
+   source was temporarily backed up, excluded from this build and restored byte
+   for byte; seek-staged-build-provenance.json records both hashes and restoration.
+   Matching Windows plugin output is included with the staged seek/counter fix.
 
 ## 7. Consolidated documents
 
