@@ -2328,6 +2328,9 @@ replacement-run closure in section 6.26 (20:23 UTC):
    source was temporarily backed up, excluded from this build and restored byte
    for byte; seek-staged-build-provenance.json records both hashes and restoration.
    Matching Windows plugin output is included with the staged seek/counter fix.
+9. Pushed counter correction 0ff06a7a and seek fix 1d31040d. Fresh full validation
+   run 39721181625 is queued. Do not close the Android failure until fresh native
+   readiness, rendered IMM pixels, rear occlusion and strict collector gates pass.
 
 ## 7. Consolidated documents
 
