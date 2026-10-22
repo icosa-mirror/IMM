@@ -13,12 +13,14 @@ Current checkpoint (2026-10-22): static paint/group subtree deletion and empty
 paint creation/population/deletion pass local DirectX lifecycle/failure checks
 (6.53-6.55). Spawn-cache lifetime and render-counter synchronization fixes are
 pushed in 56521cae/6272e87a (6.56). Their full validation run 39709116389 has
-passed eleven jobs including Windows, Android and web builds; five Apple jobs
-await runners. Engine/device gates depend on the complete build workflow and
+passed eleven jobs including Windows, Android and web builds; one Apple job is
+running and four await runners. Engine/device gates depend on the complete build workflow and
 have not accepted these revisions. Full CI is not passing yet.
 
 Spawn creation/deletion/cache publication and its reserve-failure prerequisite pass
-local checks (6.57-6.59). No new spawn renderer/backend acceptance is claimed. Whole-table paint
+local checks (6.57-6.59) and are pushed through df3c5a14. New full run 39711536998
+is queued; the preceding run is retained because Apple work has started. No new
+spawn renderer/backend acceptance is claimed. Whole-table paint
 timeline editing, presented-revision save, managed live cutover and full A1-A3
 acceptance remain open, alongside the converter/reader fidelity gaps below.
 
@@ -2075,6 +2077,11 @@ replacement-run closure in section 6.26 (20:23 UTC):
    spawn-reserve-exports.* and spawn-reserve-paint-{create,delete}/. Native exports
    remain 147 player/51 reader, with 121 declared player bindings checked. Broader
    backend lifetime, GPU/in-flight cancellation and full M2 acceptance remain open.
+5. Commits 83c173c1 (preview initialization), dc611ffc (reserve ownership/zeroing)
+   and df3c5a14 (spawn lifecycle) were pulled/pushed together. Fresh full validation
+   run 39711536998 targets df3c5a14 and is queued. Counter run 39709116389 now has
+   a running Godot iOS validation job and four Apple jobs queued; it was not cancelled.
+   Neither run yet establishes complete platform/package or Android runtime acceptance.
 
 ### 6.59. Failure-atomic reserve helpers (2026-10-22)
 
