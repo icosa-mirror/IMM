@@ -13,7 +13,10 @@ Current live checkpoint (2026-10-22): static paint/group subtree deletion and
 empty paint creation/population/deletion now have local DirectX lifecycle and
 failure checks (6.53-6.55). Subtree run 39704338933 passed Windows and Android
 builds; Apple jobs remain queued. Paint creation and the ownership correction
-need fresh full CI. The older Android readiness failure and stale packaged macOS
+are pushed in 50efa422/97ee60b0. Full run 39708054202 was cancelled after review
+found stale spawn-cache pointers across unload; the focused correction passes local
+regressions (6.56). The render-counter synchronization correction is in progress.
+The older Android readiness failure and stale packaged macOS
 exports remain unresolved; full A1-A3 and the converter acceptance gaps stay open.
 
 Local native regressions and four paired paint/viewpoint metadata comparisons pass.
@@ -1995,6 +1998,34 @@ replacement-run closure in section 6.26 (20:23 UTC):
    artifacts/layer-lifecycle-native-tests.log, paint-create-final-build.log,
    paint-create-converter-suite.log, paint-create-bridge.log,
    paint-create-deletion-regression/ and paint-create-renderer-run2/.
+4. Commits 50efa422 and 97ee60b0 were pulled/pushed together; fresh full validation
+   run 39708054202 was cancelled after review found a spawn-cache lifetime defect
+   exposed by actually deleting owned layers. The correction is in progress; no
+   full-platform acceptance is claimed. Queue audit
+   found Apple jobs awaiting runner assignment, no pending approvals/deployments,
+   and an older macos-14 job actively running. This supports allocation backlog;
+   it does not establish the account concurrency limit or justify changing OS gates.
+   Evidence: artifacts/apple-queue-*.json. Regression monitoring, Android readiness
+   diagnosis and the next lifecycle audit run in parallel; no required gate is weakened.
+
+### 6.56. Regression follow-up in progress (2026-10-22)
+
+1. Spawn lifecycle review found cached raw Layer pointers surviving manager Exit,
+   unsafe negative/out-of-range queries and stale selection across reload without
+   a default viewpoint. The ownership correction makes their lifetime especially
+   important. Manager Exit now clears cached pointers/selection; Enter resets the
+   selected ordinal even without a new default. Invalid/unloaded document queries
+   return empty defaults and invalid selections preserve the valid selection.
+   Native build, unload/reload/invalid-index tests, viewpoint policy tests and all
+   five DirectX paint creation cases pass locally. This does not change the borrowed
+   lifetime of returned names or establish concurrent query/teardown safety.
+   Evidence: artifacts/spawn-cache-final-build.log, spawn-cache-authoring-tests.log,
+   spawn-cache-policy-tests.log and spawn-cache-paint-regression/.
+2. Android readiness review found unsynchronized external reads of working render
+   counters while GlobalRender resets triangles and display rendering updates the
+   other fields. A completed numeric snapshot is being added for external Unity/
+   Godot performance queries. This is a concrete data race; its contribution to
+   the observed Android readiness failure remains unproven until device validation.
 
 ## 7. Consolidated documents
 

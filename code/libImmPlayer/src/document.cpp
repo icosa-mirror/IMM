@@ -175,21 +175,23 @@ namespace ImmPlayer
 
     int Document::GetSpawnAreaCount()
     {
-        return mPlayerManager.GetSpawnAreaCount();
+        return mState.mLoadingState == LoadingState::Loaded ? mPlayerManager.GetSpawnAreaCount() : 0;
     }
 
     int Document::GetSpawnArea()
     {
-        return mPlayerManager.GetSpawnArea();
+        return mState.mLoadingState == LoadingState::Loaded ? mPlayerManager.GetSpawnArea() : -1;
     }
 
     int Document::GetInitialSpawnArea()
     {
-        return mPlayerManager.GetInitialSpawnArea();
+        return mState.mLoadingState == LoadingState::Loaded ? mPlayerManager.GetInitialSpawnArea() : -1;
     }
 
     int Document::GetInitialSpawnAreaLayerId() const
     {
+        if (mState.mLoadingState != LoadingState::Loaded)
+            return -1;
         const Layer * layer = mSequence.GetInitialSpawnArea();
         return layer != nullptr ? static_cast<int>(layer->GetID()) : -1;
     }
@@ -199,7 +201,8 @@ namespace ImmPlayer
         if (mState.mLoadingState != LoadingState::Loaded || mEvaluationRevision == 0 ||
             spawnAreaId < 0 || spawnAreaId >= GetSpawnAreaCount())
             return false;
-        return mPlayerManager.GetSpawnAreaLayer(spawnAreaId)->GetWorldVisible();
+        const Layer * layer = mPlayerManager.GetSpawnAreaLayer(spawnAreaId);
+        return layer != nullptr && layer->GetWorldVisible();
     }
 
     int Document::GetAvailableSpawnAreaIds(int capacity, int * ids)
@@ -295,7 +298,11 @@ namespace ImmPlayer
 
     const piImage* Document::GetSpawnAreaScreenshot(int spawnAreaId)
     {
+        if (mState.mLoadingState != LoadingState::Loaded)
+            return nullptr;
         const Layer *layer = mPlayerManager.GetSpawnAreaLayer(spawnAreaId);
+        if (layer == nullptr || layer->GetType() != Layer::Type::SpawnArea || layer->GetImplementation() == nullptr)
+            return nullptr;
         const LayerSpawnArea* layerSpawnArea = (LayerSpawnArea*)layer->GetImplementation();
 
         return layerSpawnArea->GetScreenshot();
@@ -303,7 +310,12 @@ namespace ImmPlayer
 
     void Document::GetSpawnAreaInfo(SpawnAreaInfo& info, int spawnAreaId)
     {
+        info = SpawnAreaInfo{};
+        if (mState.mLoadingState != LoadingState::Loaded)
+            return;
         const Layer *layer = mPlayerManager.GetSpawnAreaLayer(spawnAreaId);
+        if (layer == nullptr || layer->GetType() != Layer::Type::SpawnArea || layer->GetImplementation() == nullptr)
+            return;
         const LayerSpawnArea* layerSpawnArea = (LayerSpawnArea*)layer->GetImplementation();
         info.mName = layer->GetName().GetS();
         info.mVersion = layerSpawnArea->GetVersion();

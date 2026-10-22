@@ -44,6 +44,7 @@ namespace ImmPlayer
     void MngrPlayer::Enter(Sequence * document, const piTick now)
     {
         mDocument = document;
+        mCurrentSpawnAreaId = -1;
 #ifdef _DEBUG
         mLog->Printf(LT_DEBUG, L"Enter!");
 #endif
@@ -129,9 +130,12 @@ namespace ImmPlayer
 #ifdef _DEBUG
         mLog->Printf(LT_DEBUG, L"Exit");
 #endif
-        Layer* root = mDocument->GetRoot();
+        Layer * root = mDocument != nullptr ? mDocument->GetRoot() : nullptr;
         mIsPlaying = false;
-        root->SetPlaying(false);
+        if (root != nullptr)
+            root->SetPlaying(false);
+        mSpawnAreas.Reset();
+        mCurrentSpawnAreaId = -1;
     }
 
     void MngrPlayer::Pause(const piTick now)
@@ -247,17 +251,22 @@ namespace ImmPlayer
 
     int MngrPlayer::GetSpawnArea()
     {
-        return mCurrentSpawnAreaId;
+        return mCurrentSpawnAreaId >= 0 && mCurrentSpawnAreaId < GetSpawnAreaCount() ?
+            mCurrentSpawnAreaId : -1;
     }
 
     int MngrPlayer::GetInitialSpawnArea()
     {
+        if (!mIsPlaying || mDocument == nullptr)
+            return -1;
         const Layer *initialSpawnArea = mDocument->GetInitialSpawnArea();
         return FindSpawnAreaIdByLayer(initialSpawnArea);
     }
 
     void MngrPlayer::SetSpawnArea(int spawnAreaId)
     {
+        if (spawnAreaId < 0 || spawnAreaId >= GetSpawnAreaCount())
+            return;
         if (mCurrentSpawnAreaId != spawnAreaId)
         {
             mCurrentSpawnAreaId = spawnAreaId;
@@ -266,6 +275,8 @@ namespace ImmPlayer
 
     Layer * MngrPlayer::GetSpawnAreaLayer( int spawnAreaId)
     {
+        if (spawnAreaId < 0 || spawnAreaId >= GetSpawnAreaCount())
+            return nullptr;
         return mSpawnAreas.Get(spawnAreaId);
     }
 

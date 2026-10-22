@@ -1199,10 +1199,11 @@ namespace ImmPlayer
 
     bool Player::GetSpawnAreaInfo(Document::SpawnAreaInfo & info, int docId, int spawnAreaId)
     {
+        info = Document::SpawnAreaInfo{};
         Document *doc = (Document *)mDocuments.GetAddress(docId);
-        if (!doc || spawnAreaId >= doc->GetSpawnAreaCount())
+        if (!doc || spawnAreaId < 0 || spawnAreaId >= doc->GetSpawnAreaCount())
         {
-            mLog->Printf(LT_ERROR, L"Invalid document id %d or spawnarea id %d.", docId, spawnAreaId);
+            if (mLog) mLog->Printf(LT_ERROR, L"Invalid document id %d or spawnarea id %d.", docId, spawnAreaId);
             return false;
         }
         doc->GetSpawnAreaInfo(info, spawnAreaId);

@@ -5,6 +5,7 @@
 #include <thread>
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 #include "libImmPlayer/src/document.h"
+#include "libImmPlayer/src/mngrPlayer.h"
 using namespace ImmCore;
 using namespace ImmImporter;
 using namespace ImmPlayer;
@@ -45,12 +46,58 @@ static void checkLayerInitialization(piLog * log)
     sequence.Deinit(log);
     std::puts("[IMM_LAYER_LIFECYCLE_TEST] depth limit, unpublished failure, repeated teardown and reinitialization passed");
 }
+static void checkSpawnCacheLifecycle(piLog * log)
+{
+    Sequence populated;
+    Sequence empty;
+    require(populated.Init(Sequence::Type::Still, 0, vec3(0.0f)) &&
+        empty.Init(Sequence::Type::Still, 0, vec3(0.0f)), "spawn cache sequences");
+    const auto initialize = [&](Layer * layer, Layer::Type type) {
+        return layer->Init(type, L"spawn-cache", true, trans3d::identity(), trans3d::identity(),
+            1.0f, false, piTick(0), 0, UINT32_MAX, log);
+    };
+    require(initialize(populated.GetRoot(), Layer::Type::Group) &&
+        initialize(empty.GetRoot(), Layer::Type::Group), "spawn cache roots");
+    Layer * spawn = populated.CreateLayer(populated.GetRoot());
+    require(spawn != nullptr && initialize(spawn, Layer::Type::SpawnArea), "metadata-only spawn layer");
+    populated.SetInitialSpawnArea(spawn);
+    MngrPlayer manager;
+    require(manager.Init(log), "spawn cache manager");
+    manager.Enter(&populated, piTick(0));
+    require(manager.GetSpawnAreaCount() == 1 && manager.GetSpawnArea() == 0 &&
+        manager.GetInitialSpawnArea() == 0, "valid spawn selection preserved");
+    require(manager.GetSpawnAreaLayer(-1) == nullptr && manager.GetSpawnAreaLayer(1) == nullptr,
+        "invalid spawn cache indices rejected");
+    manager.SetSpawnArea(-1);
+    manager.SetSpawnArea(1);
+    require(manager.GetSpawnArea() == 0, "invalid selection preserves active spawn");
+    populated.SetInitialSpawnArea(nullptr);
+    manager.Enter(&populated, piTick(1));
+    require(manager.GetSpawnAreaCount() == 1 && manager.GetSpawnArea() == -1 &&
+        manager.GetInitialSpawnArea() == -1, "same manager enter without default clears old ordinal");
+    populated.SetInitialSpawnArea(spawn);
+    manager.Enter(&populated, piTick(2));
+    require(manager.GetSpawnArea() == 0, "authored default selected after reentry");
+    manager.Exit();
+    populated.Deinit(log);
+    require(manager.GetSpawnAreaCount() == 0 && manager.GetSpawnArea() == -1 &&
+        manager.GetInitialSpawnArea() == -1 && manager.GetSpawnAreaLayer(0) == nullptr,
+        "exit clears pointers before sequence deletion");
+    manager.Enter(&empty, piTick(3));
+    require(manager.GetSpawnAreaCount() == 0 && manager.GetSpawnArea() == -1 &&
+        manager.GetInitialSpawnArea() == -1, "empty sequence does not inherit active spawn");
+    manager.Exit();
+    manager.Deinit();
+    empty.Deinit(log);
+}
+
 int wmain(int argc, wchar_t** argv)
 {
     require(argc == 2, "fixture argument");
     piLog log;
     require(log.Init(L"artifacts/authoring-failure-runtime.log", PILOG_TXT), "log init");
     checkLayerInitialization(&log);
+    checkSpawnCacheLifecycle(&log);
     Document doc;
     require(doc.Init(L"authoring-failures", 0), "document init");
     auto cpu = [&](const Document::Command* command = nullptr) {
@@ -69,6 +116,22 @@ int wmain(int argc, wchar_t** argv)
         { std::this_thread::sleep_for(std::chrono::milliseconds(1)); cpu(); gpu(); }
         require(doc.GetLoadingState() == Document::LoadingState::Loaded, "fixture loaded");
         require(doc.AttachEditing(), "attach editing");
+        const int spawnCount = doc.GetSpawnAreaCount();
+        require(spawnCount == 3 && doc.GetSpawnArea() == doc.GetInitialSpawnArea(), "loaded fixture spawn defaults");
+        Document::SpawnAreaInfo valid;
+        doc.GetSpawnAreaInfo(valid, 0);
+        require(valid.mName != nullptr && valid.mVersion > 0, "valid spawn info remains available");
+        for (const int invalid : { -1, spawnCount, INT32_MAX })
+        {
+            Document::SpawnAreaInfo info = valid;
+            doc.GetSpawnAreaInfo(info, invalid);
+            require(info.mName == nullptr && info.mVersion == 0 &&
+                doc.GetSpawnAreaScreenshot(invalid) == nullptr, "invalid spawn queries return empty defaults");
+        }
+        doc.SetSpawnArea(spawnCount - 1);
+        doc.SetSpawnArea(-1);
+        doc.SetSpawnArea(spawnCount);
+        require(doc.GetSpawnArea() == spawnCount - 1, "invalid document selection preserves last valid ordinal");
     };
     auto unload = [&](uint64_t revision) {
         Document::Command command{}; command.mType = Document::Command::Type::Unload;
@@ -76,6 +139,15 @@ int wmain(int argc, wchar_t** argv)
         doc.UnloadSync(nullptr, nullptr, nullptr, nullptr, Drawing::ColorSpace::Linear,
             Drawing::PaintRenderingTechnique::Static, nullptr, nullptr, &log, piTick(1000001));
         require(doc.GetLoadingState() == Document::LoadingState::UnloadingCompleted && !doc.IsEditing(), "unload invalidates session");
+        require(doc.GetSpawnAreaCount() == 0 && doc.GetSpawnArea() == -1 && doc.GetInitialSpawnArea() == -1 &&
+            doc.GetInitialSpawnAreaLayerId() == -1, "unload clears spawn enumeration and selection");
+        for (const int invalid : { -1, 0, 2, INT32_MAX })
+        {
+            Document::SpawnAreaInfo info{};
+            doc.GetSpawnAreaInfo(info, invalid);
+            require(info.mName == nullptr && info.mVersion == 0 &&
+                doc.GetSpawnAreaScreenshot(invalid) == nullptr, "unloaded spawn queries are safe after layer destruction");
+        }
         Document::AuthoringCommitStatus status{}; Document::AuthoringRevisions revisions{};
         require(!doc.GetAuthoringCommitStatus(revision, &status) && !doc.GetAuthoringRevisions(&revisions), "old session queries rejected");
         require(doc.QueueLayerDeletion(0) == -4, "mutation rejected while detached");
@@ -128,6 +200,7 @@ int wmain(int argc, wchar_t** argv)
         unload(deletedRevision);
     }
     doc.End(); load.mStrArg.End(); log.End();
+    std::puts("[IMM_SPAWN_CACHE_TEST] unload invalid queries, safe bounds, active ordinal reset passed (CPU-only)");
     std::puts("[IMM_AUTHORING_FAILURE_TEST] queued/prepared group unload, invalid parents, root reparent, reload, deleted IDs passed (CPU-only; no GPU cancellation evidence)");
     return 0;
 }

@@ -415,6 +415,11 @@ Spawn updates support sphere or axis-aligned box volume, floor/eye tracking, per
 locomotion mask, and the owning layer's rigid transform. Validation rejects invalid enums/masks,
 non-finite values, non-positive radii/scale, inverted bounds, and non-unit quaternions. Volume
 and transform publish together; default selection targets an existing spawn layer ID.
+Manager Exit clears cached spawn pointers/selection before layer disposal, and Enter
+resets selection when the next document has no default. Invalid/unloaded spawn queries
+return empty defaults; invalid ordinals cannot change a valid selection. Native lifecycle,
+viewpoint policy and DirectX paint regressions pass locally (roadmap 6.56). Returned
+names remain borrowed; this does not establish concurrent query/teardown safety.
 
 Layer creation supports `Group=0` and `Paint=1`, with an existing group parent and bounded
 UTF-8 name. Paint begins visible/identity/opacity 1, non-timeline, with one empty
