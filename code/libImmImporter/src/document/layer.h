@@ -244,6 +244,8 @@ namespace ImmImporter
 		double mDrawInTime;
 		double mAnimParams[4];
         ImmCore::piTick mLastActiveSpanStart; // keep track of gapless retriggering
+        ImmCore::piTick mLastActiveSpanClockOrigin;
+        bool mHasActiveSpanClockOrigin;
         ImmCore::piTick mStartOffset;
 		ImmCore::piTick mDuration;
 		ImmCore::piTick mStartTime;

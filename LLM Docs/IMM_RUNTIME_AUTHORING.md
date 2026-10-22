@@ -343,7 +343,12 @@ at the held local time. Playback intent survives zero/one-frame clips. Native-cr
 paint receives the time-zero visibility key that offline export/import already
 synthesizes; growing that paint can therefore animate without a caller-authored key.
 Existing explicitly keyless paint retains its semantics. Repeat/Loop/Offset live
-controls and managed transaction mapping remain open.
+controls and managed transaction mapping remain open. Roadmap 6.67 separates stored
+paint repeat metadata from Loop-evaluated frame selection for both implementations,
+and resets/resolves tick Offset before visibility evaluation. CPU regressions cover
+key removal/backward seeks and sound span restart metadata; content-offset changes
+no longer masquerade as timeline wraps. Audible playback is unvalidated. Group/root
+Loop canonical state remains a separate open issue.
 
 Drawing creation, deletion and geometry replacement return `QueueFull` (-7) while the
 background importer owns drawing storage; CPU preparation and GPU publication

@@ -5,8 +5,11 @@
 #include <vector>
 
 #include "libImmImporter/src/document/layerPaintStatic.h"
+#include "libImmImporter/src/document/layerPaintPretessellated.h"
 #include "libImmImporter/src/document/layer.h"
 #include "libImmImporter/src/document/sequence.h"
+#include "libImmImporter/src/document/layerSound.h"
+#include "libImmPlayer/src/mngrPlayer.h"
 
 namespace
 {
@@ -18,6 +21,167 @@ namespace
             std::exit(1);
         }
     }
+}
+
+template<typename Paint>
+static void CheckLayerDrivenPlaybackKeys()
+{
+    using namespace ImmCore;
+    using namespace ImmImporter;
+    piLog log;
+    requireFrames(log.Init(L"artifacts/paint-playback-keys.log", PILOG_TXT), "playback key test log");
+    Sequence sequence;
+    requireFrames(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "playback key sequence");
+    Layer * root = sequence.GetRoot();
+    requireFrames(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+        1.0f, true, piTick(0), 1, UINT32_MAX, &log), "playback key root");
+    root->SetStartTime(piTick(0));
+    root->SetPlaying(true);
+    Layer * layer = sequence.CreateLayer(root);
+    requireFrames(layer != nullptr && layer->Init(Layer::Type::Paint, L"Paint", true,
+        trans3d::identity(), trans3d::identity(), 1.0f, false, piTick(0), 1, UINT32_MAX, &log), "playback key paint");
+    auto * paint = new Paint();
+    requireFrames(paint->Init(3, 3, 0, 30, 1), "playback key implementation");
+    for (int index = 0; index < 3; ++index)
+    {
+        requireFrames(paint->GetDrawing(index)->Init(0), "playback key drawing");
+        paint->GetFrameBuffer()[index] = index;
+    }
+    layer->SetImplementation(paint);
+    layer->SetLoaded(true);
+    Layer::AnimValue value{};
+    value.mBool = true;
+    requireFrames(layer->AddKey(piTick(0), Layer::AnimProperty::Visibility, value,
+        Layer::InterpolationType::None), "playback visibility key");
+    value.mBool = false;
+    requireFrames(layer->AddKey(piTick::FromFrames(4, 30), Layer::AnimProperty::Loop, value,
+        Layer::InterpolationType::None), "playback loop key");
+    layer->SetStateAt(piTick::FromFrames(7, 30), &log);
+    requireFrames(paint->GetCurrentDrawing() == paint->GetDrawing(2), "active finite Loop clamps paint");
+    requireFrames(paint->GetMaxRepeatCount() == 0, "Loop evaluation preserves canonical repeat metadata");
+    layer->SetStateAt(piTick::FromFrames(3, 30), &log);
+    requireFrames(paint->GetCurrentDrawing() == paint->GetDrawing(0), "seek before Loop restores canonical repeat");
+    layer->SetStateAt(piTick::FromFrames(7, 30), &log);
+    layer->ReplaceAnimKeys(Layer::AnimProperty::Loop, {});
+    layer->SetStateAt(piTick::FromFrames(7, 30), &log);
+    requireFrames(paint->GetCurrentDrawing() == paint->GetDrawing(1), "removing Loop restores canonical repeat");
+
+    paint->SetMaxRepeatCount(2);
+    value.mBool = true;
+    requireFrames(layer->AddKey(piTick::FromFrames(8, 30), Layer::AnimProperty::Loop, value,
+        Layer::InterpolationType::None), "finite canonical repeat loop key");
+    layer->SetStateAt(piTick::FromFrames(10, 30), &log);
+    requireFrames(paint->GetMaxRepeatCount() == 2 && paint->GetCurrentDrawing() == paint->GetDrawing(1),
+        "Loop true overrides finite repeat without changing its canonical count");
+    layer->SetStateAt(piTick::FromFrames(7, 30), &log);
+    requireFrames(paint->GetMaxRepeatCount() == 2 && paint->GetCurrentDrawing() == paint->GetDrawing(2),
+        "seek before Loop restores the authored finite repeat clamp");
+    layer->SetStateAt(piTick::FromFrames(10, 30), &log);
+    layer->ReplaceAnimKeys(Layer::AnimProperty::Loop, {});
+    layer->SetStateAt(piTick::FromFrames(10, 30), &log);
+    requireFrames(paint->GetMaxRepeatCount() == 2 && paint->GetCurrentDrawing() == paint->GetDrawing(2),
+        "removing Loop restores the authored finite repeat clamp");
+    paint->SetMaxRepeatCount(0);
+
+    value.mInt = static_cast<uint32_t>(piTick::CastInt(piTick::FromFrames(1, 30)));
+    requireFrames(layer->AddKey(piTick::FromFrames(4, 30), Layer::AnimProperty::Offset, value,
+        Layer::InterpolationType::None), "playback offset key");
+    layer->SetStateAt(piTick::FromFrames(5, 30), &log);
+    requireFrames(paint->GetCurrentDrawing() == paint->GetDrawing(0), "active Offset applies on its first evaluation");
+    layer->SetStateAt(piTick::FromFrames(3, 30), &log);
+    requireFrames(paint->GetCurrentDrawing() == paint->GetDrawing(0), "seek before Offset resets local-time offset");
+    layer->SetStateAt(piTick::FromFrames(5, 30), &log);
+    layer->ReplaceAnimKeys(Layer::AnimProperty::Offset, {});
+    layer->SetStateAt(piTick::FromFrames(5, 30), &log);
+    requireFrames(paint->GetCurrentDrawing() == paint->GetDrawing(2), "removing Offset resets local-time offset");
+    sequence.Deinit(&log);
+    log.End();
+}
+
+static void CheckLayerDrivenSoundOffsets()
+{
+    using namespace ImmCore;
+    using namespace ImmImporter;
+    piLog log;
+    requireFrames(log.Init(L"artifacts/sound-offset-keys.log", PILOG_TXT), "sound offset test log");
+    Sequence sequence;
+    requireFrames(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "sound offset sequence");
+    sequence.SetInitialSpawnArea(nullptr);
+    Layer * root = sequence.GetRoot();
+    requireFrames(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+        1.0f, true, piTick(1000), 0, UINT32_MAX, &log), "sound offset looping root");
+    Layer * layer = sequence.CreateLayer(root);
+    requireFrames(layer != nullptr && layer->Init(Layer::Type::Sound, L"Sound", true,
+        trans3d::identity(), trans3d::identity(), 1.0f, false, piTick(0), 1, UINT32_MAX, &log), "sound offset layer");
+    auto * sound = new LayerSound();
+    LayerSound::AttenuationParameters attenuation{};
+    LayerSound::ModifierParameters modifier{};
+    requireFrames(sound->Init(false, false, 1.0f, attenuation, modifier, LayerSound::Type::Flat, 10.0f, &log),
+        "sound offset implementation");
+    layer->SetImplementation(sound);
+    Layer::AnimValue value{};
+    value.mBool = true;
+    requireFrames(layer->AddKey(piTick(0), Layer::AnimProperty::Visibility, value,
+        Layer::InterpolationType::None), "sound offset visibility");
+    value.mInt = 100;
+    requireFrames(layer->AddKey(piTick(10), Layer::AnimProperty::Offset, value,
+        Layer::InterpolationType::None), "sound active offset");
+    ImmPlayer::MngrPlayer player;
+    requireFrames(player.Init(&log), "sound offset player");
+    const piTick epoch(1000000);
+    player.Enter(&sequence, epoch);
+    player.Update(epoch + piTick(20));
+    requireFrames(sound->GetPlaying() && sound->GetOffset() == piTick::ToMicroSeconds(piTick(120)),
+        "cold sound span uses currently active Offset immediately");
+    const auto seek = [&](int64_t tick) {
+        player.SetTime(epoch, piTick(tick), piTick(0));
+        player.Update(epoch);
+        requireFrames(sound->GetPlaying() && sound->GetForceRestart(), "sound seek preserves explicit restart request");
+        sound->SetForceRestart(false); // Simulate audio renderer consuming the explicit seek request.
+    };
+    seek(5);
+    requireFrames(sound->GetOffset() == piTick::ToMicroSeconds(piTick(5)), "sound seek before first Offset restores zero");
+    seek(20);
+    requireFrames(sound->GetOffset() == piTick::ToMicroSeconds(piTick(120)), "sound seek restores active Offset");
+    layer->ReplaceAnimKeys(Layer::AnimProperty::Offset, {});
+    seek(20);
+    requireFrames(sound->GetOffset() == piTick::ToMicroSeconds(piTick(20)), "sound removed Offset restores zero");
+    std::puts("[IMM_SOUND_OFFSET_TEST] cold/backseek/removal passed; metadata only, no audio engine");
+
+    value.mBool = true;
+    requireFrames(layer->AddKey(piTick(20), Layer::AnimProperty::Visibility, value,
+        Layer::InterpolationType::None), "sound second visibility span");
+    value.mInt = 100;
+    requireFrames(layer->AddKey(piTick(10), Layer::AnimProperty::Offset, value,
+        Layer::InterpolationType::None), "sound initial offset");
+    value.mInt = 0;
+    requireFrames(layer->AddKey(piTick(30), Layer::AnimProperty::Offset, value,
+        Layer::InterpolationType::None), "sound decreasing midspan offset");
+    seek(0);
+    player.Update(epoch + piTick(10));
+    player.Update(epoch + piTick(20));
+    const piTick originalStart = layer->GetStartTime();
+    const uint64_t originalOffset = sound->GetOffset();
+    player.Update(epoch + piTick(29));
+    requireFrames(layer->GetStartTime() == originalStart && sound->GetOffset() == originalOffset,
+        "sound remains in its initial visibility span before Offset boundary");
+    player.Update(epoch + piTick(30));
+    const bool stableAtBoundary = layer->GetStartTime() == originalStart && sound->GetOffset() == originalOffset;
+    player.Update(epoch + piTick(31));
+    const bool stableAfterBoundary = layer->GetStartTime() == originalStart && sound->GetOffset() == originalOffset;
+    const bool noForceRestart = !sound->GetForceRestart();
+    player.Update(epoch + piTick(1000));
+    const bool actualWrap = layer->GetStartTime() == epoch + piTick(1000) &&
+        sound->GetOffset() == 0 && !sound->GetForceRestart();
+    std::printf("[IMM_SOUND_OFFSET_TEST] midspanBoundaryStable=%d midspanNextTickStable=%d forceRestartUnchanged=%d actualWrapRetrigger=%d\n",
+        stableAtBoundary ? 1 : 0, stableAfterBoundary ? 1 : 0, noForceRestart ? 1 : 0, actualWrap ? 1 : 0);
+    player.Exit();
+    player.Deinit();
+    sequence.Deinit(&log);
+    log.End();
+    requireFrames(actualWrap, "actual looping ancestor wrap retriggers sound with active Offset");
+    requireFrames(stableAtBoundary && stableAfterBoundary && noForceRestart,
+        "decreasing midspan Offset alone must not masquerade as an ancestor wrap");
 }
 
 static void CheckLayerDrivenPaintFrameGrowth()
@@ -157,5 +321,8 @@ void CheckPaintFrameTables()
     removed.reset();
     paint.Deinit();
     CheckLayerDrivenPaintFrameGrowth();
+    CheckLayerDrivenPlaybackKeys<LayerPaintStatic>();
+    CheckLayerDrivenPlaybackKeys<LayerPaintPretessellated>();
+    CheckLayerDrivenSoundOffsets();
     std::puts("[IMM_PAINT_FRAME_TABLE_TEST] detached publication, held selection, zero frames, repeat/offset, append and compaction passed");
 }

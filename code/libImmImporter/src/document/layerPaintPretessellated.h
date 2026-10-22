@@ -37,6 +37,7 @@ namespace ImmImporter
 		void SetPlaying(bool playing);
         void SetOffset(uint32_t offsetFrames);
         void SetMaxRepeatCount(uint32_t count);
+        void SetEvaluatedMaxRepeatCount(uint32_t count) override;
 
 
 		// for deserializing... (ugly!)
@@ -62,6 +63,7 @@ namespace ImmImporter
         uint32_t mVersion;
 		// playback state
 		bool mIsPlaying;		
+        uint32_t mEvaluatedMaxRepeatCount;
         ImmCore::piTick mTime;	
         uint32_t mOffset;        // start offset in frames
 		uint32_t mCurrentFrame; // derived from mCurrentTime, and always in synch

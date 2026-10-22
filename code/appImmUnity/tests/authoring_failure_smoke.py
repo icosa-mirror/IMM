@@ -4,6 +4,8 @@ Build appImmUnity/libImmPlayer Release first. No Unity Editor or renderer is sta
 """
 from pathlib import Path
 import argparse
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -22,6 +24,10 @@ def main() -> None:
     args = parser.parse_args()
     out = ROOT / 'artifacts/authoring-failure'
     out.mkdir(parents=True, exist_ok=True)
+    report_path = out / 'report.json'
+    report = {'passed': False, 'scope': 'CPU authoring, frame-table and playback-key regressions'}
+    report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
+    (out / 'run.log').write_text('', encoding='utf-8')
     plugin = ROOT / 'code/appImmUnity/exe/ImmUnityPlugin.dll'
     for dependency in runtime_dependencies(ROOT):
         shutil.copy2(dependency, out / dependency.name)
@@ -53,8 +59,17 @@ def main() -> None:
                 '/p:PostBuildEventUseInBuild=false', '/v:minimal', '/nologo'],
                 cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         require(result.returncode == 0, f'build (see {out / "build.log"})')
-        subprocess.run([str(out / 'AuthoringFailureTest.exe'), str(out / 'fixture.imm')],
-            cwd=ROOT, check=True, timeout=30)
+        executable = out / 'AuthoringFailureTest.exe'
+        report['executableSha256'] = hashlib.sha256(executable.read_bytes()).hexdigest()
+        report['pluginSha256'] = hashlib.sha256(staged_plugin.read_bytes()).hexdigest()
+        with (out / 'run.log').open('w', encoding='utf-8') as log:
+            result = subprocess.run([str(executable), str(out / 'fixture.imm')],
+                cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, timeout=30)
+        report['passed'] = result.returncode == 0
+        report['exitCode'] = result.returncode
+        report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
+        require(report['passed'], f'native regressions (see {out / "run.log"})')
+        print('[IMM_AUTHORING_REGRESSIONS] passed; native output retained in artifacts/authoring-failure/run.log')
     finally:
         temporary.unlink(missing_ok=True)
 

@@ -80,6 +80,8 @@ namespace ImmImporter
 		mAnimParams[2] = 0.3;
 		mAnimParams[3] = 0.7;
         mLastActiveSpanStart = piTick(0);
+        mLastActiveSpanClockOrigin = piTick(0);
+        mHasActiveSpanClockOrigin = false;
 
         if (!mName.InitCopyW(name))
         {
@@ -788,12 +790,41 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         const piTick timelineTime = (timeline->GetMaxRepeatCount() == 0 || numPlays < timeline->GetMaxRepeatCount()) ?
             timelineWrapped : timelineDuration;
 
+        // Resolve step playback keys before Visibility computes the clip's local
+        // time. Missing keys (including a seek before the first key) restore the
+        // canonical repeat and zero tick offset on every evaluation.
+        mStartOffset = piTick(0);
+        if (isPaintLayer)
+            lp->SetEvaluatedMaxRepeatCount(lp->GetMaxRepeatCount());
+        for (const AnimProperty prop : { AnimProperty::Loop, AnimProperty::Offset })
+        {
+            if (prop == AnimProperty::Loop && !isPaintLayer)
+                continue;
+            const AnimKey * activeKey = nullptr;
+            const int numKeys = GetNumAnimKeys(prop);
+            for (int index = 0; index < numKeys; ++index)
+            {
+                const AnimKey * key = GetAnimKey(prop, index);
+                if (key->mTime > timelineTime)
+                    break;
+                activeKey = key;
+            }
+            if (activeKey == nullptr)
+                continue;
+            if (prop == AnimProperty::Loop)
+                lp->SetEvaluatedMaxRepeatCount(activeKey->mValue.mBool ? 0 : 1);
+            else
+                mStartOffset = piTick(int64_t(activeKey->mValue.mInt));
+        }
+
         piTick timeSinceStart = piTick(0);
 
         const int maxProps = static_cast<int>(AnimProperty::MAX);
         for (int i = 0; i < maxProps; i++)
         {
             const AnimProperty prop = static_cast<AnimProperty>(i);
+            if (prop == AnimProperty::Offset || (prop == AnimProperty::Loop && isPaintLayer))
+                continue;
 
             const int numKeys = GetNumAnimKeys(prop);
             if (numKeys == 0) continue; // skip property
@@ -894,20 +925,6 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
                 if (lastKey->mValue.mBool)
                 {
-                    // If there is an offset key at this time, we need to run it first
-                    const AnimKey* offsetKey = nullptr;
-                    const int numOffsetKeys = GetNumAnimKeys(AnimProperty::Offset);
-                    for (int j = 0; j < numOffsetKeys; j++)
-                    {
-                        const AnimKey* key = GetAnimKey(AnimProperty::Offset, j);
-                        if (key->mTime == lastKey->mTime)
-                        {
-                            offsetKey = key;
-                            break;
-                        }
-                    }
-                    if (offsetKey != nullptr) mStartOffset = piTick(int64_t(offsetKey->mValue.mInt));
-
                     timeSinceStart = (timelineTime - lastKey->mTime) + mStartOffset;
                     const piTick startTime = timeline->GetStartTime() + timeFromStart - timeSinceStart;
 
@@ -937,8 +954,16 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         ti = ti->GetParent();
                     }
 
-                    // this could be due to parent sequence looping or restart from a pause
-                    const bool hasRestarted = startTime > mStartTime;
+                    // Detect the visibility span's clock advance, excluding its
+                    // content offset. Decreasing Offset retimes content without
+                    // creating another parent-loop iteration. Clock advances
+                    // from a real loop or resume retain the existing behavior.
+                    const piTick spanClockOrigin = timeline->GetStartTime() + timeFromStart -
+                        (timelineTime - lastKey->mTime);
+                    const bool hasRestarted = mHasActiveSpanClockOrigin ?
+                        spanClockOrigin > mLastActiveSpanClockOrigin : startTime > mStartTime;
+                    mLastActiveSpanClockOrigin = spanClockOrigin;
+                    mHasActiveSpanClockOrigin = true;
                     // The root wraps its own clock without retiming its start;
                     // resetting that start would make a finite root loop forever.
                     const bool clipRestartedAndParentLooping = !isRoot && isParentSequenceLooping && hasRestarted;
@@ -1026,13 +1051,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     mDrawInTime = lastKey->mValue.mDouble + (nextKey->mValue.mDouble - lastKey->mValue.mDouble)*t;
                 break;
             case AnimProperty::Loop:
-                if (isPaintLayer)
-                    lp->SetMaxRepeatCount(lastKey->mValue.mBool ? 0 : 1);
-                else
-                    mMaxRepeatCount = (lastKey->mValue.mBool ? 0 : 1);
-                break;
-            case AnimProperty::Offset:
-                mStartOffset = piTick(int64_t(lastKey->mValue.mInt));
+                mMaxRepeatCount = (lastKey->mValue.mBool ? 0 : 1);
                 break;
             default:
                 break;
@@ -1068,6 +1087,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
     void Layer::SetDefaultPlaybackVisibility()
     {
         mVisible = false;
+        mHasActiveSpanClockOrigin = false;
     }
 
     void Layer::ResetActionStatesAt(piTick time)

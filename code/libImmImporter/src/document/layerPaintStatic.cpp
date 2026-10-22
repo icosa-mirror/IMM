@@ -19,6 +19,7 @@ namespace ImmImporter
 		mCurrentFrame = 0;
         mOffset = 0;
 		mMaxRepeatCount = maxRepeatCount;
+        mEvaluatedMaxRepeatCount = maxRepeatCount;
         mVersion = version;
 
 		mDrawings.clear();
@@ -101,7 +102,7 @@ namespace ImmImporter
         const uint64_t framesSinceStartWrapped = framesSinceStart % numFrames;
         const uint64_t numRepeatsSinceStart = framesSinceStart / numFrames;
 
-        if (mMaxRepeatCount != 0 && numRepeatsSinceStart >= mMaxRepeatCount)
+        if (mEvaluatedMaxRepeatCount != 0 && numRepeatsSinceStart >= mEvaluatedMaxRepeatCount)
         {
             mCurrentFrame = static_cast<unsigned int>(numFrames - 1);
         }
@@ -124,6 +125,12 @@ namespace ImmImporter
     void LayerPaintStatic::SetMaxRepeatCount(uint32_t maxCount)
     {
         mMaxRepeatCount = maxCount;
+        mEvaluatedMaxRepeatCount = maxCount;
+    }
+
+    void LayerPaintStatic::SetEvaluatedMaxRepeatCount(uint32_t count)
+    {
+        mEvaluatedMaxRepeatCount = count;
     }
 
 

@@ -26,6 +26,8 @@ namespace ImmImporter
 		virtual void SetPlaying(bool playing) = 0;
         virtual void SetOffset(uint32_t offsetFrames) = 0;
         virtual void SetMaxRepeatCount(uint32_t count) = 0;
+        // Animation changes evaluated playback, never the canonical serialized repeat.
+        virtual void SetEvaluatedMaxRepeatCount(uint32_t count) = 0;
 
 		// for deserializing... (ugly!)
         virtual unsigned int GetMaxRepeatCount(void) const = 0;

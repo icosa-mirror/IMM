@@ -240,6 +240,17 @@ jobs:
       shell: pwsh
       run: python code/appImmUnity/tests/authoring_failure_smoke.py --msbuild (Get-Command msbuild).Source
 
+    - name: Upload Windows native authoring regression evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: WindowsNativeAuthoringRegressions
+        if-no-files-found: ignore
+        path: |
+          artifacts/authoring-failure/build.log
+          artifacts/authoring-failure/run.log
+          artifacts/authoring-failure/report.json
+
     - name: Verify nested paint deletion and renderer retirement
       shell: pwsh
       run: python code/appImmUnity/tests/paint_subtree_smoke.py --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/paint-subtree-ci

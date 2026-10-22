@@ -17,7 +17,9 @@ CI. Full validation run 39723167991 was cancelled
 after the subsequent source defect below. Hosted acceptance is pending.
 A subsequent ownership audit found a D3D11 structured-buffer view leak (6.66);
 the fix and direct COM lifetime regression are pushed in b4a2c595. Fresh full
-validation run 39724027590 is registered; hosted acceptance remains pending.
+validation run 39724027590 was cancelled after the playback regressions in 6.67
+were established. The local playback correction and regressions now pass; a fresh
+full validation run is required. Hosted acceptance remains pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
 39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
@@ -2395,6 +2397,46 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Android pass for 1d31040d remains scoped evidence, not full multiplatform or
    D3D11 resource-lifetime acceptance. Pushed fix b4a2c595 starts fresh full run
    39724027590; no hosted pass or full M1 claim is made.
+
+### 6.67. Paint Loop/Offset evaluated-state correction (2026-10-22)
+
+1. Playback audit found that paint Loop keys overwrote the stored repeat count.
+   Both static and pretessellated paint now keep canonical and evaluated repeat
+   counts separately. Frame selection uses evaluated state; metadata getters retain
+   the authored count. Before the first Loop key or after key removal, evaluation
+   restores the canonical value. The old-source regression failed on metadata
+   corruption; final cases cover canonical infinite/finite counts and both Loop
+   values, backward seeks and removal through actual Layer evaluation.
+2. Offset now resolves its active tick value before visibility computes local
+   time, with zero before the first key or when absent. This fixes first-evaluation
+   lag and stale offsets after removal/backward seek. It is distinct from the
+   paint-only SetOffset helper, whose argument is frames.
+3. Shared Offset evaluation required sound-state checks. Cold start, backward seek
+   and removed keys use the expected offsets. A decreasing midspan Offset under a
+   looping ancestor reproduced a false sound retrigger. Wrap detection now compares
+   visibility-span clock origins excluding content offset, resetting its sample on
+   seek/restart. Final tests preserve the sound at the changed key and following
+   tick while a genuine ancestor wrap still retriggers. Existing finite-window,
+   root and pause/resume predicates are retained. No audio-engine or audible
+   playback acceptance is claimed.
+4. Final Windows Unity/viewer/Godot/reader build, native authoring/frame-table/sound
+   tests, chapter/viewpoint policy, all eleven visible sequence cases, full converter
+   suite and strict Windows exports pass. A prior reader/library link collision
+   during parallel validation was resolved by the sequential build; final builds
+   and tests run after all production edits. Native-suite run.log and verdict/hash
+   report are now uploaded by the existing required Windows gate; stale pass reports
+   are cleared before execution. Workflow matrix/actionlint checks pass.
+5. Evidence: artifacts/playback-keys-old-source.log,
+   playback-key-sound-before-fix.log, playback-key-sound-refined-before.log,
+   playback-key-final-native-build.log, playback-key-final-native-tests.log,
+   authoring-failure/{run.log,report.json}, playback-key-final-policy-tests.log,
+   playback-key-final-sequence/, playback-key-final-converter/ and
+   playback-key-final-exports.*.
+6. Run 39724027590 is terminal completed/cancelled after source regressions were
+   established; a fresh full run is required. No new live ABI or managed cutover is
+   claimed. Group/root Loop keys still mutate canonical timeline repeat state;
+   correction remains pending with explicit root self-wrapped-clock and nested
+   chapter/Stop/Continue evidence. This milestone does not close M1/M2 or the plan.
 
 ## 7. Consolidated documents
 
