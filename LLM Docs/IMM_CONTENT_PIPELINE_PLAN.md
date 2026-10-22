@@ -19,7 +19,8 @@ URP/non-XR Firebase, Android Vulkan, Windows DirectX/Vulkan and Godot iOS Metal.
 Sound-import run 39669262483 completed its first attempt with an Android SDK
 CMake archive failure before project compilation and missing dependent validation
 evidence. macOS/iOS builds and all three iOS visual gates passed. Its single
-targeted Android/dependents retry is now running as attempt 2 (section 6.47).
+targeted retry has passed Android; dependent validation is still running as attempt 2
+(section 6.48).
 Later APIs still need their own platform/package acceptance;
 hosted success does not establish skipped hardware gates or full content fidelity.
 Confirmed regressions take priority over new feature work. See section 6.26.
@@ -1748,6 +1749,52 @@ replacement-run closure in section 6.26 (20:23 UTC):
    Evidence: artifacts/old-android-targeted-retry-state.json. A repeated failure
    remains unresolved; do not retry again indefinitely. This clock correction
    requires its own fresh full CI.
+
+### 6.48. Live publication timing infrastructure and current baseline (2026-10-22)
+
+1. A1 audit confirmed that the shared live probe timed queue/Commit calls, then
+   polled status after three frames. Added internal monotonic timestamps at native
+   Document Commit entry and first Preparing/Prepared/Presented/Rejected transitions.
+   The opt-in probe reports those intervals and checks monotonic ordering; its
+   polling delay is excluded from publication timing. No exported C ABI changed.
+   Timestamp work runs on authoring transitions, not ordinary unedited playback.
+2. Rebuilt the Windows player/reader/viewer. A fresh standalone DirectX sample1
+   run reaches revision 13; the initial two-element/16-point edit reports 0.175 ms
+   from internal Commit entry to publication. CPU/GPU/pre-presentation injection
+   each rejects with no Presented timestamp and unchanged target drawing bounds.
+   Captured renderer frame traces report zero geometry mismatches. The first
+   short run ended at async load completion and was inconclusive; corrected runs
+   use a longer frame budget. Empty child environment flags also invalidated an
+   initial injection attempt; only runs with explicit environment removal are used.
+3. These are diagnostics, not M1 latency acceptance: the live edit is not matched
+   to the Small/Medium/Large full-reload workload, and there is no repeated live
+   median/p95 yet. Internal publication excludes prior ABI validation/copy, display
+   latency, GPU completion and retirement. Prepared boundaries differ by operation,
+   so its interval does not isolate CPU/GPU stages. No M1/M2 completion is claimed.
+4. Fresh 30-iteration compile/reload summed stage medians: Small 1.892 ms (10
+   drawings/160 points), Medium 50.209 ms (400/12,800), Large 841.438 ms
+   (4,000/256,000). The slower Large historical comparison was investigated with
+   isolated five-sample parent/current/parent runs using identical reader and
+   generated fixture hashes: summed-stage sample medians 830.027 / 809.443 /
+   782.320 ms. No slowdown due to this timing change was identified within that
+   comparison; the unmatched historical difference remains unclassified. Stage
+   sums are not end-to-end wall-clock observations. Benchmark CLI now selects
+   exact exporter/reader binaries and records their hashes, fixture hashes, raw
+   samples and nearest-rank p95, enabling future matched comparisons.
+5. Full converter/native .NET suite, export verification and existing live-edit
+   wiring checks pass. Independent review found no material timing/C-ABI defect.
+   Evidence: ignored artifacts/live-timing-native-build.log, live-timing-viewer-build.log,
+   live-timing-{normal,cpu,gpu,present}.log, live-timing-validation-summary.json,
+   live-timing-baseline.json, live-timing-parent-comparison.json,
+   live-timing-suite.log, live-timing-contract.log and live-timing-exports.json.
+   Next build repeated matched live-edit cases with visible workloads, phase timing,
+   artifact provenance and per-frame revision checks. Full A1-A3 and converter
+   startup/chapter/application acceptance remain open.
+6. Latest clock run 39696568808 passed Android; Windows remains in its Godot build,
+   with no reported failure. Old run 39669262483 attempt 2 has now passed replacement
+   Android job 119554846760: the original SDK archive failure is cleared by its
+   sole targeted retry. Downstream Unity/device/engine validation remains active;
+   the full run is not yet passing/complete. This instrumentation needs fresh CI.
 
 ## 7. Consolidated documents
 

@@ -197,6 +197,25 @@ The [exporter benchmark](../code/appImmUnity/tests/exporter_benchmark.py) curren
 compile-and-reload comparison. The proposed live cases and matched median/p95 acceptance
 results are still missing. Functional viewer probes do not establish those latency targets.
 
+Roadmap section 6.48 adds internal monotonic timestamps at native Commit entry and
+first Preparing/Prepared/Presented/Rejected transitions. The shared opt-in viewer
+probe reports publication timing separately from its delayed status poll and checks
+monotonic ordering. A local DirectX diagnostic and three injected rejection paths
+pass; the normal sample is 0.175 ms to revision publication. This is one 16-point
+sample on sample1, not the matched Small/Medium/Large acceptance workload. It excludes
+prior ABI validation/copy, displayed-frame latency, GPU completion and retirement.
+Prepared has operation-specific boundaries and is not a separate CPU/GPU stage timer.
+
+A fresh 30-iteration compile/reload run records summed stage medians of 1.892 / 50.209 /
+841.438 ms for Small/Medium/Large. These differ from the historical baseline above;
+they do not establish an improvement or regression without matched binary provenance.
+A five-sample parent/current/parent Large comparison with identical reader and fixture
+hashes gives summed-stage sample medians of 830.027 / 809.443 / 782.320 ms. No slowdown
+from this timing-only change was identified within that diagnostic comparison.
+The historical difference remains unclassified. The benchmark now accepts explicit
+binary paths and retains hashes, raw stage samples and nearest-rank p95. Stage sums
+remain distinct from end-to-end wall-clock and rendered presentation measurements.
+
 ## 5. Live document architecture and identity
 
 `ImmPlayer::Document` owns the existing `ImmImporter::Sequence`. CPU/GPU updates consume that

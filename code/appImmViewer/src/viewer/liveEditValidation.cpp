@@ -897,6 +897,30 @@ namespace ExePlayer
             drawingBoxAfter.mMaxY == mDrawingBoxBefore.mMaxY &&
             drawingBoxAfter.mMaxZ == mDrawingBoxBefore.mMaxZ;
         const ImmCore::bound3d boxAfter = player->GetDocumentBBox(mDocumentId);
+        if (hasStatus)
+        {
+            const bool timingValid = status.mCommitStartedNs != 0 &&
+                (status.mPreparingNs == 0 || status.mPreparingNs >= status.mCommitStartedNs) &&
+                (status.mPreparedNs == 0 || (status.mPreparingNs != 0 && status.mPreparedNs >= status.mPreparingNs)) &&
+                (status.mRejectedNs == 0 || status.mRejectedNs >= status.mCommitStartedNs) &&
+                (status.mState != ImmPlayer::Document::AuthoringCommitState::Presented ||
+                    (status.mPreparedNs != 0 && status.mPresentedNs >= status.mPreparedNs && status.mRejectedNs == 0));
+            const auto elapsedMs = [&](uint64_t end) -> double
+            {
+                return status.mCommitStartedNs != 0 && end >= status.mCommitStartedNs ?
+                    static_cast<double>(end - status.mCommitStartedNs) / 1000000.0 : -1.0;
+            };
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_TIMING] revision=%llu status=%d valid=%d commitToPreparingMs=%.6f commitToFirstPreparedMs=%.6f commitToPresentedMs=%.6f commitToRejectedMs=%.6f",
+                static_cast<unsigned long long>(mRevision), static_cast<int>(status.mState), timingValid ? 1 : 0,
+                elapsedMs(status.mPreparingNs), elapsedMs(status.mPreparedNs),
+                elapsedMs(status.mPresentedNs), elapsedMs(status.mRejectedNs));
+            if (!timingValid)
+            {
+                mMeasured = true;
+                return;
+            }
+        }
         log->Printf(LT_MESSAGE,
             L"[IMM_LIVE_EDIT] frame=%llu appliedAt=%llu revision=%llu status=%d result=%d drawingBBoxUnchanged=%d "
             L"bboxAfter=(%.3f,%.3f,%.3f)-(%.3f,%.3f,%.3f)",

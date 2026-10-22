@@ -224,6 +224,12 @@ namespace ImmPlayer {
             int32_t mResult = 0;
             uint32_t mFailingCommand = 0;
             uint64_t mObject = 0;
+            // Internal monotonic timestamps, not part of the exported C status ABI.
+            uint64_t mCommitStartedNs = 0;
+            uint64_t mPreparingNs = 0;
+            uint64_t mPreparedNs = 0;
+            uint64_t mPresentedNs = 0;
+            uint64_t mRejectedNs = 0;
         };
 
         struct AuthoringElementGeometry
@@ -466,6 +472,7 @@ namespace ImmPlayer {
         const DrawingHandleEntry * iFindDrawingHandle(uint32_t layerId, uint64_t drawingId) const;
         const DrawingCreation * iFindOpenDrawingCreation(uint32_t layerId, uint64_t drawingId) const;
         AuthoringCommitStatus * iFindCommitStatus(uint64_t revision);
+        void iSetCommitState(AuthoringCommitStatus * status, AuthoringCommitState state);
         void iRejectCommit(uint64_t revision, int32_t result, uint32_t failingCommand, uint64_t object);
         void iInvalidateAuthoringSession(void);
         void iPrepareAuthoringCommit(LayerRendererPaint * layerPaintRender, ImmCore::piLog * log);

@@ -740,7 +740,7 @@ namespace ImmPlayer
                     const bool changedParent = parent != previousParent;
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu %lsLayer=%llu",
@@ -780,7 +780,7 @@ namespace ImmPlayer
                         delete *deleted;
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu deletedGroupLayer=%llu subtreeLayers=%u",
@@ -812,7 +812,7 @@ namespace ImmPlayer
                     mPendingPresentation.mCreatedLayer.release();
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu createdGroupLayer=%llu",
@@ -840,7 +840,7 @@ namespace ImmPlayer
                     mSequence.SetSpawnAreaNeedsUpdate(true);
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu spawnAreaLayer=%llu",
@@ -863,7 +863,7 @@ namespace ImmPlayer
                     mSequence.SetSpawnAreaNeedsUpdate(true);
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu initialSpawnAreaLayer=%llu",
@@ -888,7 +888,7 @@ namespace ImmPlayer
                         property, std::move(mPendingPresentation.mAnimationKeys));
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu layer=%llu animationProperty=%d",
@@ -916,7 +916,7 @@ namespace ImmPlayer
                         layer->SetCanonicalTransform(mPendingPresentation.mLayerTransform);
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu layer=%llu canonicalVisible=%d canonicalOpacity=%.3f",
@@ -973,7 +973,7 @@ namespace ImmPlayer
                     }
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu deletedDrawing=%llu remappedFrame=%d frame=%u",
@@ -1001,7 +1001,7 @@ namespace ImmPlayer
                     const uint64_t presentedDrawing = mPendingPresentation.mObject;
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
                         L"[IMM_LIVE_EDIT] presented revision=%llu frame=%u drawing=%llu",
@@ -1019,7 +1019,7 @@ namespace ImmPlayer
             else
             {
                 if (status != nullptr)
-                    status->mState = AuthoringCommitState::Prepared;
+                    iSetCommitState(status, AuthoringCommitState::Prepared);
                 mPreparedRevision = revision;
 
                 Drawing * replacement = mPendingPresentation.mReplacement.get();
@@ -1082,7 +1082,7 @@ namespace ImmPlayer
                     }
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
-                        status->mState = AuthoringCommitState::Presented;
+                        iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT] presented revision=%llu drawing=%llu",
                         static_cast<unsigned long long>(revision),
@@ -1740,12 +1740,34 @@ namespace ImmPlayer
         return nullptr;
     }
 
+    static uint64_t iAuthoringClockNs()
+    {
+        return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
+
+    void Document::iSetCommitState(AuthoringCommitStatus * status, AuthoringCommitState state)
+    {
+        if (status == nullptr) return;
+        status->mState = state;
+        const uint64_t now = iAuthoringClockNs();
+        // Keep the first observation of a transition if preparation spans frames.
+        switch (state)
+        {
+        case AuthoringCommitState::Preparing: if (status->mPreparingNs == 0) status->mPreparingNs = now; break;
+        case AuthoringCommitState::Prepared: if (status->mPreparedNs == 0) status->mPreparedNs = now; break;
+        case AuthoringCommitState::Presented: if (status->mPresentedNs == 0) status->mPresentedNs = now; break;
+        case AuthoringCommitState::Rejected: if (status->mRejectedNs == 0) status->mRejectedNs = now; break;
+        default: break;
+        }
+    }
+
     void Document::iRejectCommit(uint64_t revision, int32_t result, uint32_t failingCommand, uint64_t object)
     {
         AuthoringCommitStatus * status = iFindCommitStatus(revision);
         if (status == nullptr)
             return;
-        status->mState = AuthoringCommitState::Rejected;
+        iSetCommitState(status, AuthoringCommitState::Rejected);
         status->mResult = result;
         status->mFailingCommand = failingCommand;
         status->mObject = object;
@@ -1782,7 +1804,7 @@ namespace ImmPlayer
         mSealedBatches.pop_front();
         AuthoringCommitStatus * status = iFindCommitStatus(batch.mRevision);
         if (status != nullptr)
-            status->mState = AuthoringCommitState::Preparing;
+            iSetCommitState(status, AuthoringCommitState::Preparing);
 
         if (batch.mLayerReparents.size() == 1 && batch.mLayerDeletions.empty() &&
             batch.mLayerCreations.empty() && batch.mSpawnAreaEdits.empty() &&
@@ -1882,7 +1904,7 @@ namespace ImmPlayer
             }
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = reparent.mLayerId;
             }
             mPreparedRevision = batch.mRevision;
@@ -1957,7 +1979,7 @@ namespace ImmPlayer
             }
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = deletion.mLayerId;
             }
             mPreparedRevision = batch.mRevision;
@@ -2009,7 +2031,7 @@ namespace ImmPlayer
             }
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = creation.mLayerId;
             }
             mPreparedRevision = batch.mRevision;
@@ -2045,7 +2067,7 @@ namespace ImmPlayer
             }
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = edit.mLayerId;
             }
             mPreparedRevision = batch.mRevision;
@@ -2082,7 +2104,7 @@ namespace ImmPlayer
             }
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = edit.mLayerId;
             }
             mPreparedRevision = batch.mRevision;
@@ -2131,7 +2153,7 @@ namespace ImmPlayer
             }
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = edit.mLayerId;
             }
             mPreparedRevision = batch.mRevision;
@@ -2163,7 +2185,7 @@ namespace ImmPlayer
             }
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = edit.mLayerId;
             }
             mPreparedRevision = batch.mRevision;
@@ -2228,7 +2250,7 @@ namespace ImmPlayer
 
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = deletion.mDrawingId;
             }
             mPreparedRevision = batch.mRevision;
@@ -2273,7 +2295,7 @@ namespace ImmPlayer
 
             if (status != nullptr)
             {
-                status->mState = AuthoringCommitState::Prepared;
+                iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = mapping.mDrawingId;
             }
             mPreparedRevision = batch.mRevision;
@@ -2405,6 +2427,7 @@ namespace ImmPlayer
 
     uint64_t Document::CommitEdits(int32_t * resultOut)
     {
+        const uint64_t commitStartedNs = iAuthoringClockNs();
         if (resultOut != nullptr)
             *resultOut = 0;
         const bool creationTargetsGeometry = mOpenDrawingCreations.size() == 1 &&
@@ -2511,7 +2534,7 @@ namespace ImmPlayer
         batch.mLayerReparents.swap(mOpenLayerReparents);
         mSealedBatches.push_back(std::move(batch));
         mCommitStatuses.push_back(AuthoringCommitStatus{
-            mRequestedRevision, AuthoringCommitState::Queued, 0, 0, 0 });
+            mRequestedRevision, AuthoringCommitState::Queued, 0, 0, 0, commitStartedNs });
         if (mCommitStatuses.size() > 64)
             mCommitStatuses.erase(mCommitStatuses.begin());
         return mRequestedRevision;

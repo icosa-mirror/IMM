@@ -31,13 +31,19 @@ Usage:
     python code/appImmUnity/tests/exporter_benchmark.py
     python code/appImmUnity/tests/exporter_benchmark.py --repeat 9 --cases medium,large
     python code/appImmUnity/tests/exporter_benchmark.py --json artifacts/exporter-benchmark.json
+
+--plugin and --stroke-reader select exact binaries for matched comparisons. JSON
+retains binary/fixture hashes, raw stage samples and nearest-rank p95. Stage sums
+are not end-to-end wall-clock or rendered presentation measurements.
 """
 
 from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
+import math
 import os
 import statistics
 import sys
@@ -254,6 +260,8 @@ def summarize(samples: list[float]) -> dict:
         "median": statistics.median(samples),
         "max": max(samples),
         "mean": statistics.fmean(samples),
+        "p95": sorted(samples)[math.ceil(0.95 * len(samples)) - 1],
+        "samples": samples,
     }
 
 
@@ -263,11 +271,13 @@ def main() -> int:
     parser.add_argument("--cases", default="small,medium,large", help="comma separated case names")
     parser.add_argument("--json", type=Path, help="write the full result set as JSON")
     parser.add_argument("--keep", type=Path, help="keep generated .imm files in this directory")
+    parser.add_argument("--plugin", type=Path, help="use a specific exporter binary for matched comparisons")
+    parser.add_argument("--stroke-reader", type=Path, help="use a specific reader binary for matched comparisons")
     arguments = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[3]
-    plugin = repo_root / "code/appImmUnity/exe/ImmUnityPlugin.dll"
-    stroke_reader = (repo_root / "code/ImmUnitySampleProject/Packages/"
+    plugin = arguments.plugin or repo_root / "code/appImmUnity/exe/ImmUnityPlugin.dll"
+    stroke_reader = arguments.stroke_reader or (repo_root / "code/ImmUnitySampleProject/Packages/"
                                 "com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll")
     for required in (plugin, stroke_reader):
         if not required.is_file():
@@ -314,6 +324,9 @@ def main() -> int:
                 decode = [decode_case(reader, decode_path) for _ in range(arguments.repeat)]
 
                 results[name] = {
+                    "exporterSha256": hashlib.sha256(plugin.read_bytes()).hexdigest(),
+                    "readerSha256": hashlib.sha256(stroke_reader.read_bytes()).hexdigest(),
+                    "fixtureSha256": hashlib.sha256(decode_path.read_bytes()).hexdigest(),
                     "case": case,
                     "drawings": samples[0]["drawings"],
                     "points": samples[0]["points"],
