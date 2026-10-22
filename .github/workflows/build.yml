@@ -349,6 +349,18 @@ jobs:
           artifacts/gpu-prepared-unload-ci/*/settings.json
           artifacts/gpu-prepared-unload-ci/*/stdout.log
 
+    - name: Verify D3D11 structured buffer ownership
+      shell: pwsh
+      run: python code/appImmUnity/tests/d3d11_buffer_ownership_smoke.py --msbuild (Get-Command msbuild).Source
+
+    - name: Upload Windows D3D11 ownership evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: WindowsD3D11BufferOwnership
+        if-no-files-found: ignore
+        path: artifacts/d3d11-buffer-ownership
+
     - name: Verify IMM content baseline
       shell: pwsh
       run: python tests\tools\verify_imm_baseline.py exampleImmFiles\sample1.imm --baseline tests\baselines\content\sample1.json --write-actual artifacts\baseline-content\sample1.actual.json

@@ -2067,7 +2067,8 @@ piBuffer piRendererDX11::CreateStructuredBuffer(const void *data, unsigned int n
 
 desc.Usage = (mode == BufferType::Dynamic) ? D3D11_USAGE_DEFAULT : D3D11_USAGE_IMMUTABLE;
 
-	desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	// DEFAULT and IMMUTABLE buffers cannot request CPU write access.
+	desc.CPUAccessFlags = 0;
 	desc.ByteWidth = amount;// (amount + 15) & 0xfffffff0; // must be multiple of 16 for constant buffers
 	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 	desc.StructureByteStride = elementSize;
@@ -2076,7 +2077,11 @@ desc.Usage = (mode == BufferType::Dynamic) ? D3D11_USAGE_DEFAULT : D3D11_USAGE_I
 	if (data == nullptr)
 	{
 		HRESULT hr = dev->CreateBuffer(&desc, nullptr, &me->mObject);
-		if (FAILED(hr)) return nullptr;
+		if (FAILED(hr))
+		{
+			free(me);
+			return nullptr;
+		}
 	}
 	else
 	{
@@ -2085,7 +2090,11 @@ desc.Usage = (mode == BufferType::Dynamic) ? D3D11_USAGE_DEFAULT : D3D11_USAGE_I
 		dataDesc.SysMemPitch = 0;
 		dataDesc.SysMemSlicePitch = 0;
 		HRESULT hr = dev->CreateBuffer(&desc, &dataDesc, &me->mObject);
-		if (FAILED(hr)) return nullptr;
+		if (FAILED(hr))
+		{
+			free(me);
+			return nullptr;
+		}
 	}
 
 
@@ -2100,7 +2109,12 @@ desc.Usage = (mode == BufferType::Dynamic) ? D3D11_USAGE_DEFAULT : D3D11_USAGE_I
 	vdesc.BufferEx.NumElements = numElements;
 
 	HRESULT hr = dev->CreateShaderResourceView(me->mObject, &vdesc, &me->mView);
-	if (FAILED(hr)) return nullptr;
+	if (FAILED(hr))
+	{
+		me->mObject->Release();
+		free(me);
+		return nullptr;
+	}
 
 	me->mUse = use;
 	me->mSize = amount;
@@ -2134,6 +2148,8 @@ void piRendererDX11::CreateBufferMapped_End(piBuffer vme)
 void piRendererDX11::DestroyBuffer(piBuffer vme)
 {
 	piIBuffer *me = (piIBuffer*)vme;
+	if (me->mView != nullptr)
+		me->mView->Release();
 	me->mObject->Release();
 	free(me);
 }

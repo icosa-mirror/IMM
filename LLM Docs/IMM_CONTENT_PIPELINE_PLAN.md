@@ -13,15 +13,20 @@ Current checkpoint (2026-10-22): paint/group lifecycle, spawn cache publication,
 whole-table paint timelines and canonical property publication have local validation
 recorded in 6.53-6.63. Uploaded, unpublished replacement cancellation now passes
 three Windows D3D11 cases (6.64), is committed in f50ec11d and is required in Windows
-CI. Full validation run 39723167991 is registered; hosted acceptance is pending.
+CI. Full validation run 39723167991 was cancelled
+after the subsequent source defect below. Hosted acceptance is pending.
+A subsequent ownership audit found a D3D11 structured-buffer view leak (6.66);
+the local fix and direct COM lifetime regression pass; full CI is pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
 39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
 contain visible IMM paint and pass rear occlusion at the unchanged threshold; URP
 content/depth/allocation checks and rendered-frame evidence pass. Both APK native
-payloads match the same-run build. The strict collector remains pending, so full
-Android acceptance is not established. Last checked: sixteen jobs passed, two
-queued, no failures observed. Section 6.65 records the preceding false-green job,
+payloads match the same-run build. Strict artifact 12401878020 now passes its
+status, manifest, capture/composition, stereo, native-eye, video and face-orientation
+checks. This closes the earlier Android readiness/composition failure for the
+hosted device scope at 1d31040d; full multiplatform CI remains pending. Last checked:
+eighteen jobs passed, two queued, no CI failures observed. Section 6.65 records the preceding false-green job,
 source fix and replacement evidence. No extra infrastructure retry was used.
 Packaged macOS exports remain stale until replacement builds/gates succeed.
 Earlier Unity CS1061 and Godot iOS failures were closed by complete hosted runs
@@ -2348,7 +2353,46 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    zero (not ignored); required content/depth/allocation checks and rendered-frame
    validity pass. Its APK native payload matches the same native artifact/hash.
    Evidence: artifacts/ci-agent-39721181625-urp-*.
-   Strict collector/full-run acceptance remain pending.
+   Strict artifact 12401878020 independently passes status/manifest, capture and
+   composition metrics, managed/native eye structures, stereo log contract, physical
+   device video and face orientation. Evidence:
+   artifacts/ci-agent-39721181625-strict-summary.json. The earlier Android failure
+   is closed for this hosted scope; full multiplatform acceptance remains pending.
+
+### 6.66. D3D11 structured-buffer ownership regression (2026-10-22)
+
+1. Resource-lifetime audit found that CreateStructuredBuffer owns both an
+   ID3D11Buffer and an ID3D11ShaderResourceView, while DestroyBuffer released only
+   the buffer. The leaked view retained the buffer after cancellation, retirement
+   or unload. Cancellation logs alone therefore did not prove resource release.
+2. The direct WARP test first rejected the existing structured-buffer descriptor:
+   DEFAULT/IMMUTABLE usage incorrectly requested CPU-write access. With that
+   prerequisite corrected, the old DestroyBuffer reproduced a leaked view reference
+   count of one. The final fix releases the view before the backing buffer and
+   cleans wrapper/buffer ownership on failed creation. Failure unwind is reviewed,
+   not allocation-fault tested.
+3. Eight real WARP cases alternate Static/IMMUTABLE and Dynamic/DEFAULT. After
+   unbinding, destroying the renderer buffer and releasing observer references,
+   both actual COM view and resource reference counts reach zero. Ordinary buffers
+   with no view also destroy successfully. No drawing commands are submitted, so
+   this is ownership-release evidence, not in-flight GPU completion or all-backend
+   leak accounting. The runner compiles the current production renderer directly
+   and retains source/executable hashes and per-iteration results; stale pass
+   reports are cleared before build/run.
+4. Evidence: artifacts/d3d11-ownership-before.log (original invalid descriptor),
+   d3d11-ownership-leak-before-fix.log (descriptor-only correction/old destroy),
+   and d3d11-buffer-ownership/{build.log,run.log,report.json} (fixed).
+   Windows Unity/viewer/Godot native build, the three real GPU-prepared
+   cancellation/recovery cases, all Small property/control rendered-effect cases,
+   strict Windows exports and evidence-parser guards pass. Evidence:
+   artifacts/d3d11-ownership-native-build.log, d3d11-ownership-gpu-regression/,
+   d3d11-ownership-property-regression/ and d3d11-ownership-exports.*.
+   Windows CI now requires the ownership check and uploads its evidence; workflow
+   matrix and actionlint checks pass. Full replacement CI remains pending.
+5. Runs 39721181625 and 39723167991 are terminal completed/cancelled so
+   the source correction can receive a fresh full validation run. The saved strict
+   Android pass for 1d31040d remains scoped evidence, not full multiplatform or
+   D3D11 resource-lifetime acceptance. No full M1 claim is made.
 
 ## 7. Consolidated documents
 
