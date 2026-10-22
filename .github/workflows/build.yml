@@ -234,6 +234,10 @@ jobs:
       shell: pwsh
       run: python code/appImmUnity/tests/paint_subtree_smoke.py --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/paint-subtree-ci
 
+    - name: Verify paint creation, failure cleanup and pending unload
+      shell: pwsh
+      run: python code/appImmUnity/tests/paint_subtree_smoke.py --operation create --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/paint-create-ci
+
     - name: Upload paint subtree lifecycle evidence
       if: always()
       uses: actions/upload-artifact@v4
@@ -247,6 +251,12 @@ jobs:
           artifacts/paint-subtree-ci/*/stdout.log
           artifacts/paint-subtree-ci/*/settings.json
           artifacts/paint-subtree-ci/*/capture.ppm
+          artifacts/paint-create-ci/report.json
+          artifacts/paint-create-ci/nested-paint.imm
+          artifacts/paint-create-ci/*/debug.txt
+          artifacts/paint-create-ci/*/stdout.log
+          artifacts/paint-create-ci/*/settings.json
+          artifacts/paint-create-ci/*/capture.ppm
 
     - name: Verify repeated live edit publication and visible target revisions
       shell: pwsh

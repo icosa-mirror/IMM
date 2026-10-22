@@ -9,6 +9,13 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
+Current live checkpoint (2026-10-22): static paint/group subtree deletion and
+empty paint creation/population/deletion now have local DirectX lifecycle and
+failure checks (6.53-6.55). Subtree run 39704338933 passed Windows and Android
+builds; Apple jobs remain queued. Paint creation and the ownership correction
+need fresh full CI. The older Android readiness failure and stale packaged macOS
+exports remain unresolved; full A1-A3 and the converter acceptance gaps stay open.
+
 Local native regressions and four paired paint/viewpoint metadata comparisons pass.
 Taperecorder's normal default-viewpoint DirectX capture is pixel-identical to its
 reference. Live GitHub status checked at 2026-10-21 20:23 UTC confirms full hosted
@@ -1823,7 +1830,7 @@ replacement-run closure in section 6.26 (20:23 UTC):
    Small edits and retained provenance/log/capture artifacts. It checks correctness
    without machine-dependent latency thresholds. Native viewer build, nine report
    guard tests, existing live-validation contract, full converter suite, native
-   chapter/early-stop policy, Windows exports (121 player/51 reader) and the exact
+   chapter/early-stop policy, Windows declared-binding checks (121 player/51 reader) and the exact
    new CI command pass locally. Evidence: ignored artifacts/live-benchmark-v2-*
    and artifacts/live-benchmark-ci-*; failed v1/pilot timings remain inconclusive.
 5. Timing run 39698167460 and clock run 39696568808 have passed Windows and
@@ -1918,7 +1925,7 @@ replacement-run closure in section 6.26 (20:23 UTC):
    publication. Required Windows CI now runs these three cases and retains logs,
    settings, fixture, capture and provenance. This is not cross-backend acceptance.
 4. Full converter suite, CPU authoring cancellation, existing live contracts and
-   Windows exports (121/51) pass. Player bridge/adapter/content/C# checks pass;
+   Windows declared-binding checks (121/51) pass. Player bridge/adapter/content/C# checks pass;
    all-platform export verification remains failed on stale macOS binaries.
    Repeated 30-edit publication regression passes all three fully resident corpus
    cases (p95 0.2397/0.3856/0.1760 ms); endpoints retain section 6.49's limits.
@@ -1930,7 +1937,7 @@ replacement-run closure in section 6.26 (20:23 UTC):
 
 ### 6.54. Paint layer creation lifecycle work (2026-10-22)
 
-1. In progress: additive Paint=1 support in the existing live LayerCreate ABI
+1. Added Paint=1 support in the existing live LayerCreate ABI
    (Group=0 unchanged). A new paint starts visible/identity/opacity 1 with one
    initialized empty drawing and frame zero mapped to it, repeat 1, version 1,
    and the document frame rate (30 when unset). This makes existing drawing edits
@@ -1939,12 +1946,32 @@ replacement-run closure in section 6.26 (20:23 UTC):
    and stable drawing-handle publication. Failure/unload cleanup cancels the slot
    before destroying either drawing or the pending layer. Partial drawing buffer
    initialization and failed drawing-vector growth now release successful allocations.
-   A real-renderer create/fill/delete probe and CPU/GPU/presentation rejection
-   checks are being added; build and acceptance remain pending.
+   Real DirectX checks pass: create an unpublished empty paint, publish its frame
+   and stable handle, populate it with visible geometry through that handle, then
+   delete it. Sibling handles/bounds remain stable and document bounds restore.
+   CPU/GPU/presentation injection keeps the failed creation unpublished, with
+   prepared-slot cancellation verified for GPU/presentation rejection.
 3. Paint subtree run 39704338933 has passed Windows and Android with no failures;
    its five Apple jobs remain queued. Readiness run 39701694123 has the same
    terminal/queued split. Neither run is full platform acceptance, and the older
    Android readiness failure remains unresolved pending replacement device results.
+4. A separate opt-in hold keeps paint creation in Preparing after CPU renderer-slot
+   preparation. The test unloads the document, observes slot cancellation and old
+   session invalidation before reloading the fixture, then checks restored content,
+   rendering and a fresh editing session. This proves pending CPU-slot cancellation,
+   not cancellation during an in-flight GPU upload. Five cases are required in
+   Windows CI with logs/settings/captures/fixture and binary/backend/GPU provenance.
+5. Native build, exact new CI command, full converter suite, bridge, chapter/early-stop
+   policy, live contracts and Windows binding checks pass locally. The player set
+   passes bridge/adapter/content/C# and remains failed on stale macOS exports.
+   Windows binaries export 147 player functions and 51 reader functions; the
+   verifier checks 121 declared player bindings and all 51 reader bindings. No new
+   function signature/export was added by Paint=1. Evidence:
+   artifacts/paint-create-pending-build.log, paint-create-ci/,
+   paint-create-ci-command.log, paint-create-converter-suite.log,
+   paint-create-policy-regression.log, paint-create-player-regressions.* and
+   paint-create-exports.json. Other lifecycle types, broader M1/M2 evidence,
+   revision-selected save and managed live cutover remain open.
 
 ### 6.55. Layer/sequence ownership correction (2026-10-22)
 

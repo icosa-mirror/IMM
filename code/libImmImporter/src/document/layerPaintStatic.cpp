@@ -138,8 +138,16 @@ namespace ImmImporter
 		drawing->SetGpuId(-1);
 		drawing->SetLoaded(false);
 		DrawingStatic * result = drawing.get();
-		mDrawings.push_back(std::move(drawing));
-		return result;
+        try
+        {
+            mDrawings.push_back(std::move(drawing));
+        }
+        catch (const std::bad_alloc &)
+        {
+            drawing->Deinit();
+            return nullptr;
+        }
+        return result;
 	}
 
 	bool LayerPaintStatic::RemoveLastDrawing(Drawing * expected)

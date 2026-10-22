@@ -33,6 +33,7 @@ namespace ExePlayer
         bool IsStandaloneProbeSuccessful() const { return IsStandaloneProbeFinished() && mStandaloneSuccessful; }
 
     private:
+        void TickPaintCreation(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
         void TickSubtreeDeletion(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
         struct SubtreeLayerSnapshot
         {
@@ -48,6 +49,13 @@ namespace ExePlayer
         };
         bool mStandaloneConfigured = false;
         bool mStandaloneEnabled = false;
+        bool mPaintCreationEnabled = false;
+        bool mPaintCreationUnload = false;
+        bool mPaintCreationSessionInvalid = false;
+        int mPaintCreationReloadDocument = -1;
+        int mPaintCreationStage = 0;
+        int mPaintCreationLayer = -1;
+        uint64_t mPaintCreationHandle = 0;
         bool mStandaloneSuccessful = false;
         bool mStandaloneExpectRejection = false;
         int mStandaloneTarget = -1;

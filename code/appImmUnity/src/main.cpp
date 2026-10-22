@@ -2334,7 +2334,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     if (parentLayerId < 0 || nameUtf8 == nullptr || nameLength == 0 ||
         nameLength > 4096 || layerIdOut == nullptr)
         return IMM_AUTHORING_INVALID_ARGUMENT;
-    if (layerType != IMM_AUTHORING_LAYER_GROUP)
+    if (layerType != IMM_AUTHORING_LAYER_GROUP && layerType != IMM_AUTHORING_LAYER_PAINT)
         return IMM_AUTHORING_UNSUPPORTED;
     try
     {
@@ -2342,8 +2342,11 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
         if (!ImmUnity::DecodeUtf8(nameUtf8, nameLength, name))
             return IMM_AUTHORING_INVALID_ARGUMENT;
         uint32_t layerId = 0;
-        const int32_t result = iPlayer().QueueGroupLayerCreation(
-            docId, static_cast<uint32_t>(parentLayerId), std::move(name), layerId);
+        const int32_t result = layerType == IMM_AUTHORING_LAYER_GROUP ?
+            iPlayer().QueueGroupLayerCreation(
+                docId, static_cast<uint32_t>(parentLayerId), std::move(name), layerId) :
+            iPlayer().QueuePaintLayerCreation(
+                docId, static_cast<uint32_t>(parentLayerId), std::move(name), layerId);
         if (result == IMM_AUTHORING_OK)
             *layerIdOut = static_cast<int32_t>(layerId);
         return result;

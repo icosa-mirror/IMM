@@ -768,6 +768,9 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
             info->Download(renderer, log);
             info->End();
             mLayerInfo.Free(token);
+            if (mTracePresentationFrames)
+                log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT_CANCEL] completedToken=%llu",
+                    static_cast<unsigned long long>(token));
         }
     }
 

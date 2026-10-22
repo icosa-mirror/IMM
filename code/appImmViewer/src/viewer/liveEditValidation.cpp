@@ -68,6 +68,418 @@ namespace ExePlayer
                std::fabs(a.mMaxY - b.mMaxY) < 0.000001 && std::fabs(a.mMaxZ - b.mMaxZ) < 0.000001;
     }
 
+    void LiveEditValidation::TickPaintCreation(Viewer & viewer, ImmCore::piLog * log, uint64_t frame,
+        uint64_t requestedFrame)
+    {
+        if (mMeasured || frame < requestedFrame)
+            return;
+        const auto fail = [&](const wchar_t * reason) {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_PAINT_CREATE] pass=0 stage=%d reason=%s", mPaintCreationStage, reason);
+            mMeasured = true;
+        };
+        if (frame - requestedFrame > 10000)
+        {
+            fail(L"timeout");
+            return;
+        }
+        ImmPlayer::Player * player = viewer.GetPlayer();
+        if (mPaintCreationStage == 4)
+        {
+            ImmPlayer::Player::DocumentState state;
+            player->GetDocumentState(state, mDocumentId);
+            if (state.mLoadingState == ImmPlayer::Player::LoadingState::Failed)
+            {
+                fail(L"pending creation unload failed");
+                return;
+            }
+            if (state.mLoadingState != ImmPlayer::Player::LoadingState::Unloaded)
+                return;
+            bool editing = false;
+            const bool queried = player->GetEditingState(mDocumentId, editing);
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            ImmPlayer::Document::AuthoringCommitStatus status;
+            mPaintCreationSessionInvalid = (!queried || !editing) &&
+                !player->GetAuthoringRevisions(mDocumentId, revisions) &&
+                !player->GetAuthoringCommitStatus(mDocumentId, mRevision, status);
+            if (!mPaintCreationSessionInvalid)
+            {
+                fail(L"unloaded authoring session remains accessible");
+                return;
+            }
+            // Validate the old session before Load can reuse its numeric document slot.
+            mPaintCreationReloadDocument = player->Load(L"nested-paint.imm");
+            if (mPaintCreationReloadDocument < 0)
+            {
+                fail(L"fixture reload failed");
+                return;
+            }
+            mPaintCreationStage = 5;
+            mStandaloneTerminalFrame = 0;
+            return;
+        }
+        if (mPaintCreationStage == 5)
+        {
+            ImmPlayer::Player::DocumentState state;
+            player->GetDocumentState(state, mPaintCreationReloadDocument);
+            if (state.mLoadingState == ImmPlayer::Player::LoadingState::Failed)
+            {
+                fail(L"reloaded fixture failed");
+                return;
+            }
+            if (state.mLoadingState != ImmPlayer::Player::LoadingState::Loaded)
+                return;
+            const auto & before = mStandaloneLayers[0];
+            bool hierarchy = player->GetLayerCount(mPaintCreationReloadDocument) == mStandaloneLayerCount;
+            bool siblingStable = false;
+            for (int index = 0; index < player->GetLayerCount(mPaintCreationReloadDocument); index++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (!player->GetLayerInfoByIndex(mPaintCreationReloadDocument, index, info))
+                {
+                    fail(L"reloaded layer enumeration failed");
+                    return;
+                }
+                if (std::wstring(info.name) == L"LiveCreatedPaint")
+                    hierarchy = false;
+                if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint) &&
+                    (!info.isLoaded || info.paintNumStrokes < info.paintNumDrawings))
+                    return;
+                if (std::wstring(info.name) != L"KeepPaint")
+                    continue;
+                siblingStable = info.type == static_cast<int>(ImmImporter::Layer::Type::Paint) &&
+                    info.paintNumStrokes == before.strokes &&
+                    info.paintNumDrawings == static_cast<int>(before.boxes.size()) &&
+                    info.hasBBox == before.hasBox && (!before.hasBox || iSubtreeBoxesMatch(info.bbox, before.box));
+                for (size_t drawing = 0; drawing < before.boxes.size(); drawing++)
+                {
+                    ImmCore::bound3 box;
+                    siblingStable = siblingStable &&
+                        player->GetDrawingBBox(mPaintCreationReloadDocument, info.id, static_cast<int>(drawing), box) &&
+                        iSubtreeBoxesMatch(box, before.boxes[drawing]);
+                }
+            }
+            const bool bounds = iSubtreeBoxesMatch(
+                player->GetDocumentBBox(mPaintCreationReloadDocument), mStandaloneBoxBefore);
+            if (!hierarchy || !siblingStable || !bounds)
+            {
+                fail(L"reload changed fixture hierarchy or bounds");
+                return;
+            }
+            if (mStandaloneTerminalFrame == 0)
+                mStandaloneTerminalFrame = frame;
+            if (frame < mStandaloneTerminalFrame + 3)
+                return;
+            ImmPlayer::Document::AuthoringRevisions fresh;
+            const bool freshSession = player->AttachEditing(mPaintCreationReloadDocument) &&
+                player->GetAuthoringRevisions(mPaintCreationReloadDocument, fresh) &&
+                fresh.mRequested == 0 && fresh.mPrepared == 0 && fresh.mPresented == 0;
+            mStandaloneSuccessful = mPaintCreationSessionInvalid && freshSession;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_PAINT_CREATE] pass=%d stage=5 unloaded=1 reloaded=1 sessionInvalid=%d freshSession=%d hierarchy=1 siblingStable=1 bounds=1",
+                mStandaloneSuccessful ? 1 : 0, mPaintCreationSessionInvalid ? 1 : 0, freshSession ? 1 : 0);
+            mMeasured = true;
+            return;
+        }
+        const int doc = viewer.GetPrimaryDocumentId();
+        if (doc < 0 || !viewer.IsDocumentLoaded(doc))
+            return;
+        std::vector<ImmPlayer::Player::LayerInfo> infos;
+        for (int index = 0; index < player->GetLayerCount(doc); index++)
+        {
+            ImmPlayer::Player::LayerInfo info;
+            if (!player->GetLayerInfoByIndex(doc, index, info))
+            {
+                fail(L"layer enumeration failed");
+                return;
+            }
+            infos.push_back(info);
+        }
+        const auto findInfo = [&](int id) -> const ImmPlayer::Player::LayerInfo * {
+            for (const auto & info : infos)
+                if (info.id == id)
+                    return &info;
+            return nullptr;
+        };
+        if (!mApplied)
+        {
+            int parent = -1;
+            const ImmPlayer::Player::LayerInfo * sibling = nullptr;
+            for (const auto & info : infos)
+            {
+                if (std::wstring(info.name) == L"DeleteTarget")
+                {
+                    if (parent >= 0)
+                    {
+                        fail(L"duplicate parent");
+                        return;
+                    }
+                    parent = info.id;
+                }
+                if (std::wstring(info.name) == L"KeepPaint")
+                {
+                    if (sibling != nullptr)
+                    {
+                        fail(L"duplicate sibling");
+                        return;
+                    }
+                    sibling = &info;
+                }
+                if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint) &&
+                    (!info.isLoaded || info.paintNumDrawings <= 0 || info.paintNumStrokes < info.paintNumDrawings))
+                    return;
+            }
+            if (parent < 0 || sibling == nullptr ||
+                sibling->type != static_cast<int>(ImmImporter::Layer::Type::Paint) ||
+                !player->AttachEditing(doc))
+            {
+                fail(L"fixture or attach failed");
+                return;
+            }
+            mDocumentId = doc;
+            mStandaloneTarget = parent;
+            mStandaloneLayerCount = static_cast<int>(infos.size());
+            mStandaloneBoxBefore = player->GetDocumentBBox(doc);
+            mStandaloneExpectRejection = std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr ||
+                std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_GPU") != nullptr ||
+                std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr;
+            SubtreeLayerSnapshot snapshot;
+            snapshot.id = sibling->id;
+            snapshot.parent = sibling->parentId;
+            snapshot.child = sibling->childIndex;
+            snapshot.strokes = sibling->paintNumStrokes;
+            snapshot.hasBox = sibling->hasBBox;
+            snapshot.box = sibling->bbox;
+            for (int drawing = 0; drawing < sibling->paintNumDrawings; drawing++)
+            {
+                uint64_t handle = 0;
+                ImmCore::bound3 box;
+                if (!player->GetDrawingHandle(doc, sibling->id, drawing, handle) ||
+                    !player->GetDrawingBBox(doc, sibling->id, drawing, box))
+                {
+                    fail(L"sibling snapshot failed");
+                    return;
+                }
+                snapshot.handles.push_back(handle);
+                snapshot.boxes.push_back(box);
+            }
+            mStandaloneLayers.push_back(std::move(snapshot));
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            if (!player->GetAuthoringRevisions(doc, revisions))
+            {
+                fail(L"revision snapshot failed");
+                return;
+            }
+            mStandaloneOldRevision = revisions.mPresented;
+            uint32_t created = ~0u;
+            if (player->QueuePaintLayerCreation(doc, parent, L"LiveCreatedPaint", created) != 0)
+            {
+                fail(L"creation queue failed");
+                return;
+            }
+            mPaintCreationLayer = static_cast<int>(created);
+            uint64_t unpublished = 0;
+            if (findInfo(mPaintCreationLayer) != nullptr || player->GetLayerCount(doc) != mStandaloneLayerCount ||
+                player->GetDrawingHandle(doc, mPaintCreationLayer, 0, unpublished) ||
+                player->GetFrameDrawingHandle(doc, mPaintCreationLayer, 0, unpublished))
+            {
+                fail(L"queued layer visible before commit");
+                return;
+            }
+            int32_t result = -99;
+            mRevision = player->CommitEdits(doc, &result);
+            if (mRevision == 0 || result != 0)
+            {
+                fail(L"creation commit failed");
+                return;
+            }
+            mPaintCreationStage = 1;
+            mApplied = true;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_PAINT_CREATE] queued=1 stage=1 layer=%d revision=%llu unpublished=1 expectRejected=%d",
+                mPaintCreationLayer, static_cast<unsigned long long>(mRevision), mStandaloneExpectRejection ? 1 : 0);
+            return;
+        }
+        ImmPlayer::Document::AuthoringCommitStatus status;
+        ImmPlayer::Document::AuthoringRevisions revisions;
+        if (!player->GetAuthoringCommitStatus(doc, mRevision, status) ||
+            !player->GetAuthoringRevisions(doc, revisions) || revisions.mRequested != mRevision ||
+            (revisions.mPrepared != mStandaloneOldRevision && revisions.mPrepared != mRevision) ||
+            (revisions.mPresented != mStandaloneOldRevision && revisions.mPresented != mRevision))
+        {
+            fail(L"unexpected revision history");
+            return;
+        }
+        const auto & before = mStandaloneLayers[0];
+        const auto * sibling = findInfo(before.id);
+        bool siblingStable = sibling != nullptr && sibling->parentId == before.parent &&
+            sibling->childIndex == before.child && sibling->paintNumStrokes == before.strokes &&
+            sibling->paintNumDrawings == static_cast<int>(before.handles.size()) &&
+            sibling->hasBBox == before.hasBox && (!before.hasBox || iSubtreeBoxesMatch(sibling->bbox, before.box));
+        for (size_t drawing = 0; drawing < before.handles.size(); drawing++)
+        {
+            uint64_t handle = 0;
+            ImmCore::bound3 box;
+            siblingStable = siblingStable &&
+                player->GetDrawingHandle(doc, before.id, static_cast<int>(drawing), handle) &&
+                handle == before.handles[drawing] &&
+                player->GetDrawingBBox(doc, before.id, static_cast<int>(drawing), box) &&
+                iSubtreeBoxesMatch(box, before.boxes[drawing]);
+        }
+        if (!siblingStable)
+        {
+            fail(L"sibling changed");
+            return;
+        }
+        const bool rejected = status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected;
+        const bool presented = status.mState == ImmPlayer::Document::AuthoringCommitState::Presented;
+        if (!rejected && !presented)
+        {
+            if (revisions.mPresented != mStandaloneOldRevision)
+            {
+                fail(L"pending commit changed presented revision");
+                return;
+            }
+            if (mPaintCreationUnload && mPaintCreationStage == 1 &&
+                status.mState == ImmPlayer::Document::AuthoringCommitState::Preparing)
+            {
+                uint64_t handle = 0;
+                if (findInfo(mPaintCreationLayer) != nullptr ||
+                    static_cast<int>(infos.size()) != mStandaloneLayerCount ||
+                    player->GetDrawingHandle(doc, mPaintCreationLayer, 0, handle) ||
+                    !iSubtreeBoxesMatch(player->GetDocumentBBox(doc), mStandaloneBoxBefore))
+                {
+                    fail(L"pending creation changed public fixture");
+                    return;
+                }
+                log->Printf(LT_MESSAGE,
+                    L"[IMM_LIVE_PAINT_CREATE] pendingUnload=1 stage=1 status=%d revision=%llu unpublished=1 siblingStable=1 bounds=1",
+                    static_cast<int>(status.mState), static_cast<unsigned long long>(mRevision));
+                player->Unload(doc);
+                mPaintCreationStage = 4;
+            }
+            return;
+        }
+        if (mPaintCreationUnload)
+        {
+            fail(L"creation reached terminal state before pending unload");
+            return;
+        }
+        if (mStandaloneTerminalFrame == 0)
+            mStandaloneTerminalFrame = frame;
+        // Leave time for deferred GPU resource retirement before the next edit or capture.
+        if (frame < mStandaloneTerminalFrame + 3)
+            return;
+        const auto * created = findInfo(mPaintCreationLayer);
+        uint64_t handle = 0, mapped = 0;
+        const bool hasHandle = player->GetDrawingHandle(doc, mPaintCreationLayer, 0, handle);
+        const bool hasFrame = player->GetFrameDrawingHandle(doc, mPaintCreationLayer, 0, mapped);
+        const bool restoredBounds = iSubtreeBoxesMatch(player->GetDocumentBBox(doc), mStandaloneBoxBefore);
+        if (mStandaloneExpectRejection || rejected)
+        {
+            const bool hierarchy = created == nullptr && static_cast<int>(infos.size()) == mStandaloneLayerCount;
+            const bool revision = revisions.mPresented == mStandaloneOldRevision;
+            mStandaloneSuccessful = mPaintCreationStage == 1 && mStandaloneExpectRejection && rejected &&
+                status.mResult == -10 && hierarchy && !hasHandle && !hasFrame && restoredBounds && revision;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_PAINT_CREATE] pass=%d stage=%d rejected=%d status=%d result=%d hierarchy=%d handles=%d siblingStable=1 bounds=%d revisions=%d",
+                mStandaloneSuccessful ? 1 : 0, mPaintCreationStage, rejected ? 1 : 0,
+                static_cast<int>(status.mState), status.mResult, hierarchy ? 1 : 0,
+                !hasHandle && !hasFrame ? 1 : 0, restoredBounds ? 1 : 0, revision ? 1 : 0);
+            mMeasured = true;
+            return;
+        }
+        if (revisions.mPresented != mRevision || revisions.mPrepared != mRevision || status.mResult != 0)
+        {
+            fail(L"terminal publication revision mismatch");
+            return;
+        }
+        if (mPaintCreationStage == 3)
+        {
+            const bool hierarchy = created == nullptr && static_cast<int>(infos.size()) == mStandaloneLayerCount;
+            const bool staleRejected = !hasHandle && !hasFrame &&
+                player->QueueDrawingDeletion(doc, mPaintCreationLayer, mPaintCreationHandle) == -1;
+            mStandaloneSuccessful = hierarchy && staleRejected && restoredBounds;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_PAINT_CREATE] pass=%d stage=3 rejected=0 status=%d result=%d hierarchy=%d handles=%d siblingStable=1 bounds=%d revisions=1",
+                mStandaloneSuccessful ? 1 : 0, static_cast<int>(status.mState), status.mResult,
+                hierarchy ? 1 : 0, staleRejected ? 1 : 0, restoredBounds ? 1 : 0);
+            mMeasured = true;
+            return;
+        }
+        ImmPlayer::Player::LayerDiagnostics diagnostics;
+        const bool properties = created != nullptr && created->type == static_cast<int>(ImmImporter::Layer::Type::Paint) &&
+            created->parentId == mStandaloneTarget && created->paintNumDrawings == 1 && created->paintNumFrames == 1 &&
+            created->isVisible == 1 && std::fabs(created->opacity - 1.0f) < 0.000001f &&
+            std::wstring(created->name) == L"LiveCreatedPaint" &&
+            player->GetLayerDiagnostics(doc, mPaintCreationLayer, diagnostics) &&
+            diagnostics.canonicalVisible == 1 && std::fabs(diagnostics.canonicalOpacity - 1.0f) < 0.000001f &&
+            iTransformsMatch(diagnostics.canonicalTransform, ImmCore::trans3d::identity());
+        const bool handles = hasHandle && hasFrame && handle != 0 && mapped == handle &&
+            (mPaintCreationStage == 1 || handle == mPaintCreationHandle);
+        if (!properties || !handles || static_cast<int>(infos.size()) != mStandaloneLayerCount + 1)
+        {
+            fail(L"created layer properties or handles mismatch");
+            return;
+        }
+        int32_t queued = -99;
+        if (mPaintCreationStage == 1)
+        {
+            if (created->paintNumStrokes != 0 || created->hasBBox != 0 || !restoredBounds)
+            {
+                fail(L"empty creation changed geometry or bounds");
+                return;
+            }
+            mPaintCreationHandle = handle;
+            std::vector<ImmPlayer::Document::AuthoringElementGeometry> elements(1);
+            auto & element = elements[0];
+            element.mBrush = ImmImporter::Element::BrushSectionType::Circle;
+            element.mVisibility = ImmImporter::Element::VisibilityType::Always;
+            element.mPoints.resize(16);
+            for (uint32_t index = 0; index < 16; index++)
+            {
+                const float t = static_cast<float>(index) / 15.0f;
+                auto & point = element.mPoints[index];
+                point.mPos = ImmCore::vec3(t * 0.5f, 1.5f, 0.0f);
+                point.mNor = ImmCore::vec3(0.0f, 1.0f, 0.0f);
+                point.mDir = ImmCore::vec3(0.0f, 0.0f, 1.0f);
+                point.mCol = ImmCore::vec3(0.2f, 0.4f, 0.9f);
+                point.mAlpha = 1.0f;
+                point.mWidth = 0.01f;
+                point.mLength = t;
+                point.mTime = t;
+            }
+            queued = player->QueueDrawingGeometry(doc, mPaintCreationLayer, handle, std::move(elements),
+                ImmImporter::Drawing::ColorSpace::Gamma, false, 0.01f);
+        }
+        else
+        {
+            ImmCore::bound3 box;
+            if (created->paintNumStrokes != 1 || created->hasBBox != 1 ||
+                !player->GetDrawingBBox(doc, mPaintCreationLayer, 0, box) ||
+                std::fabs((box.mMinY + box.mMaxY) * 0.5f - 1.5f) > 0.0001f ||
+                box.mMaxX - box.mMinX < 0.49f || !iSubtreeBoxesMatch(created->bbox, box))
+            {
+                fail(L"populated drawing bounds mismatch");
+                return;
+            }
+            queued = player->QueueLayerDeletion(doc, mPaintCreationLayer);
+        }
+        log->Printf(LT_MESSAGE,
+            L"[IMM_LIVE_PAINT_CREATE] pass=1 stage=%d rejected=0 status=%d result=%d hierarchy=1 handles=1 siblingStable=1 bounds=1 revisions=1 layer=%d drawing=%llu",
+            mPaintCreationStage, static_cast<int>(status.mState), status.mResult, mPaintCreationLayer,
+            static_cast<unsigned long long>(handle));
+        mStandaloneOldRevision = mRevision;
+        int32_t result = -99;
+        mRevision = queued == 0 ? player->CommitEdits(doc, &result) : 0;
+        if (mRevision == 0 || result != 0)
+        {
+            fail(L"next lifecycle queue/commit failed");
+            return;
+        }
+        mPaintCreationStage++;
+        mStandaloneTerminalFrame = 0;
+    }
+
     void LiveEditValidation::TickSubtreeDeletion(Viewer & viewer, ImmCore::piLog * log, uint64_t frame,
                                                  uint64_t requestedFrame)
     {
@@ -480,10 +892,23 @@ namespace ExePlayer
             mStandaloneConfigured = true;
             const char * value = std::getenv("IMM_VIEWER_LIVE_DELETE_SUBTREE");
             mStandaloneEnabled = value != nullptr && std::string(value) == "1";
+            const char * paint = std::getenv("IMM_VIEWER_LIVE_CREATE_PAINT");
+            mPaintCreationEnabled = paint != nullptr && std::string(paint) == "1";
+            const char * unload = std::getenv("IMM_VIEWER_LIVE_CREATE_PAINT_UNLOAD");
+            mPaintCreationUnload = unload != nullptr && std::string(unload) == "1";
+            if (mStandaloneEnabled && mPaintCreationEnabled)
+            {
+                log->Printf(LT_ERROR, L"[IMM_LIVE_PAINT_CREATE] pass=0 stage=0 reason=conflicting standalone modes");
+                mMeasured = true;
+            }
+            mStandaloneEnabled = mStandaloneEnabled || mPaintCreationEnabled;
         }
         if (mStandaloneEnabled)
         {
-            TickSubtreeDeletion(viewer, log, frame, requestedFrame);
+            if (mPaintCreationEnabled)
+                TickPaintCreation(viewer, log, frame, requestedFrame);
+            else
+                TickSubtreeDeletion(viewer, log, frame, requestedFrame);
             return;
         }
 

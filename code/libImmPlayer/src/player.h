@@ -170,6 +170,8 @@ namespace ImmPlayer {
             const ImmCore::trans3d & transform);
         int32_t QueueGroupLayerCreation(int docId, uint32_t parentLayerId,
             std::wstring name, uint32_t & layerIdOut);
+        int32_t QueuePaintLayerCreation(int docId, uint32_t parentLayerId,
+            std::wstring name, uint32_t & layerIdOut);
         int32_t QueueLayerDeletion(int docId, uint32_t layerId);
         int32_t QueueLayerReparent(int docId, uint32_t layerId,
             uint32_t parentLayerId, uint32_t childIndex);

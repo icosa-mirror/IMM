@@ -185,16 +185,14 @@ namespace ImmImporter
 
         for (int i = 0; i < kNumBrushTypes; i++)
         {
-            if (!mGeometry.mBuffers[i].mPoints.Init(32, false))
+            if (!mGeometry.mBuffers[i].mPoints.Init(32, false) ||
+                !mGeometry.mBuffers[i].mIndices.Init(32, false) ||
+                !mGeometry.mBuffers[i].mChunks.Init(4, false))
+            {
+                Deinit();
                 return false;
-
-            if (!mGeometry.mBuffers[i].mIndices.Init(32, false))
-                return false;
-
-            if (!mGeometry.mBuffers[i].mChunks.Init(4, false))
-                return false;
+            }
         }
-
         return true;
     }
 
@@ -202,9 +200,9 @@ namespace ImmImporter
     {
         for (int i = 0; i < kNumBrushTypes; i++)
         {
-            mGeometry.mBuffers[i].mChunks.End();
-            mGeometry.mBuffers[i].mPoints.End();
-            mGeometry.mBuffers[i].mIndices.End();
+            if (mGeometry.mBuffers[i].mChunks.IsInitialized()) mGeometry.mBuffers[i].mChunks.End();
+            if (mGeometry.mBuffers[i].mPoints.IsInitialized()) mGeometry.mBuffers[i].mPoints.End();
+            if (mGeometry.mBuffers[i].mIndices.IsInitialized()) mGeometry.mBuffers[i].mIndices.End();
         }
     }
 

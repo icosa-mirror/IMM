@@ -1,4 +1,4 @@
-"""Exercise real Windows renderer retirement for nested paint subtree deletion."""
+"""Exercise real Windows paint lifecycle and renderer ownership failures."""
 from pathlib import Path
 import argparse
 import ctypes as c
@@ -12,6 +12,7 @@ import time
 
 import exporter_bridge_smoke as smoke
 from exporter_benchmark import Exporter, Transform, make_points
+from live_edit_benchmark_report import runtime_provenance
 
 
 def fixture(plugin, output):
@@ -56,6 +57,7 @@ def main():
     parser.add_argument('--viewer', type=Path, required=True)
     parser.add_argument('--plugin', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--operation', choices=('delete', 'create'), default='delete')
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows standalone renderer required')
@@ -66,12 +68,15 @@ def main():
     handles = [os.add_dll_directory(str(path.parent)) for path in smoke.runtime_dependencies(Path(__file__).resolve().parents[3])]
     fixture(args.plugin.resolve(), fixture_path)
     template = json.loads((viewer.parent / 'settings-baseline-directx-sample1.json').read_text(encoding='utf-8'))
-    report = {'viewerSha256': hashlib.sha256(viewer.read_bytes()).hexdigest(),
+    report = {'operation': args.operation, 'viewerSha256': hashlib.sha256(viewer.read_bytes()).hexdigest(),
               'pluginSha256': hashlib.sha256(args.plugin.read_bytes()).hexdigest(),
               'fixtureSha256': hashlib.sha256(fixture_path.read_bytes()).hexdigest(), 'cases': {}}
-    for case in ('normal', 'retirement-failure', 'replacement-retirement-failure'):
+    cases = ('normal', 'cpu-failure', 'gpu-failure', 'present-failure', 'pending-unload') if args.operation == 'create' else (
+        'normal', 'retirement-failure', 'replacement-retirement-failure')
+    for case in cases:
         runtime = output / case
         runtime.mkdir()
+        shutil.copy2(fixture_path, runtime / 'nested-paint.imm')
         owned_viewer = runtime / viewer.name
         shutil.copy2(viewer, owned_viewer)
         for path in viewer.parent.iterdir():
@@ -97,7 +102,17 @@ def main():
             'IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS': '0', 'IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS': '0',
             'IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS': '0', 'IMM_VIEWER_VALIDATE_MIN_PICTURE360_CUBEMAP_DRAWCALLS': '0',
             'IMM_VIEWER_VALIDATE_CAPTURE_PATH': str(runtime / 'capture.ppm')})
-        if case != 'normal':
+        if args.operation == 'create':
+            environment.pop('IMM_VIEWER_LIVE_DELETE_SUBTREE')
+            environment['IMM_VIEWER_LIVE_CREATE_PAINT'] = '1'
+            failure = {'cpu-failure': 'IMM_LIVE_EDIT_FAIL_PREPARE_CPU',
+                       'gpu-failure': 'IMM_LIVE_EDIT_FAIL_PREPARE_GPU', 'present-failure': 'IMM_LIVE_EDIT_FAIL_PRESENT'}
+            if case in failure:
+                environment[failure[case]] = '1'
+            if case == 'pending-unload':
+                environment['IMM_VIEWER_LIVE_CREATE_PAINT_UNLOAD'] = '1'
+                environment['IMM_LIVE_EDIT_HOLD_PAINT_CREATION'] = '1'
+        elif case != 'normal':
             environment['IMM_LIVE_EDIT_FAIL_RETIREMENT'] = '1'
         if case == 'replacement-retirement-failure':
             environment.pop('IMM_VIEWER_LIVE_DELETE_SUBTREE')
@@ -120,7 +135,11 @@ def main():
                     child.wait(timeout=10)
                 raise RuntimeError(f'{case}: owned viewer timeout')
         text = (runtime / 'debug.txt').read_text(encoding='utf-8', errors='replace')
-        if case == 'replacement-retirement-failure':
+        if args.operation == 'create':
+            expected_stage = 5 if case == 'pending-unload' else (3 if case == 'normal' else 1)
+            smoke.require(code == 0 and re.search(fr'\[IMM_LIVE_PAINT_CREATE\] pass=1 stage={expected_stage}\b', text),
+                          f'{case}: paint creation lifecycle failed')
+        elif case == 'replacement-retirement-failure':
             smoke.require(code == 0 and re.search(r'\[IMM_LIVE_EDIT\].*revision=1 status=5 result=-10 drawingBBoxUnchanged=1', text),
                           'replacement retirement failure must reject before model mutation')
             smoke.require(re.search(r'\[IMM_LIVE_TIMING\] revision=1 status=5 valid=1 .*commitToPresentedMs=-1', text),
@@ -132,7 +151,17 @@ def main():
         smoke.require('geometryMatch=0' not in text, f'{case}: model/renderer mismatch')
         completed = re.findall(r'\[IMM_LIVE_EDIT_RETIRE\] completedToken=(\d+)', text)
         retired = re.findall(r'renderer delete retiredToken=(\d+)', text)
-        smoke.require(len(retired) == (5 if case == 'normal' else 0) and sorted(retired) == sorted(completed),
+        cancelled = []
+        if args.operation == 'create':
+            swaps = re.findall(r'renderer swap activeToken=\d+ retiredToken=(\d+)', text)
+            cancelled = re.findall(r'\[IMM_LIVE_EDIT_CANCEL\] completedToken=(\d+)', text)
+            smoke.require(len(retired) == (1 if case == 'normal' else 0) and
+                len(swaps) == (1 if case == 'normal' else 0) and sorted(retired + swaps) == sorted(completed),
+                f'{case}: created paint drawing retirement incomplete')
+            smoke.require(len(cancelled) == (1 if case in ('gpu-failure', 'present-failure', 'pending-unload') else 0),
+                          f'{case}: prepared slot cancellation incomplete')
+        else:
+            smoke.require(len(retired) == (5 if case == 'normal' else 0) and sorted(retired) == sorted(completed),
                       f'{case}: every detached drawing must reach renderer retirement')
         capture = (runtime / 'capture.ppm').read_bytes().split(b'\n', 3)
         smoke.require(len(capture) == 4 and capture[0] == b'P6' and capture[2] == b'255', 'RGB capture')
@@ -144,11 +173,13 @@ def main():
         smoke.require(render and all(int(re.search(fr'{field}=(\d+)', render[-1])[1]) > 0
             for field in ('paintDrawCalls', 'triangles')), 'positive surviving render')
         report['cases'][case] = {'elapsedSeconds': time.monotonic() - started, 'retiredDrawings': len(retired),
-            'completedRetirements': len(completed), 'logSha256': hashlib.sha256((runtime / 'debug.txt').read_bytes()).hexdigest()}
+            'completedRetirements': len(completed), 'cancelledPreparedSlots': len(cancelled),
+            **runtime_provenance(text, 'DirectX'),
+            'logSha256': hashlib.sha256((runtime / 'debug.txt').read_bytes()).hexdigest()}
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     for handle in handles:
         handle.close()
-    print('[IMM_PAINT_SUBTREE_TEST] nested paint deletion, retirement and subtree/replacement rollback passed')
+    print(f'[IMM_PAINT_LIFECYCLE_TEST] {args.operation}: lifecycle, renderer ownership and injected rollback passed')
 
 
 if __name__ == '__main__':

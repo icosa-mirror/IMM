@@ -416,9 +416,16 @@ locomotion mask, and the owning layer's rigid transform. Validation rejects inva
 non-finite values, non-positive radii/scale, inverted bounds, and non-unit quaternions. Volume
 and transform publish together; default selection targets an existing spawn layer ID.
 
-Layer creation currently supports only `Group`, with an existing group parent and bounded
-UTF-8 name. Preparation initializes a detached group and reserves sequence/parent capacity;
-publication appends without allocation and rolls back unexpected partial publication.
+Layer creation supports `Group=0` and `Paint=1`, with an existing group parent and bounded
+UTF-8 name. Paint begins visible/identity/opacity 1, non-timeline, with one empty
+drawing and frame zero mapped to it, repeat 1, version 1, and the document frame
+rate (30 when unset). Preparation initializes a detached layer, reserves sequence,
+parent and handle capacity, and prepares paint renderer resources. Publication adds
+hierarchy and the drawing handle atomically; query that handle after Presented and
+use existing geometry operations. Failure/unload cancels the renderer slot before
+destroying either drawing or the pending layer. Windows DirectX create/fill/delete,
+CPU/GPU/presentation rejection and CPU-prepared pending unload/reload pass locally
+(roadmap 6.54). This is not other-backend or in-flight-upload cancellation acceptance.
 
 Reparent supports sibling reorder and cross-parent moves, rejecting roots, cycles, invalid
 indices, and non-group destinations. Cross-parent preparation builds all affected subtree full
@@ -433,7 +440,7 @@ before empty layers are destroyed. Active asynchronous import returns busy; inst
 into the target subtree reject deletion. Spawn, sound, picture, model, instance and timeline
 descendants remain unsupported. Windows DirectX nested-paint deletion, retirement and
 injected rollback pass locally (roadmap 6.53); other backends need replacement evidence.
-Paint/spawn layer creation is likewise not delivered by the live layer-creation ABI.
+Spawn and media layer creation remain outside the delivered live layer-creation ABI.
 
 ### 8.4 Result taxonomy and diagnostics
 
@@ -555,8 +562,8 @@ handles and resource-release accounting still need separate evidence.
    measurements and audit the regression/failure matrix before claiming M1 completion.
 2. Static paint/group subtree deletion now has local DirectX lifecycle evidence. Complete
    agreed lifecycle coverage for other descendants and reference handling with explicit
-   resource retirement; keep unaccepted types unsupported. Paint/spawn layer creation still
-   needs prepared implementation resources before publication.
+   resource retirement; keep unaccepted types unsupported. Paint creation now prepares
+   implementation/renderer resources before publication; spawn creation remains open.
 3. Complete the agreed M2 scope, then implement presented-revision save/publish and managed
    cutover in that order. Preserve the original compatibility path until the relevant live
    surface/backend is accepted.

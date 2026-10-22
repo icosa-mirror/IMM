@@ -786,6 +786,17 @@ namespace ImmPlayer
             parentLayerId, std::move(name), &layerIdOut);
     }
 
+    int32_t Player::QueuePaintLayerCreation(int docId, uint32_t parentLayerId,
+        std::wstring name, uint32_t & layerIdOut)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueuePaintLayerCreation(
+            parentLayerId, std::move(name), &layerIdOut);
+    }
+
     int32_t Player::QueueLayerDeletion(int docId, uint32_t layerId)
     {
         std::lock_guard<std::mutex> guard(mMutex);

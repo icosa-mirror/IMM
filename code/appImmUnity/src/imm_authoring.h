@@ -62,7 +62,8 @@ typedef enum ImmAuthoringLayerPropertyMask
 
 typedef enum ImmAuthoringLayerType
 {
-    IMM_AUTHORING_LAYER_GROUP = 0
+    IMM_AUTHORING_LAYER_GROUP = 0,
+    IMM_AUTHORING_LAYER_PAINT = 1
 } ImmAuthoringLayerType;
 
 typedef enum ImmAuthoringAnimProperty
@@ -235,6 +236,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Commit(int32_t docI
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetRevisions(int32_t docId, ImmAuthoringRevisions * revisionsOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetCommitStatus(int32_t docId, uint64_t revision,
     ImmAuthoringCommitStatus * statusOut);
+// Paint starts with one empty drawing and frame zero mapped to it; query its
+// handle after publication and use the normal drawing geometry edit operations.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerCreate(int32_t docId,
     int32_t parentLayerId, int32_t layerType, const char * nameUtf8, uint32_t nameLength,
     int32_t * layerIdOut);

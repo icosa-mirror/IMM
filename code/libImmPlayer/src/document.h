@@ -262,6 +262,8 @@ namespace ImmPlayer {
             const ImmCore::trans3d & transform);
         int32_t QueueGroupLayerCreation(uint32_t parentLayerId, std::wstring name,
             uint32_t * layerIdOut);
+        int32_t QueuePaintLayerCreation(uint32_t parentLayerId, std::wstring name,
+            uint32_t * layerIdOut);
         int32_t QueueLayerDeletion(uint32_t layerId);
         int32_t QueueLayerReparent(uint32_t layerId, uint32_t parentLayerId,
             uint32_t childIndex);
@@ -364,6 +366,7 @@ namespace ImmPlayer {
             uint32_t mLayerId = 0;
             uint32_t mParentLayerId = 0;
             std::wstring mName;
+            ImmImporter::Layer::Type mType = ImmImporter::Layer::Type::Group;
         };
 
         struct LayerDeletion
@@ -435,6 +438,8 @@ namespace ImmPlayer {
             bool mIsInitialSpawnAreaEdit = false;
             bool mIsSpawnAreaEdit = false;
             bool mIsLayerCreation = false;
+            bool mHasPaintCreationRendererToken = false;
+            uint64_t mCreatedPaintDrawingHandle = 0;
             bool mIsLayerDeletion = false;
             bool mIsLayerReparent = false;
             ImmImporter::LayerSpawnArea::Volume mSpawnAreaVolume = {};
@@ -469,6 +474,8 @@ namespace ImmPlayer {
         };
         PendingPresentation mPendingPresentation;
 
+        int32_t iQueueLayerCreation(uint32_t parentLayerId, std::wstring name,
+            ImmImporter::Layer::Type type, uint32_t * layerIdOut);
         void iBuildDrawingHandleMap(ImmImporter::Layer * layer);
         const DrawingHandleEntry * iFindDrawingHandle(uint32_t layerId, uint64_t drawingId) const;
         const DrawingCreation * iFindOpenDrawingCreation(uint32_t layerId, uint64_t drawingId) const;

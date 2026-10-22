@@ -838,6 +838,31 @@ namespace ImmPlayer
                 Layer * parent = mPendingPresentation.mLayerCreationParent;
                 Layer * created = mPendingPresentation.mCreatedLayer.get();
                 const uint64_t layerId = mPendingPresentation.mObject;
+                const bool paintCreation = mPendingPresentation.mHasPaintCreationRendererToken;
+                if (paintCreation && std::getenv("IMM_LIVE_EDIT_HOLD_PAINT_CREATION") != nullptr)
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                if (paintCreation)
+                {
+                    auto * paint = created != nullptr ?
+                        static_cast<LayerPaintStatic *>(created->GetImplementation()) : nullptr;
+                    if (paint == nullptr || layerPaintRender == nullptr ||
+                        !layerPaintRender->PrepareDrawingReplacementInGPU(renderer, mPendingPresentation.mRendererToken, log))
+                    {
+                        iRejectCommit(revision, -10, 0, layerId);
+                        iDiscardPendingPresentation(layerPaintRender, renderer, log);
+                        return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                    }
+                    if (status != nullptr)
+                        iSetCommitState(status, AuthoringCommitState::Prepared);
+                    mPreparedRevision = revision;
+                    if (!layerPaintRender->PresentDrawingCreation(paint->GetDrawing(0),
+                        mPendingPresentation.mReplacement.get(), mPendingPresentation.mRendererToken, revision, log))
+                    {
+                        iRejectCommit(revision, -10, 0, layerId);
+                        iDiscardPendingPresentation(layerPaintRender, renderer, log);
+                        return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                    }
+                }
                 bool published = parent != nullptr && created != nullptr &&
                     mSequence.PublishPreparedLayer(created);
                 if (published && !parent->PublishPreparedChild(created))
@@ -848,21 +873,29 @@ namespace ImmPlayer
                 if (!published)
                 {
                     iRejectCommit(revision, -5, 0, layerId);
-                    if (created != nullptr)
-                        created->Deinit(log);
-                    mPendingPresentation = PendingPresentation{};
+                    iDiscardPendingPresentation(layerPaintRender, renderer, log);
                 }
                 else
                 {
+                    if (paintCreation)
+                    {
+                        mDrawingHandles.push_back(DrawingHandleEntry{
+                            mPendingPresentation.mCreatedPaintDrawingHandle, created, 0 });
+                        mPendingPresentation.mReplacement->Deinit();
+                    }
                     mPendingPresentation.mCreatedLayer.release();
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
-                    log->Printf(LT_MESSAGE,
-                        L"[IMM_LIVE_EDIT] presented revision=%llu createdGroupLayer=%llu",
-                        static_cast<unsigned long long>(revision),
-                        static_cast<unsigned long long>(layerId));
+                    if (paintCreation)
+                        log->Printf(LT_MESSAGE,
+                            L"[IMM_LIVE_EDIT] presented revision=%llu createdPaintLayer=%llu",
+                            static_cast<unsigned long long>(revision), static_cast<unsigned long long>(layerId));
+                    else
+                        log->Printf(LT_MESSAGE,
+                            L"[IMM_LIVE_EDIT] presented revision=%llu createdGroupLayer=%llu",
+                            static_cast<unsigned long long>(revision), static_cast<unsigned long long>(layerId));
                 }
             }
             else if (mPendingPresentation.mIsSpawnAreaEdit)
@@ -1662,6 +1695,18 @@ namespace ImmPlayer
     int32_t Document::QueueGroupLayerCreation(uint32_t parentLayerId,
         std::wstring name, uint32_t * layerIdOut)
     {
+        return iQueueLayerCreation(parentLayerId, std::move(name), Layer::Type::Group, layerIdOut);
+    }
+
+    int32_t Document::QueuePaintLayerCreation(uint32_t parentLayerId,
+        std::wstring name, uint32_t * layerIdOut)
+    {
+        return iQueueLayerCreation(parentLayerId, std::move(name), Layer::Type::Paint, layerIdOut);
+    }
+
+    int32_t Document::iQueueLayerCreation(uint32_t parentLayerId,
+        std::wstring name, Layer::Type type, uint32_t * layerIdOut)
+    {
         if (!mEditing)
             return -4;
         if (layerIdOut == nullptr || name.empty())
@@ -1682,7 +1727,7 @@ namespace ImmPlayer
             return -5;
         const uint32_t layerId = mNextLayerHandle;
         mOpenLayerCreations.push_back(LayerCreation{
-            layerId, parentLayerId, std::move(name) });
+            layerId, parentLayerId, std::move(name), type });
         mNextLayerHandle++;
         *layerIdOut = layerId;
         return 0;
@@ -2102,19 +2147,79 @@ namespace ImmPlayer
             }
             std::unique_ptr<Layer> layer(new (std::nothrow) Layer(
                 &mSequence, parent, creation.mLayerId));
-            if (!layer || !layer->Init(Layer::Type::Group, creation.mName.c_str(), true,
-                trans3d::identity(), trans3d::identity(), 1.0f, false, piTick(0), 0,
+            if (!layer || !layer->Init(creation.mType, creation.mName.c_str(), true,
+                trans3d::identity(), trans3d::identity(), 1.0f, false, piTick(0),
+                creation.mType == Layer::Type::Paint ? 1 : 0,
                 UINT32_MAX, log, false))
             {
                 iRejectCommit(batch.mRevision, -5, 0, creation.mLayerId);
                 return;
             }
+            std::unique_ptr<DrawingStatic> prepared;
+            bool preparedInitialized = false;
+            uint64_t rendererToken = 0;
+            uint64_t drawingHandle = 0;
+            if (creation.mType == Layer::Type::Paint)
+            {
+                bool initialized = false;
+                try
+                {
+                    std::unique_ptr<LayerPaintStatic> paint(new (std::nothrow) LayerPaintStatic());
+                    const uint32_t frameRate = mSequence.GetFrameRate() != 0 ? mSequence.GetFrameRate() : 30;
+                    if (paint && paint->Init(0, 1, 1, frameRate, 1))
+                    {
+                        layer->SetImplementation(paint.release());
+                        layer->SetLoaded(true);
+                        auto * implementation = static_cast<LayerPaintStatic *>(layer->GetImplementation());
+                        implementation->GetFrameBuffer()[0] = 0;
+                        auto * drawing = static_cast<DrawingStatic *>(implementation->AddDrawing());
+                        prepared.reset(new (std::nothrow) DrawingStatic());
+                        initialized = drawing != nullptr &&
+                            drawing->ReplaceGeometry(nullptr, 0, Drawing::ColorSpace::Linear, false, 0.01f) &&
+                            prepared && (preparedInitialized = prepared->Init(0)) &&
+                            prepared->ReplaceGeometry(nullptr, 0, Drawing::ColorSpace::Linear, false, 0.01f);
+                        if (initialized)
+                        {
+                            drawing->SetLoaded(true);
+                            prepared->SetLoaded(true);
+                            mDrawingHandles.reserve(mDrawingHandles.size() + 1);
+                        }
+                    }
+                }
+                catch (const std::bad_alloc &)
+                {
+                    initialized = false;
+                }
+                if (!initialized)
+                {
+                    if (preparedInitialized)
+                        prepared->Deinit();
+                    layer->Deinit(log);
+                    iRejectCommit(batch.mRevision, -5, 0, creation.mLayerId);
+                    return;
+                }
+                if (layerPaintRender == nullptr ||
+                    !layerPaintRender->PrepareDrawingReplacementInCPU(prepared.get(), &rendererToken, log))
+                {
+                    prepared->Deinit();
+                    layer->Deinit(log);
+                    iRejectCommit(batch.mRevision, -10, 0, creation.mLayerId);
+                    return;
+                }
+                drawingHandle = mNextDrawingHandle++;
+            }
             if (status != nullptr)
             {
-                iSetCommitState(status, AuthoringCommitState::Prepared);
+                if (creation.mType == Layer::Type::Group)
+                    iSetCommitState(status, AuthoringCommitState::Prepared);
                 status->mObject = creation.mLayerId;
             }
-            mPreparedRevision = batch.mRevision;
+            if (creation.mType == Layer::Type::Group)
+                mPreparedRevision = batch.mRevision;
+            mPendingPresentation.mHasPaintCreationRendererToken = creation.mType == Layer::Type::Paint;
+            mPendingPresentation.mRendererToken = rendererToken;
+            mPendingPresentation.mReplacement = std::move(prepared);
+            mPendingPresentation.mCreatedPaintDrawingHandle = drawingHandle;
             mPendingPresentation.mRevision = batch.mRevision;
             mPendingPresentation.mObject = creation.mLayerId;
             mPendingPresentation.mIsLayerCreation = true;
@@ -2625,6 +2730,8 @@ namespace ImmPlayer
     {
         if (mPendingPresentation.mRevision == 0)
             return;
+        if (mPendingPresentation.mHasPaintCreationRendererToken && layerPaintRender != nullptr)
+            layerPaintRender->CancelDrawingReplacement(renderer, mPendingPresentation.mRendererToken, log);
         if (layerPaintRender != nullptr && !mPendingPresentation.mIsFrameMapping &&
             !mPendingPresentation.mIsDeletion && !mPendingPresentation.mIsLayerPropertyEdit &&
             !mPendingPresentation.mIsAnimationKeyEdit &&
