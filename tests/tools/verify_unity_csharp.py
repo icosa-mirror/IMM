@@ -1,11 +1,11 @@
-"""Compile the Unity project's generated C# projects without opening the Editor.
+"""Compile current package sources using Unity-generated references and defines.
 
 Unity writes .csproj files (and IMM Unity Test.sln) into the project root, referencing the
 installed Editor's managed assemblies. That makes it possible to type-check the packages,
-the sample scripts and the test assemblies with MSBuild alone - which matters here because
-the Editor currently hangs while opening the project (it stops right after
-"[Package Manager] Connected to IPC stream"), and because CI only compiles the small
-SharpQuill adapter subset.
+the sample scripts and the test assemblies with MSBuild alone. For the two default runtime
+assemblies, an artifact-only MSBuild target replaces stale generated source lists with
+current assembly-owned sources, excluding nested asmdef/asmref directories. References
+and conditional symbols still come from the generated project; this is not a Unity import.
 
 Outputs go to artifacts/csharp-check/ so nothing is written into the project while the
 Editor may be holding it open.
@@ -30,6 +30,7 @@ import os
 import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -46,6 +47,10 @@ DEFAULT_PROJECTS = (
     "ImmUnity.Runtime",
     "ImmStrokeReader.Runtime",
 )
+RUNTIME_SOURCE_ROOTS = {
+    "ImmUnity.Runtime": UNITY_PROJECT / "Packages/com.immersive-foundation.imm-unity/Runtime",
+    "ImmStrokeReader.Runtime": UNITY_PROJECT / "Packages/com.immersive-foundation.imm-stroke-reader/Runtime",
+}
 # Also need Library/ScriptAssemblies, so they require a completed Editor import.
 PACKAGE_DEPENDENT_PROJECTS = (
     "ImmUnity.Runtime.Tests",
@@ -68,6 +73,41 @@ def project_path(name: str) -> Path:
     return UNITY_PROJECT / f"{name}.csproj"
 
 
+def assembly_sources(root: Path) -> list[Path]:
+    """Follow Unity's directory assembly ownership, excluding nested assemblies."""
+    sources = []
+    for directory, subdirectories, files in os.walk(root):
+        current = Path(directory)
+        if current != root and any(name.endswith((".asmdef", ".asmref")) for name in files):
+            subdirectories.clear()
+            continue
+        sources.extend(current / name for name in files if name.endswith(".cs"))
+    return sorted(sources)
+
+
+def write_runtime_sources(name: str, output_root: Path) -> Path | None:
+    root = RUNTIME_SOURCE_ROOTS.get(name)
+    if root is None:
+        return None
+    sources = assembly_sources(root)
+    if not sources or not (root / f"{name}.asmdef").is_file():
+        raise ValueError(f"Missing runtime assembly sources: {root}")
+    namespace = "http://schemas.microsoft.com/developer/msbuild/2003"
+    ET.register_namespace("", namespace)
+    project = ET.Element(f"{{{namespace}}}Project")
+    target = ET.SubElement(project, "Target", Name="ImmVerifyCurrentRuntimeSources", BeforeTargets="PrepareForBuild",
+                           Condition=f"'$(MSBuildProjectName)' == '{name}'")
+    group = ET.SubElement(target, "ItemGroup")
+    # Run before generated assembly attributes are added, retaining Unity's
+    # references/defines while replacing its potentially stale source inventory.
+    ET.SubElement(group, "Compile", Remove="@(Compile)")
+    for source in sources:
+        ET.SubElement(group, "Compile", Include=str(source.resolve()))
+    path = output_root.resolve() / f"{name}.sources.targets"
+    ET.ElementTree(project).write(path, encoding="utf-8", xml_declaration=True)
+    return path
+
+
 def compile_project(msbuild: Path, name: str, output_root: Path, verbose: bool) -> tuple[bool, list[str]]:
     """Return (succeeded, error lines) for one generated project."""
     project = project_path(name)
@@ -86,6 +126,9 @@ def compile_project(msbuild: Path, name: str, output_root: Path, verbose: bool) 
         "-v:m",
         "-nologo",
     ]
+    sources = write_runtime_sources(name, output_root)
+    if sources is not None:
+        command.append(f"-p:CustomAfterMicrosoftCSharpTargets={sources}")
     completed = subprocess.run(
         command,
         cwd=UNITY_PROJECT,

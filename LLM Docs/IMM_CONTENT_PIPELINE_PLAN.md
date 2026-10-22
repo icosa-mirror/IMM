@@ -1859,6 +1859,27 @@ replacement-run closure in section 6.26 (20:23 UTC):
    from Unity compilation/device execution. The Android failure remains unresolved
    pending fresh full CI and successful replacement visual evidence.
 
+### 6.51. Current-source C# verification and package regression audit (2026-10-22)
+
+1. The full player regression command exposed stale Unity-generated source lists:
+   newer image/audio source files existed but were absent from the generated
+   runtime project. The verifier now writes an artifact-only MSBuild source overlay
+   for each default runtime assembly, discovering current assembly-owned C# files
+   and excluding nested asmdef/asmref directories. Unity's references/defines and
+   generated project files are preserved. The overlay is project-scoped so it
+   cannot replace a referenced project's sources. This does not replace Unity import.
+2. Both current package runtime assemblies now compile. Two verifier tests cover
+   new-source inclusion, nested assembly exclusion, referenced-project isolation
+   and preservation of the generated project; required in core CI. Exporter bridge,
+   SharpQuill adapter and sample content baseline also pass the full regression
+   command. Evidence: artifacts/live-a1-current-csharp.log,
+   live-a1-csharp-verifier-tests.log and live-a1-player-regressions-current.*.
+3. The full regression command remains failed because packaged macOS binaries
+   lack newer declared exports. Windows exports pass; this is not all-platform
+   acceptance. Replacement run 39701694123 is live with no failures at this audit,
+   but Apple builds remain queued. Old 39669262483 is completed/cancelled.
+   Do not skip or weaken the all-platform export check to report a passing set.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
