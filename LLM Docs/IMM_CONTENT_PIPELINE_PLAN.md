@@ -2197,8 +2197,9 @@ replacement-run closure in section 6.26 (20:23 UTC):
    android-ci-job-equivalence.log and early-android-workflow-verifier.log.
    Pushed in 765f9a05. Run 39716790347 now proves early scheduling: Android native
    and Windows builds passed, and non-XR/URP player jobs 119622318226/119622318250
-   are running while four Apple jobs remain queued. Eleven jobs passed with no
-   failures observed. Firebase/strict runtime acceptance remains pending; this
+   started while four Apple jobs remained queued. The URP player build has now
+   passed; non-XR is still running. Twelve jobs passed with no failures observed.
+   Firebase/strict runtime acceptance remains pending; this
    does not close the Android failure.
 
 ### 6.63. Canonical property publication: Windows measurements (2026-10-22)
@@ -2244,8 +2245,9 @@ replacement-run closure in section 6.26 (20:23 UTC):
    matched geometry baseline/run passes in property-benchmark-geometry-regression2/.
 7. Windows CI now requires the Small three-property/control correctness smoke and
    uploads reports/captures. It does not enforce a workstation latency threshold
-   on hosted runners. Workflow wiring and syntax checks pass; replacement full CI
-   remains pending. Production mutation behavior and APIs are unchanged.
+   on hosted runners. Workflow wiring and syntax checks pass. Pushed in 91eda9bb;
+   replacement full validation run 39718923123 is queued. Production mutation
+   behavior and APIs are unchanged; hosted acceptance remains pending.
 
 ## 7. Consolidated documents
 
