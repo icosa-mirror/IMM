@@ -232,6 +232,21 @@ The new Windows CI smoke checks correctness without a hardware latency threshold
 This closes the missing repeated publication measurement for this one operation and
 backend, while the other M1/A1 acceptance requirements remain open.
 
+Roadmap 6.63 adds a separate property-live-v1 workload with red target and blue
+siblings separated in the image. Thirty measured visibility/opacity/transform
+edits after five warmups per Small/Medium/Large size pass on Windows DirectX /
+RTX 4090. Commit-to-Presented p95 ranges from 0.1028 to 0.1439 ms, below 2 ms for
+this native endpoint. Control/change captures prove the final rendered effect and
+unchanged sibling pixels; per-sample effective state and sampled selected renderer
+slots/geometry remain coherent. Untimed setup removes the importer's default
+visibility key so it cannot mask canonical visibility edits.
+
+This measures native Player/Commit publication, excluding earlier ABI/marshalling,
+display latency, GPU completion and retirement. Queue/call samples and artifact
+provenance are retained. The required Windows CI Small smoke checks correctness
+without a hardware latency threshold. Other backends, full resource accounting and
+broader M1 acceptance remain open; no production optimization was introduced.
+
 ## 5. Live document architecture and identity
 
 `ImmPlayer::Document` owns the existing `ImmImporter::Sequence`. CPU/GPU updates consume that
@@ -330,11 +345,11 @@ synthesizes; growing that paint can therefore animate without a caller-authored 
 Existing explicitly keyless paint retains its semantics. Repeat/Loop/Offset live
 controls and managed transaction mapping remain open.
 
-Drawing creation, deletion and geometry replacement return `Busy` (-7) while the
+Drawing creation, deletion and geometry replacement return `QueueFull` (-7) while the
 background importer owns drawing storage; CPU preparation and GPU publication
 recheck ownership. Table-only, metadata and independent new-layer edits remain
 available. Callers must wait before queueing a resource-edit bundle, rather than
-leaving a partially queued batch after Busy.
+leaving a partially queued batch while import owns the drawing storage.
 
 Windows validation passes locally: eleven DirectX sequence cases cover held-time
 growth, ordinary advancing playback, reorder/holds/shrink/empty tables, create/delete
@@ -505,7 +520,7 @@ Preview-asset construction and media layer creation remain outside the delivered
 | -4 | `InvalidState` | Detached/invalid lifecycle or invalid batch shape |
 | -5 | `OutOfMemory` | Allocation failure |
 | -6 | `ValidationFailed` | Invalid proposed hierarchy/reference state |
-| -7 | `QueueFull` | Open operation capacity or unresolved commit capacity occupied |
+| -7 | `QueueFull` | Operation/commit capacity occupied, or drawing storage temporarily owned by background import |
 | -8 | `DependencyFailed` | Reserved dependency-failure result |
 | -9 | `Cancelled` | Cancellation/lifecycle invalidation |
 | -10 | `RendererFailed` | Replacement renderer preparation/presentation failure |

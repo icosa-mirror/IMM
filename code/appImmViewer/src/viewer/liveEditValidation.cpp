@@ -1440,6 +1440,318 @@ namespace ExePlayer
     }
 
 
+    void LiveEditValidation::TickPropertyBenchmark(Viewer & viewer, ImmCore::piLog * log,
+        uint64_t frame, uint64_t requestedFrame)
+    {
+        if (mMeasured || frame < requestedFrame)
+            return;
+        const wchar_t * property = mPropertyBenchmarkKind == 1 ? L"visibility" :
+            mPropertyBenchmarkKind == 2 ? L"opacity" : L"transform";
+        const auto fail = [&](const wchar_t * reason) {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_PROPERTY_BENCHMARK_ERROR] iteration=%u property=%ls reason=%ls",
+                mBenchmarkIteration, property, reason);
+            mMeasured = true;
+        };
+        if (frame - requestedFrame > 10000)
+        {
+            fail(L"timeout");
+            return;
+        }
+        ImmPlayer::Player * player = viewer.GetPlayer();
+        if (mDocumentId < 0)
+        {
+            const int doc = viewer.GetPrimaryDocumentId();
+            if (doc < 0 || !viewer.IsDocumentLoaded(doc))
+                return;
+            const int expectedLayers = mBenchmarkPoints == 16 ? 2 : mBenchmarkPoints == 32 ? 4 : 8;
+            const int expectedDrawings = mBenchmarkPoints == 16 ? 10 : mBenchmarkPoints == 32 ? 400 : 4000;
+            const int expectedFrames = mBenchmarkPoints == 16 ? 24 : mBenchmarkPoints == 32 ? 480 : 4000;
+            int paints = 0, drawings = 0, frames = 0, loaded = 0;
+            std::vector<ImmPlayer::Player::LayerInfo> infos;
+            for (int index = 0; index < player->GetLayerCount(doc); ++index)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (!player->GetLayerInfoByIndex(doc, index, info))
+                {
+                    fail(L"fixture enumeration failed");
+                    return;
+                }
+                infos.push_back(info);
+                if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint))
+                {
+                    if (!info.isLoaded)
+                        return;
+                    ++paints;
+                    drawings += info.paintNumDrawings;
+                    frames += info.paintNumFrames;
+                    loaded += info.paintNumStrokes;
+                    if (std::wstring(info.name) == L"PropertyTarget")
+                        mLayerId = info.id;
+                }
+            }
+            if (loaded != drawings)
+                return;
+            if (paints != expectedLayers || drawings != expectedDrawings || frames != expectedFrames ||
+                mLayerId < 0 || !player->AttachEditing(doc))
+            {
+                fail(L"property fixture corpus or attach mismatch");
+                return;
+            }
+            mPropertyBenchmarkLayerCount = static_cast<int>(infos.size());
+            for (const auto & info : infos)
+            {
+                ImmPlayer::Player::LayerDiagnostics diagnostics;
+                if (!player->GetLayerDiagnostics(doc, info.id, diagnostics) ||
+                    diagnostics.visibilityOverrideEnabled || diagnostics.opacityOverrideEnabled ||
+                    diagnostics.transformOverrideEnabled || diagnostics.hasOpacityKeys || diagnostics.hasTransformKeys ||
+                    !diagnostics.canonicalVisible || !diagnostics.isVisible || !diagnostics.isWorldVisible ||
+                    std::fabs(diagnostics.canonicalOpacity - 1.0f) > 0.000001f ||
+                    std::fabs(diagnostics.worldOpacity - 1.0f) > 0.000001f ||
+                    !iTransformsMatch(diagnostics.canonicalTransform, diagnostics.transform))
+                {
+                    fail(L"fixture keys, overrides or effective properties mask canonical state");
+                    return;
+                }
+                if (info.type != static_cast<int>(ImmImporter::Layer::Type::Paint))
+                {
+                    if (info.parentId >= 0 || !iTransformsMatch(diagnostics.transform, ImmCore::trans3d::identity()))
+                    {
+                        fail(L"fixture has unexpected hierarchy transform");
+                        return;
+                    }
+                    continue;
+                }
+                if (diagnostics.visibilityKeyCount != 1)
+                {
+                    fail(L"expected the imported default visibility key only");
+                    return;
+                }
+                PropertyBenchmarkLayer snapshot;
+                snapshot.id = info.id;
+                snapshot.parent = info.parentId;
+                snapshot.frames = info.paintNumFrames;
+                snapshot.transform = diagnostics.canonicalTransform;
+                for (int drawing = 0; drawing < info.paintNumDrawings; ++drawing)
+                {
+                    uint64_t handle = 0;
+                    ImmCore::bound3 box;
+                    if (!player->GetDrawingHandle(doc, info.id, drawing, handle) ||
+                        !player->GetDrawingBBox(doc, info.id, drawing, box))
+                    {
+                        fail(L"fixture drawing snapshot failed");
+                        return;
+                    }
+                    snapshot.handles.push_back(handle);
+                    snapshot.boxes.push_back(box);
+                }
+                mPropertyBenchmarkLayers.push_back(std::move(snapshot));
+            }
+            mDocumentId = doc;
+            mPropertyBenchmarkStage = 1;
+            player->Pause(doc);
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_PROPERTY_CORPUS] property=%ls paintLayers=%d drawings=%d frames=%d loadedStrokes=%d points=%u",
+                property, paints, drawings, frames, loaded, mBenchmarkPoints);
+            return;
+        }
+        if (mPropertyBenchmarkStage == 1)
+        {
+            player->SetTime(mDocumentId, ImmCore::piTick(0), ImmCore::piTick(1));
+            mPropertyBenchmarkStage = 2;
+            return;
+        }
+        ImmCore::piTick position(0), stopped(0);
+        player->GetTime(mDocumentId, &position, &stopped);
+        if (position != ImmCore::piTick(0) || stopped <= ImmCore::piTick(0))
+        {
+            fail(L"property playback did not remain held at frame zero");
+            return;
+        }
+        ImmPlayer::Document::AuthoringRevisions revisions;
+        if (!player->GetAuthoringRevisions(mDocumentId, revisions))
+        {
+            fail(L"revision lookup failed");
+            return;
+        }
+        if (mPropertyBenchmarkStage == 2)
+        {
+            // The importer synthesizes a true visibility key at zero. Remove
+            // only that target key in an untimed setup commit; otherwise a
+            // canonical visibility edit would leave the evaluated key in control.
+            if (player->QueueAnimationKeyRemoval(mDocumentId, mLayerId,
+                ImmImporter::Layer::AnimProperty::Visibility, ImmCore::piTick(0)) != 0 ||
+                (mRevision = player->CommitEdits(mDocumentId)) == 0)
+            {
+                fail(L"default visibility setup removal failed");
+                return;
+            }
+            mPropertyBenchmarkStage = 3;
+            return;
+        }
+        if (mPropertyBenchmarkStage == 3)
+        {
+            ImmPlayer::Document::AuthoringCommitStatus setup;
+            if (!player->GetAuthoringCommitStatus(mDocumentId, mRevision, setup) ||
+                setup.mState == ImmPlayer::Document::AuthoringCommitState::Rejected)
+            {
+                fail(L"default visibility setup commit failed");
+                return;
+            }
+            if (setup.mState != ImmPlayer::Document::AuthoringCommitState::Presented)
+                return;
+            mBenchmarkPreviousRevision = mRevision;
+            mPropertyBenchmarkTerminalFrame = frame;
+            mPropertyBenchmarkStage = 4;
+            return;
+        }
+        if (mPropertyBenchmarkStage == 4)
+        {
+            if (frame < mPropertyBenchmarkTerminalFrame + 2)
+                return;
+            const auto & performance = viewer.GetPerformanceInfoForFrame();
+            const int paints = static_cast<int>(mPropertyBenchmarkLayers.size());
+            if (performance.numPaintDrawCalls != paints || performance.numTriangles <= 0 ||
+                performance.numTriangles % paints != 0)
+            {
+                fail(L"baseline does not render every separated paint layer");
+                return;
+            }
+            mPropertyBenchmarkBaseDrawCalls = performance.numPaintDrawCalls;
+            mPropertyBenchmarkBaseTriangles = performance.numTriangles;
+            mPropertyBenchmarkTerminalFrame = 0;
+            mPropertyBenchmarkStage = 5;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_PROPERTY_SETUP] property=%ls visibilityKeyRemoved=1 overrides=0 pausedFrame=0 paintDrawCalls=%d triangles=%d",
+                property, mPropertyBenchmarkBaseDrawCalls, mPropertyBenchmarkBaseTriangles);
+        }
+        const bool changed = !mPropertyBenchmarkControl && mBenchmarkIteration % 2 == 0;
+        const bool targetVisible = !(mPropertyBenchmarkKind == 1 && changed);
+        const float targetOpacity = mPropertyBenchmarkKind == 2 && changed ? 0.25f : 1.0f;
+        if (mBenchmarkPending)
+        {
+            ImmPlayer::Document::AuthoringCommitStatus status;
+            if (!player->GetAuthoringCommitStatus(mDocumentId, mRevision, status) ||
+                revisions.mRequested != mRevision ||
+                (revisions.mPrepared != mBenchmarkPreviousRevision && revisions.mPrepared != mRevision) ||
+                (revisions.mPresented != mBenchmarkPreviousRevision && revisions.mPresented != mRevision) ||
+                status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected)
+            {
+                fail(L"property publication status or revision mismatch");
+                return;
+            }
+            if (status.mState != ImmPlayer::Document::AuthoringCommitState::Presented)
+                return;
+            if (mPropertyBenchmarkTerminalFrame == 0)
+                mPropertyBenchmarkTerminalFrame = frame;
+            // Correctness samples and the final capture follow rendered frames;
+            // recorded timing remains the native publication timestamp itself.
+            if (frame < mPropertyBenchmarkTerminalFrame + 2)
+                return;
+            const bool timing = status.mCommitStartedNs != 0 &&
+                status.mPreparingNs >= status.mCommitStartedNs && status.mPreparedNs >= status.mPreparingNs &&
+                status.mPresentedNs >= status.mPreparedNs && status.mRejectedNs == 0;
+            if (!timing || status.mResult != 0 || revisions.mPresented != mRevision || revisions.mPrepared != mRevision ||
+                player->GetLayerCount(mDocumentId) != mPropertyBenchmarkLayerCount)
+            {
+                fail(L"property timing or presented state mismatch");
+                return;
+            }
+            for (const auto & before : mPropertyBenchmarkLayers)
+            {
+                const bool target = before.id == mLayerId;
+                ImmPlayer::Player::LayerDiagnostics diagnostics;
+                auto transform = before.transform;
+                if (target && mPropertyBenchmarkKind == 3 && changed)
+                    transform.mTranslation.x += 0.15;
+                uint64_t mapped = 0;
+                if (!player->GetLayerDiagnostics(mDocumentId, before.id, diagnostics) ||
+                    diagnostics.visibilityOverrideEnabled || diagnostics.opacityOverrideEnabled ||
+                    diagnostics.transformOverrideEnabled || diagnostics.hasOpacityKeys || diagnostics.hasTransformKeys ||
+                    diagnostics.visibilityKeyCount != (target ? 0 : 1) || diagnostics.parentId != before.parent ||
+                    diagnostics.canonicalVisible != (target ? targetVisible : true) ||
+                    diagnostics.isVisible != (target ? targetVisible : true) ||
+                    diagnostics.isWorldVisible != (target ? targetVisible : true) ||
+                    std::fabs(diagnostics.canonicalOpacity - (target ? targetOpacity : 1.0f)) > 0.000001f ||
+                    std::fabs(diagnostics.opacity - (target ? targetOpacity : 1.0f)) > 0.000001f ||
+                    std::fabs(diagnostics.worldOpacity - (target ? targetOpacity : 1.0f)) > 0.000001f ||
+                    !iTransformsMatch(diagnostics.canonicalTransform, transform) || !iTransformsMatch(diagnostics.transform, transform) ||
+                    !player->GetFrameDrawingHandle(mDocumentId, before.id, 0, mapped) || mapped != before.handles[0])
+                {
+                    fail(L"canonical/evaluated property or immutable sibling mismatch");
+                    return;
+                }
+                // Whole-corpus snapshots run outside the measured native commit
+                // interval. Geometry identity is also checked by renderer traces.
+                for (size_t drawing = 0; drawing < before.handles.size(); ++drawing)
+                {
+                    uint64_t handle = 0;
+                    ImmCore::bound3 box;
+                    if (!player->GetDrawingHandle(mDocumentId, before.id, static_cast<int>(drawing), handle) ||
+                        handle != before.handles[drawing] ||
+                        !player->GetDrawingBBox(mDocumentId, before.id, static_cast<int>(drawing), box) ||
+                        !iSubtreeBoxesMatch(box, before.boxes[drawing]))
+                    {
+                        fail(L"property edit changed drawing handles or local geometry bounds");
+                        return;
+                    }
+                }
+            }
+            const auto & performance = viewer.GetPerformanceInfoForFrame();
+            const int expectedCalls = mPropertyBenchmarkBaseDrawCalls - (targetVisible ? 0 : 1);
+            const int expectedTriangles = mPropertyBenchmarkBaseTriangles - (targetVisible ? 0 :
+                mPropertyBenchmarkBaseTriangles / static_cast<int>(mPropertyBenchmarkLayers.size()));
+            if (performance.numPaintDrawCalls != expectedCalls || performance.numTriangles != expectedTriangles)
+            {
+                fail(L"effective property state did not produce the expected paint render selection");
+                return;
+            }
+            const auto elapsed = [&](uint64_t end) {
+                return static_cast<double>(end - status.mCommitStartedNs) / 1000000.0;
+            };
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_PROPERTY_BENCHMARK] iteration=%u sample=%d warmup=%d points=%u layer=%d revision=%llu status=4 property=%ls control=%d queueMs=%.6f commitCallMs=%.6f commitToPreparingMs=%.6f commitToFirstPreparedMs=%.6f commitToPresentedMs=%.6f effective=1 stableGeometry=1 siblingStable=1 paintDrawCalls=%d triangles=%d changed=%d",
+                mBenchmarkIteration, static_cast<int>(mBenchmarkIteration) - static_cast<int>(mBenchmarkWarmup),
+                mBenchmarkIteration < mBenchmarkWarmup ? 1 : 0, mBenchmarkPoints, mLayerId,
+                static_cast<unsigned long long>(mRevision), property, mPropertyBenchmarkControl ? 1 : 0,
+                mBenchmarkQueueMs, mBenchmarkCommitCallMs, elapsed(status.mPreparingNs), elapsed(status.mPreparedNs),
+                elapsed(status.mPresentedNs), expectedCalls, expectedTriangles, changed ? 1 : 0);
+            ++mBenchmarkIteration;
+            mBenchmarkPending = false;
+            mPropertyBenchmarkTerminalFrame = 0;
+            mBenchmarkPreviousRevision = mRevision;
+            if (mBenchmarkIteration == mBenchmarkWarmup + mBenchmarkSamples)
+            {
+                log->Printf(LT_MESSAGE,
+                    L"[IMM_LIVE_PROPERTY_BENCHMARK_DONE] property=%ls control=%d samples=%u warmup=%u effect=%ls stableGeometry=1 siblingStable=1 effective=1",
+                    property, mPropertyBenchmarkControl ? 1 : 0, mBenchmarkSamples, mBenchmarkWarmup,
+                    mPropertyBenchmarkControl ? L"baseline" : L"changed");
+                mMeasured = true;
+            }
+            return;
+        }
+        ImmCore::trans3d transform = ImmCore::trans3d::identity();
+        for (const auto & snapshot : mPropertyBenchmarkLayers)
+            if (snapshot.id == mLayerId)
+                transform = snapshot.transform;
+        if (mPropertyBenchmarkKind == 3 && changed)
+            transform.mTranslation.x += 0.15;
+        const auto started = std::chrono::steady_clock::now();
+        const int32_t queued = player->QueueLayerProperties(mDocumentId, mLayerId,
+            mPropertyBenchmarkKind == 1, targetVisible, mPropertyBenchmarkKind == 2, targetOpacity,
+            mPropertyBenchmarkKind == 3, transform);
+        const auto queuedAt = std::chrono::steady_clock::now();
+        mRevision = queued == 0 ? player->CommitEdits(mDocumentId) : 0;
+        const auto committed = std::chrono::steady_clock::now();
+        if (mRevision == 0)
+        {
+            fail(L"property queue or commit failed");
+            return;
+        }
+        mBenchmarkQueueMs = std::chrono::duration<double, std::milli>(queuedAt - started).count();
+        mBenchmarkCommitCallMs = std::chrono::duration<double, std::milli>(committed - queuedAt).count();
+        mBenchmarkPending = true;
+    }
+
     void LiveEditValidation::TickBenchmark(Viewer & viewer, ImmCore::piLog * log,
         uint64_t frame, uint64_t requestedFrame)
     {
@@ -1616,7 +1928,16 @@ namespace ExePlayer
         {
             mBenchmarkConfigured = true;
             const char* points = std::getenv("IMM_VIEWER_LIVE_BENCHMARK_POINTS");
-            mBenchmarkEnabled = points != nullptr && points[0] != 0;
+            const char * property = std::getenv("IMM_VIEWER_LIVE_PROPERTY_BENCHMARK");
+            const bool propertyRequested = property != nullptr && property[0] != 0;
+            mBenchmarkEnabled = propertyRequested || (points != nullptr && points[0] != 0);
+            if (propertyRequested)
+            {
+                const std::string name(property);
+                mPropertyBenchmarkKind = name == "visibility" ? 1 : name == "opacity" ? 2 : name == "transform" ? 3 : -1;
+                const char * control = std::getenv("IMM_VIEWER_LIVE_PROPERTY_CONTROL");
+                mPropertyBenchmarkControl = control != nullptr && std::string(control) == "1";
+            }
             if (mBenchmarkEnabled)
             {
                 const auto parse = [](const char* name, uint32_t fallback, uint32_t minimum, uint32_t maximum, uint32_t& out)
@@ -1636,11 +1957,20 @@ namespace ExePlayer
                     log->Printf(LT_ERROR, L"[IMM_LIVE_BENCHMARK_ERROR] invalid benchmark configuration");
                     mMeasured = true;
                 }
+                if (propertyRequested && (mPropertyBenchmarkKind < 1 ||
+                    (mBenchmarkPoints != 16 && mBenchmarkPoints != 32 && mBenchmarkPoints != 64)))
+                {
+                    log->Printf(LT_ERROR, L"[IMM_LIVE_PROPERTY_BENCHMARK_ERROR] invalid property benchmark configuration");
+                    mMeasured = true;
+                }
             }
         }
         if (mBenchmarkEnabled)
         {
-            TickBenchmark(viewer, log, frame, requestedFrame);
+            if (mPropertyBenchmarkKind != 0)
+                TickPropertyBenchmark(viewer, log, frame, requestedFrame);
+            else
+                TickBenchmark(viewer, log, frame, requestedFrame);
             return;
         }
         ImmPlayer::Player * player = viewer.GetPlayer();

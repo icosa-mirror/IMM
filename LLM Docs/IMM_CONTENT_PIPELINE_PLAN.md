@@ -2195,9 +2195,57 @@ replacement-run closure in section 6.26 (20:23 UTC):
    other fifteen engine jobs are unchanged except the removed collector dependency.
    Evidence: artifacts/android-ci-actionlint.log, android-ci-*-contracts.log,
    android-ci-job-equivalence.log and early-android-workflow-verifier.log.
-   Pushed in 765f9a05; replacement full validation run 39716790347 is queued.
-   Live acceptance remains pending. This schedules evidence sooner; it does not
-   close the Android failure.
+   Pushed in 765f9a05. Run 39716790347 now proves early scheduling: Android native
+   and Windows builds passed, and non-XR/URP player jobs 119622318226/119622318250
+   are running while four Apple jobs remain queued. Eleven jobs passed with no
+   failures observed. Firebase/strict runtime acceptance remains pending; this
+   does not close the Android failure.
+
+### 6.63. Canonical property publication: Windows measurements (2026-10-22)
+
+1. Added repeated visibility/opacity/transform publication measurements against
+   the 2 ms target. The geometry benchmark's overlapping
+   active strokes can hide property changes, and its Small case has no visible
+   unrelated paint layer. Its captures cannot establish property correctness.
+2. Added a separately identified property-live-v1 workload with separated red target
+   and immutable blue siblings, full CPU drawing residency and held frame zero. Retain
+   10/400/4,000 drawings and 16/32/64 points per drawing, recording new fixture hashes
+   and layout metadata; do not reuse geometry baseline comparisons or claim speedup.
+3. Untimed setup removes the importer's synthesized target visibility key, then
+   verifies no keys/overrides mask the canonical changes. Each property is measured
+   independently. Final control/change captures prove target disappearance, lower
+   opacity pixel energy or translated red centroid, with blue sibling pixels
+   unchanged. Per-sample effective values, counts, handles/bounds and sampled
+   renderer tokens/geometry revisions remain coherent. No all-GPU-upload accounting
+   or all-backend acceptance is claimed.
+4. Five warmups and thirty measured edits per property/size pass on Windows DirectX
+   / RTX 4090, with separate control captures. Native Commit-to-Presented median/p95
+   milliseconds are:
+
+   | Size | Visibility | Opacity | Transform |
+   |---|---|---|---|
+   | Small | 0.0658 / 0.1266 | 0.0566 / 0.1028 | 0.0496 / 0.1155 |
+   | Medium | 0.0533 / 0.1439 | 0.0589 / 0.1289 | 0.0461 / 0.1196 |
+   | Large | 0.0445 / 0.1299 | 0.0429 / 0.1182 | 0.0433 / 0.1206 |
+
+5. These are stored native publication timestamps, excluding the later two-frame
+   correctness wait, prior ABI/marshalling costs, displayed-frame latency, GPU
+   completion and retirement. Queue/call samples and binary/fixture/settings/GPU
+   provenance are retained separately. No optimization or speedup is claimed;
+   broader M1 acceptance remains open. Maximum publication across all 270 measured
+   edits is 0.1758 ms.
+6. Evidence: artifacts/property-benchmark-final/ retains report.json and each
+   case/property/control-or-change log and capture. Build/fixture evidence is in
+   property-benchmark-final-build.log and property-benchmark-files-v1/.
+   Parser tests reject incomplete metadata, missing/mismatched renderer evidence,
+   incorrect effects, sibling pixel changes and invalid timing. The eleven sequence
+   cases and existing geometry benchmark smoke pass. An initial stale pilot
+   baseline with different warmup metadata was correctly rejected; the fresh
+   matched geometry baseline/run passes in property-benchmark-geometry-regression2/.
+7. Windows CI now requires the Small three-property/control correctness smoke and
+   uploads reports/captures. It does not enforce a workstation latency threshold
+   on hosted runners. Workflow wiring and syntax checks pass; replacement full CI
+   remains pending. Production mutation behavior and APIs are unchanged.
 
 ## 7. Consolidated documents
 

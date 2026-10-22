@@ -83,6 +83,24 @@ namespace ExePlayer
         ImmCore::bound3d mStandaloneBoxBefore;
         std::vector<SubtreeLayerSnapshot> mStandaloneLayers;
         void TickBenchmark(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        void TickPropertyBenchmark(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        struct PropertyBenchmarkLayer
+        {
+            int id = -1;
+            int parent = -1;
+            int frames = 0;
+            ImmCore::trans3d transform = ImmCore::trans3d::identity();
+            std::vector<uint64_t> handles;
+            std::vector<ImmCore::bound3> boxes;
+        };
+        int mPropertyBenchmarkKind = 0;
+        bool mPropertyBenchmarkControl = false;
+        int mPropertyBenchmarkStage = 0;
+        int mPropertyBenchmarkLayerCount = 0;
+        int mPropertyBenchmarkBaseDrawCalls = 0;
+        int mPropertyBenchmarkBaseTriangles = 0;
+        uint64_t mPropertyBenchmarkTerminalFrame = 0;
+        std::vector<PropertyBenchmarkLayer> mPropertyBenchmarkLayers;
         bool mBenchmarkConfigured = false;
         bool mBenchmarkEnabled = false;
         bool mBenchmarkPending = false;
