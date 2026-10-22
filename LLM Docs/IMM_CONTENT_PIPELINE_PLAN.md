@@ -16,8 +16,9 @@ no missing required evidence. The single permitted standalone iOS Simulator retr
 resolved the first attempt's boot timeout; no gate or scope was weakened (6.71).
 The prior Android readiness/composition and compiler failures are closed for this
 validated baseline. CI-built/package macOS and all-platform export checks pass.
-Tracked local non-Windows binaries were not refreshed by the skipped binary-sync
-step; CI artifact acceptance does not claim they were updated in this checkout.
+That run's binary-sync step was skipped. The subsequent upstream CI binary-refresh
+commit 2316ebc9 has now been merged into this checkout; these replacement binaries
+do not establish acceptance of the newer live-key milestone.
 
 Live static-paint Loop/Offset key editing (6.70) now passes final local rebuild,
 hidden-parent CPU regression, six viewer cases and regression checks. This
@@ -2545,6 +2546,15 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Full hosted CI for this milestone is pending; 6.71 accepts only a0f71bd4.
    Canonical paint-repeat property editing, full M2, managed cutover and broader
    platform acceptance remain open.
+8. Implementation committed as 76c46f1d. The pre-push pull merged upstream
+   CI binary-refresh 2316ebc9, retaining this milestone's rebuilt/validated Windows
+   player and reader DLLs in the two conflicting package paths. Other upstream
+   replacement binaries are retained. No source conflict or stash was required.
+   Post-merge export verification passes all four platforms under the existing
+   platform policy. Strict all-platform mode flags only the already documented
+   iOS registration function supplied by ImmUnityPluginRegister.mm outside the
+   static library; strict Windows verification passes. Evidence:
+   artifacts/paint-playback-milestone-merged-exports.json.
 
 ### 6.71. Full hosted CI acceptance restored (2026-10-22)
 
