@@ -644,7 +644,8 @@ Pause can suppress evaluation. Paused seeks remain paused. The new CPU regressio
 fails before the fix and passes afterward. Static/pretessellated draw counters now
 clear even when no paint layers are visible. An Android producer exposed the
 missing-paint failure; its replacement non-XR producer now passes with visible IMM
-content and unchanged occlusion thresholds. URP and strict/full CI remain pending.
+content and unchanged occlusion thresholds. The URP producer also passes its
+actual acceptance report; strict/full CI remain pending.
 
 1. Close the acceptance evidence gap for the implemented vertical slice: add matched live-edit
    measurements and audit the regression/failure matrix before claiming M1 completion.

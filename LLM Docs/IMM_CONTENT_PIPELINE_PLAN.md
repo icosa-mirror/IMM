@@ -9,32 +9,21 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
-Current checkpoint (2026-10-22): static paint/group subtree deletion and empty
-paint creation/population/deletion pass local DirectX lifecycle/failure checks
-(6.53-6.55). Spawn-cache lifetime and render-counter synchronization fixes are
-pushed in 56521cae/6272e87a (6.56). Their full validation run 39709116389 has
-passed thirteen jobs, including standalone iOS visual validation; Unity iOS visual
-validation is running and two Apple native builds await runners. Engine/device gates depend on the complete build workflow and
-have not accepted these revisions. Full CI is not passing yet.
+Current checkpoint (2026-10-22): paint/group lifecycle, spawn cache publication,
+whole-table paint timelines and canonical property publication have local validation
+recorded in 6.53-6.63. Uploaded, unpublished replacement cancellation now passes
+three Windows D3D11 cases (6.64), is committed in f50ec11d and is required in Windows
+CI. Full validation run 39723167991 is registered; hosted acceptance is pending.
 
-Spawn creation/deletion/cache publication and its reserve-failure prerequisite pass
-local checks (6.57-6.59) and are pushed through df3c5a14. Full run 39711536998
-also has twelve passed jobs and four Apple jobs queued. No new
-spawn renderer/backend acceptance is claimed. Whole-table paint timeline editing
-now passes local Windows lifecycle/playback checks and is pushed in 4a099f5a (6.60).
-Its full run 39715756422 has eleven passed jobs, including Windows/Android builds,
-and five jobs queued, with no failures observed. Full timeline/backend acceptance,
-presented-revision save, managed live cutover and full A1-A3
-acceptance remain open, alongside the converter/reader fidelity gaps below.
-
-The Android non-XR missing-paint failure is corrected in 1d31040d: fresh run
-39721181625 has actual producer passed=true, six captures, visible IMM paint and
-passing rear occlusion at the unchanged threshold. The APK native payload matches
-the same-run build. URP and the strict collector remain pending, so full Android
-acceptance is not established. Section 6.65 records the preceding false-green job,
-source fix and actual replacement evidence. No extra infrastructure retry was used.
-Packaged
-macOS exports also remain stale until replacement builds/gates succeed.
+The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
+39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
+contain visible IMM paint and pass rear occlusion at the unchanged threshold; URP
+content/depth/allocation checks and rendered-frame evidence pass. Both APK native
+payloads match the same-run build. The strict collector remains pending, so full
+Android acceptance is not established. Last checked: sixteen jobs passed, two
+queued, no failures observed. Section 6.65 records the preceding false-green job,
+source fix and replacement evidence. No extra infrastructure retry was used.
+Packaged macOS exports remain stale until replacement builds/gates succeed.
 Earlier Unity CS1061 and Godot iOS failures were closed by complete hosted runs
 39645977224/39646549914; those historical passes do not accept later APIs.
 Confirmed regressions take priority over new feature work (6.26). Detailed source,
@@ -2293,6 +2282,9 @@ replacement-run closure in section 6.26 (20:23 UTC):
    The preceding seek-fix run now has an actual accepted non-XR producer (6.65);
    full Android acceptance still requires URP and the strict collector.
 
+Hosted checkpoint: f50ec11d is pushed; full validation run 39723167991 includes
+the new required Windows cancellation test. No hosted pass is claimed yet.
+
 ### 6.65. Android freeze failure and truthful producer status (2026-10-22)
 
 1. Non-XR job 119627721787 in 39716790347 reports success, but artifact 12400033781
@@ -2352,7 +2344,11 @@ replacement-run closure in section 6.26 (20:23 UTC):
    and composition captures contain actual IMM paint. Evidence:
    artifacts/ci-agent-39721181625-nonxr-* and android-seek-fix-accepted.png.
    The earlier non-XR missing-paint failure is superseded by this producer evidence;
-   URP/strict collector/full-run acceptance remain pending.
+   URP artifact 12401892293 also reports passed=true/errors=[] and gcloud exit
+   zero (not ignored); required content/depth/allocation checks and rendered-frame
+   validity pass. Its APK native payload matches the same native artifact/hash.
+   Evidence: artifacts/ci-agent-39721181625-urp-*.
+   Strict collector/full-run acceptance remain pending.
 
 ## 7. Consolidated documents
 
