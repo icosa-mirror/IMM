@@ -20,8 +20,10 @@ the fix and direct COM lifetime regression are pushed in b4a2c595. Fresh full
 validation run 39724027590 was cancelled after the playback regressions in 6.67
 were established. Playback correction 86fd4645 is now pushed with passing local
 regressions (6.67). Full run 39724961901 is completed/cancelled after the additional root/group
-repeat regressions in 6.68 were reproduced. Correction 3b8589b1 is pushed with
-passing local regressions; fresh full run 39725916624 is queued. Hosted acceptance
+repeat regressions in 6.68 were reproduced. Correction 3b8589b1 passed local
+playback checks, but the CI audit found an Android compiler failure from the earlier
+paint change (6.69). Run 39725916624 is completed/cancelled; the override
+annotation fix now passes a local Android NDK importer build. Hosted acceptance
 remains pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
@@ -2484,8 +2486,32 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    timeline-repeat-converter/, timeline-repeat-evaluated-compare.log,
    timeline-repeat-sequence-regression/ and timeline-repeat-exports.*.
 7. Run 39724961901 is terminal completed/cancelled. Corrected source 3b8589b1 is
-   pushed; fresh full validation run 39725916624 is queued. No hosted pass, M1/M2
+   pushed; its full run 39725916624 was subsequently cancelled for 6.69. No hosted pass, M1/M2
    or full-roadmap completion is claimed.
+
+### 6.69. Android missing-override compiler regression (2026-10-22)
+
+1. Audit of superseded run 39724961901 found a real Android native source failure,
+   not an infrastructure problem: Clang rejected eighteen methods in
+   LayerPaintPretessellated with -Werror,-Winconsistent-missing-override. Adding
+   the evaluated-repeat override exposed the previously unannotated overrides.
+   Windows compilation had not detected this Android compiler regression.
+2. All eighteen existing overridden methods now explicitly declare override.
+   No warning/error gate or runtime behavior is changed. NDK 26.1.10909125,
+   aarch64 Android API26 reproduces all eighteen errors on the old header, while
+   the corrected header passes. Both affected production translation units pass;
+   all 22 CMake-listed importer translation units then compile with -Werror and
+   archive successfully. This is a local importer build, not a complete Android
+   player link, hosted device pass or full CI acceptance.
+3. Evidence: artifacts/retry-audit-android.log,
+   android-override-check/{before,after,layer,layerPaintPretessellated}.log and
+   android-override-check/importer/report.json (per-source/header hashes and flags).
+   Helper run 39725799794 succeeded as an eligibility-guard no-op; it performed no
+   retry and supplies no validation evidence. A repeated failure is not being
+   dismissed as infrastructure or hidden by a helper's green conclusion.
+4. Run 39725916624 is terminal completed/cancelled. The annotation fix must receive a
+   fresh full validation run. The group/root playback checks in 6.68 remain valid
+   for their declared Windows/CPU scope; Android/platform acceptance stays open.
 
 ## 7. Consolidated documents
 
