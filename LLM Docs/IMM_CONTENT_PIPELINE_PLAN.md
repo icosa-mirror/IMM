@@ -29,6 +29,12 @@ Vulkan evidence is incomplete; the full hosted workflow does not accept that row
 Earlier numbered checkpoints retain historical results; use this checkpoint and
 6.70 for current live-key evidence and 6.71 for current CI acceptance.
 
+Live-key validation run 39748355080 on b5c43743 failed on attempt 1: both Unity
+Android Firebase jobs timed out installing FFmpeg before device runtime started.
+The Windows job, including the new live-key and authoring regression steps,
+passed. One failed-job/dependent infrastructure retry has been requested; its
+result is pending (6.72). This is not a passing full validation of the milestone.
+
 ## 1. Objective and document ownership
 
 Provide reusable content reading, representation and writing so applications can
@@ -2634,6 +2640,28 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    full-ci-package-export-verification.log, full-ci-retry-progress2.json and the
    downloaded final CIValidationEvidence artifact. No full-roadmap completion is
    claimed; the remaining M1-M5/converter requirements retain their own exit gates.
+
+### 6.72. Live-key full CI: Android dependency timeout (2026-10-22)
+
+1. Run 39748355080 at b5c43743 attempt 1 completed with 20 successful jobs,
+   four failed and nine skipped. Windows, including the required static paint
+   playback-key/versioned ABI step and authoring cancellation regressions, passed.
+   This does not establish complete milestone/platform acceptance.
+2. Unity Android URP job 119725145631 and non-XR job 119725145658 each attempted
+   to download 94.1 MB for FFmpeg. Their `timeout 120 apt-get install --yes ffmpeg`
+   commands exited 124 during package downloads. Device runtime steps did not run;
+   missing rendered-frame/Firebase result errors are downstream consequences,
+   not evidence of an observed rendering regression. The Unity Android Vulkan
+   aggregate 119726432452 and final Validation Evidence 119736487908 also failed.
+3. Confirmed run_attempt=1, then requested exactly one `gh run rerun --failed`
+   for this isolated dependency-install infrastructure failure. Request succeeded;
+   successful independent jobs are preserved. No source change, timeout increase
+   or gate weakening was made. Retry acceptance remains pending. If the same
+   failure repeats, it remains unresolved; do not rerun indefinitely.
+4. Evidence: artifacts/live-key-ci-failure-run.json,
+   artifacts/live-key-ci-failure-attempt.json,
+   artifacts/live-key-ci-urp-job.log and artifacts/live-key-ci-nonxr-job.log.
+   [Validation run](https://github.com/icosa-mirror/IMM/actions/runs/39748355080).
 
 ## 7. Consolidated documents
 
