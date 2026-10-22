@@ -66,6 +66,15 @@ namespace ImmPlayer
 			return false;
 		}
 
+        // Preflight the complete batch again on the GPU publication thread before
+        // detaching model ownership. Success reserves all retirement entries.
+        virtual bool PrepareDrawingsDeletion(ImmImporter::Drawing * const * drawings,
+            uint32_t count, ImmCore::piLog * log)
+        {
+            (void)drawings; (void)count; (void)log;
+            return false;
+        }
+
 		virtual bool PrepareDrawingDeletion(ImmImporter::Drawing * active,
 			ImmCore::piLog * log)
 		{

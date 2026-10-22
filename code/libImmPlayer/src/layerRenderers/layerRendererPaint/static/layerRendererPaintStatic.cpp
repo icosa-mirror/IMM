@@ -4,6 +4,7 @@
 // IQ-TODO: check if Quest support glDrawIndirect, and if so, add it! 
 
 #include <cstdlib>
+#include <new>
 #ifdef RENDER_BUDGET
 #include <algorithm>
 #endif
@@ -640,6 +641,12 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         if (replacementInfo == nullptr || oldInfo == nullptr || !replacementInfo->mUploaded)
             return false;
 
+        // Reserve retirement before mutating either drawing. A failed allocation
+        // must leave the active model and renderer identity unchanged.
+        Drawing * retiring[] = { active };
+        if (!PrepareDrawingsDeletion(retiring, 1, log))
+            return false;
+
         if (!activeStatic->SwapGeometry(replacementStatic))
             return false;
 
@@ -691,21 +698,55 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         return true;
     }
 
-    bool LayerRendererPaintStatic::PrepareDrawingDeletion(Drawing * active, piLog * log)
+    bool LayerRendererPaintStatic::PrepareDrawingsDeletion(
+        Drawing * const * drawings, uint32_t count, piLog * log)
     {
         std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
-        DrawingStatic * activeStatic = dynamic_cast<DrawingStatic *>(active);
-        const int token = activeStatic != nullptr ? activeStatic->GetGpuId() : -1;
-        if (token < 0 || !mLayerInfo.IsUsed(static_cast<uint64_t>(token)))
+        if (count == 0)
+            return true;
+        if (drawings == nullptr)
+            return false;
+        for (uint32_t index = 0; index < count; index++)
         {
-            log->Printf(LT_ERROR, L"Live edit: deleted drawing has no renderer slot");
+            DrawingStatic * drawing = dynamic_cast<DrawingStatic *>(drawings[index]);
+            const int token = drawing != nullptr ? drawing->GetGpuId() : -1;
+            if (token < 0 || static_cast<uint64_t>(token) >= mLayerInfo.GetMaxLength() ||
+                !mLayerInfo.IsUsed(static_cast<uint64_t>(token)))
+            {
+                log->Printf(LT_ERROR, L"Live edit: deleted drawing has no renderer slot");
+                return false;
+            }
+        }
+        if (std::getenv("IMM_LIVE_EDIT_FAIL_RETIREMENT") != nullptr)
+        {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected retirement preparation failure count=%u", count);
+            return false;
+        }
+        if (count > mRetiredDrawings.max_size() - mRetiredDrawings.size())
+            return false;
+        try
+        {
+            mRetiredDrawings.reserve(mRetiredDrawings.size() + count);
+        }
+        catch (const std::bad_alloc &)
+        {
+            log->Printf(LT_ERROR, L"Live edit: could not reserve drawing retirement entries");
             return false;
         }
         return true;
     }
 
+    bool LayerRendererPaintStatic::PrepareDrawingDeletion(Drawing * active, piLog * log)
+    {
+        Drawing * drawings[] = { active };
+        return PrepareDrawingsDeletion(drawings, 1, log);
+    }
+
     void LayerRendererPaintStatic::PresentDrawingDeletion(Drawing * removed, piLog * log)
     {
+        std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
+        // The complete publication batch was preflighted immediately before model
+        // detachment. No allocation is permitted after ownership changes.
         DrawingStatic * removedStatic = dynamic_cast<DrawingStatic *>(removed);
         const int token = removedStatic != nullptr ? removedStatic->GetGpuId() : -1;
         if (token < 0)
@@ -755,6 +796,9 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
                 retired.mDrawing->Deinit();
                 delete retired.mDrawing;
             }
+            if (mTracePresentationFrames)
+                log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT_RETIRE] completedToken=%llu",
+                    static_cast<unsigned long long>(retired.mToken));
             mRetiredDrawings.erase(mRetiredDrawings.begin() + i);
         }
     }

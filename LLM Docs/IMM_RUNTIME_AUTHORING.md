@@ -425,10 +425,15 @@ indices, and non-group destinations. Cross-parent preparation builds all affecte
 names and destination capacity; presentation updates topology/names together with rollback on
 unexpected insertion failure.
 
-Deletion supports a non-root subtree containing only ordinary, non-timeline groups. It detaches
-once and removes sequence entries atomically. Paint, spawn, media, instance, and timeline
-descendants remain unsupported until all references and renderer resources have retirement
-rules. Paint/spawn layer creation is likewise not delivered by the live layer-creation ABI.
+Deletion supports a non-root subtree containing ordinary non-timeline groups and static
+paint layers. Preparation collects every drawing; publication validates all renderer slots
+and reserves retirement capacity before detaching hierarchy/storage. All drawings transfer
+to deferred retirement, including frame-referenced drawings, and their handles are invalidated
+before empty layers are destroyed. Active asynchronous import returns busy; instance links
+into the target subtree reject deletion. Spawn, sound, picture, model, instance and timeline
+descendants remain unsupported. Windows DirectX nested-paint deletion, retirement and
+injected rollback pass locally (roadmap 6.53); other backends need replacement evidence.
+Paint/spawn layer creation is likewise not delivered by the live layer-creation ABI.
 
 ### 8.4 Result taxonomy and diagnostics
 
@@ -548,9 +553,10 @@ handles and resource-release accounting still need separate evidence.
 
 1. Close the acceptance evidence gap for the implemented vertical slice: add matched live-edit
    measurements and audit the regression/failure matrix before claiming M1 completion.
-2. The next native hierarchy step is resource-owning subtree deletion, with explicit reference
-   cleanup and renderer retirement for every descendant. Paint/spawn layer creation also
-   needs prepared implementation resources before publication. Keep unsupported types explicit.
+2. Static paint/group subtree deletion now has local DirectX lifecycle evidence. Complete
+   agreed lifecycle coverage for other descendants and reference handling with explicit
+   resource retirement; keep unaccepted types unsupported. Paint/spawn layer creation still
+   needs prepared implementation resources before publication.
 3. Complete the agreed M2 scope, then implement presented-revision save/publish and managed
    cutover in that order. Preserve the original compatibility path until the relevant live
    surface/backend is accepted.

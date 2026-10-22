@@ -61,6 +61,277 @@ namespace ExePlayer
         *this = LiveEditValidation{};
     }
 
+    template <typename Bounds> static bool iSubtreeBoxesMatch(const Bounds & a, const Bounds & b)
+    {
+        return std::fabs(a.mMinX - b.mMinX) < 0.000001 && std::fabs(a.mMinY - b.mMinY) < 0.000001 &&
+               std::fabs(a.mMinZ - b.mMinZ) < 0.000001 && std::fabs(a.mMaxX - b.mMaxX) < 0.000001 &&
+               std::fabs(a.mMaxY - b.mMaxY) < 0.000001 && std::fabs(a.mMaxZ - b.mMaxZ) < 0.000001;
+    }
+
+    void LiveEditValidation::TickSubtreeDeletion(Viewer & viewer, ImmCore::piLog * log, uint64_t frame,
+                                                 uint64_t requestedFrame)
+    {
+        if (mMeasured || frame < requestedFrame)
+            return;
+        const auto fail = [&](const wchar_t * reason) {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_SUBTREE] pass=0 reason=%s", reason);
+            mMeasured = true;
+        };
+        if (frame - requestedFrame > 10000)
+        {
+            fail(L"timeout");
+            return;
+        }
+        ImmPlayer::Player * player = viewer.GetPlayer();
+        const int doc = viewer.GetPrimaryDocumentId();
+        if (doc < 0 || !viewer.IsDocumentLoaded(doc))
+            return;
+        std::vector<ImmPlayer::Player::LayerInfo> infos;
+        for (int index = 0; index < player->GetLayerCount(doc); index++)
+        {
+            ImmPlayer::Player::LayerInfo info;
+            if (!player->GetLayerInfoByIndex(doc, index, info))
+            {
+                fail(L"layer enumeration failed");
+                return;
+            }
+            infos.push_back(info);
+        }
+        if (!mApplied)
+        {
+            int target = -1, sibling = -1;
+            for (const auto & info : infos)
+            {
+                if (std::wstring(info.name) == L"DeleteTarget")
+                {
+                    if (target >= 0)
+                    {
+                        fail(L"duplicate target");
+                        return;
+                    }
+                    target = info.id;
+                }
+                if (std::wstring(info.name) == L"KeepPaint")
+                {
+                    if (sibling >= 0)
+                    {
+                        fail(L"duplicate sibling");
+                        return;
+                    }
+                    sibling = info.id;
+                }
+                if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint) &&
+                    (!info.isLoaded || info.paintNumDrawings <= 0 || info.paintNumStrokes < info.paintNumDrawings))
+                    return;
+            }
+            if (target < 0 || sibling < 0)
+            {
+                fail(L"named fixture layers absent");
+                return;
+            }
+            const auto inTarget = [&](int id) {
+                for (size_t depth = 0; depth <= infos.size(); depth++)
+                {
+                    if (id == target)
+                        return true;
+                    int parent = -1;
+                    for (const auto & item : infos)
+                        if (item.id == id)
+                        {
+                            parent = item.parentId;
+                            break;
+                        }
+                    if (parent < 0 || parent == id)
+                        return false;
+                    id = parent;
+                }
+                return false;
+            };
+            if (inTarget(sibling))
+            {
+                fail(L"sibling belongs to target");
+                return;
+            }
+            if (!player->AttachEditing(doc))
+            {
+                fail(L"attach failed");
+                return;
+            }
+            mDocumentId = doc;
+            mStandaloneTarget = target;
+            mStandaloneLayerCount = static_cast<int>(infos.size());
+            mStandaloneExpectRejection = std::getenv("IMM_LIVE_EDIT_FAIL_RETIREMENT") != nullptr;
+            mStandaloneBoxBefore = player->GetDocumentBBox(doc);
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            if (!player->GetAuthoringRevisions(doc, revisions))
+            {
+                fail(L"revision snapshot failed");
+                return;
+            }
+            mStandaloneOldRevision = revisions.mPresented;
+            int targetPaints = 0;
+            for (const auto & info : infos)
+            {
+                const bool targetLayer = inTarget(info.id);
+                if (!targetLayer && info.id != sibling)
+                    continue;
+                if (targetLayer)
+                    mStandaloneTargetLayers++;
+                SubtreeLayerSnapshot snapshot;
+                snapshot.id = info.id;
+                snapshot.parent = info.parentId;
+                snapshot.child = info.childIndex;
+                snapshot.strokes = info.paintNumStrokes;
+                snapshot.target = targetLayer;
+                snapshot.hasBox = info.hasBBox;
+                snapshot.box = info.bbox;
+                if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint))
+                {
+                    if (targetLayer)
+                        targetPaints++;
+                    for (int drawing = 0; drawing < info.paintNumDrawings; drawing++)
+                    {
+                        uint64_t handle = 0;
+                        ImmCore::bound3 box;
+                        if (!player->GetDrawingHandle(doc, info.id, drawing, handle) ||
+                            !player->GetDrawingBBox(doc, info.id, drawing, box))
+                        {
+                            fail(L"drawing snapshot failed");
+                            return;
+                        }
+                        snapshot.handles.push_back(handle);
+                        snapshot.boxes.push_back(box);
+                    }
+                }
+                else if (!targetLayer || info.type != static_cast<int>(ImmImporter::Layer::Type::Group))
+                {
+                    fail(L"unexpected fixture layer type");
+                    return;
+                }
+                mStandaloneLayers.push_back(std::move(snapshot));
+            }
+            if (targetPaints < 2)
+            {
+                fail(L"fixture needs multiple target paints");
+                return;
+            }
+            const int32_t queued = player->QueueLayerDeletion(doc, target);
+            int32_t result = -99;
+            mRevision = queued == 0 ? player->CommitEdits(doc, &result) : 0;
+            if (mRevision == 0 || result != 0)
+            {
+                fail(L"deletion queue/commit failed");
+                return;
+            }
+            mApplied = true;
+            log->Printf(LT_MESSAGE,
+                        L"[IMM_LIVE_SUBTREE] queued=1 revision=%llu targetLayers=%d targetPaints=%d expectRejected=%d",
+                        static_cast<unsigned long long>(mRevision), mStandaloneTargetLayers, targetPaints,
+                        mStandaloneExpectRejection ? 1 : 0);
+            return;
+        }
+        ImmPlayer::Document::AuthoringCommitStatus status;
+        if (!player->GetAuthoringCommitStatus(mDocumentId, mRevision, status))
+        {
+            fail(L"status missing");
+            return;
+        }
+        ImmPlayer::Document::AuthoringRevisions observed;
+        if (!player->GetAuthoringRevisions(mDocumentId, observed) || observed.mRequested != mRevision ||
+            (observed.mPrepared != mStandaloneOldRevision && observed.mPrepared != mRevision) ||
+            (observed.mPresented != mStandaloneOldRevision && observed.mPresented != mRevision))
+        {
+            fail(L"unexpected revision during publication");
+            return;
+        }
+        if (status.mState != ImmPlayer::Document::AuthoringCommitState::Presented &&
+            status.mState != ImmPlayer::Document::AuthoringCommitState::Rejected)
+        {
+            if (observed.mPresented != mStandaloneOldRevision)
+                fail(L"pending commit changed presented revision");
+            return;
+        }
+        const bool rejected = status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected;
+        if (mStandaloneTerminalFrame == 0)
+            mStandaloneTerminalFrame = frame;
+        // Let deferred drawing retirement advance before capture/exit.
+        if (frame < mStandaloneTerminalFrame + 3)
+            return;
+        bool hierarchy = true, handles = true, siblingStable = true;
+        int targetDrawings = 0;
+        for (const auto & before : mStandaloneLayers)
+        {
+            const ImmPlayer::Player::LayerInfo * after = nullptr;
+            for (const auto & info : infos)
+                if (info.id == before.id)
+                {
+                    after = &info;
+                    break;
+                }
+            const bool mustExist = !before.target || rejected;
+            if ((after != nullptr) != mustExist)
+                hierarchy = false;
+            if (after &&
+                (after->hasBBox != before.hasBox || (before.hasBox && !iSubtreeBoxesMatch(after->bbox, before.box))))
+            {
+                hierarchy = false;
+                if (!before.target)
+                    siblingStable = false;
+            }
+            if (after && (after->parentId != before.parent || after->childIndex != before.child ||
+                          after->paintNumStrokes != before.strokes ||
+                          after->paintNumDrawings != static_cast<int>(before.handles.size())))
+            {
+                // Groups have no drawings; sibling child index may compact after target removal.
+                if (!(!before.target && !rejected && after->parentId == before.parent &&
+                      after->paintNumStrokes == before.strokes &&
+                      after->paintNumDrawings == static_cast<int>(before.handles.size())))
+                    hierarchy = false;
+            }
+            for (size_t drawing = 0; drawing < before.handles.size(); drawing++)
+            {
+                uint64_t handle = 0;
+                ImmCore::bound3 box;
+                const bool exists = player->GetDrawingHandle(mDocumentId, before.id, static_cast<int>(drawing), handle);
+                if (before.target)
+                    targetDrawings++;
+                if (mustExist)
+                {
+                    const bool stable =
+                        exists && handle == before.handles[drawing] &&
+                        player->GetDrawingBBox(mDocumentId, before.id, static_cast<int>(drawing), box) &&
+                        iSubtreeBoxesMatch(box, before.boxes[drawing]);
+                    handles = handles && stable;
+                    if (!before.target)
+                        siblingStable = siblingStable && stable;
+                }
+                else if (exists || player->QueueDrawingDeletion(mDocumentId, before.id, before.handles[drawing]) != -1)
+                    handles = false;
+            }
+        }
+        const auto box = player->GetDocumentBBox(mDocumentId);
+        const bool bounds = rejected ? iSubtreeBoxesMatch(box, mStandaloneBoxBefore)
+                                     : box.mMaxX < mStandaloneBoxBefore.mMaxX - 1.0 &&
+                                           std::fabs(box.mMinX - mStandaloneBoxBefore.mMinX) < 0.000001;
+        const bool count =
+            static_cast<int>(infos.size()) == mStandaloneLayerCount - (rejected ? 0 : mStandaloneTargetLayers);
+        ImmPlayer::Document::AuthoringRevisions revisions;
+        const bool revision = player->GetAuthoringRevisions(mDocumentId, revisions) &&
+                              revisions.mRequested == mRevision &&
+                              revisions.mPresented == (rejected ? mStandaloneOldRevision : mRevision) &&
+                              (revisions.mPrepared == mStandaloneOldRevision || revisions.mPrepared == mRevision);
+        mStandaloneSuccessful = rejected == mStandaloneExpectRejection && (!rejected || status.mResult == -5) &&
+                                hierarchy && handles && siblingStable && bounds && count && revision;
+        log->Printf(
+            LT_MESSAGE,
+            L"[IMM_LIVE_SUBTREE] pass=%d rejected=%d status=%d result=%d hierarchy=%d handles=%d siblingStable=%d bounds=%d count=%d revisions=%d targetDrawings=%d",
+            mStandaloneSuccessful ? 1 : 0, rejected ? 1 : 0, static_cast<int>(status.mState), status.mResult,
+            hierarchy ? 1 : 0, handles ? 1 : 0, siblingStable ? 1 : 0, bounds ? 1 : 0, count ? 1 : 0, revision ? 1 : 0,
+            targetDrawings);
+        mMeasured = true;
+    }
+
+
     void LiveEditValidation::TickBenchmark(Viewer & viewer, ImmCore::piLog * log,
         uint64_t frame, uint64_t requestedFrame)
     {
@@ -203,6 +474,18 @@ namespace ExePlayer
     {
         if (!enabled || log == nullptr)
             return;
+
+        if (!mStandaloneConfigured)
+        {
+            mStandaloneConfigured = true;
+            const char * value = std::getenv("IMM_VIEWER_LIVE_DELETE_SUBTREE");
+            mStandaloneEnabled = value != nullptr && std::string(value) == "1";
+        }
+        if (mStandaloneEnabled)
+        {
+            TickSubtreeDeletion(viewer, log, frame, requestedFrame);
+            return;
+        }
 
         if (!mBenchmarkConfigured)
         {

@@ -4,6 +4,7 @@
 #include "libImmImporter/src/document/layerSpawnArea.h"
 
 #include <stdint.h>
+#include <vector>
 
 namespace ImmCore
 {
@@ -27,7 +28,35 @@ namespace ExePlayer
         bool IsBenchmarkSuccessful() const
         { return IsBenchmarkFinished() && mBenchmarkIteration == mBenchmarkWarmup + mBenchmarkSamples; }
 
+        bool IsStandaloneProbeEnabled() const { return mStandaloneEnabled; }
+        bool IsStandaloneProbeFinished() const { return mStandaloneEnabled && mMeasured; }
+        bool IsStandaloneProbeSuccessful() const { return IsStandaloneProbeFinished() && mStandaloneSuccessful; }
+
     private:
+        void TickSubtreeDeletion(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        struct SubtreeLayerSnapshot
+        {
+            int id = -1;
+            int parent = -1;
+            int child = -1;
+            int strokes = 0;
+            int hasBox = 0;
+            ImmCore::bound3 box;
+            bool target = false;
+            std::vector<uint64_t> handles;
+            std::vector<ImmCore::bound3> boxes;
+        };
+        bool mStandaloneConfigured = false;
+        bool mStandaloneEnabled = false;
+        bool mStandaloneSuccessful = false;
+        bool mStandaloneExpectRejection = false;
+        int mStandaloneTarget = -1;
+        int mStandaloneLayerCount = 0;
+        int mStandaloneTargetLayers = 0;
+        uint64_t mStandaloneOldRevision = 0;
+        uint64_t mStandaloneTerminalFrame = 0;
+        ImmCore::bound3d mStandaloneBoxBefore;
+        std::vector<SubtreeLayerSnapshot> mStandaloneLayers;
         void TickBenchmark(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
         bool mBenchmarkConfigured = false;
         bool mBenchmarkEnabled = false;

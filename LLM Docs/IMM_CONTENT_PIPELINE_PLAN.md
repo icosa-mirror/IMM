@@ -1896,6 +1896,38 @@ replacement-run closure in section 6.26 (20:23 UTC):
    step added. Evidence: artifacts/authoring-failure-suite.log and
    artifacts/authoring-failure/build.log. No production player behavior changed.
 
+### 6.53. Paint-owning subtree lifecycle work (2026-10-22)
+
+1. Extended deletion from group-only subtrees to non-timeline static
+   paint/group descendants. CPU preparation collects the complete layer/drawing
+   set; GPU publication preflights all renderer slots and retirement capacity before
+   hierarchy removal. Drawing ownership transfers without frame-reference filtering,
+   followed by handle invalidation and empty-layer destruction. Active asynchronous
+   import and instance links into the target subtree are rejected. Other resource
+   types remain explicitly unsupported; full M2 lifecycle acceptance stays open.
+2. Source review found that existing replacement/deletion retirement push_back
+   could allocate after model mutation. Retirement capacity is now preflighted
+   before mutation, including an immediate single-deletion publication recheck.
+   Opt-in retirement-preparation failure injection is added.
+3. Windows native build and a real DirectX fixture pass: nested groups contain
+   two paint layers/five referenced drawings, with an unaffected sibling. Deletion
+   removes all target layers/handles, shrinks document bounds, preserves sibling
+   handles/bounds/rendering, and completes all five renderer retirements. Forced
+   retirement-preparation failure preserves hierarchy, handles, bounds and presented
+   revision. The same injection rejects a drawing replacement before geometry
+   publication. Required Windows CI now runs these three cases and retains logs,
+   settings, fixture, capture and provenance. This is not cross-backend acceptance.
+4. Full converter suite, CPU authoring cancellation, existing live contracts and
+   Windows exports (121/51) pass. Player bridge/adapter/content/C# checks pass;
+   all-platform export verification remains failed on stale macOS binaries.
+   Repeated 30-edit publication regression passes all three fully resident corpus
+   cases (p95 0.2397/0.3856/0.1760 ms); endpoints retain section 6.49's limits.
+   Evidence: artifacts/paint-subtree-final-build.log, paint-subtree-final-run/,
+   paint-subtree-converter-suite.log, paint-subtree-authoring-final.log,
+   paint-subtree-exports.json, paint-subtree-player-regressions.* and
+   paint-subtree-live-regression/. Reader rebuilds had unchanged code sections;
+   timestamp/debug-metadata-only binary changes were omitted.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

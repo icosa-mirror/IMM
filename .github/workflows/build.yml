@@ -230,6 +230,24 @@ jobs:
       shell: pwsh
       run: python code/appImmUnity/tests/authoring_failure_smoke.py --msbuild (Get-Command msbuild).Source
 
+    - name: Verify nested paint deletion and renderer retirement
+      shell: pwsh
+      run: python code/appImmUnity/tests/paint_subtree_smoke.py --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/paint-subtree-ci
+
+    - name: Upload paint subtree lifecycle evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: WindowsPaintSubtreeLifecycle
+        if-no-files-found: ignore
+        path: |
+          artifacts/paint-subtree-ci/report.json
+          artifacts/paint-subtree-ci/nested-paint.imm
+          artifacts/paint-subtree-ci/*/debug.txt
+          artifacts/paint-subtree-ci/*/stdout.log
+          artifacts/paint-subtree-ci/*/settings.json
+          artifacts/paint-subtree-ci/*/capture.ppm
+
     - name: Verify repeated live edit publication and visible target revisions
       shell: pwsh
       run: |

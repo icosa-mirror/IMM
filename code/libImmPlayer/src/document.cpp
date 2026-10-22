@@ -24,6 +24,23 @@ using namespace ImmImporter;
 
 namespace ImmPlayer
 {
+    // Instance links can reach into a subtree from outside its parent hierarchy.
+    // Reject those deletions until reference retargeting is part of the contract.
+    static bool iHasInstanceReferenceToSubtree(Layer * current, Layer * subtree)
+    {
+        if (current->GetType() == Layer::Type::Instance)
+        {
+            const auto * instance = static_cast<const LayerInstance *>(current->GetImplementation());
+            for (Layer * target = instance != nullptr ? instance->GetInstance() : nullptr;
+                target != nullptr; target = target->GetParent())
+                if (target == subtree) return true;
+        }
+        if (current->GetType() == Layer::Type::Group)
+            for (uint32_t i = 0; i < current->GetNumChildren(); ++i)
+                if (iHasInstanceReferenceToSubtree(current->GetChild(i), subtree)) return true;
+        return false;
+    }
+
     Document::PreparedLayerFullName::~PreparedLayerFullName()
     {
         if (mInitialized)
@@ -754,6 +771,17 @@ namespace ImmPlayer
                 Layer * layer = mPendingPresentation.mLayer;
                 Layer * parent = mPendingPresentation.mLayerCreationParent;
                 const uint64_t layerId = mPendingPresentation.mObject;
+                const auto & drawings = mPendingPresentation.mDeletedDrawings;
+                // Publication is serialized on the render thread. Recheck the
+                // complete retirement budget immediately before any ownership change.
+                if (!drawings.empty() && (layerPaintRender == nullptr ||
+                    !layerPaintRender->PrepareDrawingsDeletion(drawings.data(),
+                        static_cast<uint32_t>(drawings.size()), log)))
+                {
+                    iRejectCommit(revision, -5, 0, layerId);
+                    mPendingPresentation = PendingPresentation{};
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                }
                 bool removed = layer != nullptr && parent != nullptr &&
                     !mPendingPresentation.mDeletedLayers.empty() &&
                     parent->RemovePublishedChild(layer);
@@ -772,6 +800,23 @@ namespace ImmPlayer
                 }
                 else
                 {
+                    for (Layer * deleted : mPendingPresentation.mDeletedLayers)
+                    {
+                        if (deleted->GetType() == Layer::Type::Paint)
+                            static_cast<LayerPaintStatic *>(deleted->GetImplementation())->ReleaseDrawingsForRetirement();
+                    }
+                    for (Drawing * drawing : drawings)
+                        layerPaintRender->PresentDrawingDeletion(drawing, log);
+                    for (size_t i = 0; i < mDrawingHandles.size();)
+                    {
+                        const Layer * owner = mDrawingHandles[i].mLayer;
+                        bool deleted = false;
+                        for (Layer * candidate : mPendingPresentation.mDeletedLayers)
+                            deleted = deleted || candidate == owner;
+                        if (deleted) mDrawingHandles.erase(mDrawingHandles.begin() + i);
+                        else ++i;
+                    }
+                    const uint32_t retiredDrawingCount = static_cast<uint32_t>(drawings.size());
                     layer->Deinit(log);
                     const uint32_t deletedLayerCount = static_cast<uint32_t>(
                         mPendingPresentation.mDeletedLayers.size());
@@ -783,9 +828,9 @@ namespace ImmPlayer
                         iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
-                        L"[IMM_LIVE_EDIT] presented revision=%llu deletedGroupLayer=%llu subtreeLayers=%u",
+                        L"[IMM_LIVE_EDIT] presented revision=%llu deletedGroupLayer=%llu subtreeLayers=%u retiredDrawings=%u",
                         static_cast<unsigned long long>(revision),
-                        static_cast<unsigned long long>(layerId), deletedLayerCount);
+                        static_cast<unsigned long long>(layerId), deletedLayerCount, retiredDrawingCount);
                 }
             }
             else if (mPendingPresentation.mIsLayerCreation)
@@ -935,11 +980,13 @@ namespace ImmPlayer
                     (frames != nullptr &&
                         mPendingPresentation.mFrameIndex < paint->GetNumFrames() &&
                         mPendingPresentation.mMappedDrawingIndex < paint->GetNumDrawings());
-                if (hasValidMapping && mPendingPresentation.mIsFrameMapping)
+                const bool retirementReady = hasValidMapping && layerPaintRender != nullptr &&
+                    layerPaintRender->PrepareDrawingDeletion(mPendingPresentation.mActive, log);
+                if (retirementReady && mPendingPresentation.mIsFrameMapping)
                     frames[mPendingPresentation.mFrameIndex] =
                         mPendingPresentation.mMappedDrawingIndex;
                 Drawing * removed = paint != nullptr && layerPaintRender != nullptr ?
-                    (hasValidMapping ? paint->ExtractDrawing(
+                    (retirementReady ? paint->ExtractDrawing(
                         mPendingPresentation.mDrawingIndex) : nullptr) : nullptr;
                 if (removed == nullptr)
                 {
@@ -947,7 +994,8 @@ namespace ImmPlayer
                         mPendingPresentation.mFrameIndex < paint->GetNumFrames())
                         frames[mPendingPresentation.mFrameIndex] =
                             mPendingPresentation.mPreviousFrameDrawingIndex;
-                    iRejectCommit(revision, layerPaintRender == nullptr ? -10 : -6, 0,
+                    iRejectCommit(revision, layerPaintRender == nullptr ? -10 :
+                        (hasValidMapping && !retirementReady ? -5 : -6), 0,
                         mPendingPresentation.mObject);
                     mPendingPresentation = PendingPresentation{};
                 }
@@ -1656,9 +1704,14 @@ namespace ImmPlayer
             return -1;
         if (layer == mSequence.GetRoot() || layer->GetParent() == nullptr)
             return -3;
+        if (IsLoadingAsync(&mSequence)) return -7;
+        if (iHasInstanceReferenceToSubtree(mSequence.GetRoot(), layer)) return -6;
         std::function<bool(Layer *)> isDeletableGroupSubtree;
         isDeletableGroupSubtree = [&](Layer * current)
         {
+            if (current->GetType() == Layer::Type::Paint && !current->GetIsTimeline())
+                return dynamic_cast<LayerPaintStatic *>(
+                    static_cast<LayerPaint *>(current->GetImplementation())) != nullptr;
             if (current->GetType() != Layer::Type::Group || current->GetIsTimeline())
                 return false;
             for (uint32_t index = 0; index < current->GetNumChildren(); index++)
@@ -1950,14 +2003,29 @@ namespace ImmPlayer
                 }
             }
             std::vector<Layer *> deletedLayers;
+            std::vector<Drawing *> deletedDrawings;
             try
             {
                 std::function<bool(Layer *)> collectSubtree;
                 collectSubtree = [&](Layer * current)
                 {
-                    if (current->GetType() != Layer::Type::Group ||
-                        current->GetIsTimeline())
+                    if (current->GetIsTimeline())
                         return false;
+                    if (current->GetType() == Layer::Type::Paint)
+                    {
+                        auto * paint = dynamic_cast<LayerPaintStatic *>(
+                            static_cast<LayerPaint *>(current->GetImplementation()));
+                        if (paint == nullptr) return false;
+                        deletedLayers.push_back(current);
+                        for (uint32_t i = 0; i < paint->GetNumDrawings(); ++i)
+                        {
+                            Drawing * drawing = paint->GetDrawing(i);
+                            if (dynamic_cast<DrawingStatic *>(drawing) == nullptr) return false;
+                            deletedDrawings.push_back(drawing);
+                        }
+                        return true;
+                    }
+                    if (current->GetType() != Layer::Type::Group) return false;
                     deletedLayers.push_back(current);
                     for (uint32_t index = 0; index < current->GetNumChildren(); index++)
                     {
@@ -1966,7 +2034,18 @@ namespace ImmPlayer
                     }
                     return true;
                 };
-                if (previousChildIndex == UINT32_MAX || !collectSubtree(layer))
+                if (IsLoadingAsync(&mSequence))
+                {
+                    iRejectCommit(batch.mRevision, -7, 0, deletion.mLayerId);
+                    return;
+                }
+                if (iHasInstanceReferenceToSubtree(mSequence.GetRoot(), layer))
+                {
+                    iRejectCommit(batch.mRevision, -6, 0, deletion.mLayerId);
+                    return;
+                }
+                if (previousChildIndex == UINT32_MAX || !collectSubtree(layer) ||
+                    deletedDrawings.size() > UINT32_MAX)
                 {
                     iRejectCommit(batch.mRevision, -3, 0, deletion.mLayerId);
                     return;
@@ -1990,6 +2069,7 @@ namespace ImmPlayer
             mPendingPresentation.mLayerCreationParent = parent;
             mPendingPresentation.mLayerPreviousChildIndex = previousChildIndex;
             mPendingPresentation.mDeletedLayers = std::move(deletedLayers);
+            mPendingPresentation.mDeletedDrawings = std::move(deletedDrawings);
             return;
         }
 

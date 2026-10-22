@@ -59,6 +59,9 @@ namespace ImmImporter
 		Drawing * AddDrawing(void) override;
 		bool RemoveLastDrawing(Drawing * expected) override;
 		Drawing * ExtractDrawing(uint32_t drawingIndex) override;
+        // Detached subtree only: caller already owns a complete drawing pointer list
+        // and has reserved renderer retirement. Does not deinitialize any drawing.
+        void ReleaseDrawingsForRetirement(void) noexcept;
 
 
 	private:

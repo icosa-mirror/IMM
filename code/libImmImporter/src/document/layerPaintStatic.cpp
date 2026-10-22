@@ -151,6 +151,13 @@ namespace ImmImporter
 		return true;
 	}
 
+    void LayerPaintStatic::ReleaseDrawingsForRetirement(void) noexcept
+    {
+        for (auto & drawing : mDrawings)
+            drawing.release();
+        mDrawings.clear();
+    }
+
 	Drawing * LayerPaintStatic::ExtractDrawing(uint32_t drawingIndex)
 	{
 		if (drawingIndex >= mDrawings.size())

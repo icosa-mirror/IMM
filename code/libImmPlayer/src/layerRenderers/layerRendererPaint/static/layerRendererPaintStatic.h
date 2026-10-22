@@ -34,6 +34,8 @@ namespace ImmPlayer
 		bool PresentDrawingCreation(ImmImporter::Drawing * created,
 			ImmImporter::Drawing * prepared, uint64_t token, uint64_t revision,
 			ImmCore::piLog * log) override;
+        bool PrepareDrawingsDeletion(ImmImporter::Drawing * const * drawings,
+            uint32_t count, ImmCore::piLog * log) override;
 		bool PrepareDrawingDeletion(ImmImporter::Drawing * active,
 			ImmCore::piLog * log) override;
 		void PresentDrawingDeletion(ImmImporter::Drawing * removed,
