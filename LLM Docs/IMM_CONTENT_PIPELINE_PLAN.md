@@ -24,7 +24,9 @@ repeat regressions in 6.68 were reproduced. Correction 3b8589b1 passed local
 playback checks, but the CI audit found an Android compiler failure from the earlier
 paint change (6.69). Run 39725916624 is completed/cancelled; the override
 annotation fix a0f71bd4 is pushed and passes a local Android NDK importer build.
-Fresh full run 39726457067 is queued; hosted acceptance remains pending.
+Run 39726457067 has passed Android native compilation (including importer) and
+required Windows native authoring/frame-table/property checks. Last audit: eleven
+jobs passed, one queued, no failures; full hosted acceptance remains pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
 39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
@@ -2510,8 +2512,29 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    retry and supplies no validation evidence. A repeated failure is not being
    dismissed as infrastructure or hidden by a helper's green conclusion.
 4. Run 39725916624 is terminal completed/cancelled. Annotation fix a0f71bd4 is
-   pushed; fresh full validation run 39726457067 is queued. The group/root playback checks in 6.68 remain valid
+   pushed; full validation run 39726457067 now passes Android native compilation
+   including importer. Required Windows native authoring/frame-table/property
+   rendering checks also pass. Full CI/device acceptance remains pending.
+   The group/root playback checks in 6.68 remain valid
    for their declared Windows/CPU scope; Android/platform acceptance stays open.
+
+### 6.70. Live static-paint Loop/Offset keys (in progress)
+
+1. Extend the existing atomic key edit path to static-paint Loop/Offset insertion,
+   replacement and removal. Both channels are stepped; other layer implementations
+   remain unsupported for these live channels. This is the key-editing portion of
+   M2; canonical paint-repeat property editing remains a separate open item.
+2. Preserve the 80-byte version 1 key layout and reserved-zero contract. Loop uses
+   its boolean payload. Offset requires an additive 96-byte version 2 key carrying
+   an exact uint32 tick value, with explicit size/version/reserved validation; no
+   float or reserved-field reinterpretation. No new export is required.
+3. Publication must reselect at the current held parent clock without another
+   seek, changing playback intent, resetting root actions or retriggering unrelated
+   sounds. A targeted static-paint evaluator path is being implemented. Queued and
+   prepared unload, CPU/presentation rejection, stable handles/mappings/tokens and
+   visible A/B selection need independent acceptance evidence.
+4. Implementation and tests are in progress. No live-key, M2, managed-cutover or
+   full-platform acceptance is claimed yet.
 
 ## 7. Consolidated documents
 
