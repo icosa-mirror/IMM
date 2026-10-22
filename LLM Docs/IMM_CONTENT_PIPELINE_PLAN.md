@@ -1880,6 +1880,22 @@ replacement-run closure in section 6.26 (20:23 UTC):
    but Apple builds remain queued. Old 39669262483 is completed/cancelled.
    Do not skip or weaken the all-platform export check to report a passing set.
 
+### 6.52. Native pending-authoring cancellation regression (2026-10-22)
+
+1. Added a separate native Document harness using a paint-free group/viewpoint
+   fixture and the real player/importer code. It interrupts group creation while
+   Queued and after CPU Prepared, before GPU publication. Canonical hierarchy
+   stays unchanged, unload invalidates editing/status/revision queries, reload
+   contains no cancelled creation, and a fresh session can publish/delete a group.
+2. Invalid parents, root/self reparenting, unsupported deletion of a group with
+   viewpoint descendants and deleted layer IDs are rejected without hierarchy
+   mutation. This does not establish stale drawing-handle behavior, allocator
+   leak freedom or GPU allocation/upload/retirement cancellation. Those A1/M1
+   failure-matrix items remain open; the live benchmark alone does not close them.
+3. Isolated Windows native build and execution pass, with a required Windows CI
+   step added. Evidence: artifacts/authoring-failure-suite.log and
+   artifacts/authoring-failure/build.log. No production player behavior changed.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

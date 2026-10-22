@@ -539,6 +539,13 @@ Acceptance checks must establish:
 
 ### 10.2 Next work and stop conditions
 
+Roadmap section 6.52 adds a passing Windows CPU-only native cancellation harness:
+queued and CPU-prepared group creation can be interrupted by unload without
+publication; session queries are invalidated and reload supports fresh edits.
+Invalid parent/cycle/root references and deleted group IDs are rejected. It is
+required in Windows CI. Paint geometry/GPU-resource cancellation, stale drawing
+handles and resource-release accounting still need separate evidence.
+
 1. Close the acceptance evidence gap for the implemented vertical slice: add matched live-edit
    measurements and audit the regression/failure matrix before claiming M1 completion.
 2. The next native hierarchy step is resource-owning subtree deletion, with explicit reference

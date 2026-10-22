@@ -226,6 +226,10 @@ jobs:
       shell: pwsh
       run: dotnet run --project tests/UnityRenderReadiness/UnityRenderReadiness.csproj
 
+    - name: Verify authoring cancellation and invalid references
+      shell: pwsh
+      run: python code/appImmUnity/tests/authoring_failure_smoke.py --msbuild (Get-Command msbuild).Source
+
     - name: Verify repeated live edit publication and visible target revisions
       shell: pwsh
       run: |
