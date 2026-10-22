@@ -50,7 +50,8 @@ enum
     IMM_AUTHORING_MIN_POINTS_PER_ELEMENT = 2,
     IMM_AUTHORING_MAX_POINTS_PER_ELEMENT = 8192,
     IMM_AUTHORING_MAX_ELEMENTS_PER_DRAWING = 65536,
-    IMM_AUTHORING_MAX_POINTS_PER_DRAWING = 1048576
+    IMM_AUTHORING_MAX_POINTS_PER_DRAWING = 1048576,
+    IMM_AUTHORING_MAX_FRAMES_PER_SEQUENCE = 1000000
 };
 
 typedef enum ImmAuthoringLayerPropertyMask
@@ -283,6 +284,11 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_FrameGetDrawingHand
 // one revision.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_FrameSetHandle(int32_t docId, int32_t layerId,
     int32_t frameIndex, uint64_t drawingId);
+// Replace the entire frame table atomically. Zero frames accepts a null pointer and
+// renders no drawing. Nonempty tables use stable drawing handles from this layer;
+// holds are represented by repeated handles. The input is copied before returning.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_FrameSequenceSetHandles(int32_t docId,
+    int32_t layerId, const uint64_t * drawingIds, uint32_t frameCount);
 
 #ifdef __cplusplus
 }

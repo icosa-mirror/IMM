@@ -155,6 +155,7 @@ namespace ImmPlayer {
             std::vector<Document::AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
         int32_t QueueFrameMapping(int docId, uint32_t layerId, uint32_t frameIndex, uint64_t drawingId);
+        int32_t QueueFrameSequence(int docId, uint32_t layerId, std::vector<uint64_t> drawingIds);
         int32_t QueueLayerProperties(int docId, uint32_t layerId,
             bool setVisibility, bool visible, bool setOpacity, float opacity,
             bool setTransform, const ImmCore::trans3d & transform);

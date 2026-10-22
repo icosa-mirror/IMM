@@ -307,6 +307,9 @@ Current supported batch shapes are:
 | Geometry replacement | One drawing |
 | Drawing creation + geometry + optional frame mapping | In that order, all targeting the reserved drawing in one layer |
 | Frame mapping | One frame to a committed handle |
+| Whole frame sequence | Up to 1,000,000 handles from one paint layer; repeated handles hold drawings; zero frames selects no drawing |
+| Drawing creation + geometry + optional whole frame sequence | In that order, one paint layer; the table may reference the reserved drawing |
+| Whole frame sequence + drawing deletion | Table first; the resulting table must not reference the deleted drawing |
 | Drawing deletion | One drawing, unreferenced in the resulting frame table |
 | Frame remap + drawing deletion | Remap first; no other remaining frame may reference the deleted drawing |
 | Canonical layer properties | One layer; visibility/opacity/transform masks may be combined |
@@ -318,6 +321,29 @@ Current supported batch shapes are:
 The `DependencyFailed` result is reserved in the ABI. Its presence does not imply an implemented
 multi-commit dependency queue. Managed expected-revision transactions likewise must not be
 assumed to exist in the native ABI before M4 maps their semantics explicitly.
+
+`ImmAuthoring_FrameSequenceSetHandles` copies the caller's handle table. Publication
+swaps a detached, validated table without replacing geometry resources and reselects
+at the held local time. Playback intent survives zero/one-frame clips. Native-created
+paint receives the time-zero visibility key that offline export/import already
+synthesizes; growing that paint can therefore animate without a caller-authored key.
+Existing explicitly keyless paint retains its semantics. Repeat/Loop/Offset live
+controls and managed transaction mapping remain open.
+
+Drawing creation, deletion and geometry replacement return `Busy` (-7) while the
+background importer owns drawing storage; CPU preparation and GPU publication
+recheck ownership. Table-only, metadata and independent new-layer edits remain
+available. Callers must wait before queueing a resource-edit bundle, rather than
+leaving a partially queued batch after Busy.
+
+Windows validation passes locally: eleven DirectX sequence cases cover held-time
+growth, ordinary advancing playback, reorder/holds/shrink/empty tables, create/delete
+bundles, injected failures, unload and stable siblings. Existing three deletion and
+five creation cases, native frame-table/ownership tests, viewpoint policy, converter
+round trips and ABI export checks also pass. The async guard test manipulates the
+real worker counter; it does not exercise concurrent decoding. Evidence is recorded
+in roadmap sections 6.60-6.61. Full replacement CI and other backend acceptance remain
+pending; this does not complete M1, M2 or managed live cutover.
 
 ## 7. Atomic preparation, publication, and resource lifetime
 

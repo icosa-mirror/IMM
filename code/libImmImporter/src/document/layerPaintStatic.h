@@ -36,6 +36,8 @@ namespace ImmImporter
 
 		// playback controlls
 		void SetTime(ImmCore::piTick time) override; // sets current time during playback
+        // Retains intent even with zero/one frame. No frame-table edit starts
+        // keyless paint; playback is still driven by the existing visibility keys.
 		void SetPlaying(bool playing) override;
         void SetOffset(uint32_t offsetFrames) override;
         void SetMaxRepeatCount(uint32_t count) override;
@@ -63,13 +65,25 @@ namespace ImmImporter
         // and has reserved renderer retirement. Does not deinitialize any drawing.
         void ReleaseDrawingsForRetirement(void) noexcept;
 
+        struct PreparedFrameTable
+        {
+            std::vector<uint32_t> mFrames;
+        };
+        // Indices are private drawing indices, resolved from handles by the
+        // authoring caller. resultingDrawingCount may include one pending append.
+        static std::unique_ptr<PreparedFrameTable> PrepareFrameTable(
+            std::vector<uint32_t> indices, uint32_t resultingDrawingCount);
+        // Swaps ownership without allocating. On success table owns the previous
+        // frames and can be swapped back before any drawing compaction.
+        bool PublishFrameTable(PreparedFrameTable & table) noexcept;
+
 
 	private:
 		// static data
 		// Drawings are individually allocated so appending a live-authored drawing cannot move
 		// existing objects that are referenced by the player and renderer.
 		std::vector<std::unique_ptr<DrawingStatic>> mDrawings;
-		ImmCore::piArray mFrames;
+		std::vector<uint32_t> mFrames;
 		uint32_t mFrameRate;	 // in FPS
 		uint32_t mMaxRepeatCount; // 0 repeats forever
         uint32_t mVersion;
@@ -79,6 +93,8 @@ namespace ImmImporter
         ImmCore::piTick mTime;	
         uint32_t mOffset;        // start offset in frames
 		uint32_t mCurrentFrame; // derived from mCurrentTime, and always in synch
+
+        void iSelectFrame(void) noexcept;
 
 	};
 

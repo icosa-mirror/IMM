@@ -525,7 +525,7 @@ namespace ImmPlayer
 
 		const Drawing *dr = lp->GetCurrentDrawing();
 
-        if (!dr->GetLoaded())
+        if (dr == nullptr || !dr->GetLoaded())
             return;
 
 		const bound3 bbox = dr->GetBBox();//lp->GetBBox(drawing);

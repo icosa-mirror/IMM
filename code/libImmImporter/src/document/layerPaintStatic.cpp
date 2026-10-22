@@ -10,6 +10,8 @@ namespace ImmImporter
 
 	bool LayerPaintStatic::Init(int numDrawings, int numFrames, int maxRepeatCount, uint32_t frameRate, unsigned int version)
 	{
+        if (numDrawings < 0 || numFrames < 0)
+            return false;
 		// When adding properties here, make sure to add them to Copy and De/Serialize
 		mIsPlaying = false;		
 		mTime = 0;
@@ -29,9 +31,14 @@ namespace ImmImporter
 			mDrawings.push_back(std::move(drawing));
 		}
 
-		if (!mFrames.Init(numFrames, sizeof(uint32_t), true))
-			return false;
-		mFrames.SetLength(numFrames);
+        try
+        {
+            mFrames.assign(static_cast<size_t>(numFrames), 0);
+        }
+        catch (const std::bad_alloc &)
+        {
+            return false;
+        }
 		return true;
 	}
 
@@ -43,21 +50,20 @@ namespace ImmImporter
 			drawing->Deinit();
 		}
 		mDrawings.clear();
-		mFrames.End();
+        std::vector<uint32_t>().swap(mFrames);
 	}
 
 	const bound3& LayerPaintStatic::GetBBox(void) const
 	{
-		const uint32_t drawing = mFrames.GetSInt32(mCurrentFrame);
-		const Drawing* dr = mDrawings[drawing].get();
-		return dr->GetBBox();
+        const Drawing * drawing = GetCurrentDrawing();
+        static const bound3 empty(1e20f);
+        return drawing != nullptr ? drawing->GetBBox() : empty;
 	}
 
 	const bool LayerPaintStatic::HasBBox(void) const
 	{
-		const uint32_t drawing = mFrames.GetSInt32(mCurrentFrame);
-		const Drawing* dr = mDrawings[drawing].get();
-		return dr->GetNumStrokes() > 0;
+        const Drawing * drawing = GetCurrentDrawing();
+        return drawing != nullptr && drawing->GetNumStrokes() > 0;
 	}
 
 	unsigned int LayerPaintStatic::GetNumDrawings(void) const
@@ -67,7 +73,7 @@ namespace ImmImporter
 
 	unsigned int LayerPaintStatic::GetNumFrames(void) const
 	{
-		return static_cast<unsigned int>(mFrames.GetLength());
+		return static_cast<unsigned int>(mFrames.size());
 	}
 
     bool LayerPaintStatic::GetPlaying(void) const
@@ -77,11 +83,20 @@ namespace ImmImporter
 
 	void LayerPaintStatic::SetTime(piTick time)
 	{
-		if (!mIsPlaying || mFrames.GetLength() <= 1) return;
+		if (!mIsPlaying) return;
 
 		mTime = time;
+        iSelectFrame();
+    }
 
-        const uint64_t numFrames = mFrames.GetLength();
+    void LayerPaintStatic::iSelectFrame(void) noexcept
+    {
+        const uint64_t numFrames = mFrames.size();
+        if (numFrames <= 1)
+        {
+            mCurrentFrame = 0;
+            return;
+        }
         const uint64_t framesSinceStart = piTick::ToFramesFloor(mTime, mFrameRate) + mOffset;
         const uint64_t framesSinceStartWrapped = framesSinceStart % numFrames;
         const uint64_t numRepeatsSinceStart = framesSinceStart / numFrames;
@@ -103,8 +118,6 @@ namespace ImmImporter
 
 	void LayerPaintStatic::SetPlaying(bool playing)
 	{
-		if(mFrames.GetLength() <= 1) return;
-
 		mIsPlaying = playing;
 	}
 
@@ -116,8 +129,10 @@ namespace ImmImporter
 
 	const Drawing * LayerPaintStatic::GetCurrentDrawing(void) const
 	{
-		const uint32_t drawing = mFrames.GetSInt32(mCurrentFrame);
-		return mDrawings[drawing].get();
+        if (mFrames.empty() || mCurrentFrame >= mFrames.size())
+            return nullptr;
+        const uint32_t drawing = mFrames[mCurrentFrame];
+        return drawing < mDrawings.size() ? mDrawings[drawing].get() : nullptr;
 	}
 
     Drawing * LayerPaintStatic::NewDrawing(void)
@@ -166,6 +181,34 @@ namespace ImmImporter
         mDrawings.clear();
     }
 
+    std::unique_ptr<LayerPaintStatic::PreparedFrameTable> LayerPaintStatic::PrepareFrameTable(
+        std::vector<uint32_t> indices, uint32_t resultingDrawingCount)
+    {
+        if (indices.size() > UINT32_MAX)
+            return nullptr;
+        for (const uint32_t index : indices)
+            if (index >= resultingDrawingCount)
+                return nullptr;
+        std::unique_ptr<PreparedFrameTable> prepared(new (std::nothrow) PreparedFrameTable());
+        if (prepared != nullptr)
+            prepared->mFrames.swap(indices);
+        return prepared;
+    }
+
+    bool LayerPaintStatic::PublishFrameTable(PreparedFrameTable & table) noexcept
+    {
+        if (table.mFrames.size() > UINT32_MAX)
+            return false;
+        for (const uint32_t index : table.mFrames)
+            if (index >= mDrawings.size())
+                return false;
+        mFrames.swap(table.mFrames);
+        // Reselect even while stopped: the retained local time defines the held
+        // drawing, and the old frame index may exceed the replacement length.
+        iSelectFrame();
+        return true;
+    }
+
 	Drawing * LayerPaintStatic::ExtractDrawing(uint32_t drawingIndex)
 	{
 		if (drawingIndex >= mDrawings.size())
@@ -196,7 +239,7 @@ namespace ImmImporter
 
 	uint32_t * LayerPaintStatic::GetFrameBuffer(void)
 	{
-		return (uint32_t*)mFrames.GetAddress(0);
+		return mFrames.empty() ? nullptr : mFrames.data();
 	}
 
     unsigned int LayerPaintStatic::GetVersion(void) const

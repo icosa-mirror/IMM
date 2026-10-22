@@ -708,6 +708,15 @@ namespace ImmPlayer
         return doc->QueueFrameMapping(layerId, frameIndex, drawingId);
     }
 
+    int32_t Player::QueueFrameSequence(int docId, uint32_t layerId, std::vector<uint64_t> drawingIds)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueFrameSequence(layerId, std::move(drawingIds));
+    }
+
     int32_t Player::QueueLayerProperties(int docId, uint32_t layerId,
         bool setVisibility, bool visible, bool setOpacity, float opacity,
         bool setTransform, const ImmCore::trans3d & transform)

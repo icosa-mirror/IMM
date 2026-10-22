@@ -12,10 +12,12 @@
 #include "libImmPlayer/src/mngrPlayer.h"
 #include "libImmPlayer/src/renderPerformanceSnapshot.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
+#include "libImmImporter/src/document/layerPaintStatic.h"
 using namespace ImmCore;
 using namespace ImmImporter;
 using namespace ImmPlayer;
 void CheckArrayReserveFailure();
+void CheckPaintFrameTables();
 static void require(bool ok, const char* message)
 {
     if (!ok) { std::fprintf(stderr, "[IMM_AUTHORING_FAILURE_TEST] %s\n", message); std::exit(1); }
@@ -147,6 +149,7 @@ static void checkSpawnCacheLifecycle(piLog * log)
         initialize(empty.GetRoot(), Layer::Type::Group), "spawn cache roots");
     Layer * spawn = populated.CreateLayer(populated.GetRoot());
     require(spawn != nullptr && initialize(spawn, Layer::Type::SpawnArea), "metadata-only spawn layer");
+    require(spawn->GetNumChildren() == 0, "leaf child count is safe without initialized group storage");
     populated.SetInitialSpawnArea(spawn);
     MngrPlayer manager;
     require(manager.Init(log), "spawn cache manager");
@@ -188,6 +191,7 @@ int wmain(int argc, wchar_t** argv)
     checkEmptySpawnCleanup();
     checkRenderPerformanceSnapshots();
     CheckArrayReserveFailure();
+    CheckPaintFrameTables();
     Document doc;
     require(doc.Init(L"authoring-failures", 0), "document init");
     auto cpu = [&](const Document::Command* command = nullptr) {
@@ -202,9 +206,11 @@ int wmain(int argc, wchar_t** argv)
     auto loadFixture = [&]() {
         cpu(&load); gpu();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        while (doc.GetLoadingState() != Document::LoadingState::Loaded && std::chrono::steady_clock::now() < deadline)
+        while ((doc.GetLoadingState() != Document::LoadingState::Loaded ||
+            IsLoadingAsync(doc.GetSequence())) && std::chrono::steady_clock::now() < deadline)
         { std::this_thread::sleep_for(std::chrono::milliseconds(1)); cpu(); gpu(); }
-        require(doc.GetLoadingState() == Document::LoadingState::Loaded, "fixture loaded");
+        require(doc.GetLoadingState() == Document::LoadingState::Loaded && !IsLoadingAsync(doc.GetSequence()),
+            "fixture loaded with background ownership released");
         require(doc.AttachEditing(), "attach editing");
         const int spawnCount = doc.GetSpawnAreaCount();
         require(spawnCount == 3 && doc.GetSpawnArea() == doc.GetInitialSpawnArea(), "loaded fixture spawn defaults");
@@ -429,6 +435,76 @@ int wmain(int argc, wchar_t** argv)
     const uint64_t firstSpawn = present();
     require(doc.GetSpawnAreaCount() == 1 && doc.GetSpawnArea() == -1 && doc.GetInitialSpawnArea() == -1,
         "first creation does not implicitly select active or default spawn");
+    require(doc.DetachEditing(), "detach before installing CPU-only guard fixture");
+    Layer * guardLayer = doc.GetSequence()->CreateLayer(root);
+    require(guardLayer != nullptr && guardLayer->Init(Layer::Type::Paint, L"async-guard", true,
+        trans3d::identity(), trans3d::identity(), 1.0f, false, piTick(0), 0, UINT32_MAX, &log),
+        "CPU-only guard paint layer");
+    auto * guardPaint = new LayerPaintStatic();
+    require(guardPaint->Init(0, 0, 1, 30, 1) && guardPaint->AddDrawing() != nullptr,
+        "CPU-only guard drawing");
+    guardLayer->SetImplementation(guardPaint);
+    guardLayer->SetLoaded(true);
+    require(doc.AttachEditing(), "attach guard fixture");
+    uint64_t guardHandle = 0;
+    require(doc.GetDrawingHandle(guardLayer->GetID(), 0, &guardHandle), "guard drawing handle");
+    Document::AuthoringElementGeometry geometry;
+    geometry.mBrush = Element::BrushSectionType::Circle;
+    geometry.mVisibility = Element::VisibilityType::Always;
+    for (int index = 0; index < 16; index++)
+    {
+        Element::PointSource point{};
+        point.mPos = vec3(index * 0.01f, 0.0f, 0.0f);
+        point.mNor = vec3(0.0f, 0.0f, 1.0f);
+        point.mDir = vec3(1.0f, 0.0f, 0.0f);
+        point.mCol = vec3(1.0f);
+        point.mAlpha = 1.0f;
+        point.mWidth = 0.01f;
+        geometry.mPoints.push_back(point);
+    }
+    auto & workers = doc.GetSequence()->GetImportState().activeWorkers;
+    require(workers.load() == 0, "no real worker is active in the guard fixture");
+    workers.fetch_add(1);
+    uint64_t reserved = 0;
+    require(doc.QueueDrawingCreation(guardLayer->GetID(), &reserved) == -7 &&
+        doc.QueueDrawingDeletion(guardLayer->GetID(), guardHandle) == -7 &&
+        doc.QueueDrawingGeometry(guardLayer->GetID(), guardHandle, { geometry },
+            Drawing::ColorSpace::Linear, false, 0.01f) == -7,
+        "active importer blocks drawing storage and geometry mutation at queue");
+    require(doc.QueueFrameSequence(guardLayer->GetID(), {}) == 0 && doc.DiscardPendingEdits(),
+        "table-only operation remains queueable during import");
+    require(doc.QueueGroupLayerCreation(root->GetID(), L"independent-group", &spawnedId) == 0 &&
+        doc.DiscardPendingEdits(), "independent hierarchy creation remains queueable during import");
+    workers.fetch_sub(1);
+    for (int operation = 0; operation < 3; operation++)
+    {
+        uint64_t target = guardHandle;
+        if (operation == 0)
+            require(doc.QueueDrawingCreation(guardLayer->GetID(), &target) == 0, "queue valid drawing creation before import activity");
+        if (operation != 1)
+            require(doc.QueueDrawingGeometry(guardLayer->GetID(), target, { geometry },
+                Drawing::ColorSpace::Linear, false, 0.01f) == 0, "queue valid geometry before import activity");
+        else
+            require(doc.QueueDrawingDeletion(guardLayer->GetID(), target) == 0,
+                "queue unreferenced drawing deletion before import activity");
+        int32_t result = -99;
+        const uint64_t revision = doc.CommitEdits(&result);
+        require(revision != 0 && result == 0, "commit import guard case");
+        workers.fetch_add(1);
+        cpu(&commit);
+        workers.fetch_sub(1);
+        Document::AuthoringCommitStatus status{};
+        require(doc.GetAuthoringCommitStatus(revision, &status) &&
+            status.mState == Document::AuthoringCommitState::Rejected && status.mResult == -7 &&
+            guardPaint->GetNumDrawings() == 1 && guardPaint->GetNumFrames() == 0,
+            "CPU preparation rechecks import activity and preserves drawing/table state");
+    }
+    require(doc.DetachEditing() && root->RemovePublishedChild(guardLayer) &&
+        doc.GetSequence()->RemovePublishedLayer(guardLayer), "remove CPU-only guard fixture before GPU unload");
+    guardLayer->Deinit(&log);
+    delete guardLayer;
+    require(doc.AttachEditing(), "reattach original fixture");
+    std::puts("[IMM_ASYNC_EDIT_GUARD_TEST] active-worker queue and CPU rechecks passed (counter guard; no concurrent decode exercised)");
     unload(firstSpawn);
     doc.End(); load.mStrArg.End(); log.End();
     std::puts("[IMM_LIVE_SPAWN_LIFECYCLE_TEST] create, reparent, default/active deletion, subtree cleanup and pending unload passed (CPU-only)");

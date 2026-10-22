@@ -800,6 +800,12 @@ def verify_capability_exports(library: ctypes.CDLL) -> None:
     get_load_time = bind(library, "GetLoadTimeInMs", ctypes.c_int)
     set_perf_enabled = bind(library, "SetPerformanceMeasurementEnabled", None, ctypes.c_int)
     get_perf_info = bind(library, "GetPerformanceInfo", None, ctypes.POINTER(PerformanceInfo))
+    set_frame_sequence = bind(library, "ImmAuthoring_FrameSequenceSetHandles", ctypes.c_int32,
+        ctypes.c_int32, ctypes.c_int32, ctypes.POINTER(ctypes.c_uint64), ctypes.c_uint32)
+    # Invalid ABI inputs must reject before touching the uninitialized player.
+    for layer, count in ((-1, 0), (0, 1), (0, 1000001)):
+        require(set_frame_sequence(0, layer, None, count) == -2,
+            "frame sequence rejects invalid layer/null/count bounds before document lookup")
     get_chapter_info = bind(
         library,
         "GetChapterInfoEx",

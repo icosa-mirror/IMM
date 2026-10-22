@@ -238,6 +238,10 @@ jobs:
       shell: pwsh
       run: python code/appImmUnity/tests/paint_subtree_smoke.py --operation create --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/paint-create-ci
 
+    - name: Verify whole frame-table publication and rendered selection
+      shell: pwsh
+      run: python code/appImmUnity/tests/paint_subtree_smoke.py --operation sequence --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/frame-sequence-ci
+
     - name: Upload paint subtree lifecycle evidence
       if: always()
       uses: actions/upload-artifact@v4
@@ -257,6 +261,13 @@ jobs:
           artifacts/paint-create-ci/*/stdout.log
           artifacts/paint-create-ci/*/settings.json
           artifacts/paint-create-ci/*/capture.ppm
+          artifacts/frame-sequence-ci/report.json
+          artifacts/frame-sequence-ci/nested-paint.imm
+          artifacts/frame-sequence-ci/new-paint-source.imm
+          artifacts/frame-sequence-ci/*/debug.txt
+          artifacts/frame-sequence-ci/*/stdout.log
+          artifacts/frame-sequence-ci/*/settings.json
+          artifacts/frame-sequence-ci/*/capture.ppm
 
     - name: Verify repeated live edit publication and visible target revisions
       shell: pwsh

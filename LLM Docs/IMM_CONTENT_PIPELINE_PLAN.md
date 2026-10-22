@@ -13,13 +13,13 @@ Current checkpoint (2026-10-22): static paint/group subtree deletion and empty
 paint creation/population/deletion pass local DirectX lifecycle/failure checks
 (6.53-6.55). Spawn-cache lifetime and render-counter synchronization fixes are
 pushed in 56521cae/6272e87a (6.56). Their full validation run 39709116389 has
-passed eleven jobs including Windows, Android and web builds; one Apple job is
-running and four await runners. Engine/device gates depend on the complete build workflow and
+passed twelve jobs including Windows, Android, web and Godot iOS validation;
+four Apple jobs await runners. Engine/device gates depend on the complete build workflow and
 have not accepted these revisions. Full CI is not passing yet.
 
 Spawn creation/deletion/cache publication and its reserve-failure prerequisite pass
-local checks (6.57-6.59) and are pushed through df3c5a14. New full run 39711536998
-is queued; the preceding run is retained because Apple work has started. No new
+local checks (6.57-6.59) and are pushed through df3c5a14. Full run 39711536998
+also has twelve passed jobs and four Apple jobs queued. No new
 spawn renderer/backend acceptance is claimed. Whole-table paint
 timeline editing, presented-revision save, managed live cutover and full A1-A3
 acceptance remain open, alongside the converter/reader fidelity gaps below.
@@ -2100,28 +2100,68 @@ replacement-run closure in section 6.26 (20:23 UTC):
    compiler failure remains. Evidence: artifacts/spawn-reserve-final-build.log,
    spawn-lifecycle-final-build-retry.log and spawn-reserve-native-tests.log.
 
-### 6.60. Atomic frame-sequence editing in progress (2026-10-22)
+### 6.60. Atomic frame-sequence editing: Windows milestone (2026-10-22)
 
-1. Native full-table replacement is being added so managed append/insert/move/
-   remove/resize and held frames can map to a single future live revision. The
-   proposed additive FrameSequenceSetHandles ABI copies up to 1,000,000 stable
-   drawing handles from one paint layer; zero frames explicitly means no active
-   drawing. This does not add managed live transaction mapping or frame IDs.
-2. Detached table preparation and nonallocating publication preserve handles and
-   renderer resources. Importer/renderer changes include safe empty tables, retained
-   playback intent through zero/one-frame states and reselection at held local time
-   after publication. Keyless paint is not implicitly started; an existing supported
-   visibility=true key supplies explicit playback intent. These changes await build.
-3. Supported proposed batches include table-only, drawing-create/geometry/table and
-   table/drawing-delete with references checked against the resulting table. CPU
-   layer tests and a DirectX probe are being added for timing, empty/held/reordered
-   tables, rollback, pending unload, stable siblings and model/renderer agreement.
-4. Export verification previously checked only managed P/Invoke declarations. It
-   now also reads the native authoring header; a pre-build negative check correctly
-   reports the newly declared FrameSequenceSetHandles missing from the old binary
-   (artifacts/frame-sequence-before-exports.*). This is intentional pre-build evidence,
-   not a new accepted binary. The operation and stronger gate need matching builds
-   and replacement full CI before platform acceptance.
+1. Added FrameSequenceSetHandles: an owned table of up to 1,000,000 stable
+   drawing handles from one paint layer. Repetition represents holds; zero frames
+   explicitly selects no drawing. Supported batches are table-only,
+   drawing-create/geometry/optional-table and table/drawing-delete with references
+   checked against the resulting table. Managed live mapping and frame IDs remain open.
+2. Detached preparation and nonallocating table publication preserve handles and
+   geometry resources. Empty tables are safe in both paint renderer paths. Playback
+   intent and held local time survive zero/one-frame states; growth immediately
+   reselects the held frame. Native-created paint receives the visibility key that
+   offline import synthesizes. Explicitly keyless paint is unchanged. No new live
+   repeat/Loop/Offset controls are claimed.
+3. All eleven DirectX cases pass, including pure tables, create/delete bundles,
+   injected CPU/GPU/presentation failures and queued/prepared unload. New paint
+   grows at held frame one without another seek, then renders A/B/A/B evaluated
+   seeks and both drawings under normal Playing clock advancement without further
+   seeks. Bounds, stable handles, siblings, draw calls and real triangle counts
+   agree. Evidence: artifacts/frame-sequence-ci-run3/ and its summary log.
+   Table-only avoids geometry replacement paths; no GPU-upload timing claim.
+4. Source-matched Windows Unity/viewer/reader/Godot builds, native table/real-layer/
+   ownership tests, converter round trips, exporter bridge and stronger Windows
+   export verification pass. Existing five creation, three deletion and viewpoint
+   policy checks pass against the final binaries. Evidence: artifacts/
+   frame-sequence-final-build.log, frame-sequence-autoplay-build.log,
+   frame-sequence-reviewed-native-tests.log, frame-sequence-final-converter.log,
+   frame-sequence-bridge.log, frame-sequence-exports.*,
+   frame-sequence-create-regression.log, frame-sequence-delete-regression.log and
+   frame-sequence-viewpoint-regression.log. Review found and removed a double Init
+   in the new test fixture; the native suite passes afterward.
+5. Export verification now reads native authoring declarations as well as managed
+   bindings. Its negative check found the new API absent from the old binary;
+   rebuilt Windows has 148 actual player exports and 147 unique required exports
+   (121 managed bindings plus 26 native authoring declarations). Reader checks pass.
+   Full replacement CI/platform acceptance is pending; M1/M2/M4 remain open.
+
+### 6.61. Background import/drawing ownership guard: local validation (2026-10-22)
+
+1. The importer captures sorted drawing indices before starting its worker, which
+   subsequently indexes drawing vectors and fills geometry. Live create/delete/
+   geometry edits could invalidate that ownership. Those commands now return Busy
+   (-7), rechecked at queueing, CPU preparation and GPU publication. Table-only,
+   metadata and independent new-layer construction remain available.
+2. The native test drives the actual active-worker counter with valid payloads,
+   checks queue/CPU rejection and unchanged drawing/table state, and verifies
+   table-only/hierarchy commands remain allowed. It removes its CPU-only fixture
+   before GPU unload. This is deterministic counter coverage, not concurrent-decode
+   stress. Native tests pass in artifacts/frame-sequence-reviewed-native-tests.log.
+3. Viewer resource probes wait for ownership release before queueing bundles and
+   report exact errors. An earlier exploratory generic-handle failure did not log
+   its return code, so its cause is not retrospectively proven. Final eleven-case
+   sequence and existing create/delete probes pass with the Busy protocol.
+4. Generic leaf traversal now returns zero children without reading uninitialized
+   group storage, which asserted in Debug. A direct piTArray include fixes standalone
+   compilation. Source review found no further actionable importer/transaction
+   regressions; this is not platform, save or managed-cutover acceptance.
+5. CI checkpoint: 39711536998 has twelve passed and four Apple jobs queued.
+   39709116389 has twelve passed, two Apple native builds queued, and both Apple
+   visual jobs running. Neither has failures; neither is a completed full pass.
+   The earlier Android runtime readiness failure remains unresolved. Next after
+   this milestone: move the existing required Android validation chain earlier,
+   using the same-run native Android artifact, while retaining every existing gate.
 
 ## 7. Consolidated documents
 

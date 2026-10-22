@@ -446,7 +446,10 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		return bound3d(1e30);
 	}
 
-	uint32_t Layer::GetNumChildren(void) const { return static_cast<uint32_t>(mChildren.GetLength()); }
+	uint32_t Layer::GetNumChildren(void) const
+    {
+        return mChildren.IsInitialized() ? static_cast<uint32_t>(mChildren.GetLength()) : 0;
+    }
 
 	Layer* Layer::GetChild(uint32_t id) { return mChildren.Get(id); }
 
@@ -949,7 +952,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         log->Printf(LT_DEBUG, L"[LayerSetState] Starting timeline %s", mName.GetS());
 #endif
                     }
-                    else if (isPaintLayer && lp->GetNumFrames() > 1 && !lp->GetPlaying())
+                    else if (isPaintLayer && !lp->GetPlaying())
                     {
                         lp->SetTime(timeSinceStart);
                         lp->SetPlaying(true);
@@ -979,7 +982,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         log->Printf(LT_DEBUG, L"[LayerSetState] Stopping timeline %s", mName.GetS());
 #endif
                     }
-                    else if (isPaintLayer && lp->GetNumFrames() > 1 && lp->GetPlaying())
+                    else if (isPaintLayer && lp->GetPlaying())
                     {
                         lp->SetPlaying(false);
 #ifdef _DEBUG

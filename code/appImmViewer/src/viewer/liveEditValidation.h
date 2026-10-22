@@ -35,6 +35,9 @@ namespace ExePlayer
     private:
         void TickPaintCreation(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
         void TickSubtreeDeletion(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        void TickFrameSequence(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        void TickFrameSequenceBundle(Viewer & viewer, ImmCore::piLog * log, uint64_t frame);
+        void TickNewPaintFrameSequence(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
         struct SubtreeLayerSnapshot
         {
             int id = -1;
@@ -50,6 +53,20 @@ namespace ExePlayer
         bool mStandaloneConfigured = false;
         bool mStandaloneEnabled = false;
         bool mPaintCreationEnabled = false;
+        bool mFrameSequenceEnabled = false;
+        bool mFrameSequenceReadinessLogged = false;
+        int mFrameSequenceStage = 0;
+        int mFrameSequenceIndex = 0;
+        int mFrameSequenceReload = -1;
+        int mFrameSequenceTrianglesA = 0;
+        int mFrameSequenceTrianglesB = 0;
+        int mFrameSequenceDrawCalls = 0;
+        std::vector<uint64_t> mFrameSequenceExpected;
+        ImmCore::bound3 mFrameSequenceBoxA;
+        ImmCore::bound3 mFrameSequenceBoxB;
+        uint32_t mFrameSequencePlayingDrawings = 0;
+        int64_t mFrameSequencePlayingPreviousTime = 0;
+        bool mFrameSequencePlayingAdvanced = false;
         bool mPaintCreationUnload = false;
         bool mPaintCreationSessionInvalid = false;
         int mPaintCreationReloadDocument = -1;

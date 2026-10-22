@@ -15,7 +15,7 @@ from exporter_benchmark import Exporter, Transform, make_points
 from live_edit_benchmark_report import runtime_provenance
 
 
-def fixture(plugin, output):
+def fixture(plugin, output, sequence_probe=False):
     library = c.CDLL(str(plugin))
     exporter = Exporter(library)
     group = smoke.bind(library, 'ImmExporter_CreateGroupLayer', c.c_void_p,
@@ -37,11 +37,12 @@ def fixture(plugin, output):
                 try:
                     smoke.require(exporter.drawing_init(drawing, 1, 0), 'drawing init')
                     element = smoke.require(exporter.drawing_get_element(drawing, 0), 'element')
-                    smoke.require(exporter.element_init(element, 16, 2, 1), 'Circle/Always')
-                    points = make_points(0, 16, live_workload=True)
+                    point_count = 32 if sequence_probe and name == b'KeepPaint' and index == 1 else 16
+                    smoke.require(exporter.element_init(element, point_count, 2, 1), 'Circle/Always')
+                    points = make_points(0, point_count, live_workload=True)
                     for point in points:
-                        point.px += x - 2
-                    smoke.require(exporter.element_set_points(element, 0, points, 16), 'points')
+                        point.px += x - 2 + (0.35 if point_count == 32 else 0)
+                    smoke.require(exporter.element_set_points(element, 0, points, point_count), 'points')
                     exporter.compute_element_bounds(element)
                     exporter.compute_drawing_bounds(drawing)
                     exporter.paint_add_frame(paint, exporter.get_drawing_index(drawing))
@@ -57,7 +58,7 @@ def main():
     parser.add_argument('--viewer', type=Path, required=True)
     parser.add_argument('--plugin', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
-    parser.add_argument('--operation', choices=('delete', 'create'), default='delete')
+    parser.add_argument('--operation', choices=('delete', 'create', 'sequence'), default='delete')
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows standalone renderer required')
@@ -66,17 +67,23 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     fixture_path = output / 'nested-paint.imm'
     handles = [os.add_dll_directory(str(path.parent)) for path in smoke.runtime_dependencies(Path(__file__).resolve().parents[3])]
-    fixture(args.plugin.resolve(), fixture_path)
+    fixture(args.plugin.resolve(), fixture_path, args.operation == 'sequence')
+    new_paint_fixture = output / 'new-paint-source.imm'
+    if args.operation == 'sequence':
+        fixture(args.plugin.resolve(), new_paint_fixture)
     template = json.loads((viewer.parent / 'settings-baseline-directx-sample1.json').read_text(encoding='utf-8'))
     report = {'operation': args.operation, 'viewerSha256': hashlib.sha256(viewer.read_bytes()).hexdigest(),
               'pluginSha256': hashlib.sha256(args.plugin.read_bytes()).hexdigest(),
               'fixtureSha256': hashlib.sha256(fixture_path.read_bytes()).hexdigest(), 'cases': {}}
     cases = ('normal', 'cpu-failure', 'gpu-failure', 'present-failure', 'pending-unload') if args.operation == 'create' else (
         'normal', 'retirement-failure', 'replacement-retirement-failure')
+    if args.operation == 'sequence':
+        cases = ('normal', 'cpu-failure', 'gpu-flag', 'present-failure', 'queued-unload', 'prepared-unload', 'bundle', 'bundle-cpu-failure', 'bundle-gpu-failure', 'bundle-present-failure', 'new-paint')
     for case in cases:
         runtime = output / case
         runtime.mkdir()
-        shutil.copy2(fixture_path, runtime / 'nested-paint.imm')
+        case_fixture = new_paint_fixture if case == 'new-paint' else fixture_path
+        shutil.copy2(case_fixture, runtime / 'nested-paint.imm')
         owned_viewer = runtime / viewer.name
         shutil.copy2(viewer, owned_viewer)
         for path in viewer.parent.iterdir():
@@ -85,7 +92,7 @@ def main():
             elif path.suffix.lower() == '.dll':
                 shutil.copy2(path, runtime / path.name)
         settings = json.loads(json.dumps(template))
-        settings['File']['Load'] = [str(fixture_path)]
+        settings['File']['Load'] = [str(case_fixture)]
         settings['Rendering'].update({'RenderingAPI': 'DirectX', 'EnableVR': False, 'RenderingTechnique': 'Static'})
         settings['Playback']['PlayerSpawn']['Location'] = 'Custom'
         settings['Playback']['PlayerSpawn']['Custom'] = {'Rotation': [0, 0, 0, 1], 'Scale': 1,
@@ -112,6 +119,26 @@ def main():
             if case == 'pending-unload':
                 environment['IMM_VIEWER_LIVE_CREATE_PAINT_UNLOAD'] = '1'
                 environment['IMM_LIVE_EDIT_HOLD_PAINT_CREATION'] = '1'
+        elif args.operation == 'sequence':
+            environment.pop('IMM_VIEWER_LIVE_DELETE_SUBTREE')
+            environment['IMM_VIEWER_LIVE_FRAME_SEQUENCE'] = '1'
+            flags = {'cpu-failure': 'IMM_LIVE_EDIT_FAIL_PREPARE_CPU',
+                     'gpu-flag': 'IMM_LIVE_EDIT_FAIL_PREPARE_GPU',
+                     'present-failure': 'IMM_LIVE_EDIT_FAIL_PRESENT'}
+            if case == 'new-paint':
+                environment['IMM_VIEWER_LIVE_FRAME_SEQUENCE_NEW_PAINT'] = '1'
+            if case.startswith('bundle'):
+                environment['IMM_VIEWER_LIVE_FRAME_SEQUENCE_BUNDLE'] = '1'
+                flags.update({'bundle-cpu-failure': 'IMM_LIVE_EDIT_FAIL_PREPARE_CPU',
+                              'bundle-gpu-failure': 'IMM_LIVE_EDIT_FAIL_PREPARE_GPU',
+                              'bundle-present-failure': 'IMM_LIVE_EDIT_FAIL_PRESENT'})
+            if case in flags:
+                environment[flags[case]] = '1'
+            if case == 'queued-unload':
+                environment['IMM_VIEWER_LIVE_FRAME_SEQUENCE_QUEUED_UNLOAD'] = '1'
+            if case == 'prepared-unload':
+                environment['IMM_VIEWER_LIVE_FRAME_SEQUENCE_PREPARED_UNLOAD'] = '1'
+                environment['IMM_LIVE_EDIT_HOLD_FRAME_SEQUENCE'] = '1'
         elif case != 'normal':
             environment['IMM_LIVE_EDIT_FAIL_RETIREMENT'] = '1'
         if case == 'replacement-retirement-failure':
@@ -139,6 +166,28 @@ def main():
             expected_stage = 5 if case == 'pending-unload' else (3 if case == 'normal' else 1)
             smoke.require(code == 0 and re.search(fr'\[IMM_LIVE_PAINT_CREATE\] pass=1 stage={expected_stage}\b', text),
                           f'{case}: paint creation lifecycle failed')
+        elif args.operation == 'sequence':
+            prefix = ('IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT' if case == 'new-paint' else
+                      ('IMM_LIVE_FRAME_SEQUENCE_BUNDLE' if case.startswith('bundle') else 'IMM_LIVE_FRAME_SEQUENCE'))
+            smoke.require(code == 0 and re.search(fr'\[{prefix}\] pass=1', text),
+                          f'{case}: whole frame-table native probe failed')
+            if case == 'new-paint':
+                smoke.require('alternating=4 frames=10000 defaultVisibility=1 finiteRepeat=1' in text and
+                              'heldBeforeGrowth=1 selectedBWithoutSeek=1' in text and
+                              'autoPlaying=1 advanced=1 bothDrawings=1' in text, 'new paint animation did not play after growth')
+            elif case == 'bundle':
+                smoke.require('createdGeometryAndTable=1 tableAndDelete=3 zeroDrawings=1' in text, 'bundle lifecycle incomplete')
+            elif case.startswith('bundle-'):
+                smoke.require('rejected=1 result=-10 unchanged=1' in text, f'{case}: bundle rollback incomplete')
+            elif case in ('normal', 'gpu-flag'):
+                smoke.require('tables=6 rejectedInvalidHandles=3 restored=1' in text, f'{case}: sequence transitions incomplete')
+            elif case in ('cpu-failure', 'present-failure'):
+                smoke.require('rejected=1 result=-10 unchanged=1' in text, f'{case}: table rollback incomplete')
+            else:
+                smoke.require('unloaded=1 reloaded=1 freshSession=1' in text, f'{case}: pending table unload incomplete')
+            if not case.startswith('bundle') and case != 'new-paint':
+                smoke.require(not re.search(r'renderer swap|renderer delete|\[IMM_LIVE_EDIT_CANCEL\]', text),
+                              f'{case}: table-only edit touched renderer ownership')
         elif case == 'replacement-retirement-failure':
             smoke.require(code == 0 and re.search(r'\[IMM_LIVE_EDIT\].*revision=1 status=5 result=-10 drawingBBoxUnchanged=1', text),
                           'replacement retirement failure must reject before model mutation')
@@ -160,6 +209,15 @@ def main():
                 f'{case}: created paint drawing retirement incomplete')
             smoke.require(len(cancelled) == (1 if case in ('gpu-failure', 'present-failure', 'pending-unload') else 0),
                           f'{case}: prepared slot cancellation incomplete')
+        elif args.operation == 'sequence':
+            swaps = re.findall(r'renderer swap activeToken=\d+ retiredToken=(\d+)', text)
+            cancelled = re.findall(r'\[IMM_LIVE_EDIT_CANCEL\] completedToken=(\d+)', text)
+            expected_retirements = 3 if case == 'bundle' else 0
+            expected_cancellations = 1 if case in ('bundle-gpu-failure', 'bundle-present-failure') else 0
+            expected_swaps = 1 if case == 'new-paint' else 0
+            smoke.require(len(retired) == expected_retirements and sorted(retired + swaps) == sorted(completed) and len(swaps) == expected_swaps,
+                          f'{case}: renderer retirement or unexpected slot swap')
+            smoke.require(len(cancelled) == expected_cancellations, f'{case}: prepared slot cancellation')
         else:
             smoke.require(len(retired) == (5 if case == 'normal' else 0) and sorted(retired) == sorted(completed),
                       f'{case}: every detached drawing must reach renderer retirement')
@@ -172,7 +230,7 @@ def main():
         render = [line for line in text.splitlines() if 'IMM GL validation: frame=' in line]
         smoke.require(render and all(int(re.search(fr'{field}=(\d+)', render[-1])[1]) > 0
             for field in ('paintDrawCalls', 'triangles')), 'positive surviving render')
-        report['cases'][case] = {'elapsedSeconds': time.monotonic() - started, 'retiredDrawings': len(retired),
+        report['cases'][case] = {'fixtureSha256': hashlib.sha256(case_fixture.read_bytes()).hexdigest(), 'elapsedSeconds': time.monotonic() - started, 'retiredDrawings': len(retired),
             'completedRetirements': len(completed), 'cancelledPreparedSlots': len(cancelled),
             **runtime_provenance(text, 'DirectX'),
             'logSha256': hashlib.sha256((runtime / 'debug.txt').read_bytes()).hexdigest()}

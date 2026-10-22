@@ -1,6 +1,7 @@
 #pragma once
 
 #include "libImmCore/src/libBasics/piString.h"
+#include "libImmCore/src/libBasics/piTArray.h"
 
 #include "element.h"
 #include "drawing.h"

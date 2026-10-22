@@ -19,6 +19,7 @@
 
 #include "../../libImmImporter/src/document/sequence.h"
 #include "../../libImmImporter/src/document/layerSpawnArea.h"
+#include "../../libImmImporter/src/document/layerPaintStatic.h"
 
 namespace ImmPlayer {
 
@@ -247,6 +248,8 @@ namespace ImmPlayer {
             std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
         int32_t QueueFrameMapping(uint32_t layerId, uint32_t frameIndex, uint64_t drawingId);
+        static constexpr uint32_t kMaxFrameSequenceLength = 1000000; // Managed MaxFrames default and C ABI ceiling.
+        int32_t QueueFrameSequence(uint32_t layerId, std::vector<uint64_t> drawingIds);
         int32_t QueueLayerProperties(uint32_t layerId, bool setVisibility, bool visible,
             bool setOpacity, float opacity, bool setTransform,
             const ImmCore::trans3d & transform);
@@ -318,6 +321,12 @@ namespace ImmPlayer {
             uint32_t mLayerId = 0;
             uint32_t mFrameIndex = 0;
             uint64_t mDrawingId = 0;
+        };
+
+        struct FrameSequence
+        {
+            uint32_t mLayerId = 0;
+            std::vector<uint64_t> mDrawingIds;
         };
 
         struct DrawingDeletion
@@ -400,6 +409,7 @@ namespace ImmPlayer {
             std::vector<DrawingCreation> mDrawingCreations;
             std::vector<GeometryEdit> mGeometryEdits;
             std::vector<FrameMapping> mFrameMappings;
+            std::vector<FrameSequence> mFrameSequences;
             std::vector<DrawingDeletion> mDrawingDeletions;
             std::vector<LayerPropertyEdit> mLayerPropertyEdits;
             std::vector<AnimationKeyEdit> mAnimationKeyEdits;
@@ -416,6 +426,7 @@ namespace ImmPlayer {
         std::vector<DrawingCreation> mOpenDrawingCreations;
         std::vector<GeometryEdit> mOpenGeometryEdits;
         std::vector<FrameMapping> mOpenFrameMappings;
+        std::vector<FrameSequence> mOpenFrameSequences;
         std::vector<DrawingDeletion> mOpenDrawingDeletions;
         std::vector<LayerPropertyEdit> mOpenLayerPropertyEdits;
         std::vector<AnimationKeyEdit> mOpenAnimationKeyEdits;
@@ -434,6 +445,8 @@ namespace ImmPlayer {
             uint64_t mObject = 0;
             bool mIsCreation = false;
             bool mIsFrameMapping = false;
+            bool mHasFrameSequence = false;
+            std::unique_ptr<ImmImporter::LayerPaintStatic::PreparedFrameTable> mPreparedFrameTable;
             bool mIsDeletion = false;
             bool mIsLayerPropertyEdit = false;
             bool mIsAnimationKeyEdit = false;
@@ -491,6 +504,9 @@ namespace ImmPlayer {
             ImmImporter::Layer * insertionParent, uint32_t insertionIndex,
             std::vector<ImmImporter::Layer *> & prepared);
         void iPublishPreparedSpawnAreaCache(void);
+        int32_t iPrepareFrameSequence(const FrameSequence & sequence, const DrawingCreation * creation,
+            uint64_t deletedDrawing, std::unique_ptr<ImmImporter::LayerPaintStatic::PreparedFrameTable> & table,
+            ImmImporter::Layer ** layerOut);
         void iPrepareAuthoringCommit(LayerRendererPaint * layerPaintRender, ImmCore::piLog * log);
         void iDiscardPendingPresentation(LayerRendererPaint * layerPaintRender,
             ImmCore::piRenderer * renderer, ImmCore::piLog * log);

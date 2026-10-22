@@ -68,6 +68,702 @@ namespace ExePlayer
                std::fabs(a.mMaxY - b.mMaxY) < 0.000001 && std::fabs(a.mMaxZ - b.mMaxZ) < 0.000001;
     }
 
+    void LiveEditValidation::TickFrameSequence(Viewer & viewer, ImmCore::piLog * log, uint64_t frame,
+        uint64_t requestedFrame)
+    {
+        if (std::getenv("IMM_VIEWER_LIVE_FRAME_SEQUENCE_NEW_PAINT") != nullptr)
+        {
+            TickNewPaintFrameSequence(viewer, log, frame, requestedFrame);
+            return;
+        }
+        if (mMeasured || frame < requestedFrame)
+            return;
+        const auto fail = [&](const wchar_t * reason) {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE] pass=0 stage=%d table=%d reason=%s",
+                mFrameSequenceStage, mFrameSequenceIndex, reason);
+            mMeasured = true;
+        };
+        if (frame - requestedFrame > 10000) { fail(L"timeout"); return; }
+        ImmPlayer::Player * player = viewer.GetPlayer();
+        const int doc = mFrameSequenceStage == 5 ? mFrameSequenceReload : mDocumentId;
+        if (mFrameSequenceStage == 4)
+        {
+            ImmPlayer::Player::DocumentState state;
+            player->GetDocumentState(state, mDocumentId);
+            if (state.mLoadingState != ImmPlayer::Player::LoadingState::Unloaded)
+                return;
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            ImmPlayer::Document::AuthoringCommitStatus status;
+            if (player->GetAuthoringRevisions(mDocumentId, revisions) ||
+                player->GetAuthoringCommitStatus(mDocumentId, mRevision, status))
+            { fail(L"unloaded session survived"); return; }
+            mFrameSequenceReload = player->Load(L"nested-paint.imm");
+            if (mFrameSequenceReload < 0) { fail(L"reload failed"); return; }
+            mFrameSequenceStage = 5;
+            mStandaloneTerminalFrame = 0;
+            return;
+        }
+        ImmPlayer::Player::DocumentState state;
+        const int selectedDoc = mFrameSequenceStage == 0 ? viewer.GetPrimaryDocumentId() : doc;
+        player->GetDocumentState(state, selectedDoc);
+        if (state.mLoadingState != ImmPlayer::Player::LoadingState::Loaded)
+            return;
+        if (mFrameSequenceStage == 5 && !player->AttachEditing(selectedDoc))
+        { fail(L"reload attach failed"); return; }
+        std::vector<ImmPlayer::Player::LayerInfo> infos;
+        for (int index = 0; index < player->GetLayerCount(selectedDoc); ++index)
+        {
+            ImmPlayer::Player::LayerInfo info;
+            if (!player->GetLayerInfoByIndex(selectedDoc, index, info))
+            { fail(L"layer enumeration failed"); return; }
+            if (info.type == static_cast<int>(ImmImporter::Layer::Type::Paint) &&
+                (!info.isLoaded || info.paintNumStrokes < info.paintNumDrawings))
+                return;
+            infos.push_back(info);
+        }
+        const auto find = [&](int id) -> const ImmPlayer::Player::LayerInfo * {
+            for (const auto & info : infos) if (info.id == id) return &info;
+            return nullptr;
+        };
+        if (mFrameSequenceStage == 0)
+        {
+            if (!player->AttachEditing(selectedDoc)) { fail(L"attach failed"); return; }
+            mDocumentId = selectedDoc;
+            player->Pause(selectedDoc);
+            mFrameSequenceStage = 1;
+            return;
+        }
+        if (mFrameSequenceStage == 1)
+        {
+            player->SetTime(doc, ImmCore::piTick(0), ImmCore::piTick(1));
+            mFrameSequenceStage = 2;
+            mStandaloneTerminalFrame = frame;
+            return;
+        }
+        if (mFrameSequenceStage == 2)
+        {
+            if (frame < mStandaloneTerminalFrame + 3) return;
+            for (const auto & info : infos)
+            {
+                if (info.type != static_cast<int>(ImmImporter::Layer::Type::Paint)) continue;
+                SubtreeLayerSnapshot snapshot;
+                snapshot.id = info.id; snapshot.parent = info.parentId; snapshot.child = info.childIndex;
+                snapshot.strokes = info.paintNumStrokes; snapshot.hasBox = info.hasBBox; snapshot.box = info.bbox;
+                snapshot.target = std::wstring(info.name) == L"KeepPaint";
+                for (int index = 0; index < info.paintNumDrawings; ++index)
+                {
+                    uint64_t handle = 0; ImmCore::bound3 box;
+                    if (!player->GetDrawingHandle(doc, info.id, index, handle) ||
+                        !player->GetDrawingBBox(doc, info.id, index, box))
+                    { fail(L"drawing snapshot failed"); return; }
+                    snapshot.handles.push_back(handle); snapshot.boxes.push_back(box);
+                }
+                if (snapshot.target) mStandaloneTarget = info.id;
+                mStandaloneLayers.push_back(std::move(snapshot));
+            }
+            const auto * target = find(mStandaloneTarget);
+            if (!target || target->paintNumDrawings != 2 || target->paintNumFrames != 2)
+            { fail(L"two-drawing fixture missing"); return; }
+            const auto perf = player->GetRenderPerformanceSnapshot();
+            if (perf.numPaintDrawCalls < 2 || perf.numTriangles <= 0)
+            { fail(L"baseline not rendered"); return; }
+            mFrameSequenceTrianglesA = perf.numTriangles;
+            mFrameSequenceDrawCalls = perf.numPaintDrawCalls;
+            mStandaloneExpectRejection = std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr ||
+                std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr;
+            ImmPlayer::Document::AuthoringRevisions revisions;
+            if (!player->GetAuthoringRevisions(doc, revisions)) { fail(L"baseline revisions"); return; }
+            mStandaloneOldRevision = revisions.mPresented;
+            mFrameSequenceStage = 3;
+            mRevision = 0;
+        }
+        if (std::getenv("IMM_VIEWER_LIVE_FRAME_SEQUENCE_BUNDLE") != nullptr)
+        {
+            TickFrameSequenceBundle(viewer, log, frame);
+            return;
+        }
+        const SubtreeLayerSnapshot * target = nullptr;
+        for (const auto & snapshot : mStandaloneLayers)
+        {
+            if (snapshot.target) target = &snapshot;
+            const auto * info = find(snapshot.id);
+            if (!info || info->parentId != snapshot.parent || info->childIndex != snapshot.child ||
+                info->paintNumDrawings != static_cast<int>(snapshot.handles.size()) ||
+                info->paintNumStrokes != snapshot.strokes)
+            { fail(L"drawing registry or hierarchy changed"); return; }
+            if (!snapshot.target && (info->hasBBox != snapshot.hasBox ||
+                (snapshot.hasBox && !iSubtreeBoxesMatch(info->bbox, snapshot.box))))
+            { fail(L"sibling bounds changed"); return; }
+            for (size_t index = 0; index < snapshot.handles.size(); ++index)
+            {
+                uint64_t handle = 0; ImmCore::bound3 box;
+                if (!player->GetDrawingHandle(selectedDoc, snapshot.id, static_cast<int>(index), handle) ||
+                    !player->GetDrawingBBox(selectedDoc, snapshot.id, static_cast<int>(index), box) ||
+                    !iSubtreeBoxesMatch(box, snapshot.boxes[index]) ||
+                    (mFrameSequenceStage != 5 && handle != snapshot.handles[index]))
+                { fail(L"stable drawing handle or geometry changed"); return; }
+            }
+        }
+        if (!target) { fail(L"target missing"); return; }
+        if (mFrameSequenceStage == 5)
+        {
+            if (mStandaloneTerminalFrame == 0) mStandaloneTerminalFrame = frame;
+            if (frame < mStandaloneTerminalFrame + 3) return;
+            const auto * info = find(target->id);
+            ImmPlayer::Document::AuthoringRevisions fresh;
+            mStandaloneSuccessful = info && info->paintNumFrames == 2 && player->AttachEditing(selectedDoc) &&
+                player->GetAuthoringRevisions(selectedDoc, fresh) && fresh.mRequested == 0 &&
+                fresh.mPrepared == 0 && fresh.mPresented == 0;
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE] pass=%d unloaded=1 reloaded=1 freshSession=%d",
+                mStandaloneSuccessful ? 1 : 0, mStandaloneSuccessful ? 1 : 0);
+            mMeasured = true;
+            return;
+        }
+        if (mRevision == 0)
+        {
+            const uint64_t a = target->handles[0], b = target->handles[1];
+            if (mFrameSequenceIndex == 0)
+            {
+                uint64_t foreign = 0;
+                for (const auto & sibling : mStandaloneLayers)
+                    if (!sibling.target && !sibling.handles.empty()) foreign = sibling.handles[0];
+                const int32_t readiness = player->QueueDrawingDeletion(doc, target->id, a);
+                if (readiness == -7)
+                {
+                    if (!mFrameSequenceReadinessLogged)
+                        log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE] referencedDeleteResult=-7 waitingForResourceOwner=1");
+                    mFrameSequenceReadinessLogged = true;
+                    return;
+                }
+                if (readiness != -6)
+                {
+                    log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE] referencedDeleteResult=%d expected=-6", readiness);
+                    fail(L"referenced deletion readiness failed"); return;
+                }
+                const int32_t zero = player->QueueFrameSequence(doc, target->id, { 0 });
+                const int32_t stale = player->QueueFrameSequence(doc, target->id, { ~uint64_t(0) });
+                const int32_t cross = player->QueueFrameSequence(doc, target->id, { foreign });
+                if (foreign == 0 || zero != -1 || stale != -1 || cross != -1)
+                {
+                    log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE] zeroResult=%d staleResult=%d crossResult=%d", zero, stale, cross);
+                    fail(L"invalid handle result mismatch"); return;
+                }
+            }
+            switch (mFrameSequenceIndex)
+            {
+                case 0: mFrameSequenceExpected = { b, b, a, b }; break;
+                case 1: mFrameSequenceExpected = { a, a, a }; break;
+                case 2: mFrameSequenceExpected = { b, a }; break;
+                case 3: mFrameSequenceExpected = { a }; break;
+                case 4: mFrameSequenceExpected.clear(); break;
+                default: mFrameSequenceExpected = { a, b }; break;
+            }
+            if (player->QueueFrameSequence(doc, target->id, mFrameSequenceExpected) != 0)
+            { fail(L"table queue failed"); return; }
+            int32_t result = -99;
+            mRevision = player->CommitEdits(doc, &result);
+            if (mRevision == 0 || result != 0) { fail(L"table commit failed"); return; }
+            mStandaloneTerminalFrame = 0;
+            if (std::getenv("IMM_VIEWER_LIVE_FRAME_SEQUENCE_QUEUED_UNLOAD") != nullptr)
+            {
+                player->Unload(doc); mFrameSequenceStage = 4;
+            }
+            return;
+        }
+        ImmPlayer::Document::AuthoringCommitStatus status;
+        if (!player->GetAuthoringCommitStatus(doc, mRevision, status))
+        { fail(L"commit status missing"); return; }
+        if (std::getenv("IMM_VIEWER_LIVE_FRAME_SEQUENCE_PREPARED_UNLOAD") != nullptr &&
+            status.mState == ImmPlayer::Document::AuthoringCommitState::Prepared)
+        {
+            player->Unload(doc); mFrameSequenceStage = 4; return;
+        }
+        const bool rejected = status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected;
+        if (!rejected && status.mState != ImmPlayer::Document::AuthoringCommitState::Presented) return;
+        if (mStandaloneTerminalFrame == 0) mStandaloneTerminalFrame = frame;
+        if (frame < mStandaloneTerminalFrame + 3) return;
+        const auto * info = find(target->id);
+        const auto & expected = rejected ? target->handles : mFrameSequenceExpected;
+        if (!info || info->paintNumFrames != static_cast<int>(expected.size()))
+        { fail(L"frame count changed incorrectly"); return; }
+        for (size_t index = 0; index < expected.size(); ++index)
+        {
+            uint64_t handle = 0;
+            if (!player->GetFrameDrawingHandle(doc, target->id, static_cast<int>(index), handle) || handle != expected[index])
+            { fail(L"frame topology mismatch"); return; }
+        }
+        uint64_t beyond = 0;
+        if (player->GetFrameDrawingHandle(doc, target->id, static_cast<int>(expected.size()), beyond))
+        { fail(L"out-of-range frame exists"); return; }
+        ImmPlayer::Document::AuthoringRevisions revisions;
+        player->GetAuthoringRevisions(doc, revisions);
+        const auto perf = player->GetRenderPerformanceSnapshot();
+        if (rejected)
+        {
+            mStandaloneSuccessful = mStandaloneExpectRejection && status.mResult == -10 &&
+                revisions.mPresented == mStandaloneOldRevision && perf.numTriangles == mFrameSequenceTrianglesA &&
+                perf.numPaintDrawCalls == mFrameSequenceDrawCalls;
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE] pass=%d rejected=1 result=%d unchanged=1",
+                mStandaloneSuccessful ? 1 : 0, status.mResult);
+            mMeasured = true; return;
+        }
+        if (mStandaloneExpectRejection || revisions.mPresented != mRevision || status.mResult != 0)
+        { fail(L"expected rejection or revision mismatch"); return; }
+        const bool empty = expected.empty();
+        const bool drawingB = !empty && expected[0] == target->handles[1];
+        if (info->hasBBox != (empty ? 0 : 1) || (!empty &&
+            !iSubtreeBoxesMatch(info->bbox, target->boxes[drawingB ? 1 : 0])))
+        { fail(L"selected drawing bounds mismatch"); return; }
+        if (mFrameSequenceIndex == 0) mFrameSequenceTrianglesB = perf.numTriangles;
+        const bool rendered = empty ? perf.numPaintDrawCalls == mFrameSequenceDrawCalls - 1 &&
+            perf.numTriangles > 0 && perf.numTriangles < mFrameSequenceTrianglesA :
+            perf.numPaintDrawCalls == mFrameSequenceDrawCalls && perf.numTriangles ==
+                (drawingB ? mFrameSequenceTrianglesB : mFrameSequenceTrianglesA);
+        if (!rendered || mFrameSequenceTrianglesB <= mFrameSequenceTrianglesA)
+        { fail(L"real render did not follow frame table"); return; }
+        log->Printf(LT_MESSAGE,
+            L"[IMM_LIVE_FRAME_SEQUENCE] table=%d layer=%d frames=%u selected=%d triangles=%d paintDrawCalls=%d handles=1 siblingStable=1 bounds=1",
+            mFrameSequenceIndex, target->id, static_cast<unsigned int>(expected.size()), empty ? -1 : (drawingB ? 1 : 0),
+            perf.numTriangles, perf.numPaintDrawCalls);
+        ++mFrameSequenceIndex;
+        mRevision = 0;
+        if (mFrameSequenceIndex == 6)
+        {
+            mStandaloneSuccessful = true; mMeasured = true;
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE] pass=1 tables=6 rejectedInvalidHandles=3 restored=1");
+        }
+    }
+
+    void LiveEditValidation::TickNewPaintFrameSequence(Viewer & viewer, ImmCore::piLog * log,
+        uint64_t frame, uint64_t requestedFrame)
+    {
+        if (mMeasured || frame < requestedFrame) return;
+        const auto fail = [&](const wchar_t * reason) {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT] pass=0 stage=%d reason=%s", mFrameSequenceStage, reason);
+            mMeasured = true;
+        };
+        if (frame - requestedFrame > 10000) { fail(L"timeout"); return; }
+        ImmPlayer::Player * player = viewer.GetPlayer();
+        const int doc = viewer.GetPrimaryDocumentId();
+        ImmPlayer::Player::DocumentState state;
+        player->GetDocumentState(state, doc);
+        if (state.mLoadingState != ImmPlayer::Player::LoadingState::Loaded) return;
+        if (mFrameSequenceStage == 0)
+        {
+            if (!player->AttachEditing(doc)) { fail(L"attach failed"); return; }
+            mDocumentId = doc; player->Pause(doc); mFrameSequenceStage = 1; return;
+        }
+        if (mFrameSequenceStage == 1)
+        {
+            player->SetTime(doc, ImmCore::piTick(0), ImmCore::piTick(1));
+            mStandaloneTerminalFrame = frame; mFrameSequenceStage = 2; return;
+        }
+        if (mFrameSequenceStage == 2)
+        {
+            if (frame < mStandaloneTerminalFrame + 3) return;
+            mStandaloneLayers.clear();
+            int parent = -1;
+            int readinessLayer = -1;
+            uint64_t readinessHandle = 0;
+            for (int index = 0; index < player->GetLayerCount(doc); ++index)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (!player->GetLayerInfoByIndex(doc, index, info)) { fail(L"enumeration failed"); return; }
+                if (std::wstring(info.name) == L"KeepPaint")
+                { parent = info.parentId; readinessLayer = info.id; }
+                if (info.type != static_cast<int>(ImmImporter::Layer::Type::Paint)) continue;
+                if (!info.isLoaded || info.paintNumStrokes < info.paintNumDrawings) return;
+                SubtreeLayerSnapshot snapshot;
+                snapshot.id = info.id; snapshot.parent = info.parentId; snapshot.child = info.childIndex;
+                snapshot.strokes = info.paintNumStrokes; snapshot.hasBox = info.hasBBox; snapshot.box = info.bbox;
+                for (int drawing = 0; drawing < info.paintNumDrawings; ++drawing)
+                {
+                    uint64_t handle = 0; ImmCore::bound3 box;
+                    if (!player->GetDrawingHandle(doc, info.id, drawing, handle) || !player->GetDrawingBBox(doc, info.id, drawing, box))
+                    { fail(L"sibling snapshot failed"); return; }
+                    snapshot.handles.push_back(handle); snapshot.boxes.push_back(box);
+                }
+                mStandaloneLayers.push_back(std::move(snapshot));
+            }
+            if (readinessLayer < 0 || !player->GetDrawingHandle(doc, readinessLayer, 0, readinessHandle))
+            { fail(L"creation readiness fixture missing"); return; }
+            const int32_t readiness = player->QueueDrawingDeletion(doc, readinessLayer, readinessHandle);
+            if (readiness == -7)
+            {
+                if (!mFrameSequenceReadinessLogged)
+                    log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE] resourceReadiness=-7 waitingForResourceOwner=1");
+                mFrameSequenceReadinessLogged = true;
+                return;
+            }
+            if (readiness != -6)
+            {
+                log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT] readinessResult=%d expected=-6", readiness);
+                fail(L"creation readiness failed"); return;
+            }
+            uint32_t created = ~0u;
+            if (parent < 0 || player->QueuePaintLayerCreation(doc, parent, L"LiveSequencePaint", created) != 0)
+            { fail(L"paint creation queue failed"); return; }
+            mPaintCreationLayer = static_cast<int>(created);
+            int32_t result = -99; mRevision = player->CommitEdits(doc, &result);
+            if (!mRevision || result != 0) { fail(L"paint creation commit failed"); return; }
+            mFrameSequenceStage = 3; mStandaloneTerminalFrame = 0; return;
+        }
+        ImmPlayer::Player::LayerInfo createdInfo;
+        bool found = false;
+        for (int index = 0; index < player->GetLayerCount(doc); ++index)
+        {
+            ImmPlayer::Player::LayerInfo info;
+            if (!player->GetLayerInfoByIndex(doc, index, info)) { fail(L"layer query failed"); return; }
+            if (info.id == mPaintCreationLayer) { createdInfo = info; found = true; }
+            for (const auto & snapshot : mStandaloneLayers)
+            {
+                if (snapshot.id != info.id) continue;
+                if (info.parentId != snapshot.parent || info.childIndex != snapshot.child ||
+                    info.paintNumDrawings != static_cast<int>(snapshot.handles.size()) || info.paintNumStrokes != snapshot.strokes ||
+                    info.hasBBox != snapshot.hasBox || (snapshot.hasBox && !iSubtreeBoxesMatch(info.bbox, snapshot.box)))
+                { fail(L"source sibling changed"); return; }
+                for (size_t drawing = 0; drawing < snapshot.handles.size(); ++drawing)
+                {
+                    uint64_t handle = 0; ImmCore::bound3 box;
+                    if (!player->GetDrawingHandle(doc, info.id, static_cast<int>(drawing), handle) || handle != snapshot.handles[drawing] ||
+                        !player->GetDrawingBBox(doc, info.id, static_cast<int>(drawing), box) || !iSubtreeBoxesMatch(box, snapshot.boxes[drawing]))
+                    { fail(L"source drawing changed"); return; }
+                }
+            }
+        }
+        const auto queueGeometry = [&](uint64_t drawing, int count, float offset) {
+            std::vector<ImmPlayer::Document::AuthoringElementGeometry> elements(1);
+            auto & element = elements[0];
+            element.mBrush = ImmImporter::Element::BrushSectionType::Circle;
+            element.mVisibility = ImmImporter::Element::VisibilityType::Always;
+            element.mPoints.resize(count);
+            for (int index = 0; index < count; ++index)
+            {
+                const float t = static_cast<float>(index) / static_cast<float>(count - 1);
+                auto & point = element.mPoints[index];
+                point.mPos = ImmCore::vec3(offset + t * 0.5f, 1.5f, 0.0f);
+                point.mNor = ImmCore::vec3(0.0f, 1.0f, 0.0f); point.mDir = ImmCore::vec3(0.0f, 0.0f, 1.0f);
+                point.mCol = ImmCore::vec3(0.2f, 0.4f, 0.9f); point.mAlpha = 1.0f;
+                point.mWidth = 0.01f; point.mLength = t; point.mTime = t;
+            }
+            return player->QueueDrawingGeometry(doc, mPaintCreationLayer, drawing, std::move(elements),
+                ImmImporter::Drawing::ColorSpace::Linear, false, 0.01f);
+        };
+        if (mFrameSequenceStage <= 5)
+        {
+            ImmPlayer::Document::AuthoringCommitStatus status;
+            if (!player->GetAuthoringCommitStatus(doc, mRevision, status)) { fail(L"status missing"); return; }
+            if (status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected) { fail(L"unexpected rejection"); return; }
+            if (status.mState != ImmPlayer::Document::AuthoringCommitState::Presented) return;
+            if (mStandaloneTerminalFrame == 0) mStandaloneTerminalFrame = frame;
+            if (frame < mStandaloneTerminalFrame + 3) return;
+            if (!found) { fail(L"created layer missing"); return; }
+            if (mFrameSequenceStage == 3)
+            {
+                if (createdInfo.paintNumDrawings != 1 || createdInfo.paintNumFrames != 1 ||
+                    !player->GetDrawingHandle(doc, mPaintCreationLayer, 0, mPaintCreationHandle))
+                { fail(L"first drawing geometry failed"); return; }
+                const int32_t readiness = player->QueueDrawingDeletion(doc, mPaintCreationLayer, mPaintCreationHandle);
+                if (readiness == -7) return;
+                if (readiness != -6 || queueGeometry(mPaintCreationHandle, 16, -1.0f) != 0)
+                {
+                    log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT] firstGeometryReadiness=%d", readiness);
+                    fail(L"first geometry readiness or queue failed"); return;
+                }
+            }
+            else if (mFrameSequenceStage == 4)
+            {
+                const int32_t readiness = player->QueueDrawingDeletion(doc, mPaintCreationLayer, mPaintCreationHandle);
+                if (readiness == -7) return;
+                if (readiness != -6)
+                {
+                    log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT] secondGeometryReadiness=%d", readiness);
+                    fail(L"second geometry readiness failed"); return;
+                }
+                const auto perf = player->GetRenderPerformanceSnapshot();
+                if (!createdInfo.isVisible || !createdInfo.hasBBox || perf.numPaintDrawCalls != static_cast<int>(mStandaloneLayers.size()) + 1 ||
+                    !player->GetDrawingBBox(doc, mPaintCreationLayer, 0, mFrameSequenceBoxA))
+                { fail(L"new paint default visibility did not render"); return; }
+                mFrameSequenceTrianglesA = perf.numTriangles; mFrameSequenceDrawCalls = perf.numPaintDrawCalls;
+                if (mFrameSequenceIndex == 0)
+                {
+                    // Record a held logical time while this new paint still has
+                    // one frame. Growth must select B without a resume/seek repair.
+                    player->SetTime(doc, ImmCore::piTick::FromSeconds(1.1 / 30.0), ImmCore::piTick(1));
+                    mFrameSequenceIndex = 1; mStandaloneTerminalFrame = frame; return;
+                }
+                if (player->QueueDrawingCreation(doc, mPaintCreationLayer, mCreatedDrawingId) != 0 ||
+                    queueGeometry(mCreatedDrawingId, 32, -0.5f) != 0)
+                { fail(L"second drawing geometry failed"); return; }
+                std::vector<uint64_t> frames(10000);
+                for (size_t index = 0; index < frames.size(); ++index) frames[index] = (index & 1) ? mCreatedDrawingId : mPaintCreationHandle;
+                if (player->QueueFrameSequence(doc, mPaintCreationLayer, std::move(frames)) != 0)
+                { fail(L"new paint animation queue failed"); return; }
+            }
+            else
+            {
+                if (createdInfo.paintNumDrawings != 2 || createdInfo.paintNumFrames != 10000 ||
+                    !player->GetDrawingBBox(doc, mPaintCreationLayer, 1, mFrameSequenceBoxB))
+                { fail(L"new paint animation registry failed"); return; }
+                const auto held = player->GetRenderPerformanceSnapshot();
+                if (!createdInfo.isVisible || !createdInfo.hasBBox ||
+                    !iSubtreeBoxesMatch(createdInfo.bbox, mFrameSequenceBoxB) ||
+                    held.numPaintDrawCalls != mFrameSequenceDrawCalls || held.numTriangles <= mFrameSequenceTrianglesA)
+                { fail(L"one-frame held time was not preserved during growth"); return; }
+                log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT] heldBeforeGrowth=1 selectedBWithoutSeek=1 triangles=%d", held.numTriangles);
+                player->SetTime(doc, ImmCore::piTick(0), ImmCore::piTick(1));
+                mFrameSequenceStage = 6; mStandaloneTerminalFrame = frame; return;
+            }
+            int32_t result = -99; mRevision = player->CommitEdits(doc, &result);
+            if (!mRevision || result != 0) { fail(L"new paint geometry/table commit failed"); return; }
+            ++mFrameSequenceStage; mStandaloneTerminalFrame = 0; return;
+        }
+        if (mFrameSequenceStage == 10)
+        {
+            if (frame < mStandaloneTerminalFrame + 3) return;
+            ImmCore::piTick position(0), stopped(0);
+            player->GetTime(doc, &position, &stopped);
+            if (position != ImmCore::piTick(0) || state.mPlaybackState != ImmPlayer::Player::PlaybackState::Paused)
+            { fail(L"rewind did not complete before automatic playback"); return; }
+            mFrameSequencePlayingPreviousTime = ImmCore::piTick::CastInt(position);
+            player->Resume(doc);
+            mFrameSequenceStage = 11;
+            return;
+        }
+        if (mFrameSequenceStage == 11)
+        {
+            // No SetTime calls occur after Resume. Read the same player clock
+            // used to evaluate this completed render and observe both drawings.
+            if (state.mPlaybackState == ImmPlayer::Player::PlaybackState::Paused) return;
+            if (state.mPlaybackState != ImmPlayer::Player::PlaybackState::Playing)
+            { fail(L"new paint did not remain playing"); return; }
+            ImmCore::piTick position(0), stopped(0);
+            player->GetTime(doc, &position, &stopped);
+            const int64_t ticks = ImmCore::piTick::CastInt(position);
+            if (ticks < mFrameSequencePlayingPreviousTime)
+            { fail(L"automatic playback clock moved backwards"); return; }
+            mFrameSequencePlayingAdvanced = mFrameSequencePlayingAdvanced || ticks > mFrameSequencePlayingPreviousTime;
+            mFrameSequencePlayingPreviousTime = ticks;
+            const uint64_t clockFrame = ImmCore::piTick::ToFramesFloor(position, 30);
+            if (clockFrame >= 10000) { fail(L"automatic playback exhausted finite test table"); return; }
+            const bool b = (clockFrame & 1) != 0;
+            const auto perf = player->GetRenderPerformanceSnapshot();
+            uint64_t aHandle = 0, bHandle = 0, mapped = 0;
+            if (!found || !createdInfo.isVisible || !createdInfo.hasBBox || createdInfo.paintNumDrawings != 2 ||
+                createdInfo.paintNumFrames != 10000 ||
+                !player->GetDrawingHandle(doc, mPaintCreationLayer, 0, aHandle) || aHandle != mPaintCreationHandle ||
+                !player->GetDrawingHandle(doc, mPaintCreationLayer, 1, bHandle) || bHandle != mCreatedDrawingId ||
+                !player->GetFrameDrawingHandle(doc, mPaintCreationLayer, static_cast<int>(clockFrame), mapped) ||
+                mapped != (b ? mCreatedDrawingId : mPaintCreationHandle) ||
+                !iSubtreeBoxesMatch(createdInfo.bbox, b ? mFrameSequenceBoxB : mFrameSequenceBoxA) ||
+                perf.numPaintDrawCalls != mFrameSequenceDrawCalls ||
+                perf.numTriangles != (b ? mFrameSequenceTrianglesB : mFrameSequenceTrianglesA))
+            { fail(L"automatic playback selection or real render diverged from clock"); return; }
+            const uint32_t observed = b ? 2u : 1u;
+            if ((mFrameSequencePlayingDrawings & observed) == 0)
+                log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT] autoSample drawing=%d clockFrame=%llu ticks=%lld triangles=%d playing=1 bounds=1 siblingStable=1",
+                    b ? 1 : 0, static_cast<unsigned long long>(clockFrame), static_cast<long long>(ticks), perf.numTriangles);
+            mFrameSequencePlayingDrawings |= observed;
+            if (mFrameSequencePlayingDrawings == 3 && mFrameSequencePlayingAdvanced)
+            {
+                mStandaloneSuccessful = true; mMeasured = true;
+                log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT] pass=1 alternating=4 frames=10000 defaultVisibility=1 finiteRepeat=1 autoPlaying=1 advanced=1 bothDrawings=1");
+            }
+            return;
+        }
+        if (frame < mStandaloneTerminalFrame + 3) return;
+        const bool b = (mFrameSequenceStage & 1) != 0;
+        const auto perf = player->GetRenderPerformanceSnapshot();
+        uint64_t aHandle = 0, bHandle = 0, mapped = 0;
+        if (!found || !createdInfo.isVisible || !createdInfo.hasBBox || createdInfo.paintNumDrawings != 2 || createdInfo.paintNumFrames != 10000 ||
+            !player->GetDrawingHandle(doc, mPaintCreationLayer, 0, aHandle) || aHandle != mPaintCreationHandle ||
+            !player->GetDrawingHandle(doc, mPaintCreationLayer, 1, bHandle) || bHandle != mCreatedDrawingId ||
+            !player->GetFrameDrawingHandle(doc, mPaintCreationLayer, mFrameSequenceStage - 6, mapped) ||
+            mapped != (b ? mCreatedDrawingId : mPaintCreationHandle) ||
+            !iSubtreeBoxesMatch(createdInfo.bbox, b ? mFrameSequenceBoxB : mFrameSequenceBoxA) ||
+            perf.numPaintDrawCalls != mFrameSequenceDrawCalls)
+        { fail(L"new paint alternating selection/bounds/handles failed"); return; }
+        if (mFrameSequenceStage == 7) mFrameSequenceTrianglesB = perf.numTriangles;
+        if (perf.numTriangles != (b ? mFrameSequenceTrianglesB : mFrameSequenceTrianglesA) ||
+            (b && mFrameSequenceTrianglesB <= mFrameSequenceTrianglesA))
+        { fail(L"new paint did not alternate real triangles"); return; }
+        log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE_NEW_PAINT] sample=%d drawing=%d triangles=%d bounds=1 visible=1 siblingStable=1",
+            mFrameSequenceStage - 6, b ? 1 : 0, perf.numTriangles);
+        if (mFrameSequenceStage == 9)
+        {
+            // Rewind once, then let normal playback advance without seeking.
+            player->SetTime(doc, ImmCore::piTick(0), ImmCore::piTick(1));
+            mFrameSequenceStage = 10; mStandaloneTerminalFrame = frame;
+            return;
+        }
+        ++mFrameSequenceStage;
+        player->SetTime(doc, ImmCore::piTick::FromSeconds((static_cast<double>(mFrameSequenceStage - 6) + 0.1) / 30.0), ImmCore::piTick(1));
+        mStandaloneTerminalFrame = frame;
+    }
+
+    void LiveEditValidation::TickFrameSequenceBundle(Viewer & viewer, ImmCore::piLog * log, uint64_t frame)
+    {
+        ImmPlayer::Player * player = viewer.GetPlayer();
+        const auto fail = [&](const wchar_t * reason) {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE_BUNDLE] pass=0 stage=%d reason=%s", mFrameSequenceIndex, reason);
+            mMeasured = true;
+        };
+        const SubtreeLayerSnapshot * target = nullptr;
+        ImmPlayer::Player::LayerInfo targetInfo;
+        for (const auto & snapshot : mStandaloneLayers)
+        {
+            if (snapshot.target) target = &snapshot;
+            bool found = false;
+            for (int index = 0; index < player->GetLayerCount(mDocumentId); ++index)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (!player->GetLayerInfoByIndex(mDocumentId, index, info)) { fail(L"enumeration failed"); return; }
+                if (info.id != snapshot.id) continue;
+                found = true;
+                if (snapshot.target) targetInfo = info;
+                if (info.parentId != snapshot.parent || info.childIndex != snapshot.child ||
+                    (!snapshot.target && (info.paintNumDrawings != static_cast<int>(snapshot.handles.size()) ||
+                    info.paintNumStrokes != snapshot.strokes || info.hasBBox != snapshot.hasBox ||
+                    (snapshot.hasBox && !iSubtreeBoxesMatch(info.bbox, snapshot.box)))))
+                { fail(L"sibling or hierarchy changed"); return; }
+                if (!snapshot.target)
+                    for (size_t drawing = 0; drawing < snapshot.handles.size(); ++drawing)
+                    {
+                        uint64_t handle = 0; ImmCore::bound3 box;
+                        if (!player->GetDrawingHandle(mDocumentId, info.id, static_cast<int>(drawing), handle) ||
+                            handle != snapshot.handles[drawing] ||
+                            !player->GetDrawingBBox(mDocumentId, info.id, static_cast<int>(drawing), box) ||
+                            !iSubtreeBoxesMatch(box, snapshot.boxes[drawing]))
+                        { fail(L"sibling drawing changed"); return; }
+                    }
+            }
+            if (!found) { fail(L"layer missing"); return; }
+        }
+        if (!target) { fail(L"target missing"); return; }
+        const uint64_t a = target->handles[0], b = target->handles[1];
+        const bool expectFailure = std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr ||
+            std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_GPU") != nullptr || std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr;
+        if (mRevision == 0)
+        {
+            const uint64_t referenced = mFrameSequenceIndex == 0 ? a :
+                (mFrameSequenceIndex == 1 ? mCreatedDrawingId : (mFrameSequenceIndex == 2 ? b : a));
+            const int32_t readiness = player->QueueDrawingDeletion(mDocumentId, target->id, referenced);
+            if (readiness == -7)
+            {
+                if (!mFrameSequenceReadinessLogged)
+                    log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE] resourceReadiness=-7 waitingForResourceOwner=1");
+                mFrameSequenceReadinessLogged = true;
+                return;
+            }
+            if (readiness != -6)
+            {
+                log->Printf(LT_ERROR, L"[IMM_LIVE_FRAME_SEQUENCE_BUNDLE] referencedDeleteResult=%d stage=%d expected=-6",
+                    readiness, mFrameSequenceIndex);
+                fail(L"bundle resource readiness failed"); return;
+            }
+            if (mFrameSequenceIndex == 0)
+            {
+                if (player->QueueDrawingCreation(mDocumentId, target->id, mCreatedDrawingId) != 0)
+                { fail(L"referenced deletion accepted or creation failed"); return; }
+                std::vector<ImmPlayer::Document::AuthoringElementGeometry> elements(1);
+                auto & element = elements[0];
+                element.mBrush = ImmImporter::Element::BrushSectionType::Circle;
+                element.mVisibility = ImmImporter::Element::VisibilityType::Always;
+                element.mPoints.resize(24);
+                for (int index = 0; index < 24; ++index)
+                {
+                    const float t = static_cast<float>(index) / 23.0f;
+                    auto & point = element.mPoints[index];
+                    point.mPos = ImmCore::vec3(-2.0f + t * 0.5f, 1.5f, 0.0f);
+                    point.mNor = ImmCore::vec3(0.0f, 1.0f, 0.0f); point.mDir = ImmCore::vec3(0.0f, 0.0f, 1.0f);
+                    point.mCol = ImmCore::vec3(0.2f, 0.4f, 0.9f); point.mAlpha = 1.0f;
+                    point.mWidth = 0.01f; point.mLength = t; point.mTime = t;
+                }
+                if (player->QueueDrawingGeometry(mDocumentId, target->id, mCreatedDrawingId, std::move(elements),
+                    ImmImporter::Drawing::ColorSpace::Linear, false, 0.01f) != 0)
+                { fail(L"bundle geometry failed"); return; }
+                mFrameSequenceExpected = { mCreatedDrawingId, b, mCreatedDrawingId };
+            }
+            else if (mFrameSequenceIndex == 1) mFrameSequenceExpected = { a, b };
+            else if (mFrameSequenceIndex == 2) mFrameSequenceExpected = { a };
+            else mFrameSequenceExpected.clear();
+            if (player->QueueFrameSequence(mDocumentId, target->id, mFrameSequenceExpected) != 0)
+            { fail(L"bundle table failed"); return; }
+            if (mFrameSequenceIndex > 0 && player->QueueDrawingDeletion(mDocumentId, target->id,
+                mFrameSequenceIndex == 1 ? mCreatedDrawingId : (mFrameSequenceIndex == 2 ? b : a)) != 0)
+            { fail(L"bundle deletion failed"); return; }
+            int32_t result = -99;
+            mRevision = player->CommitEdits(mDocumentId, &result);
+            if (mRevision == 0 || result != 0) { fail(L"bundle commit failed"); return; }
+            mStandaloneTerminalFrame = 0;
+            return;
+        }
+        ImmPlayer::Document::AuthoringCommitStatus status;
+        if (!player->GetAuthoringCommitStatus(mDocumentId, mRevision, status)) { fail(L"bundle status missing"); return; }
+        const bool rejected = status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected;
+        if (!rejected && status.mState != ImmPlayer::Document::AuthoringCommitState::Presented) return;
+        if (mStandaloneTerminalFrame == 0) mStandaloneTerminalFrame = frame;
+        if (frame < mStandaloneTerminalFrame + 5) return;
+        ImmPlayer::Document::AuthoringRevisions revisions;
+        player->GetAuthoringRevisions(mDocumentId, revisions);
+        const auto perf = player->GetRenderPerformanceSnapshot();
+        const auto & expected = rejected ? target->handles : mFrameSequenceExpected;
+        if (targetInfo.paintNumFrames != static_cast<int>(expected.size())) { fail(L"bundle frame count"); return; }
+        for (size_t index = 0; index < expected.size(); ++index)
+        {
+            uint64_t handle = 0;
+            if (!player->GetFrameDrawingHandle(mDocumentId, target->id, static_cast<int>(index), handle) || handle != expected[index])
+            { fail(L"bundle frame identity"); return; }
+        }
+        if (rejected)
+        {
+            uint64_t absent = 0;
+            mStandaloneSuccessful = expectFailure && status.mResult == -10 && targetInfo.paintNumDrawings == 2 &&
+                revisions.mPresented == mStandaloneOldRevision && perf.numTriangles == mFrameSequenceTrianglesA &&
+                perf.numPaintDrawCalls == mFrameSequenceDrawCalls &&
+                !player->GetDrawingHandle(mDocumentId, target->id, 2, absent);
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE_BUNDLE] pass=%d rejected=1 result=%d unchanged=1",
+                mStandaloneSuccessful ? 1 : 0, status.mResult);
+            mMeasured = true; return;
+        }
+        const int expectedDrawings = 3 - mFrameSequenceIndex;
+        if (expectFailure || revisions.mPresented != mRevision || status.mResult != 0 ||
+            targetInfo.paintNumDrawings != expectedDrawings || targetInfo.paintNumStrokes != expectedDrawings ||
+            perf.numTriangles <= 0 || perf.numPaintDrawCalls != mFrameSequenceDrawCalls - (expectedDrawings == 0 ? 1 : 0))
+        { fail(L"bundle registry or rendered result"); return; }
+        for (int index = 0; index < expectedDrawings; ++index)
+        {
+            const uint64_t expectedHandle = index == 0 ? a : (index == 1 ? b : mCreatedDrawingId);
+            uint64_t handle = 0;
+            if (!player->GetDrawingHandle(mDocumentId, target->id, index, handle) || handle != expectedHandle)
+            { fail(L"bundle stable handles"); return; }
+        }
+        if (expectedDrawings == 0)
+        {
+            uint64_t absent = 0;
+            if (targetInfo.hasBBox || player->GetDrawingHandle(mDocumentId, target->id, 0, absent) ||
+                player->GetFrameDrawingHandle(mDocumentId, target->id, 0, absent) || perf.numTriangles >= mFrameSequenceTrianglesA)
+            { fail(L"empty drawing registry still rendered"); return; }
+        }
+        else
+        {
+            ImmCore::bound3 selectedBox;
+            if (!player->GetDrawingBBox(mDocumentId, target->id, mFrameSequenceIndex == 0 ? 2 : 0, selectedBox) ||
+                !targetInfo.hasBBox || !iSubtreeBoxesMatch(targetInfo.bbox, selectedBox) ||
+                (mFrameSequenceIndex == 0 ? perf.numTriangles <= mFrameSequenceTrianglesA :
+                    perf.numTriangles != mFrameSequenceTrianglesA))
+            { fail(L"bundle selected bounds or real triangles"); return; }
+        }
+        log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE_BUNDLE] stage=%d drawings=%d frames=%u triangles=%d siblingStable=1",
+            mFrameSequenceIndex, expectedDrawings, static_cast<unsigned int>(expected.size()), perf.numTriangles);
+        ++mFrameSequenceIndex; mRevision = 0;
+        if (mFrameSequenceIndex == 4)
+        {
+            mStandaloneSuccessful = true; mMeasured = true;
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_FRAME_SEQUENCE_BUNDLE] pass=1 createdGeometryAndTable=1 tableAndDelete=3 zeroDrawings=1");
+        }
+    }
+
     void LiveEditValidation::TickPaintCreation(Viewer & viewer, ImmCore::piLog * log, uint64_t frame,
         uint64_t requestedFrame)
     {
@@ -894,18 +1590,22 @@ namespace ExePlayer
             mStandaloneEnabled = value != nullptr && std::string(value) == "1";
             const char * paint = std::getenv("IMM_VIEWER_LIVE_CREATE_PAINT");
             mPaintCreationEnabled = paint != nullptr && std::string(paint) == "1";
+            const char * sequence = std::getenv("IMM_VIEWER_LIVE_FRAME_SEQUENCE");
+            mFrameSequenceEnabled = sequence != nullptr && std::string(sequence) == "1";
             const char * unload = std::getenv("IMM_VIEWER_LIVE_CREATE_PAINT_UNLOAD");
             mPaintCreationUnload = unload != nullptr && std::string(unload) == "1";
-            if (mStandaloneEnabled && mPaintCreationEnabled)
+            if (static_cast<int>(mStandaloneEnabled) + static_cast<int>(mPaintCreationEnabled) + static_cast<int>(mFrameSequenceEnabled) > 1)
             {
                 log->Printf(LT_ERROR, L"[IMM_LIVE_PAINT_CREATE] pass=0 stage=0 reason=conflicting standalone modes");
                 mMeasured = true;
             }
-            mStandaloneEnabled = mStandaloneEnabled || mPaintCreationEnabled;
+            mStandaloneEnabled = mStandaloneEnabled || mPaintCreationEnabled || mFrameSequenceEnabled;
         }
         if (mStandaloneEnabled)
         {
-            if (mPaintCreationEnabled)
+            if (mFrameSequenceEnabled)
+                TickFrameSequence(viewer, log, frame, requestedFrame);
+            else if (mPaintCreationEnabled)
                 TickPaintCreation(viewer, log, frame, requestedFrame);
             else
                 TickSubtreeDeletion(viewer, log, frame, requestedFrame);

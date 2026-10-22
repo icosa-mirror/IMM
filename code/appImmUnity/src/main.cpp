@@ -2856,6 +2856,25 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Frame
         static_cast<uint32_t>(frameIndex), drawingId);
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSequenceSetHandles(
+    int32_t docId, int32_t layerId, const uint64_t * drawingIds, uint32_t frameCount)
+{
+    if (layerId < 0 || frameCount > IMM_AUTHORING_MAX_FRAMES_PER_SEQUENCE ||
+        (frameCount > 0 && drawingIds == nullptr))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    try
+    {
+        std::vector<uint64_t> handles;
+        if (frameCount > 0)
+            handles.assign(drawingIds, drawingIds + frameCount);
+        return iPlayer().QueueFrameSequence(docId, static_cast<uint32_t>(layerId), std::move(handles));
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
     int32_t docId, int32_t layerId, uint64_t drawingId, const ImmAuthoringDrawingGeometry *geometry)
 {
