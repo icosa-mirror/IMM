@@ -18,8 +18,9 @@ after the subsequent source defect below. Hosted acceptance is pending.
 A subsequent ownership audit found a D3D11 structured-buffer view leak (6.66);
 the fix and direct COM lifetime regression are pushed in b4a2c595. Fresh full
 validation run 39724027590 was cancelled after the playback regressions in 6.67
-were established. The local playback correction and regressions now pass; a fresh
-full validation run is required. Hosted acceptance remains pending.
+were established. Playback correction 86fd4645 is now pushed with passing local
+regressions (6.67). Fresh full run 39724961901 is queued; hosted acceptance remains
+pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
 39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
@@ -2433,7 +2434,8 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    playback-key-final-sequence/, playback-key-final-converter/ and
    playback-key-final-exports.*.
 6. Run 39724027590 is terminal completed/cancelled after source regressions were
-   established; a fresh full run is required. No new live ABI or managed cutover is
+   established. Fix 86fd4645 is pushed; fresh full run 39724961901 is queued.
+   No new live ABI or managed cutover is
    claimed. Group/root Loop keys still mutate canonical timeline repeat state;
    correction remains pending with explicit root self-wrapped-clock and nested
    chapter/Stop/Continue evidence. This milestone does not close M1/M2 or the plan.
