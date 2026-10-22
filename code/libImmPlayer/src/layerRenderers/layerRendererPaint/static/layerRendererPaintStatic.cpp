@@ -797,16 +797,17 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
             const DrawingStatic * selectedDrawing = dynamic_cast<const DrawingStatic *>(dr);
             const bool geometryMatches = selectedInfo != nullptr && selectedDrawing != nullptr &&
                 selectedInfo->mGeometry == selectedDrawing->GetGeometry();
+            const int inFrustum = boxInFrustum(frus, bbox) != 0 ? 1 : 0;
             if (geometryMatches)
                 log->Printf(LT_MESSAGE,
-                    L"[IMM_LIVE_EDIT_FRAME] sample=%llu layer=%u revision=%llu rendererToken=%u geometryMatch=1",
+                    L"[IMM_LIVE_EDIT_FRAME] sample=%llu layer=%u revision=%llu rendererToken=%u geometryMatch=1 inFrustum=%d",
                     static_cast<unsigned long long>(mPresentationSample), la->GetID(),
-                    static_cast<unsigned long long>(dr->GetAuthoringRevision()), id);
+                    static_cast<unsigned long long>(dr->GetAuthoringRevision()), id, inFrustum);
             else
                 log->Printf(LT_ERROR,
-                    L"[IMM_LIVE_EDIT_FRAME] sample=%llu layer=%u revision=%llu rendererToken=%u geometryMatch=0",
+                    L"[IMM_LIVE_EDIT_FRAME] sample=%llu layer=%u revision=%llu rendererToken=%u geometryMatch=0 inFrustum=%d",
                     static_cast<unsigned long long>(mPresentationSample), la->GetID(),
-                    static_cast<unsigned long long>(dr->GetAuthoringRevision()), id);
+                    static_cast<unsigned long long>(dr->GetAuthoringRevision()), id, inFrustum);
         }
 
         // layer frustum culling

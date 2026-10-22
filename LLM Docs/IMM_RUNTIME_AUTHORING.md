@@ -194,8 +194,9 @@ The live acceptance targets remain:
    layer is rebuilt, and interactive commits do not encode and parse IMM bytes.
 
 The [exporter benchmark](../code/appImmUnity/tests/exporter_benchmark.py) currently records the
-compile-and-reload comparison. The proposed live cases and matched median/p95 acceptance
-results are still missing. Functional viewer probes do not establish those latency targets.
+compile-and-reload comparison. Roadmap section 6.49 adds a repeated matched
+single-drawing geometry publication benchmark; broader live-case and end-to-end
+acceptance remain open. Functional viewer probes alone do not establish latency targets.
 
 Roadmap section 6.48 adds internal monotonic timestamps at native Commit entry and
 first Preparing/Prepared/Presented/Rejected transitions. The shared opt-in viewer
@@ -215,6 +216,19 @@ from this timing-only change was identified within that diagnostic comparison.
 The historical difference remains unclassified. The benchmark now accepts explicit
 binary paths and retains hashes, raw stage samples and nearest-rank p95. Stage sums
 remain distinct from end-to-end wall-clock and rendered presentation measurements.
+
+The matched v2 workload references every drawing, waits for complete CPU residency,
+then holds playback at frame zero. Five warmups and 30 measured geometry edits on
+Windows DirectX / RTX 4090 give publication median/p95 in ms: Small
+0.1293/0.2066, Medium 0.08235/0.2291, Large 0.08705/0.1611. Decoded inventories,
+resident stroke counts (10/400/4,000), target revision in-frustum geometry traces,
+unchanged sampled unrelated revisions and render/capture gates pass. The first
+attempt's drawing-zero-only frame mappings narrowed residency; its timings are
+rejected. Matched compile/reload summed-stage medians are 1.376/54.199/836.243 ms,
+with a different endpoint; no speedup ratio or displayed-frame improvement is claimed.
+The new Windows CI smoke checks correctness without a hardware latency threshold.
+This closes the missing repeated publication measurement for this one operation and
+backend, while the other M1/A1 acceptance requirements remain open.
 
 ## 5. Live document architecture and identity
 

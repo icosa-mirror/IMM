@@ -222,6 +222,31 @@ jobs:
       shell: pwsh
       run: python code/appImmUnity/tests/viewpoint_policy_smoke.py --msbuild (Get-Command msbuild).Source
 
+    - name: Verify repeated live edit publication and visible target revisions
+      shell: pwsh
+      run: |
+        python tests/tools/test_live_edit_benchmark_report.py
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python code/appImmUnity/tests/exporter_benchmark.py --live-workload --warmup 1 --repeat 3 --cases small --json artifacts/live-benchmark-ci-baseline.json --keep artifacts/live-benchmark-ci-files
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python code/appImmUnity/tests/live_edit_benchmark.py --cases small --viewer code/appImmViewer/exe/appImmViewer_Release.exe --baseline artifacts/live-benchmark-ci-baseline.json --fixtures artifacts/live-benchmark-ci-files --output-dir artifacts/live-benchmark-ci --samples 3 --warmup 1
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Upload Windows live edit publication evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: WindowsLiveEditBenchmark
+        if-no-files-found: ignore
+        path: |
+          artifacts/live-benchmark-ci-baseline.json
+          artifacts/live-benchmark-ci/provenance.json
+          artifacts/live-benchmark-ci/report.json
+          artifacts/live-benchmark-ci/small/debug.txt
+          artifacts/live-benchmark-ci/small/capture.ppm
+          artifacts/live-benchmark-ci/small/settings.json
+          artifacts/live-benchmark-ci/small/stdout.log
+
     - name: Verify IMM content baseline
       shell: pwsh
       run: python tests\tools\verify_imm_baseline.py exampleImmFiles\sample1.imm --baseline tests\baselines\content\sample1.json --write-actual artifacts\baseline-content\sample1.actual.json

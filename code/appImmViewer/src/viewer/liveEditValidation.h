@@ -22,8 +22,25 @@ namespace ExePlayer
         void Reset(void);
         void Tick(Viewer & viewer, ImmCore::piLog * log, uint64_t frame,
             bool enabled, uint64_t requestedFrame);
+        bool IsBenchmarkEnabled() const { return mBenchmarkEnabled; }
+        bool IsBenchmarkFinished() const { return mBenchmarkEnabled && mMeasured; }
+        bool IsBenchmarkSuccessful() const
+        { return IsBenchmarkFinished() && mBenchmarkIteration == mBenchmarkWarmup + mBenchmarkSamples; }
 
     private:
+        void TickBenchmark(Viewer & viewer, ImmCore::piLog * log, uint64_t frame, uint64_t requestedFrame);
+        bool mBenchmarkConfigured = false;
+        bool mBenchmarkEnabled = false;
+        bool mBenchmarkPending = false;
+        bool mBenchmarkPlaybackReady = false;
+        bool mBenchmarkSeeked = false;
+        uint32_t mBenchmarkPoints = 0;
+        uint32_t mBenchmarkSamples = 30;
+        uint32_t mBenchmarkWarmup = 5;
+        uint32_t mBenchmarkIteration = 0;
+        uint64_t mBenchmarkPreviousRevision = 0;
+        double mBenchmarkQueueMs = 0;
+        double mBenchmarkCommitCallMs = 0;
         bool mApplied = false;
         bool mMeasured = false;
         bool mCreationQueued = false;

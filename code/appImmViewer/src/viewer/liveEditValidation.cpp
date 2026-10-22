@@ -61,12 +61,180 @@ namespace ExePlayer
         *this = LiveEditValidation{};
     }
 
+    void LiveEditValidation::TickBenchmark(Viewer & viewer, ImmCore::piLog * log,
+        uint64_t frame, uint64_t requestedFrame)
+    {
+        if (mMeasured || frame < requestedFrame) return;
+        ImmPlayer::Player* player = viewer.GetPlayer();
+        const auto fail = [&](const wchar_t* reason)
+        {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_BENCHMARK_ERROR] frame=%llu iteration=%u %ls",
+                static_cast<unsigned long long>(frame), mBenchmarkIteration, reason);
+            mMeasured = true;
+        };
+        if (mDocumentId < 0)
+        {
+            const int docId = viewer.GetPrimaryDocumentId();
+            if (docId < 0 || !viewer.IsDocumentLoaded(docId)) return;
+            uint64_t drawings = 0, frames = 0, loadedStrokes = 0;
+            uint32_t paintLayers = 0;
+            for (int i = 0; i < player->GetLayerCount(docId); ++i)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(docId, i, info) &&
+                    info.type == static_cast<int>(ImmImporter::Layer::Type::Paint))
+                {
+                    if (mLayerId < 0) mLayerId = info.id;
+                    ++paintLayers;
+                    drawings += static_cast<uint64_t>(info.paintNumDrawings);
+                    frames += static_cast<uint64_t>(info.paintNumFrames);
+                    loadedStrokes += static_cast<uint64_t>(info.paintNumStrokes);
+                }
+            }
+            // These benchmark fixtures contain exactly one stroke per drawing.
+            // IsDocumentLoaded only guarantees the initial five-second buffer;
+            // let the importer finish its asynchronous remainder before editing.
+            if (drawings == 0 || loadedStrokes != drawings) return;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_BENCHMARK_CORPUS] paintLayers=%u drawings=%llu frames=%llu loadedStrokes=%llu",
+                paintLayers, static_cast<unsigned long long>(drawings), static_cast<unsigned long long>(frames),
+                static_cast<unsigned long long>(loadedStrokes));
+            if (mLayerId < 0 || !player->AttachEditing(docId) ||
+                !player->GetDrawingHandle(docId, mLayerId, 0, mOriginalDrawingId))
+            { fail(L"attach or first drawing lookup failed"); return; }
+            mDocumentId = docId;
+            // Preserve references to every drawing while measuring a stable active
+            // drawing. Replacing every frame mapping with zero would shrink CPU residency.
+            player->Pause(docId);
+            return;
+        }
+        if (!mBenchmarkSeeked)
+        {
+            // Pause is queued; seek only after the next frame has consumed it.
+            player->SetTime(mDocumentId, ImmCore::piTick(0), ImmCore::piTick(1));
+            mBenchmarkSeeked = true;
+            return;
+        }
+        ImmCore::piTick position(0), stopped(0);
+        player->GetTime(mDocumentId, &position, &stopped);
+        if (position != ImmCore::piTick(0) || stopped <= ImmCore::piTick(0))
+        { fail(L"benchmark playback did not remain held at frame zero"); return; }
+        if (!mBenchmarkPlaybackReady)
+        {
+            mBenchmarkPlaybackReady = true;
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_BENCHMARK_PLAYBACK] position=0 pausedFrame=0");
+        }
+        ImmPlayer::Document::AuthoringRevisions revisions;
+        if (!player->GetAuthoringRevisions(mDocumentId, revisions))
+        { fail(L"revision query failed"); return; }
+        if (mBenchmarkPending)
+        {
+            ImmPlayer::Document::AuthoringCommitStatus status;
+            if (!player->GetAuthoringCommitStatus(mDocumentId, mRevision, status) ||
+                revisions.mRequested != mRevision ||
+                (revisions.mPrepared != mBenchmarkPreviousRevision && revisions.mPrepared != mRevision) ||
+                (revisions.mPresented != mBenchmarkPreviousRevision && revisions.mPresented != mRevision))
+            { fail(L"unexpected revision history"); return; }
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_BENCHMARK_FRAME] frame=%llu requested=%llu prepared=%llu presented=%llu",
+                static_cast<unsigned long long>(frame), static_cast<unsigned long long>(revisions.mRequested),
+                static_cast<unsigned long long>(revisions.mPrepared), static_cast<unsigned long long>(revisions.mPresented));
+            if (status.mState == ImmPlayer::Document::AuthoringCommitState::Rejected)
+            { fail(L"commit rejected"); return; }
+            if (status.mState != ImmPlayer::Document::AuthoringCommitState::Presented) return;
+            const bool timingValid = status.mCommitStartedNs != 0 &&
+                status.mPreparingNs >= status.mCommitStartedNs && status.mPreparedNs >= status.mPreparingNs &&
+                status.mPresentedNs >= status.mPreparedNs && status.mRejectedNs == 0;
+            ImmCore::bound3 box;
+            const float targetY = 1.5f + (mBenchmarkIteration % 2 == 0 ? 0.02f : 0.0f);
+            if (!timingValid || revisions.mPresented != mRevision || revisions.mPrepared != mRevision ||
+                !player->GetDrawingBBox(mDocumentId, mLayerId, 0, box) ||
+                std::fabs((box.mMinY + box.mMaxY) * 0.5f - targetY) > 0.0001f)
+            { fail(L"publication timing or drawing bounds mismatch"); return; }
+            const auto elapsedMs = [&](uint64_t end)
+            { return static_cast<double>(end - status.mCommitStartedNs) / 1000000.0; };
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_BENCHMARK] iteration=%u sample=%d warmup=%d points=%u layer=%d revision=%llu status=4 queueMs=%.6f commitCallMs=%.6f commitToPreparingMs=%.6f commitToFirstPreparedMs=%.6f commitToPresentedMs=%.6f",
+                mBenchmarkIteration, static_cast<int>(mBenchmarkIteration) - static_cast<int>(mBenchmarkWarmup),
+                mBenchmarkIteration < mBenchmarkWarmup ? 1 : 0, mBenchmarkPoints, mLayerId,
+                static_cast<unsigned long long>(mRevision), mBenchmarkQueueMs, mBenchmarkCommitCallMs,
+                elapsedMs(status.mPreparingNs), elapsedMs(status.mPreparedNs), elapsedMs(status.mPresentedNs));
+            ++mBenchmarkIteration;
+            mBenchmarkPending = false;
+            if (mBenchmarkIteration == mBenchmarkWarmup + mBenchmarkSamples)
+            {
+                log->Printf(LT_MESSAGE, L"[IMM_LIVE_BENCHMARK_DONE] samples=%u warmup=%u points=%u",
+                    mBenchmarkSamples, mBenchmarkWarmup, mBenchmarkPoints);
+                mMeasured = true;
+            }
+            return; // A separate rendered frame precedes the next queue operation.
+        }
+        std::vector<ImmPlayer::Document::AuthoringElementGeometry> elements(1);
+        auto& element = elements[0];
+        element.mBrush = ImmImporter::Element::BrushSectionType::Circle;
+        element.mVisibility = ImmImporter::Element::VisibilityType::Always;
+        element.mPoints.resize(mBenchmarkPoints);
+        for (uint32_t i = 0; i < mBenchmarkPoints; ++i)
+        {
+            const float t = static_cast<float>(i) / static_cast<float>(mBenchmarkPoints - 1);
+            auto& point = element.mPoints[i];
+            point.mPos = ImmCore::vec3(2.0f + t * 0.5f, 1.5f + (mBenchmarkIteration % 2 == 0 ? 0.02f : 0.0f), 0.0f);
+            point.mNor = ImmCore::vec3(0.0f, 1.0f, 0.0f);
+            point.mDir = ImmCore::vec3(0.0f, 0.0f, 1.0f);
+            point.mCol = ImmCore::vec3(0.2f, 0.4f, 0.9f);
+            point.mAlpha = 1.0f; point.mWidth = 0.01f; point.mLength = t; point.mTime = t;
+        }
+        using Clock = std::chrono::steady_clock;
+        const auto begin = Clock::now();
+        const int result = player->QueueDrawingGeometry(mDocumentId, static_cast<uint32_t>(mLayerId),
+            mOriginalDrawingId, std::move(elements), ImmImporter::Drawing::ColorSpace::Gamma, false, 0.01f);
+        const auto queued = Clock::now();
+        mBenchmarkPreviousRevision = revisions.mPresented;
+        mRevision = result == 0 ? player->CommitEdits(mDocumentId) : 0;
+        const auto committed = Clock::now();
+        if (mRevision == 0) { fail(L"queue or commit failed"); return; }
+        mBenchmarkQueueMs = std::chrono::duration<double, std::milli>(queued - begin).count();
+        mBenchmarkCommitCallMs = std::chrono::duration<double, std::milli>(committed - queued).count();
+        mBenchmarkPending = true;
+    }
+
     void LiveEditValidation::Tick(Viewer & viewer, ImmCore::piLog * log,
         uint64_t frame, bool enabled, uint64_t requestedFrame)
     {
         if (!enabled || log == nullptr)
             return;
 
+        if (!mBenchmarkConfigured)
+        {
+            mBenchmarkConfigured = true;
+            const char* points = std::getenv("IMM_VIEWER_LIVE_BENCHMARK_POINTS");
+            mBenchmarkEnabled = points != nullptr && points[0] != 0;
+            if (mBenchmarkEnabled)
+            {
+                const auto parse = [](const char* name, uint32_t fallback, uint32_t minimum, uint32_t maximum, uint32_t& out)
+                {
+                    const char* value = std::getenv(name);
+                    if (value == nullptr || value[0] == 0) { out = fallback; return true; }
+                    char* end = nullptr;
+                    const unsigned long number = std::strtoul(value, &end, 10);
+                    if (end == value || *end != 0 || number < minimum || number > maximum) return false;
+                    out = static_cast<uint32_t>(number);
+                    return true;
+                };
+                if (!parse("IMM_VIEWER_LIVE_BENCHMARK_POINTS", 0, 2, 4096, mBenchmarkPoints) ||
+                    !parse("IMM_VIEWER_LIVE_BENCHMARK_SAMPLES", 30, 1, 1000, mBenchmarkSamples) ||
+                    !parse("IMM_VIEWER_LIVE_BENCHMARK_WARMUP", 5, 0, 1000, mBenchmarkWarmup))
+                {
+                    log->Printf(LT_ERROR, L"[IMM_LIVE_BENCHMARK_ERROR] invalid benchmark configuration");
+                    mMeasured = true;
+                }
+            }
+        }
+        if (mBenchmarkEnabled)
+        {
+            TickBenchmark(viewer, log, frame, requestedFrame);
+            return;
+        }
         ImmPlayer::Player * player = viewer.GetPlayer();
         if (!mApplied)
         {

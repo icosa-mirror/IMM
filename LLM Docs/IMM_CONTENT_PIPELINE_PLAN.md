@@ -19,8 +19,10 @@ URP/non-XR Firebase, Android Vulkan, Windows DirectX/Vulkan and Godot iOS Metal.
 Sound-import run 39669262483 completed its first attempt with an Android SDK
 CMake archive failure before project compilation and missing dependent validation
 evidence. macOS/iOS builds and all three iOS visual gates passed. Its single
-targeted retry has passed Android; dependent validation is still running as attempt 2
-(section 6.48).
+targeted retry has passed Android, but downstream Android Vulkan validation now
+fails because required Firebase log markers and captures are absent despite both
+Firebase jobs reporting success. This remains unresolved and is under investigation;
+no further retry has been requested (section 6.49).
 Later APIs still need their own platform/package acceptance;
 hosted success does not establish skipped hardware gates or full content fidelity.
 Confirmed regressions take priority over new feature work. See section 6.26.
@@ -1795,6 +1797,46 @@ replacement-run closure in section 6.26 (20:23 UTC):
    Android job 119554846760: the original SDK archive failure is cleared by its
    sole targeted retry. Downstream Unity/device/engine validation remains active;
    the full run is not yet passing/complete. This instrumentation needs fresh CI.
+
+### 6.49. Repeated matched live publication benchmark (2026-10-22)
+
+1. Added repeated single-drawing geometry publication measurements
+   against the Small/Medium/Large compile/reload corpus. Initial frame mappings
+   referenced only drawing zero, narrowing player residency despite retaining
+   serialized drawings; those timings are rejected as acceptance evidence.
+2. Corrected fixtures reference every drawing and hold playback at frame zero.
+   Large initially exposed the importer's five-second initial buffer followed by
+   asynchronous remaining drawing loads. Benchmark startup now waits for every
+   expected single-stroke drawing to be resident. Decoded reader inventory verifies
+   every frame reference, drawing, stroke and point count. The report requires
+   paused-at-zero playback, each target revision's in-frustum model/renderer
+   geometry match, unchanged sampled unrelated revisions and positive render/capture
+   checks. It rejects missing, invalid or inconsistent measurements.
+3. Windows DirectX / RTX 4090, five warmups then 30 measured edits: publication
+   median/p95 in ms is Small 0.1293/0.2066, Medium 0.08235/0.2291 and Large
+   0.08705/0.1611. Resident strokes are 10/400/4,000; points are
+   160/12,800/256,000. Matched compile/reload summed-stage medians are
+   1.376/54.199/836.243 ms. These endpoints differ; no speedup ratio is claimed.
+   Publication excludes ABI copying, display latency, GPU completion and retirement.
+   This is one geometry operation/backend, not A1/M1 or full roadmap acceptance.
+4. Added a required Windows correctness smoke with one warmup/three measured
+   Small edits and retained provenance/log/capture artifacts. It checks correctness
+   without machine-dependent latency thresholds. Native viewer build, nine report
+   guard tests, existing live-validation contract, full converter suite, native
+   chapter/early-stop policy, Windows exports (121 player/51 reader) and the exact
+   new CI command pass locally. Evidence: ignored artifacts/live-benchmark-v2-*
+   and artifacts/live-benchmark-ci-*; failed v1/pilot timings remain inconclusive.
+5. Timing run 39698167460 and clock run 39696568808 have passed Windows and
+   Android but remain incomplete. Sound-import run 39669262483 attempt 2 has
+   cleared its original Android SDK archive failure, but Android Vulkan job
+   119565006528 failed: required Firebase markers and captures are missing.
+   Upstream Firebase jobs 119561639997 and 119561639999 report success. This
+   new evidence failure is unresolved; independent producer/collector investigation
+   takes priority. Producer summary has passed=false despite gcloud exit zero.
+   Early missing-buffer messages are followed by offscreen target creation and
+   successful native paint submissions; they do not establish the final cause.
+   The smoke readiness check still fails afterward. The one targeted retry has
+   already been used.
 
 ## 7. Consolidated documents
 

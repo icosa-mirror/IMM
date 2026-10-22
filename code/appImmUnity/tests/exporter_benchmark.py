@@ -64,13 +64,21 @@ Point = smoke.Point
 Transform = smoke.Transform
 
 
-def make_points(stroke_index: int, point_count: int) -> tuple:
+class StrokeInfo(ctypes.Structure):
+    _fields_ = [('brush', ctypes.c_int), ('visibility', ctypes.c_int),
+                ('points', ctypes.c_int), ('bounds', ctypes.c_float * 6)]
+
+
+def make_points(stroke_index: int, point_count: int, live_workload: bool = False, y_shift: float = 0.0) -> tuple:
     points = []
     for point_index in range(point_count):
         t = 0.0 if point_count <= 1 else point_index / (point_count - 1.0)
+        if live_workload:
+            t = ctypes.c_float(t).value  # Match the native benchmark's float division before x/length/time.
         points.append(
             Point(
-                t, 0.0, stroke_index * 0.002,
+                2.0 + t * 0.5 if live_workload else t,
+                1.5 + y_shift if live_workload else 0.0, stroke_index * 0.002,
                 0.0, 1.0, 0.0,
                 0.0, 0.0, 1.0,
                 0.2 + (stroke_index % 5) * 0.15, 0.4, 0.9,
@@ -119,7 +127,8 @@ class Exporter:
         self.destroy_memory = smoke.bind(library, "ImmExporter_DestroyMemory", None, ctypes.c_void_p)
 
 
-def build_case(exporter: Exporter, case: dict, output_path: Path, reader: ctypes.CDLL) -> dict:
+def build_case(exporter: Exporter, case: dict, output_path: Path, reader: ctypes.CDLL,
+               live_workload: bool = False, edit_shift: float = 0.0) -> dict:
     """Build one corpus case, returning per-stage milliseconds and byte sizes.
 
     Also times the two ways a caller can hand the compiled bytes back to a reader:
@@ -131,7 +140,7 @@ def build_case(exporter: Exporter, case: dict, output_path: Path, reader: ctypes
     layers = case["layers"]
     strokes = case["strokes"]
     point_count = case["points"]
-    frames = case["frames"]
+    frames = max(case["frames"], strokes) if live_workload else case["frames"]
 
     stages = {name: 0.0 for name in
               ("create", "layers", "drawings", "points", "bounds", "frames",
@@ -149,7 +158,7 @@ def build_case(exporter: Exporter, case: dict, output_path: Path, reader: ctypes
             layer = smoke.require(
                 exporter.create_paint_layer(
                     sequence, None, f"Paint {layer_index}".encode(), 1, 1.0,
-                    ctypes.byref(identity), ctypes.byref(identity), 1, 0, 0),
+                    ctypes.byref(identity), ctypes.byref(identity), 0 if live_workload else 1, 0, 0),
                 "ImmExporter_CreatePaintLayer")
             stages["layers"] += (time.perf_counter() - start) * 1000.0
 
@@ -162,7 +171,8 @@ def build_case(exporter: Exporter, case: dict, output_path: Path, reader: ctypes
                 smoke.require(exporter.element_init(element, point_count, 2, 1), "ImmExporter_ElementInit")
                 stages["drawings"] += (time.perf_counter() - start) * 1000.0
 
-                points = make_points(stroke_index, point_count)
+                points = make_points(stroke_index, point_count, live_workload,
+                                     edit_shift if layer_index == 0 and stroke_index == 0 else 0.0)
                 start = time.perf_counter()
                 smoke.require(exporter.element_set_points(element, 0, points, point_count),
                               "ImmExporter_ElementSetPoints")
@@ -227,6 +237,56 @@ def decode_case(reader: ctypes.CDLL, output_path: Path) -> float:
     return elapsed
 
 
+def verify_live_corpus(reader: ctypes.CDLL, path: Path, case: dict) -> dict:
+    """Untimed inventory including round-robin references to every resident drawing."""
+    smoke.require(ctypes.sizeof(StrokeInfo) == 36, 'StrokeInfo ABI size')
+    load = smoke.bind(reader, 'StrokeReader_LoadFromFile', ctypes.c_int, ctypes.c_char_p)
+    unload = smoke.bind(reader, 'StrokeReader_Unload', None, ctypes.c_int)
+    layer_count = smoke.bind(reader, 'StrokeReader_GetLayerCount', ctypes.c_int, ctypes.c_int)
+    drawing_count = smoke.bind(reader, 'StrokeReader_GetDrawingCount', ctypes.c_int, ctypes.c_int, ctypes.c_int)
+    stroke_count = smoke.bind(reader, 'StrokeReader_GetStrokeCount', ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int)
+    stroke_info = smoke.bind(reader, 'StrokeReader_GetStrokeInfo', ctypes.c_bool, ctypes.c_int,
+                             ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.POINTER(StrokeInfo))
+    animation_info = smoke.bind(reader, 'StrokeReader_GetLayerAnimationInfo', ctypes.c_bool, ctypes.c_int, ctypes.c_int,
+                                ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+    frame_buffer = smoke.bind(reader, 'StrokeReader_GetFrameBuffer', ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                              ctypes.POINTER(ctypes.c_int), ctypes.c_int)
+    document = load(os.fsencode(path))
+    smoke.require(document > 0, 'Live fixture native inventory load')
+    try:
+        layers = layer_count(document)
+        smoke.require(layers == case['layers'], 'Live fixture native layer count')
+        drawings = strokes = points = frames = 0
+        for layer in range(layers):
+            count = drawing_count(document, layer)
+            smoke.require(count == case['strokes'], 'Live fixture retained drawing count')
+            drawings += count
+            rate, frame_count, repeat = ctypes.c_int(), ctypes.c_int(), ctypes.c_int()
+            smoke.require(animation_info(document, layer, ctypes.byref(rate), ctypes.byref(frame_count), ctypes.byref(repeat)),
+                          'Live fixture frame metadata')
+            smoke.require(frame_count.value == max(case['frames'], count), 'Live fixture all-drawing frame count')
+            mapping = (ctypes.c_int * frame_count.value)()
+            smoke.require(frame_buffer(document, layer, mapping, frame_count.value) == frame_count.value and
+                          list(mapping) == [frame % count for frame in range(frame_count.value)],
+                          'Live fixture round-robin references every drawing')
+            frames += frame_count.value
+            for drawing in range(count):
+                smoke.require(stroke_count(document, layer, drawing) == 1, 'Live fixture one stroke per drawing')
+                info = StrokeInfo()
+                smoke.require(stroke_info(document, layer, drawing, 0, ctypes.byref(info)), 'Live fixture stroke metadata')
+                smoke.require(info.brush == 2 and info.visibility == 1 and info.points == case['points'],
+                              'Live fixture Circle/Always/point count')
+                strokes += 1
+                points += info.points
+        return {'layers': layers, 'drawings': drawings, 'strokes': strokes, 'points': points, 'frames': frames,
+                'allDrawingsReferenced': True,
+                'pointsPerStroke': case['points'], 'brush': 'Circle', 'visibility': 'Always',
+                'fixtureSha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                'verificationOrigin': 'automatic native reader inventory after timed samples'}
+    finally:
+        unload(document)
+
+
 def decode_memory_case(reader: ctypes.CDLL, payload, size: int) -> float:
     """Time StrokeReader_LoadFromMemory over an already-materialized buffer."""
     load = smoke.bind(reader, "StrokeReader_LoadFromMemory", ctypes.c_int, ctypes.c_void_p, ctypes.c_int)
@@ -273,7 +333,12 @@ def main() -> int:
     parser.add_argument("--keep", type=Path, help="keep generated .imm files in this directory")
     parser.add_argument("--plugin", type=Path, help="use a specific exporter binary for matched comparisons")
     parser.add_argument("--stroke-reader", type=Path, help="use a specific reader binary for matched comparisons")
+    parser.add_argument("--live-workload", action="store_true",
+                        help="Matched live geometry; round-robin frames reference every drawing, viewer pauses at frame zero.")
+    parser.add_argument("--warmup", type=int, default=0, help="unreported warmup builds before measured iterations")
     arguments = parser.parse_args()
+    if arguments.repeat <= 0 or arguments.warmup < 0:
+        parser.error("repeat must be positive and warmup must be nonnegative")
 
     repo_root = Path(__file__).resolve().parents[3]
     plugin = arguments.plugin or repo_root / "code/appImmUnity/exe/ImmUnityPlugin.dll"
@@ -312,15 +377,37 @@ def main() -> int:
                 keep_dir.mkdir(parents=True, exist_ok=True)
 
             for name in selected:
-                case = CASES[name]
+                case = dict(CASES[name])
+                if arguments.live_workload:
+                    case['frames'] = max(case['frames'], case['strokes'])
                 samples = []
-                for iteration in range(arguments.repeat):
-                    output = (keep_dir / f"{name}.imm") if keep_dir else (staging / f"{name}-{iteration}.imm")
-                    samples.append(build_case(exporter, case, output, reader))
+                sample_hashes = []
+                sample_iterations = []
+                if arguments.live_workload:
+                    # Never overwrite the initial unedited viewer fixture with
+                    # whichever edit happened to finish the measured iterations.
+                    baseline = (keep_dir or staging) / f"{name}.imm"
+                    build_case(exporter, case, baseline, reader, live_workload=True)
+                for iteration in range(arguments.warmup + arguments.repeat):
+                    if arguments.live_workload:
+                        output = staging / f"{name}-edit-{iteration}.imm"
+                    else:
+                        output = (keep_dir / f"{name}.imm") if keep_dir else (staging / f"{name}-{iteration}.imm")
+                    shift = 0.02 if arguments.live_workload and iteration % 2 == 0 else 0.0
+                    sample = build_case(exporter, case, output, reader,
+                                        live_workload=arguments.live_workload, edit_shift=shift)
+                    if arguments.live_workload and iteration == 0 and keep_dir:
+                        smoke.shutil.copy2(output, keep_dir / f"{name}-edited.imm")
+                    if iteration >= arguments.warmup:
+                        samples.append(sample)
+                        sample_hashes.append(hashlib.sha256(output.read_bytes()).hexdigest())
+                        sample_iterations.append({"iteration": iteration, "firstDrawingY": 1.5 + shift if arguments.live_workload else 0.0})
 
                 merged = {stage: summarize([s["stages"][stage] for s in samples])
                           for stage in samples[0]["stages"]}
-                decode_path = (keep_dir / f"{name}.imm") if keep_dir else (staging / f"{name}-0.imm")
+                edit_stages = ("create", "layers", "drawings", "points", "bounds", "frames",
+                               "export-mem", "handoff-copy", "read-mem")
+                decode_path = baseline if arguments.live_workload else ((keep_dir / f"{name}.imm") if keep_dir else (staging / f"{name}-{arguments.warmup}.imm"))
                 decode = [decode_case(reader, decode_path) for _ in range(arguments.repeat)]
 
                 results[name] = {
@@ -334,7 +421,19 @@ def main() -> int:
                     "bytes": samples[0]["bytes"],
                     "fileBytes": samples[0]["fileBytes"],
                     "stages": merged,
+                    "editDocumentStageSum": summarize([sum(sample["stages"][stage] for stage in edit_stages)
+                                                        for sample in samples]),
                     "decode": summarize(decode),
+                    "nativeCorpus": verify_live_corpus(reader, decode_path, case) if arguments.live_workload else None,
+                    "workload": "matched-live-first-drawing-v2" if arguments.live_workload else "historical-full-document",
+                    "warmup": arguments.warmup,
+                    "measuredIterations": sample_iterations,
+                    "measuredFixtureSha256": sample_hashes,
+                    "changedDrawing": {"layerIndex": 0, "drawingIndex": 0, "strokes": 1,
+                                       "points": case["points"], "brush": "Circle", "visibility": "Always",
+                                       "y": [1.52, 1.5], "allDrawingsReferenced": True,
+                                       "pausedAtFrameZero": True} if arguments.live_workload else None,
+                    "measurementScope": "Stage sums include graph construction, memory serialization/copy and stroke-reader reload; no player GPU loading or displayed frame.",
                 }
         finally:
             finish_reader(reader)

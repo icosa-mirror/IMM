@@ -1984,7 +1984,10 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             // Resolve before validation so capture/readback observes the frame just rendered.
             mResolve.Do(mRenderer, nullptr, vpM, 0, mQuitFade, mColorTextureM);
 
-            if (validationEnabled && !validationDone && (uint64_t)frameid >= validationFrame)
+            if (validationEnabled && !validationDone &&
+                (liveEditValidation.IsBenchmarkEnabled() ?
+                    (liveEditValidation.IsBenchmarkFinished() || (uint64_t)frameid >= validationMaxFrame) :
+                    (uint64_t)frameid >= validationFrame))
             {
                 const size_t pixelCount = (size_t)mRenderSize.x * (size_t)mRenderSize.y;
                 uint32_t *pixels = (uint32_t*)malloc(pixelCount * sizeof(uint32_t));
@@ -2013,6 +2016,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
                     const ImmPlayer::Player::PerformanceInfo &perf = mViewer.GetPerformanceInfoForFrame();
                     const bool passed =
+                        (!liveEditValidation.IsBenchmarkEnabled() || liveEditValidation.IsBenchmarkSuccessful()) &&
                         nonZeroPixels >= validationMinNonZeroPixels &&
                         (uint64_t)perf.numDrawCalls >= validationMinDrawCalls &&
                         (uint64_t)perf.numPictureDrawCalls >= validationMinPictureDrawCalls &&
@@ -2022,7 +2026,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                         (uint64_t)perf.numTriangles >= validationMinTriangles &&
                         (!validationPlayerFrameEnabled || perf.validationTimeFrame >= validationPlayerFrame);
 
-                    if (!passed && (uint64_t)frameid < validationMaxFrame)
+                    if (!passed && (uint64_t)frameid < validationMaxFrame && !liveEditValidation.IsBenchmarkFinished())
                     {
                         free(pixels);
                     }
