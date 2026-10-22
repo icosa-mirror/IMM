@@ -82,13 +82,13 @@ private:
     ImmCore::piTArray<Layer*> mLayers; // just a flat array. Hierarchy is captured through the child pointers in LayerGroup
 	ImmCore::piTArray<Asset>  mAssetTable;
     ImmCore::vec3             mBackgroundColor;
-    Layer *          mRoot;
+    Layer *          mRoot = nullptr;
 	Type             mType;
 	uint16_t         mCaps;  // bit: can be grabbed
 
 	bool             mAnimateOnStart;
     bool             mSpawnAreaNeedsUpdate;
-    const Layer*     mInitialSpawnArea;
+    const Layer*     mInitialSpawnArea = nullptr;
     uint32_t         mFrameRate;
 
 };

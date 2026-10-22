@@ -221,6 +221,7 @@ namespace ImmImporter
 
 	private:
 		uint32_t mID;
+        bool mInitialized = false;
 		Type mType;
 		bool mVisible;
 		bool mCanonicalVisible;

@@ -1928,6 +1928,47 @@ replacement-run closure in section 6.26 (20:23 UTC):
    paint-subtree-live-regression/. Reader rebuilds had unchanged code sections;
    timestamp/debug-metadata-only binary changes were omitted.
 
+### 6.54. Paint layer creation lifecycle work (2026-10-22)
+
+1. In progress: additive Paint=1 support in the existing live LayerCreate ABI
+   (Group=0 unchanged). A new paint starts visible/identity/opacity 1 with one
+   initialized empty drawing and frame zero mapped to it, repeat 1, version 1,
+   and the document frame rate (30 when unset). This makes existing drawing edits
+   usable immediately after publication without adding a second construction ABI.
+2. Detached paint/geometry and renderer-slot preparation precede atomic hierarchy
+   and stable drawing-handle publication. Failure/unload cleanup cancels the slot
+   before destroying either drawing or the pending layer. Partial drawing buffer
+   initialization and failed drawing-vector growth now release successful allocations.
+   A real-renderer create/fill/delete probe and CPU/GPU/presentation rejection
+   checks are being added; build and acceptance remain pending.
+3. Paint subtree run 39704338933 has passed Windows and Android with no failures;
+   its five Apple jobs remain queued. Readiness run 39701694123 has the same
+   terminal/queued split. Neither run is full platform acceptance, and the older
+   Android readiness failure remains unresolved pending replacement device results.
+
+### 6.55. Layer/sequence ownership correction (2026-10-22)
+
+1. Lifecycle review found two pre-existing teardown defects: Layer::Deinit did not
+   end allocated full-name strings, and Sequence::Deinit ended its raw pointer
+   registry without deleting the registered Layer objects. Teardown now releases
+   full names, deinitializes every registered layer before deleting any, then clears
+   root/default-spawn pointers and registry storage. Explicit live deletion already
+   removes its layers from the registry, so ownership is not duplicated.
+2. Layer initialization now unwinds failed string/child storage and publishes to
+   its parent only after success. Initialization guards make failed/repeated teardown
+   safe and reject initialization of an active layer. Full-name construction checks
+   its 64-node stack limit and failed appends. Failed registry growth frees the new
+   unregistered layer; disposed registry queries are guarded.
+3. Windows native lifecycle tests pass: 64-node hierarchy accepted, next depth
+   rejected without parent mutation, failed/repeated teardown and sequence reinit
+   work, and pending-authoring unload/reload regressions pass. Current native build,
+   full converter suite, exporter bridge, DirectX paint deletion/rollback and new
+   paint creation/rejection probes pass. These are functional checks, not measured
+   allocator leak counts or every allocation-failure permutation. Evidence:
+   artifacts/layer-lifecycle-native-tests.log, paint-create-final-build.log,
+   paint-create-converter-suite.log, paint-create-bridge.log,
+   paint-create-deletion-regression/ and paint-create-renderer-run2/.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

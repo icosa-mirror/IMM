@@ -12,11 +12,45 @@ static void require(bool ok, const char* message)
 {
     if (!ok) { std::fprintf(stderr, "[IMM_AUTHORING_FAILURE_TEST] %s\n", message); std::exit(1); }
 }
+
+static void checkLayerInitialization(piLog * log)
+{
+    Sequence sequence;
+    require(sequence.Init(Sequence::Type::Comic, 0, vec3(0.0f)), "layer lifecycle sequence");
+    Layer * parent = sequence.GetRoot();
+    const auto initialize = [&](Layer * layer) {
+        return layer->Init(Layer::Type::Group, L"lifecycle", true, trans3d::identity(),
+            trans3d::identity(), 1.0f, false, piTick(0), 0, UINT32_MAX, log);
+    };
+    require(initialize(parent), "root initialization");
+    require(!initialize(parent), "active layer cannot be initialized twice");
+    for (int depth = 1; depth < 64; ++depth)
+    {
+        Layer * child = sequence.CreateLayer(parent);
+        require(child != nullptr && initialize(child), "supported full-name depth");
+        parent = child;
+    }
+    const uint32_t before = parent->GetNumChildren();
+    Layer * failed = sequence.CreateLayer(parent);
+    require(failed != nullptr && !initialize(failed), "full-name stack limit rejects safely");
+    require(parent->GetNumChildren() == before, "failed initialization never publishes child");
+    failed->Deinit(log);
+    failed->Deinit(log);
+    sequence.Deinit(log);
+    require(sequence.GetRoot() == nullptr && sequence.GetLayerStorageCount() == 0,
+        "sequence teardown clears owned registry");
+    sequence.Deinit(log);
+    require(sequence.Init(Sequence::Type::Comic, 0, vec3(0.0f)), "sequence reinitialization");
+    require(initialize(sequence.GetRoot()), "layer initialization after sequence teardown");
+    sequence.Deinit(log);
+    std::puts("[IMM_LAYER_LIFECYCLE_TEST] depth limit, unpublished failure, repeated teardown and reinitialization passed");
+}
 int wmain(int argc, wchar_t** argv)
 {
     require(argc == 2, "fixture argument");
     piLog log;
     require(log.Init(L"artifacts/authoring-failure-runtime.log", PILOG_TXT), "log init");
+    checkLayerInitialization(&log);
     Document doc;
     require(doc.Init(L"authoring-failures", 0), "document init");
     auto cpu = [&](const Document::Command* command = nullptr) {

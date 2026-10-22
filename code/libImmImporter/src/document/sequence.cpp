@@ -37,11 +37,21 @@ bool Sequence::Init(const Type & type, uint16_t caps, const vec3 & backgroundCol
 
 void Sequence::Deinit(piLog *log) 
 { 
-	// recursively destroy all resources
-	mRoot->Deinit(log); 	
-	// delete layer manager
-    mLayers.End(); 
-	mAssetTable.End();
+    // Hierarchy teardown releases implementations first. The flat registry owns
+    // the Layer allocations, including unpublished layers whose Init failed.
+    if (mRoot != nullptr)
+        mRoot->Deinit(log);
+    if (mLayers.IsInitialized())
+    {
+        for (uint64_t i = 0; i < mLayers.GetLength(); ++i)
+            mLayers.Get(i)->Deinit(log);
+        for (uint64_t i = 0; i < mLayers.GetLength(); ++i)
+            delete mLayers.Get(i);
+        mLayers.End();
+    }
+    mRoot = nullptr;
+    mInitialSpawnArea = nullptr;
+    if (mAssetTable.IsInitialized()) mAssetTable.End();
 }
 
 bool Sequence::AddAsset(uint64_t offset, uint64_t size)
@@ -91,7 +101,10 @@ Layer* Sequence::CreateLayer(Layer* parent)
 	Layer* la = new Layer(this, parent, id);
 
     if (!mLayers.Append(la, true))
+    {
+        delete la;
         return nullptr;
+    }
 
 
     return la;
@@ -178,18 +191,19 @@ bool Sequence::RemovePublishedLayers(Layer * const * layers, uint32_t count)
 
 uint32_t Sequence::GetLayerStorageCount(void) const
 {
-    return static_cast<uint32_t>(mLayers.GetLength());
+    return mLayers.IsInitialized() ? static_cast<uint32_t>(mLayers.GetLength()) : 0;
 }
 
 
 bool Sequence::Recurse(VisitorF v, bool doNotRecurseCollapsedGroups, bool doNotRecurseHiddenGroups, bool doNotRecurseLockedGroups, bool doPostExec)
 {
-    return mRoot->Recurse(v, 0, 0, false, doNotRecurseCollapsedGroups, doNotRecurseHiddenGroups, doNotRecurseLockedGroups, doPostExec);
+    return mRoot != nullptr && mRoot->Recurse(v, 0, 0, false, doNotRecurseCollapsedGroups, doNotRecurseHiddenGroups, doNotRecurseLockedGroups, doPostExec);
 }
 
 
 Layer* Sequence::FindLayerByFullName(const wchar_t* name)
 {
+    if (!mLayers.IsInitialized()) return nullptr;
     const uint64_t num = mLayers.GetLength();
     for (uint64_t i = 0; i < num; i++)
     {

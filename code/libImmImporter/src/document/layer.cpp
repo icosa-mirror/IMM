@@ -45,6 +45,8 @@ namespace ImmImporter
 
 	bool Layer::Init(Type type, const wchar_t* name, bool visible, const trans3d & transform, const trans3d& pivot, float opacity, bool isTimeLine, piTick duration, uint32_t maxRepeatCount, uint32_t assetID, piLog *log, bool publishToParent)
 	{
+        if (mInitialized)
+            return false;
 		mType = type;
         mLoaded = false;
         mStartTime = piTick(0);
@@ -79,33 +81,51 @@ namespace ImmImporter
 		mAnimParams[3] = 0.7;
         mLastActiveSpanStart = piTick(0);
 
-		if (!mName.InitCopyW(name))
-			return false;
+        if (!mName.InitCopyW(name))
+        {
+            mName.End();
+            return false;
+        }
 
-		//log->Printf(LT_MESSAGE, mName.GetS());
+        if (!iCalcFullName())
+        {
+            mName.End();
+            return false;
+        }
 
-		if (publishToParent && mParent != nullptr)
-		{
-			if (!mParent->mChildren.Append(this, true))
-				return false;
-		}
+        if (type == Type::Group)
+        {
+            if (!mChildren.Init(16, true))
+            {
+                mChildren.End();
+                mFullName.End();
+                mName.End();
+                return false;
+            }
+            mImplementation = nullptr;
+        }
 
-		if (!iCalcFullName())
-			return false;
+        // Publish only after the complete layer has initialized successfully.
+        if (publishToParent && mParent != nullptr && !mParent->mChildren.Append(this, true))
+        {
+            if (type == Type::Group)
+                mChildren.End();
+            mFullName.End();
+            mName.End();
+            return false;
+        }
 
-		if (type == Type::Group)
-		{
-			if (!mChildren.Init(16, true))
-				return false;
-			mImplementation = nullptr;
-		}
-
+        mInitialized = true;
 		return true;
 	}
 
 
 	void Layer::Deinit(piLog *log)
 	{
+        if (!mInitialized)
+            return;
+        mInitialized = false;
+
 		//log->Printf(LT_MESSAGE, L"  Layer::Deinit 1 : name : %s,   type: %d,    imp = %x", this->mName.GetS(), static_cast<int>(mType), (mImplementation ==nullptr)?0:uint64_t(mImplementation));
 
 		if (mType == Type::Group)
@@ -123,6 +143,7 @@ namespace ImmImporter
             std::vector<AnimKey>().swap(mAnimKeys[i]);
 
         mName.End();
+        mFullName.End();
 
         if (mType == Type::Group)
         {
@@ -177,31 +198,37 @@ trans3d Layer::GetTransformToWorld(void) const
 	return mat;
 }
 
-	bool Layer::iCalcFullName(void)
-	{
-		Layer* stack[64];
+    bool Layer::iCalcFullName(void)
+    {
+        Layer * stack[64];
+        stack[0] = this;
+        int num = 0;
 
-		stack[0] = this;
-		int num = 0;
+        Layer * ancestor = mParent;
+        while (ancestor != nullptr)
+        {
+            if (num + 1 >= 64)
+                return false;
+            stack[++num] = ancestor;
+            ancestor = ancestor->mParent;
+        }
 
-		Layer* la = mParent;
-		while (la != nullptr)
-		{
-			num++;
-			stack[num] = la;
-			la = la->mParent;
-		}
+        if (!mFullName.InitCopy(&stack[num]->GetName()))
+        {
+            mFullName.End();
+            return false;
+        }
 
-		if (!mFullName.InitCopy(&stack[num]->GetName()))
-			return false;
-
-		for (int i = num - 1; i >= 0; i--)
-		{
-			mFullName.AppendWC(L'/');
-			mFullName.AppendS(&stack[i]->GetName());
-		}
-		return true;
-	}
+        for (int i = num - 1; i >= 0; i--)
+        {
+            if (!mFullName.AppendWC(L'/') || !mFullName.AppendS(&stack[i]->GetName()))
+            {
+                mFullName.End();
+                return false;
+            }
+        }
+        return true;
+    }
 
 	const piString* Layer::GetFullName(void) const { return &mFullName; }
 
