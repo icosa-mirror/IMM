@@ -338,6 +338,23 @@ def csharp_entry_points(sources: list[Path]) -> dict[str, dict]:
     return found
 
 
+def native_authoring_entry_points() -> dict[str, dict]:
+    """Check the public live-authoring ABI even before managed cutover uses it."""
+    header = REPO_ROOT / "code/appImmUnity/src/imm_authoring.h"
+    source = header.read_text(encoding="utf-8")
+    declarations = re.finditer(
+        r"\bIMM_AUTHORING_EXPORT\s+\w+\s+IMM_AUTHORING_CALL\s+(\w+)\s*\(", source
+    )
+    found: dict[str, dict] = {}
+    for match in declarations:
+        line = source.count("\n", 0, match.start()) + 1
+        found[match.group(1)] = {
+            "locations": [f"{header.relative_to(REPO_ROOT).as_posix()}:{line}"],
+            "platforms": None,
+        }
+    return found
+
+
 def verify(platforms: list[str], json_path: Path | None, strict: bool) -> int:
     results: dict[str, object] = {"platforms": platforms, "plugins": {}}
     errors: list[str] = []
@@ -345,8 +362,18 @@ def verify(platforms: list[str], json_path: Path | None, strict: bool) -> int:
 
     for plugin, binaries in PLUGIN_BINARIES.items():
         declared = csharp_entry_points([REPO_ROOT / p for p in CSHARP_SOURCES[plugin]])
+        managed_count = len(declared)
+        native = native_authoring_entry_points() if plugin == "ImmUnityPlugin" else {}
+        for name, record in native.items():
+            if name in declared:
+                declared[name]["locations"].extend(record["locations"])
+                declared[name]["platforms"] = None
+            else:
+                declared[name] = record
         plugin_report: dict[str, object] = {
-            "declared_entry_points": len(declared),
+            "declared_entry_points": managed_count,
+            "native_authoring_entry_points": len(native),
+            "total_required_entry_points": len(declared),
             "platforms": {},
         }
         for platform in platforms:
@@ -411,6 +438,9 @@ def verify(platforms: list[str], json_path: Path | None, strict: bool) -> int:
 
     for plugin, report in results["plugins"].items():  # type: ignore[union-attr]
         print(f"{plugin}: {report['declared_entry_points']} declared P/Invoke entry points")
+        if report["native_authoring_entry_points"]:
+            print(f"  {report['native_authoring_entry_points']} native authoring declarations; "
+                  f"{report['total_required_entry_points']} unique required exports")
         for platform, entry in report["platforms"].items():  # type: ignore[union-attr]
             count = entry.get("export_count", "-")
             note = f", {len(entry['known_gaps'])} known gap(s)" if entry.get("known_gaps") else ""

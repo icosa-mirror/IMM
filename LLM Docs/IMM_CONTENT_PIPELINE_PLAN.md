@@ -2100,6 +2100,29 @@ replacement-run closure in section 6.26 (20:23 UTC):
    compiler failure remains. Evidence: artifacts/spawn-reserve-final-build.log,
    spawn-lifecycle-final-build-retry.log and spawn-reserve-native-tests.log.
 
+### 6.60. Atomic frame-sequence editing in progress (2026-10-22)
+
+1. Native full-table replacement is being added so managed append/insert/move/
+   remove/resize and held frames can map to a single future live revision. The
+   proposed additive FrameSequenceSetHandles ABI copies up to 1,000,000 stable
+   drawing handles from one paint layer; zero frames explicitly means no active
+   drawing. This does not add managed live transaction mapping or frame IDs.
+2. Detached table preparation and nonallocating publication preserve handles and
+   renderer resources. Importer/renderer changes include safe empty tables, retained
+   playback intent through zero/one-frame states and reselection at held local time
+   after publication. Keyless paint is not implicitly started; an existing supported
+   visibility=true key supplies explicit playback intent. These changes await build.
+3. Supported proposed batches include table-only, drawing-create/geometry/table and
+   table/drawing-delete with references checked against the resulting table. CPU
+   layer tests and a DirectX probe are being added for timing, empty/held/reordered
+   tables, rollback, pending unload, stable siblings and model/renderer agreement.
+4. Export verification previously checked only managed P/Invoke declarations. It
+   now also reads the native authoring header; a pre-build negative check correctly
+   reports the newly declared FrameSequenceSetHandles missing from the old binary
+   (artifacts/frame-sequence-before-exports.*). This is intentional pre-build evidence,
+   not a new accepted binary. The operation and stronger gate need matching builds
+   and replacement full CI before platform acceptance.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
