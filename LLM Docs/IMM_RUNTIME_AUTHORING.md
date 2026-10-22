@@ -348,7 +348,11 @@ paint repeat metadata from Loop-evaluated frame selection for both implementatio
 and resets/resolves tick Offset before visibility evaluation. CPU regressions cover
 key removal/backward seeks and sound span restart metadata; content-offset changes
 no longer masquerade as timeline wraps. Audible playback is unvalidated. Group/root
-Loop canonical state remains a separate open issue.
+Loop canonical/effective state is now separated as well (roadmap 6.68). Root Loop
+controls use elapsed root time before wrapping; nested controls use parent timeline
+time. Other root properties use the resulting wrapped/clamped time. Native
+cold/sequential, boundary and Stop/Continue checks pass; Quill parity for this rule
+is unverified because the local source corpus has no Loop animation keys.
 
 Drawing creation, deletion and geometry replacement return `QueueFull` (-7) while the
 background importer owns drawing storage; CPU preparation and GPU publication

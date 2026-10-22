@@ -18,6 +18,7 @@ using namespace ImmImporter;
 using namespace ImmPlayer;
 void CheckArrayReserveFailure();
 void CheckPaintFrameTables();
+void CheckTimelineRepeatKeys();
 static void require(bool ok, const char* message)
 {
     if (!ok) { std::fprintf(stderr, "[IMM_AUTHORING_FAILURE_TEST] %s\n", message); std::exit(1); }
@@ -192,6 +193,7 @@ int wmain(int argc, wchar_t** argv)
     checkRenderPerformanceSnapshots();
     CheckArrayReserveFailure();
     CheckPaintFrameTables();
+    CheckTimelineRepeatKeys();
     Document doc;
     require(doc.Init(L"authoring-failures", 0), "document init");
     auto cpu = [&](const Document::Command* command = nullptr) {

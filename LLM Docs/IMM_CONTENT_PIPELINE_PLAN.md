@@ -19,8 +19,9 @@ A subsequent ownership audit found a D3D11 structured-buffer view leak (6.66);
 the fix and direct COM lifetime regression are pushed in b4a2c595. Fresh full
 validation run 39724027590 was cancelled after the playback regressions in 6.67
 were established. Playback correction 86fd4645 is now pushed with passing local
-regressions (6.67). Fresh full run 39724961901 is queued; hosted acceptance remains
-pending.
+regressions (6.67). Full run 39724961901 is completed/cancelled after the additional root/group
+repeat regressions in 6.68 were reproduced. Their local correction and regression
+checks now pass; replacement hosted acceptance remains pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
 39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
@@ -209,6 +210,10 @@ The preferred first candidate is:
    actual code before declaring its current feature coverage or planning changes.
 
 ## 6. Source authority and validation
+
+Numbered checkpoints record evidence at their stated revision. CI states in older
+checkpoints are historical snapshots; the current checkpoint at the top and latest
+numbered entry record their replacements and outstanding acceptance.
 
 | Surface | Authoritative implementation |
 |---|---|
@@ -2434,11 +2439,51 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    playback-key-final-sequence/, playback-key-final-converter/ and
    playback-key-final-exports.*.
 6. Run 39724027590 is terminal completed/cancelled after source regressions were
-   established. Fix 86fd4645 is pushed; fresh full run 39724961901 is queued.
+   established. Fix 86fd4645 was pushed; its run 39724961901 was subsequently
+   cancelled after the additional regressions in 6.68.
    No new live ABI or managed cutover is
-   claimed. Group/root Loop keys still mutate canonical timeline repeat state;
-   correction remains pending with explicit root self-wrapped-clock and nested
-   chapter/Stop/Continue evidence. This milestone does not close M1/M2 or the plan.
+   claimed. Group/root Loop keys also mutated canonical timeline repeat state;
+   the local correction and explicit native clock rule are recorded in 6.68.
+   Quill root Loop parity remains unverified. This milestone does not close M1/M2 or the plan.
+
+### 6.68. Group/root Loop canonical state and control clock (2026-10-22)
+
+1. Old-source actual-Layer tests reproduce canonical repeat corruption on root and
+   nested groups: authored count 2 becomes 0 under a Loop key and remains 0 before
+   the first key or after removal. A root probe at the same tick also differs
+   between cold and sequential evaluation (opacity 0.9 versus 0.1).
+2. Canonical/effective timeline repeats are now separate. Metadata getters retain
+   authored counts; runtime wrapping and sound ancestor guards use evaluated state.
+   Root Loop controls use unwrapped elapsed root time; other root properties and
+   children use the resulting wrapped/clamped time. Nested Loop controls use parent
+   timeline time. This explicit native rule removes self-referential root lookup;
+   it does not change Action::Loop chapter handling.
+3. Actual-Layer tests pass for cold/sequential root evaluation, controls beyond
+   content duration, zero duration, backward seeks, key removal and canonical
+   infinite/one/two-repeat boundaries. Keyed nested controls affect descendant
+   opacity at parent-clock boundaries and root wraps, and restore finite repeat 2
+   on removal. A held Stop/Continue case preserves nested clocks and checks exact
+   elapsed ticks 149/150 around a later control key. The initial test expected tick
+   150 one tick early; diagnostics confirmed Stop75 holds74, and the final test
+   asserts both sides without changing production timing.
+4. Windows Unity/viewer/Godot/reader build, native regression suite, chapter/viewpoint
+   policy, full converter suite, strict Windows exports and all eleven visible
+   sequence cases pass. Evaluated comparison passes 69 mode samples with zero pair
+   and history errors; ordinary sound-repeat scheduling remains correct for root
+   infinite/single/finite and nested finite cases. This is CPU scheduling evidence,
+   not audible playback or full platform acceptance.
+5. All 21 local Quill projects have zero Loop animation keys. They cannot establish
+   root Loop-key timing. Quill parity for the explicit native rule remains
+   unverified; another matched source/export case was requested. This requirement
+   remains open independently of the native correctness evidence.
+6. Evidence: artifacts/timeline-repeat-before.log,
+   timeline-repeat-old-native-output.log, timeline-repeat-native-build.log,
+   timeline-repeat-held-first.log, timeline-repeat-final-native-tests.log,
+   authoring-failure/{run.log,report.json}, timeline-repeat-policy-tests.log,
+   timeline-repeat-converter/, timeline-repeat-evaluated-compare.log,
+   timeline-repeat-sequence-regression/ and timeline-repeat-exports.*.
+7. Run 39724961901 is terminal completed/cancelled. A fresh full validation run must
+   accept the corrected source. No M1/M2 or full-roadmap completion is claimed.
 
 ## 7. Consolidated documents
 

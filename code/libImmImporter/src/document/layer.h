@@ -149,6 +149,7 @@ namespace ImmImporter
 		ImmCore::trans3d GetTransformToWorld(void) const;
 		KeepAlive * GetKeepAlive(void);
 		uint32_t GetMaxRepeatCount(void) const;
+        uint32_t GetEvaluatedMaxRepeatCount(void) const;
 		ImmCore::piTick GetStopTime() const;
         bool HasStopTime() const;
         bool IsStoppedByAction() const;
@@ -255,6 +256,7 @@ namespace ImmImporter
 		bool mIsPlaying;
 		bool mIsTimeline;
 		uint32_t mMaxRepeatCount;
+        uint32_t mEvaluatedMaxRepeatCount;
 		std::vector<AnimKey> mAnimKeys[static_cast<int>(AnimProperty::MAX)];
 
 		LayerImplementation mImplementation; // if not group

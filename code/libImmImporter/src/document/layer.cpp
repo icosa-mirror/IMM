@@ -72,6 +72,7 @@ namespace ImmImporter
 		mIsTimeline = isTimeLine;
 		mDuration = duration;
 		mMaxRepeatCount = maxRepeatCount;
+        mEvaluatedMaxRepeatCount = maxRepeatCount;
         mStartOffset = 0;
 		mAssetID = assetID;
 		mDrawInTime = 1.0;
@@ -580,6 +581,11 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		return mMaxRepeatCount;
 	}
 
+    uint32_t Layer::GetEvaluatedMaxRepeatCount() const
+    {
+        return mEvaluatedMaxRepeatCount;
+    }
+
 	void Layer::SetStartTime(piTick time)
 	{
 		mStartTime = time;
@@ -655,6 +661,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
     void Layer::SetMaxRepeatCount(uint32_t count)
     {
         mMaxRepeatCount = count;
+        mEvaluatedMaxRepeatCount = count;
     }
 
 		void Layer::SetIsTimeline(bool timeline)
@@ -783,12 +790,33 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         // handle stop frames to correct for stop time
         piTick timeFromStart = timeline->GetTimelineElapsed(now);
 
+        const auto resolveTimelineRepeat = [&](piTick keyTime) {
+            mEvaluatedMaxRepeatCount = mMaxRepeatCount;
+            const int keyCount = GetNumAnimKeys(AnimProperty::Loop);
+            for (int index = 0; index < keyCount; ++index)
+            {
+                const AnimKey * key = GetAnimKey(AnimProperty::Loop, index);
+                if (key->mTime > keyTime)
+                    break;
+                mEvaluatedMaxRepeatCount = key->mValue.mBool ? 0 : 1;
+            }
+        };
+        // The root's Loop control uses its unwrapped clock, avoiding a lookup
+        // whose own wrap/clamp decision changes which Loop key is selected.
+        if (isRoot)
+            resolveTimelineRepeat(timeFromStart);
+
         const piTick timelineWrapped = (timelineDuration != 0) ? timeFromStart % timelineDuration : timeFromStart;
 
         // handle looping clips
         const int64_t numPlays = (timelineDuration != 0) ? piTick::CastInt(timeFromStart) / piTick::CastInt(timelineDuration) : 0;
-        const piTick timelineTime = (timeline->GetMaxRepeatCount() == 0 || numPlays < timeline->GetMaxRepeatCount()) ?
+        const piTick timelineTime = (timeline->GetEvaluatedMaxRepeatCount() == 0 || numPlays < timeline->GetEvaluatedMaxRepeatCount()) ?
             timelineWrapped : timelineDuration;
+
+        // Other timeline controls belong to their parent's effective clock.
+        // Resolve before descendants read this timeline's repeat behavior.
+        if (!isRoot && !isPaintLayer)
+            resolveTimelineRepeat(timelineTime);
 
         // Resolve step playback keys before Visibility computes the clip's local
         // time. Missing keys (including a seek before the first key) restore the
@@ -823,7 +851,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         for (int i = 0; i < maxProps; i++)
         {
             const AnimProperty prop = static_cast<AnimProperty>(i);
-            if (prop == AnimProperty::Offset || (prop == AnimProperty::Loop && isPaintLayer))
+            if (prop == AnimProperty::Offset || prop == AnimProperty::Loop)
                 continue;
 
             const int numKeys = GetNumAnimKeys(prop);
@@ -937,14 +965,14 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     Layer* ti = timeline;
                     // Once this timeline is clamped at its finite end, an
                     // advancing wall clock is not another wrap.
-                    const bool timelineCanWrap = timeline->GetMaxRepeatCount() == 0 || numPlays < timeline->GetMaxRepeatCount();
+                    const bool timelineCanWrap = timeline->GetEvaluatedMaxRepeatCount() == 0 || numPlays < timeline->GetEvaluatedMaxRepeatCount();
                     while (timelineCanWrap && ti != nullptr)
                     {
-                        if ((ti == root || ti->GetIsTimeline()) && ti->GetMaxRepeatCount() != 1 && ti->GetDuration() != 0)
+                        if ((ti == root || ti->GetIsTimeline()) && ti->GetEvaluatedMaxRepeatCount() != 1 && ti->GetDuration() != 0)
                         {
                             const piTick elapsed = ti->GetTimelineElapsed(now);
                             const int64_t plays = piTick::CastInt(elapsed) / piTick::CastInt(ti->GetDuration());
-                            if (ti->GetMaxRepeatCount() == 0 || plays < ti->GetMaxRepeatCount())
+                            if (ti->GetEvaluatedMaxRepeatCount() == 0 || plays < ti->GetEvaluatedMaxRepeatCount())
                             {
                                 isParentSequenceLooping = true;
                                 break;
@@ -1051,7 +1079,6 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     mDrawInTime = lastKey->mValue.mDouble + (nextKey->mValue.mDouble - lastKey->mValue.mDouble)*t;
                 break;
             case AnimProperty::Loop:
-                mMaxRepeatCount = (lastKey->mValue.mBool ? 0 : 1);
                 break;
             default:
                 break;
