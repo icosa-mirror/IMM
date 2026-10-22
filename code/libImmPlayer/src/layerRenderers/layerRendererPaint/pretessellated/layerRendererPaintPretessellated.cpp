@@ -635,6 +635,8 @@ namespace ImmPlayer
 	void LayerRendererPaintPretessellated::DisplayRender(piRenderer* renderer, piLog* log, piBuffer layerStateShaderConstans, int capDelta)
 	{
         std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
+        mDrawCallInfo.numDrawCalls = 0;
+        mDrawCallInfo.numTriangles = 0;
 		const uint64_t num = mVisibleLayerInfos.GetLength();
 		if (num < 1) return;
 
@@ -648,9 +650,6 @@ namespace ImmPlayer
 		const int numInstances = (mStereoMode == StereoMode::Preferred && renderer->GetAPI() != piRenderer::API::GLES && renderer->GetAPI() != piRenderer::API::Vulkan) ? 2 : 1;
 
 		renderer->AttachShaderConstants(mChunkData, 9);
-
-		mDrawCallInfo.numDrawCalls = 0;
-		mDrawCallInfo.numTriangles = 0;
 
 		renderer->AttachTextures(1, &mBlueNoise, 7);
 

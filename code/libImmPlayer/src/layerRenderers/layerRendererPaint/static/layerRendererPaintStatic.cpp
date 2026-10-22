@@ -978,6 +978,8 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     void LayerRendererPaintStatic::DisplayRender(piRenderer* renderer, piLog* log, piBuffer layerStateShaderConstans, int capDelta)
     {
         std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
+        mDrawCallInfo.numDrawCalls = 0;
+        mDrawCallInfo.numTriangles = 0;
         const uint64_t num = mVisibleLayerInfos.GetLength();
         if (num < 1) return;
 
@@ -1014,9 +1016,6 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         #else
         const uint64_t numToRender = num;
         #endif
-
-        mDrawCallInfo.numDrawCalls = 0;
-        mDrawCallInfo.numTriangles = 0;
 
         // for each visible layer
         for (uint64_t j = 0; j < numToRender; j++)
