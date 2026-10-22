@@ -32,8 +32,9 @@ Earlier numbered checkpoints retain historical results; use this checkpoint and
 Live-key validation run 39748355080 on b5c43743 failed on attempt 1: both Unity
 Android Firebase jobs timed out installing FFmpeg before device runtime started.
 The Windows job, including the new live-key and authoring regression steps,
-passed. One failed-job/dependent infrastructure retry has been requested; its
-result is pending (6.72). This is not a passing full validation of the milestone.
+passed. The single failed-job/dependent retry also completed with failure. The
+user explicitly requested a new FULL run using [CI VALIDATION]; a fresh marker
+commit will start it (6.72). Full validation of the milestone remains unresolved.
 
 ## 1. Objective and document ownership
 
@@ -2662,6 +2663,13 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    artifacts/live-key-ci-failure-attempt.json,
    artifacts/live-key-ci-urp-job.log and artifacts/live-key-ci-nonxr-job.log.
    [Validation run](https://github.com/icosa-mirror/IMM/actions/runs/39748355080).
+5. Attempt 2 completed with failure, confirmed by the run API in
+   artifacts/live-key-ci-retry-final.json. The retry allowance was exhausted;
+   this is not accepted evidence. The user then explicitly instructed a new FULL
+   run using [CI VALIDATION]. A fresh marker commit starts the complete hosted
+   build/engine/device/evidence pipeline, rather than another failed-job rerun.
+   No source change or gate reduction accompanies this restart. The new run's
+   result remains pending; do not infer it passes from successful earlier jobs.
 
 ## 7. Consolidated documents
 
