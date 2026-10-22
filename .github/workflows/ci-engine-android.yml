@@ -524,6 +524,22 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Require Android runtime producer acceptance
+        if: always()
+        shell: pwsh
+        run: |
+          $resultPath = if ('${{ matrix.variant }}' -eq 'urp') {
+            'artifacts/unity-android-vulkan/urp/firebase-test-lab-result.json'
+          } else {
+            'artifacts/unity-android-vulkan/firebase-test-lab-result.json'
+          }
+          if (-not (Test-Path -LiteralPath $resultPath)) { throw "Missing Firebase runtime result: $resultPath" }
+          $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+          if ($result.passed -ne $true) {
+            $errors = ($result.errors | Select-Object -First 5) -join '; '
+            throw "Firebase runtime producer rejected ${{ matrix.variant }}: $errors"
+          }
+
   unity-android-vulkan:
     name: Unity Android Vulkan
     if: >-

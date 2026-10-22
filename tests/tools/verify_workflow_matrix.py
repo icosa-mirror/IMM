@@ -77,7 +77,7 @@ REQUIRED_JOBS = {
     },
     ".github/workflows/ci-engine-android.yml": {
         "unity-android-player-build": ["Download same-commit Android Unity native plugin", "Stage same-commit Android Unity native plugin", "Prepare clean non-XR Unity Android project", "Preflight Unity Android Vulkan runner", "Build Unity Android Vulkan smoke player", "Verify Unity Android APK is non-XR", "Upload Android player build evidence"],
-        "unity-android-device-validation": ["Download same-commit Android player", "Check Firebase Test Lab configuration", "Verify Firebase Adreno device target", "Run Unity Android Vulkan smoke in Firebase Test Lab", "Validate Unity Android Vulkan URP in Firebase Test Lab", "Verify unity-android-vulkan/urp rendered-frame evidence", "Upload Android device evidence"],
+        "unity-android-device-validation": ["Download same-commit Android player", "Check Firebase Test Lab configuration", "Verify Firebase Adreno device target", "Run Unity Android Vulkan smoke in Firebase Test Lab", "Validate Unity Android Vulkan URP in Firebase Test Lab", "Verify unity-android-vulkan/urp rendered-frame evidence", "Upload Android device evidence", "Require Android runtime producer acceptance"],
         "unity-android-vulkan": ["Download Android build and device evidence", "Require Android build and device validation success", "Record Unity Android Vulkan visual metrics", "Write Unity Android Vulkan screenshot report", "Classify Unity Android Vulkan result", "Write CI manifest", "Collect artifact summary", "Upload Unity Android Vulkan artifacts"],
     },
 }
@@ -283,7 +283,7 @@ REQUIRED_ALWAYS_STEPS = {
         },
     },
     ".github/workflows/ci-engine-android.yml": {
-        "unity-android-device-validation": {"Upload Android device evidence"},
+        "unity-android-device-validation": {"Upload Android device evidence", "Require Android runtime producer acceptance"},
         "unity-android-vulkan": {"Require Android build and device validation success", "Record Unity Android Vulkan visual metrics", "Classify Unity Android Vulkan result", "Write CI manifest", "Collect artifact summary", "Upload Unity Android Vulkan artifacts"},
     },
 }
@@ -802,6 +802,9 @@ def verify_android_parallel_validation_contract(path: Path, workflow_rel: str, e
         for token in ["needs: unity-android-player-build", "variant: [nonxr, urp]", "matrix.variant == 'nonxr'", "matrix.variant == 'urp'", "if: always() && matrix.variant == 'urp'", "name: Intermediate-UnityAndroid-build-${{ matrix.variant }}"]:
             if token not in device:
                 errors.append(f"Android device matrix missing contract: {token}")
+        for token in ["Require Android runtime producer acceptance", "$result.passed -ne $true", "Missing Firebase runtime result", "Firebase runtime producer rejected"]:
+            if token not in device:
+                errors.append(f"Android producer must fail on missing/rejected runtime evidence: {token}")
         for token in ["always() &&", "needs: [unity-android-player-build, unity-android-device-validation]", "pattern: Intermediate-UnityAndroid-*", "merge-multiple: true", 'test "$BUILD_RESULT" = success', 'test "$DEVICE_RESULT" = success', "name: UnityAndroidVulkan"]:
             if token not in aggregate:
                 errors.append(f"Android evidence aggregation missing required branch gate: {token}")

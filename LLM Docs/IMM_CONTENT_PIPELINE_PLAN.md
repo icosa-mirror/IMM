@@ -27,10 +27,13 @@ and five jobs queued, with no failures observed. Full timeline/backend acceptanc
 presented-revision save, managed live cutover and full A1-A3
 acceptance remain open, alongside the converter/reader fidelity gaps below.
 
-The unresolved Android Vulkan failure from 39669262483 lacks required Firebase
-readiness/composition/capture evidence. Its one infrastructure retry cleared the
-earlier SDK download failure; no further infrastructure retry has been requested.
-The counter race correction still needs replacement device evidence. Packaged
+The unresolved Android Vulkan failure now has fresh evidence in 39716790347:
+readiness succeeds and six captures exist, but IMM content is absent and the
+rear-occlusion composition probe fails. The producer JSON says passed=false despite
+its job appearing green; section 6.65 supersedes that apparent pass. Its native
+payload matches the same-run build. The one earlier infrastructure retry cleared
+the SDK failure; this is a runtime source failure, not another infrastructure retry.
+Packaged
 macOS exports also remain stale until replacement builds/gates succeed.
 Earlier Unity CS1061 and Godot iOS failures were closed by complete hosted runs
 39645977224/39646549914; those historical passes do not accept later APIs.
@@ -2198,9 +2201,9 @@ replacement-run closure in section 6.26 (20:23 UTC):
    Pushed in 765f9a05. Run 39716790347 now proves early scheduling: Android native
    and Windows builds passed, and non-XR/URP player jobs 119622318226/119622318250
    started while four Apple jobs remained queued. The URP player build has now
-   passed; non-XR is still running. Twelve jobs passed with no failures observed.
-   Firebase/strict runtime acceptance remains pending; this
-   does not close the Android failure.
+   passed, followed by non-XR. The non-XR Firebase job appeared green but its actual
+   result rejects missing composition success; section 6.65 records the failure.
+   Neither early scheduling nor job conclusions close the Android failure.
 
 ### 6.63. Canonical property publication: Windows measurements (2026-10-22)
 
@@ -2246,8 +2249,70 @@ replacement-run closure in section 6.26 (20:23 UTC):
 7. Windows CI now requires the Small three-property/control correctness smoke and
    uploads reports/captures. It does not enforce a workstation latency threshold
    on hosted runners. Workflow wiring and syntax checks pass. Pushed in 91eda9bb;
-   replacement full validation run 39718923123 is queued. Production mutation
-   behavior and APIs are unchanged; hosted acceptance remains pending.
+   replacement run 39718923123 passed the required Windows property step, but was
+   cancelled with 39716790347 after that run exposed the shared Android runtime
+   failure (6.65). Production mutation behavior and APIs are unchanged; full hosted
+   acceptance remains pending.
+
+### 6.64. Uploaded replacement cancellation in progress (2026-10-22)
+
+1. Existing queued/CPU-prepared unload cases do not establish cancellation after
+   actual GPU resource preparation. The current paint-creation hold is before
+   upload, and empty paint allocates no geometry buffers. Add a nonempty static
+   drawing replacement probe on Windows DirectX (the factory selects D3D11).
+2. Introduce an opt-in hold after successful GPU preparation and Prepared revision
+   assignment, before model mutation/presentation. Record that GPU preparation
+   happened once: repeated Upload is not idempotent and could overwrite handles.
+   Normal publication and public ABI semantics must remain unchanged.
+3. While held across rendered frames, require the old drawing/model/renderer pair
+   and old image to remain active. Unload must cancel the unpublished token once
+   before CPU replacement destruction; old-session queries must fail before slot
+   reuse. Reload and a healthy replacement must demonstrate a reusable session.
+4. This can establish cleanup of uploaded but unpublished resources. That token
+   was never drawn, so it cannot establish retirement of in-flight replacement
+   work, GPU completion/fence behavior, exact resource leak counts or other-backend
+   acceptance. Existing D3D12 submitted-work lifetime checks remain separate.
+5. Android run 39716790347 now has both player builds passed and non-XR/URP Firebase
+   jobs 119627721787/119627721755 running, with no failures observed. Device and
+   strict evidence results retain priority over this local acceptance work.
+6. Work is suspended for the confirmed Android source failure (6.65). The new
+   Document hold and viewer probe are uncommitted work; the viewer probe is not
+   compiled/validated and its Python harness is not yet written. Preserve it while
+   building the regression fix from staged source, then restore it exactly.
+
+### 6.65. Android freeze failure and truthful producer status (2026-10-22)
+
+1. Non-XR job 119627721787 in 39716790347 reports success, but artifact 12400033781
+   contains passed=false: the required composition-success marker is missing.
+   Its real log reports 2,530 cyan rear-probe pixels (share 0.003, limit 0.0005).
+   Both render-only and composition captures lack IMM content; the latter contains
+   only Unity probes. Readiness reports 37 paint calls/642,730 triangles and six
+   captures exist. This is not device/runtime acceptance.
+2. APK and same-run native artifact 12399692179 have identical .so SHA256
+   8b1bcd8cc44737ab5cc78dcc92b3c9157829c9974665080571b8abf2ebae1893.
+   The missing composition RT warning is intentional: the validation getter
+   returns null because final composition occurs in OnRenderImage. Neither stale
+   payload nor that warning explains the failure.
+3. Actual Vulkan draws fall to zero immediately after the smoke freezes playback.
+   Legacy SetTime resets keyed layers but evaluated immediately only when already
+   paused. The smoke seeks while playing, then queues Pause before GlobalWork;
+   Pause suppresses the next evaluation and leaves the reset layers hidden.
+   A new playing-seek/immediate-pause CPU regression fails before the correction.
+4. Both static and pretessellated renderers also retained stale paint counters:
+   DisplayRender returned for zero visible layers before resetting draw/triangle
+   counts. Move those resets ahead of the return. Coherent snapshot publication
+   alone cannot make stale renderer data current.
+5. Keep artifact collection despite a failed smoke, then make each Firebase
+   producer explicitly fail on missing/rejected result JSON. Its existing
+   continue-on-error capture step must not leave the job green. The strict Vulkan
+   collector and all marker/capture/pixel thresholds remain required and unchanged.
+   The new verdict rejects this actual failed artifact and a missing-file control,
+   and accepts an explicit passed=true control.
+6. Confirmed source-failure runs 39716790347 and 39718923123 were cancelled;
+   successful independent evidence is retained. No infrastructure retry is used.
+   Evidence: artifacts/ci-agent-39716790347-nonxr-*, android-composition-failure.png,
+   triage-unity-android-vulkan-render.png, seek-immediate-pause-before.log and
+   android-producer-verdict-controls/. Fix validation and replacement CI are pending.
 
 ## 7. Consolidated documents
 
