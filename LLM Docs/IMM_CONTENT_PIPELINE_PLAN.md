@@ -16,7 +16,8 @@ builds; Apple jobs remain queued. Paint creation and the ownership correction
 are pushed in 50efa422/97ee60b0. Full run 39708054202 was cancelled after review
 found stale spawn-cache pointers across unload; the focused correction passes local
 regressions (6.56). The render-counter synchronization correction also passes local
-checks; both fixes await a fresh full CI run.
+checks. Both fixes are pushed in 56521cae/6272e87a; replacement full validation run
+39709116389 is queued. Android runtime and Apple acceptance remain open.
 The older Android readiness failure and stale packaged macOS
 exports remain unresolved; full A1-A3 and the converter acceptance gaps stay open.
 
@@ -2037,6 +2038,12 @@ replacement-run closure in section 6.26 (20:23 UTC):
    completed display submission; it does not certify a specific document, GPU
    completion or presentation. The race is concrete, but its contribution to the
    Android readiness failure remains unproven until replacement device validation.
+4. Focused commits 56521cae (spawn-cache lifetime) and 6272e87a (render-counter
+   snapshot) are pushed after a clean pull. Full replacement validation run
+   39709116389 targets 6272e87a and is queued; the cancelled 39708054202 does not
+   validate these fixes. Windows export/binding verification also passes locally
+   (artifacts/perf-snapshot-exports.*). Android readiness and stale macOS exports
+   remain unresolved until successful replacement runtime/package gates.
 
 ## 7. Consolidated documents
 
