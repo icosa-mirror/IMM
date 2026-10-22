@@ -193,7 +193,7 @@ def main() -> int:
             "Record Unity Android Vulkan visual metrics",
             "--external-screen-capture-name unity-android-vulkan-robo-final.png",
             "validate_render_video.py",
-            "sudo timeout 120 apt-get install --yes ffmpeg",
+            "sudo timeout 600 apt-get install --yes --no-install-recommends ffmpeg",
             "unity-android-vulkan-external-render-sample1.json",
             "unity-android-vulkan-external-render-video-validation.json",
             "unity-android-vulkan-external-render-metrics.json",

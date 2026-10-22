@@ -361,7 +361,8 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'device-ci'))
     needs: unity-android-player-build
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # Allow bounded dependency setup in addition to the unchanged 30-minute device step.
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
@@ -417,13 +418,14 @@ jobs:
           gcloud firebase test android models describe "$model_id"
 
       - name: Install physical-device video validator dependency
-        timeout-minutes: 5
+        timeout-minutes: 15
         shell: bash
         run: |
           set -euo pipefail
           if ! command -v ffmpeg >/dev/null 2>&1; then
             sudo timeout 120 apt-get update
-            sudo timeout 120 apt-get install --yes ffmpeg
+            # Hosted mirror downloads exceeded two minutes on both run attempts.
+            sudo timeout 600 apt-get install --yes --no-install-recommends ffmpeg
           fi
           ffmpeg -version
 
@@ -548,7 +550,8 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'device-ci'))
     needs: [unity-android-player-build, unity-android-device-validation]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Leave evidence collection/upload time after bounded dependency installation.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -571,9 +574,14 @@ jobs:
           test "$DEVICE_RESULT" = success
 
       - name: Install physical-device video validator dependency
+        timeout-minutes: 15
+        shell: bash
         run: |
-          sudo timeout 120 apt-get update
-          sudo timeout 120 apt-get install --yes ffmpeg
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo timeout 120 apt-get update
+            sudo timeout 600 apt-get install --yes --no-install-recommends ffmpeg
+          fi
           ffmpeg -version
 
       - name: Record Unity Android Vulkan visual metrics

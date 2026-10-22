@@ -32,9 +32,12 @@ Earlier numbered checkpoints retain historical results; use this checkpoint and
 Live-key validation run 39748355080 on b5c43743 failed on attempt 1: both Unity
 Android Firebase jobs timed out installing FFmpeg before device runtime started.
 The Windows job, including the new live-key and authoring regression steps,
-passed. The single failed-job/dependent retry also completed with failure. The
-user explicitly requested a new FULL run using [CI VALIDATION]; a fresh marker
-commit will start it (6.72). Full validation of the milestone remains unresolved.
+passed. The single failed-job/dependent retry also completed with failure: URP
+again timed out installing FFmpeg, while non-XR passed. A premature fresh run
+was requested before diagnosing that retry; cancellation has been requested.
+Both dependency-install sites are now corrected and locally checked (6.73);
+a corrected [CI VALIDATION] commit will start a new full run. Full validation
+of the milestone remains unresolved.
 
 ## 1. Objective and document ownership
 
@@ -2670,6 +2673,37 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    build/engine/device/evidence pipeline, rather than another failed-job rerun.
    No source change or gate reduction accompanies this restart. The new run's
    result remains pending; do not infer it passes from successful earlier jobs.
+
+### 6.73. Correct repeated FFmpeg setup timeout before full restart (2026-10-22)
+
+1. Attempt 2 URP job 119826156048 again failed at FFmpeg package installation:
+   94.1 MB requested, exit 124 at the 120-second bound, before device runtime.
+   Non-XR passed on this attempt. Subsequent Unity Android Vulkan/evidence
+   failures follow the missing URP producer. Evidence:
+   artifacts/live-key-ci-attempt2-diagnosis.json and live-key-ci-attempt2-urp.log.
+2. The agent incorrectly interpreted the user's full-run instruction as a blind
+   restart and pushed 8c06298c before diagnosing attempt 2. Run 39795297170 is
+   superseded; cancellation was requested after the user clarified the intent.
+   That run is not acceptance evidence. Its cancellation request has not yet
+   reached a terminal state in the API snapshot; do not call it confirmed cancelled.
+3. Correct both FFmpeg setup sites in ci-engine-android.yml. Reuse an existing
+   executable; otherwise retain the 120-second package-index bound, install
+   without recommended packages and allow a bounded 600-second package install.
+   Give the setup step 15 minutes to contain both commands and version checking.
+   Increase outer infrastructure job budgets to 55 minutes for the producer and
+   30 minutes for the collector so setup cannot consume the runtime/evidence
+   allowance. The existing device step remains bounded at 30 minutes.
+   Install failure remains fatal. Device runtime timeouts, visual acceptance,
+   producer gates and required evidence are unchanged. This changes dependency
+   setup bounds in response to a measured repeated failure, not runtime gates.
+4. Composition contract, 53-job workflow matrix and changed-workflow actionlint
+   checks pass. Six extracted-shell cases pass for existing-tool reuse, successful
+   install and fatal install failure at both sites. Package commands were mocked:
+   local checks do not establish a real Ubuntu mirror download or device pass.
+   Evidence: artifacts/ffmpeg-install-fix-contracts.log,
+   ffmpeg-install-fix-matrix.log, ffmpeg-install-fix-actionlint.log and
+   artifacts/ffmpeg-install-fix-shell/report.json. Full hosted validation of this
+   corrected source remains pending; start it with [CI VALIDATION] after commit.
 
 ## 7. Consolidated documents
 
