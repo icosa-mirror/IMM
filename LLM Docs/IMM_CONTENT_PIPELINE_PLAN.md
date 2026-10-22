@@ -23,8 +23,8 @@ regressions (6.67). Full run 39724961901 is completed/cancelled after the additi
 repeat regressions in 6.68 were reproduced. Correction 3b8589b1 passed local
 playback checks, but the CI audit found an Android compiler failure from the earlier
 paint change (6.69). Run 39725916624 is completed/cancelled; the override
-annotation fix now passes a local Android NDK importer build. Hosted acceptance
-remains pending.
+annotation fix a0f71bd4 is pushed and passes a local Android NDK importer build.
+Fresh full run 39726457067 is queued; hosted acceptance remains pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
 39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
@@ -2509,8 +2509,8 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Helper run 39725799794 succeeded as an eligibility-guard no-op; it performed no
    retry and supplies no validation evidence. A repeated failure is not being
    dismissed as infrastructure or hidden by a helper's green conclusion.
-4. Run 39725916624 is terminal completed/cancelled. The annotation fix must receive a
-   fresh full validation run. The group/root playback checks in 6.68 remain valid
+4. Run 39725916624 is terminal completed/cancelled. Annotation fix a0f71bd4 is
+   pushed; fresh full validation run 39726457067 is queued. The group/root playback checks in 6.68 remain valid
    for their declared Windows/CPU scope; Android/platform acceptance stays open.
 
 ## 7. Consolidated documents
