@@ -16,7 +16,8 @@ three Windows D3D11 cases (6.64), is committed in f50ec11d and is required in Wi
 CI. Full validation run 39723167991 was cancelled
 after the subsequent source defect below. Hosted acceptance is pending.
 A subsequent ownership audit found a D3D11 structured-buffer view leak (6.66);
-the local fix and direct COM lifetime regression pass; full CI is pending.
+the fix and direct COM lifetime regression are pushed in b4a2c595. Fresh full
+validation run 39724027590 is registered; hosted acceptance remains pending.
 
 The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
 39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
@@ -2392,7 +2393,8 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
 5. Runs 39721181625 and 39723167991 are terminal completed/cancelled so
    the source correction can receive a fresh full validation run. The saved strict
    Android pass for 1d31040d remains scoped evidence, not full multiplatform or
-   D3D11 resource-lifetime acceptance. No full M1 claim is made.
+   D3D11 resource-lifetime acceptance. Pushed fix b4a2c595 starts fresh full run
+   39724027590; no hosted pass or full M1 claim is made.
 
 ## 7. Consolidated documents
 
