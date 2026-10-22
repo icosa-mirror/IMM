@@ -50,8 +50,11 @@ def main() -> int:
             "unity-macos-metal-composition/face-orientation-status.json",
             "unity-windows-directx-composition/face-orientation-status.json",
             "unity-windows-vulkan-ordered-overlay/face-orientation-status.json",
-            "unity-android-vulkan/face-orientation-status.json",
         ],
+    )
+    require_tokens(
+        ".github/workflows/ci-engine-android.yml",
+        ["unity-android-vulkan/face-orientation-status.json"],
     )
     require_tokens(
         ".github/workflows/ci-ios.yml",

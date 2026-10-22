@@ -50,6 +50,17 @@ jobs:
       contents: write
     with:
       mode: build
+      # Match the Engine gate exactly; quick/build-only calls must not acquire
+      # Firebase/Unity work, while every full validation keeps Android required.
+      validate_android_runtime: >-
+        ${{ github.event_name == 'schedule' ||
+        (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'hardware' || inputs.mode == 'release')) ||
+        (github.event_name == 'pull_request' &&
+        (contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+        contains(github.event.pull_request.labels.*.name, 'device-ci'))) ||
+        contains(github.event.head_commit.message, '[CI VALIDATION]') ||
+        contains(github.event.head_commit.message, '[RELEASE]') }}
+      validation_evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}
     secrets: inherit
 
   web:
@@ -145,6 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs:
+      - build
       - core
       - device
       - engine
@@ -174,6 +186,15 @@ jobs:
         with:
           name: EngineValidationEvidence
           path: artifacts/validation-evidence/input/EngineValidationEvidence
+
+      # A failed early Android gate fails Build and can skip the late Engine
+      # report. Retain its original diagnostics in the top-level report too.
+      - name: Download early Android runtime evidence
+        if: always() && (needs.engine.result != 'skipped' || needs.build.result == 'failure')
+        uses: actions/download-artifact@v4
+        with:
+          pattern: UnityAndroidVulkan
+          path: artifacts/validation-evidence/input
 
       - name: Download GPU matrix evidence
         if: needs.gpu.result != 'skipped'
@@ -211,6 +232,7 @@ jobs:
           path: artifacts/validation-evidence/input/GodotIOSMetal
 
       - name: Write validation visual evidence report
+        if: always()
         env:
           VALIDATION_EVIDENCE_SCOPE: >-
             ${{

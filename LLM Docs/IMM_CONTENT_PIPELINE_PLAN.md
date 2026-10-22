@@ -13,15 +13,18 @@ Current checkpoint (2026-10-22): static paint/group subtree deletion and empty
 paint creation/population/deletion pass local DirectX lifecycle/failure checks
 (6.53-6.55). Spawn-cache lifetime and render-counter synchronization fixes are
 pushed in 56521cae/6272e87a (6.56). Their full validation run 39709116389 has
-passed twelve jobs including Windows, Android, web and Godot iOS validation;
-four Apple jobs await runners. Engine/device gates depend on the complete build workflow and
+passed thirteen jobs, including standalone iOS visual validation; Unity iOS visual
+validation is running and two Apple native builds await runners. Engine/device gates depend on the complete build workflow and
 have not accepted these revisions. Full CI is not passing yet.
 
 Spawn creation/deletion/cache publication and its reserve-failure prerequisite pass
 local checks (6.57-6.59) and are pushed through df3c5a14. Full run 39711536998
 also has twelve passed jobs and four Apple jobs queued. No new
-spawn renderer/backend acceptance is claimed. Whole-table paint
-timeline editing, presented-revision save, managed live cutover and full A1-A3
+spawn renderer/backend acceptance is claimed. Whole-table paint timeline editing
+now passes local Windows lifecycle/playback checks and is pushed in 4a099f5a (6.60).
+Its full run 39715756422 has eleven passed jobs, including Windows/Android builds,
+and five jobs queued, with no failures observed. Full timeline/backend acceptance,
+presented-revision save, managed live cutover and full A1-A3
 acceptance remain open, alongside the converter/reader fidelity gaps below.
 
 The unresolved Android Vulkan failure from 39669262483 lacks required Firebase
@@ -68,7 +71,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Paint and four brush sections | Existing | Existing point/brush extraction and SharpQuill mapping | Existing; zero-width tips accepted with nonzero stroke extent | Geometry replacement exists | Static mapping implemented; two local reference paint subsets match exactly after decode |
 | Groups and hierarchy | Existing | Authoring reader exposes hierarchy; legacy adapter flattens, opt-in hierarchy mode retains local groups/pivots | Existing group/paint graph | Group hierarchy operations within limits | Map local structure without flattening |
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
-| Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Drawing/frame operations within limits | Preserve reuse; resolve mixed source rates explicitly |
+| Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Stable-handle drawing/frame edits and atomic whole tables pass local Windows checks; live repeat controls remain open | Preserve reuse; resolve mixed source rates explicitly |
 | Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform key subset; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; native root-stop/seek controls locally checked, Quill semantics remain open | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed; project reader/writer retains raw RGB/RGBA previews | Spawn metadata, encoded previews and on-demand pixels exposed; hierarchy adapter maps spheres, previews and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; full common-property constructor with hidden startup visibility encoded as a key | Spawn edits within limits | Stored preview conversion implemented both directions; generated previews, exact JPEG parity and broader navigation acceptance open |
@@ -2162,6 +2165,38 @@ replacement-run closure in section 6.26 (20:23 UTC):
    The earlier Android runtime readiness failure remains unresolved. Next after
    this milestone: move the existing required Android validation chain earlier,
    using the same-run native Android artifact, while retaining every existing gate.
+
+### 6.62. Earlier required Android runtime validation in progress (2026-10-22)
+
+1. Hosted Android player/Firebase/strict Vulkan aggregation currently waits for
+   the complete build workflow, including queued Apple builds and full UPM
+   packaging. The Android player only consumes libImmUnityPlugin.so from that
+   package. The same-run Android native artifact already contains that binary.
+2. Extracted the three hosted Android jobs to ci-engine-android.yml and call it
+   from build.yml immediately after build-android. The original Engine opt-in
+   expression and evidence scope are passed explicitly; secrets propagate at both
+   nested calls and permissions do not increase. Quick/build-only calls do not
+   acquire Firebase work. Quest hardware remains in the existing Engine workflow.
+3. Existing matrix variants, strict marker/capture/metric checks, classifiers,
+   failure propagation and artifact names remain required. Late duplicate hosted
+   Android jobs are removed. An Android failure fails the nested Build result and
+   blocks publish/release; no retry policy or acceptance threshold is weakened.
+4. A failed Build can skip late Engine aggregation, so top-level validation also
+   downloads the original UnityAndroidVulkan artifact directly and writes its
+   report even after a failed download. Missing evidence still fails required
+   hosted scope; direct collection preserves diagnostics rather than accepting it.
+5. Workflow syntax validation with actionlint 1.7.12 passes with the existing
+   custom self-hosted labels registered locally. Composition, face-orientation,
+   cache-boundary, sample-entrypoint, report and matrix-evidence checks pass.
+   Workflow wiring verifies 53 jobs; negative mutations reject the wrong early
+   dependency, a cross-run native artifact, caller opt-in drift and removal of the
+   device-success gate. Semantic comparison confirms the three extracted jobs
+   retain their steps/settings except the native artifact reference, and the
+   other fifteen engine jobs are unchanged except the removed collector dependency.
+   Evidence: artifacts/android-ci-actionlint.log, android-ci-*-contracts.log,
+   android-ci-job-equivalence.log and early-android-workflow-verifier.log.
+   Replacement live CI remains pending. This schedules evidence sooner; it does
+   not close the Android failure.
 
 ## 7. Consolidated documents
 

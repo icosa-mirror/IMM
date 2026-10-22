@@ -152,8 +152,11 @@ def main() -> int:
             "-immSmokeFrames 120",
             "-immSmokeExpectedGraphicsApi Metal",
             "-immSmokeMinOrderedOverlayImmUniqueColors 3000",
+            "unity-windows-directx-sample1.png",
+        ],
+        ROOT / ".github/workflows/ci-engine-android.yml": [
             "unity-android-vulkan:",
-            "name: ImmPlayerPlugin-Unity",
+            "name: Internal-ImmViewerPlugin-Android",
             "model=dm3q,version=34",
             "Prepare clean non-XR Unity Android project",
             "Verify Firebase Adreno device target",
@@ -198,7 +201,6 @@ def main() -> int:
             "--minimum-consecutive-frames 2",
             "--sample-interval-seconds 2",
             "unity-android-vulkan-composition-metrics.json",
-            "unity-windows-directx-sample1.png",
             "unity-android-vulkan-sample1.json",
             "unity-android-vulkan-composition-sample1.json",
         ],
@@ -632,7 +634,7 @@ def main() -> int:
             "Godot Vulkan smoke must use only the shared render-metrics baseline comparator"
         )
 
-    for workflow_name in ["ci-engine.yml", "ci-gpu.yml"]:
+    for workflow_name in ["ci-engine.yml", "ci-engine-android.yml", "ci-gpu.yml"]:
         workflow_text = (ROOT / ".github/workflows" / workflow_name).read_text(encoding="utf-8")
         if "expected_failed" in workflow_text:
             errors.append(f"{workflow_name} must not downgrade composition failures to expected_failed")

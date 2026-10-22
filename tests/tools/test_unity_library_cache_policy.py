@@ -9,7 +9,7 @@ def main():
     entries = ('PackageCache/', 'DataStore/', 'ArtifactDB', 'SourceAssetDB',
                'ShaderCache/', 'ShaderCache.db')
     configurations = 0
-    for name in ('ci-engine.yml', 'ci-ios.yml'):
+    for name in ('ci-engine.yml', 'ci-engine-android.yml', 'ci-ios.yml'):
         workflow = yaml.safe_load((root / '.github/workflows' / name).read_text())
         for job_name, job in workflow['jobs'].items():
             operations = {}

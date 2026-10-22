@@ -9,6 +9,16 @@ on:
         description: Build platform artifacts or publish artifacts produced earlier in the caller run.
         required: true
         type: string
+      validate_android_runtime:
+        description: Run the required Android engine gates immediately after the Android native build.
+        required: false
+        default: false
+        type: boolean
+      validation_evidence_scope:
+        description: Matrix evidence scope passed to the early Android engine gates.
+        required: false
+        default: hosted
+        type: string
       sync_binaries:
         description: Commit freshly built runtime binaries and packages back to the integration branch.
         required: false
@@ -652,6 +662,18 @@ jobs:
           code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/godot-extension-android-libs.txt
         if-no-files-found: error
         retention-days: 1
+
+  android-runtime:
+    name: Android Runtime
+    if: inputs.mode == 'build' && inputs.validate_android_runtime
+    needs: build-android
+    uses: ./.github/workflows/ci-engine-android.yml
+    permissions:
+      actions: write
+      contents: read
+    with:
+      evidence_scope: ${{ inputs.validation_evidence_scope }}
+    secrets: inherit
 
   build-macos:
     name: macOS

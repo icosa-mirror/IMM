@@ -1,0 +1,747 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI Engine Matrix Android
+
+on:
+  workflow_call:
+    inputs:
+      evidence_scope:
+        description: Matrix evidence scope selected by the calling workflow.
+        required: false
+        default: hosted
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  MATRIX_EVIDENCE_SCOPE: ${{ inputs.evidence_scope }}
+  UNITY_VERSION: "6000.6.0f1"
+  UNITY_ANDROID_VULKAN_VERSION: "6000.6.0f1"
+  FTL_UNITY_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_UNITY_ADRENO_DEVICE || 'model=dm3q,version=34,locale=en,orientation=landscape' }}
+  FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
+  FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
+  IMM_UNITY_FALLBACK_LICENSE: |
+    <?xml version="1.0" encoding="UTF-8"?><root><TimeStamp Value="chxldhvc0zh5Vw=="/>
+        <License id="Terms">
+            <MachineBindings>
+                <Binding Key="1" Value="C372866C-B44C-5E48-806F-7583B55F04FB"/>
+                <Binding Key="2" Value="C02F32Y5ML85"/>
+            </MachineBindings>
+            <MachineID Value="LcL/yxIaeUG12OSX31mKDtxcVx8="/>
+            <SerialHash Value="e25c63636985259e763d40cc9253cdfe6a862ceb"/>
+            <Features>
+                <Feature Value="33"/>
+                <Feature Value="1"/>
+                <Feature Value="12"/>
+                <Feature Value="2"/>
+                <Feature Value="24"/>
+                <Feature Value="3"/>
+                <Feature Value="36"/>
+                <Feature Value="17"/>
+                <Feature Value="19"/>
+                <Feature Value="62"/>
+            </Features>
+            <DeveloperData Value="AQAAAEY0LUtFWUItMzYyOC0zWEI3LVBZVVEtTUI5VQ=="/>
+            <SerialMasked Value="F4-KEYB-3628-3XB7-PYUQ-XXXX"/>
+            <StartDate Value="2023-11-21T00:00:00"/>
+            <UpdateDate Value="2023-11-22T06:03:23"/>
+            <InitialActivationDate Value="2023-11-21T06:03:21"/>
+            <LicenseVersion Value="6.x"/>
+            <ClientProvidedVersion Value="2017.2.0"/>
+            <AlwaysOnline Value="false"/>
+            <Entitlements>
+                <Entitlement Ns="unity_editor" Tag="UnityPersonal" Type="EDITOR" ValidTo="9999-12-31T00:00:00"/>
+                <Entitlement Ns="unity_editor" Tag="DarkSkin" Type="EDITOR_FEATURE" ValidTo="9999-12-31T00:00:00"/>
+            </Entitlements>
+        </License><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#Terms"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>9DZF11miRAzx7TIuCxih78B6CXU=</DigestValue></Reference></SignedInfo><SignatureValue>weRQubqMNN61lSZtm/e7S+UDzTPNQjM5aQl/c4aKLH/b2khefpgLfdWneoxdnNopA6+rW6kBqxWt
+    hMLdHY+oAOfDsfmMQRTnmQG0Y3G3xh6gjGP1RAIHoLDfFHf+0LQ3FakA2WehcFWPSYeVDrdxm3HW
+    qMmdKWooD9i+J4s4rQFTDx9+/G6yjc5KGTyGxIz3c5kxTEkV2qsFPXsauomY9Z8YPKy+cZK7g+Ol
+    pO+LhtzetgTIlIN/qG8eByjlp6nOuVGdDOIrhNJW+vllNyx0qNWPREadVrhFViI4UXegMFRl5gJc
+    rgcrlr/fD+NorDVLfcu7D863QXkkuriILUIq2Q==</SignatureValue></Signature></root>
+
+jobs:
+  unity-android-player-build:
+    name: Unity Android ${{ matrix.variant }} Player Build
+    if: >-
+      (github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: nonxr
+            build_method: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanNonXrSmokePlayer
+            shell_apk: .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+            apk: ImmUnitySmoke.apk
+          - variant: urp
+            build_method: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanUrpSmokePlayer
+            shell_apk: .ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk
+            apk: ImmUnityUrpSmoke.apk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK for APK re-signing
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download same-commit Android Unity native plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: Internal-ImmViewerPlugin-Android
+          path: artifacts/unity-android-vulkan/native-plugin
+
+      - name: Stage same-commit Android Unity native plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          plugin="$(find artifacts/unity-android-vulkan/native-plugin -name libImmUnityPlugin.so -type f | head -n 1)"
+          if [ -z "$plugin" ]; then
+            echo "Same-commit Android Unity native plugin was not present in Internal-ImmViewerPlugin-Android"
+            exit 1
+          fi
+          destination="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+          cp "$plugin" "$destination"
+
+      - name: Prepare clean non-XR Unity Android project
+        run: >
+          python tests/tools/prepare_unity_ci_project.py
+          --source code/ImmUnitySampleProject
+          --output .ci-workspace/unity-android-vulkan-nonxr
+          --include-performance-probe
+
+      - name: Restore cached Unity Android Vulkan shell APK
+        id: cache_unity_android_vulkan_shell
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ matrix.shell_apk }}
+          key: UnityAndroidVulkanShell-v2-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'tests/unity/**', 'exampleImmFiles/urp-content/**', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so', '!code/ImmUnitySampleProject/Packages/**/Plugins/x86_64/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/macOS/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/OSX/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/iOS/**', '!code/ImmUnitySampleProject/Packages/**/Plugins/WebGL/**', '!code/ImmUnitySampleProject/Packages/**/*.md') }}
+
+      - name: Restore Unity Android Library cache
+        id: cache_unity_android_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: |
+            .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/DataStore/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ArtifactDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-allowlist-v1-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
+
+      - name: Restore Unity PackageCache cache
+        id: cache_unity_android_packagecache
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
+
+      - name: Preflight Unity Android Vulkan runner
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-android-vulkan/preflight-${{ matrix.variant }}.json
+
+      - name: Start live Unity android memory diagnostics
+        run: |
+          mkdir -p artifacts/unity-android-vulkan
+          nohup python3 tests/tools/monitor_unity_build_memory.py --output artifacts/unity-android-vulkan/memory-${{ matrix.variant }}.jsonl --workspace "$GITHUB_WORKSPACE" > artifacts/unity-android-vulkan/memory-${{ matrix.variant }}-monitor.log 2>&1 &
+          echo $! > artifacts/unity-android-vulkan/memory-${{ matrix.variant }}.pid
+
+      - name: Build Unity Android Vulkan smoke player
+        id: unity_android_vulkan_build
+        if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true'
+        timeout-minutes: 45
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: .ci-workspace/unity-android-vulkan-nonxr
+          unityVersion: ${{ env.UNITY_ANDROID_VULKAN_VERSION }}
+          targetPlatform: Android
+          versioning: None
+          buildMethod: ${{ matrix.build_method }}
+          customParameters: -nographics -job-worker-count 2 -desiredWorkerCount 1 -standbyWorkerCount 1 -logFile /github/workspace/artifacts/unity-android-vulkan/unity-${{ matrix.variant }}-editor.log -immSmokePlayerPath /github/workspace/${{ matrix.shell_apk }}
+
+      - name: Stop live Unity android memory diagnostics
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 1
+        run: python3 tests/tools/monitor_unity_build_memory.py --stop artifacts/unity-android-vulkan/memory-${{ matrix.variant }}.pid --output artifacts/unity-android-vulkan/memory-${{ matrix.variant }}.jsonl
+
+      - name: Collect Unity Android smoke runner memory diagnostics
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          mkdir -p artifacts/unity-android-vulkan
+          {
+            date -u
+            free -m
+            cat /proc/pressure/memory
+            sudo -n journalctl -k --since '-30 minutes' --no-pager | \
+              grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+            sudo -n dmesg --ctime | \
+              grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+            # Containers are removed by the action; Docker retains OOM events.
+            docker events --since 30m --until "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --filter type=container --filter event=oom \
+              --format '{{.Time}} {{.Actor.ID}} {{.Actor.Attributes.image}}' || true
+          } > artifacts/unity-android-vulkan/runner-memory-${{ matrix.variant }}-smoke.log 2>&1
+
+      - name: Save Unity Android Vulkan shell APK cache
+        if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true' && steps.unity_android_vulkan_build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ matrix.shell_apk }}
+          # Reuse the pre-build key. Unity mutates project files during a build,
+          # so recomputing hashFiles here would save under an unrestorable key.
+          key: ${{ steps.cache_unity_android_vulkan_shell.outputs.cache-primary-key }}
+
+      - name: Inject same-commit plugin into Unity Android Vulkan shell APK
+        if: matrix.variant == 'nonxr'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shell_apk=".ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk"
+          plugin="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+          # game-ci's Docker container can leave .ci-cache root-owned. Keep all
+          # mutable repack/signing files in GitHub's runner-owned temp directory.
+          work_dir="${RUNNER_TEMP}/unity-android-vulkan-repack"
+          unsigned_apk="$work_dir/ImmUnitySmoke-unsigned.apk"
+          aligned_apk="$work_dir/ImmUnitySmoke-aligned.apk"
+          output_apk="artifacts/unity-android-vulkan/ImmUnitySmoke.apk"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          if [ -z "$build_tools" ] || [ ! -x "$build_tools/zipalign" ] || [ ! -x "$build_tools/apksigner" ]; then
+            echo "Android SDK zipalign/apksigner tools were not found"
+            exit 1
+          fi
+          mkdir -p "$work_dir" "$(dirname "$output_apk")"
+          python tests/tools/repack_android_native_library.py \
+            --input-apk "$shell_apk" \
+            --library "$plugin" \
+            --entry lib/arm64-v8a/libImmUnityPlugin.so \
+            --output-apk "$unsigned_apk"
+          "$build_tools/zipalign" -P 16 -f 4 "$unsigned_apk" "$aligned_apk"
+          if [ ! -f "$work_dir/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$work_dir/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -noprompt
+          fi
+          "$build_tools/apksigner" sign \
+            --ks "$work_dir/debug.keystore" \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$output_apk" \
+            "$aligned_apk"
+          "$build_tools/apksigner" verify --verbose "$output_apk"
+
+      - name: Inject same-commit plugin into Unity Android Vulkan URP shell APK
+        if: matrix.variant == 'urp'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shell_apk=".ci-cache/unity-android-vulkan-shell/urp/ImmUnityUrpSmoke.apk"
+          plugin="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+          # game-ci's Docker container can leave .ci-cache root-owned. Keep all
+          # mutable repack/signing files in GitHub's runner-owned temp directory.
+          work_dir="${RUNNER_TEMP}/unity-android-vulkan-urp-repack"
+          unsigned_apk="$work_dir/ImmUnitySmoke-unsigned.apk"
+          aligned_apk="$work_dir/ImmUnitySmoke-aligned.apk"
+          output_apk="artifacts/unity-android-vulkan/ImmUnityUrpSmoke.apk"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          if [ -z "$build_tools" ] || [ ! -x "$build_tools/zipalign" ] || [ ! -x "$build_tools/apksigner" ]; then
+            echo "Android SDK zipalign/apksigner tools were not found"
+            exit 1
+          fi
+          mkdir -p "$work_dir" "$(dirname "$output_apk")"
+          python tests/tools/repack_android_native_library.py \
+            --input-apk "$shell_apk" \
+            --library "$plugin" \
+            --entry lib/arm64-v8a/libImmUnityPlugin.so \
+            --output-apk "$unsigned_apk"
+          "$build_tools/zipalign" -P 16 -f 4 "$unsigned_apk" "$aligned_apk"
+          if [ ! -f "$work_dir/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$work_dir/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -noprompt
+          fi
+          "$build_tools/apksigner" sign \
+            --ks "$work_dir/debug.keystore" \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$output_apk" \
+            "$aligned_apk"
+          "$build_tools/apksigner" verify --verbose "$output_apk"
+
+      - name: Verify Unity Android APK is non-XR
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="artifacts/unity-android-vulkan/${{ matrix.apk }}"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          manifest_dump="artifacts/unity-android-vulkan/android-${{ matrix.variant }}-manifest.txt"
+          "$build_tools/aapt" dump xmltree "$apk" AndroidManifest.xml | tee "$manifest_dump"
+          grep -q "android.intent.category.LAUNCHER" "$manifest_dump"
+          if grep -Eiq "oculus|openxr|vr\.headtracking|HAND_TRACKING" "$manifest_dump"; then
+            echo "Unity Android Vulkan 2D APK still contains XR manifest declarations"
+            exit 1
+          fi
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_unity_android_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Android Library cache
+        if: always() && steps.cache_unity_android_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: |
+            .ci-workspace/unity-android-vulkan-nonxr/Library/PackageCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/DataStore/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ArtifactDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/SourceAssetDB
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache/
+            .ci-workspace/unity-android-vulkan-nonxr/Library/ShaderCache.db
+          key: UnityLibrary-allowlist-v1-android-vulkan-${{ matrix.variant }}-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Android player build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Intermediate-UnityAndroid-build-${{ matrix.variant }}
+          path: artifacts/unity-android-vulkan
+          if-no-files-found: error
+          retention-days: 14
+
+  unity-android-device-validation:
+    name: Unity Android ${{ matrix.variant }} Firebase Validation
+    if: >-
+      (github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))
+    needs: unity-android-player-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [nonxr, urp]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download same-commit Android player
+        uses: actions/download-artifact@v4
+        with:
+          name: Intermediate-UnityAndroid-build-${{ matrix.variant }}
+          path: artifacts/unity-android-vulkan
+
+      - name: Check Firebase Test Lab configuration
+        env:
+          FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${FTL_PROJECT_ID:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_PROJECT_ID"
+            missing=1
+          fi
+          if [ -z "${FTL_RESULTS_BUCKET:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_RESULTS_BUCKET"
+            missing=1
+          fi
+          if [ -z "${FTL_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "Missing repository secret FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify Firebase Adreno device target
+        shell: bash
+        run: |
+          set -euo pipefail
+          model_id="${FTL_UNITY_DEVICE#model=}"
+          model_id="${model_id%%,*}"
+          gcloud firebase test android models describe "$model_id"
+
+      - name: Install physical-device video validator dependency
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo timeout 120 apt-get update
+            sudo timeout 120 apt-get install --yes ffmpeg
+          fi
+          ffmpeg -version
+
+      - name: Run Unity Android Vulkan smoke in Firebase Test Lab
+        if: matrix.variant == 'nonxr'
+        timeout-minutes: 30
+        continue-on-error: true
+        shell: bash
+        run: >
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-unity-android-vulkan"
+          --device "$FTL_UNITY_DEVICE"
+          --app artifacts/unity-android-vulkan/ImmUnitySmoke.apk
+          --test-type robo
+          --robo-script tests/fixtures/firebase/unity_android_vulkan_wait.roboscript
+          --artifact-dir artifacts/unity-android-vulkan
+          --timeout 5m
+          --directory-to-pull /sdcard/Android/data/com.ImmersiveFoundation.IMMUnityTest/files
+          --required-marker "[IMM_UNITY_SMOKE] Android Vulkan CI smoke installed"
+          --required-marker "[IMM_UNITY_ANDROID_VK_CI_FRAME_PACING_20260803] optimizedFramePacing=0"
+          --required-marker "[IMM_UNITY_VK_VALIDATION_ARGS_20260731]"
+          --required-marker "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan"
+          --required-marker "[IMM_UNITY_VK_QUEUE_20260802] dedicatedQueueAllowed=1"
+          --required-marker "[IMM_UNITY_VK_QUEUE_20260802] mode=dedicated queueIndex=1"
+          --required-marker "Vulkan renderer initialized with external device"
+          --required-marker "[IMM_UNITY_VK_RT_SRC_20260612]"
+          --required-marker "source=offscreenRT"
+          --required-marker "Vulkan renderer began external image frame"
+          --required-marker "[IMM_UNITY_SMOKE] smoke spawn area 0 applied"
+          --required-marker "[IMM_UNITY_SMOKE] native render ready paintDrawCalls="
+          --required-marker "[IMM_UNITY_SMOKE] render candidate capture="
+          --required-marker "[IMM_UNITY_SMOKE] render source=unity-vulkan-presented-screen"
+          --required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"
+          --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_RT_20260801]"
+          --required-marker "[IMM_UNITY_VK_ONRENDERIMAGE_20260802]"
+          --required-marker "[IMM_UNITY_VK_DEPTH_SAMPLE_20260803]"
+          --required-marker "[IMM_UNITY_VK_DEPTH_COMPOSITE_20260803]"
+          --required-marker "shader=Unlit/Transparent supported=True"
+          --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_HOLD_20260731]"
+          --required-marker "[IMM_UNITY_SMOKE] render candidate capture="
+          --required-marker "[IMM_UNITY_VK_SYNTH_STEREO_20260803] passed"
+          --required-marker "[IMM_SYNTH_NATIVE_EYE_20260804] pair capture="
+          --required-marker "[IMM_UNITY_SMOKE] synthetic stereo Vulkan capture="
+          --required-marker "[IMM_UNITY_SMOKE] capture="
+          --required-capture-name unity-android-vulkan-render.png
+          --required-capture-name unity-android-vulkan-face-orientation.png
+          --required-capture-name unity-android-vulkan-synthetic-stereo.png
+          --required-capture-name unity-android-vulkan-synthetic-stereo-native.png
+          --required-capture-name unity-android-vulkan.png
+          --external-screen-capture-name unity-android-vulkan-robo-final.png
+          --client-label "IMM Unity Android Vulkan"
+
+      - name: Validate Unity Android Vulkan URP in Firebase Test Lab
+        if: matrix.variant == 'urp'
+        timeout-minutes: 30
+        shell: bash
+        run: >
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-unity-android-vulkan-urp"
+          --device "$FTL_UNITY_DEVICE"
+          --app artifacts/unity-android-vulkan/ImmUnityUrpSmoke.apk
+          --test-type robo
+          --robo-script tests/fixtures/firebase/unity_android_vulkan_urp_wait.roboscript
+          --artifact-dir artifacts/unity-android-vulkan/urp
+          --timeout 5m
+          --directory-to-pull /sdcard/Android/data/com.ImmersiveFoundation.IMMUnityTest/files
+          --required-marker "[IMM_URP_SMOKE] graphicsDevice=Vulkan"
+          --required-marker "[IMM_URP_SMOKE] PASS rendered at 1 samples."
+          --required-marker "[IMM_URP_SMOKE] PASS rendered at 4 samples."
+          --required-marker "[IMM_URP_SMOKE] PASS bidirectional depth composition at 1 samples."
+          --required-marker "[IMM_URP_SMOKE] PASS bidirectional depth composition at 4 samples."
+          --required-marker "[IMM_URP_SMOKE] PASS queued camera isolation."
+          --required-marker "[IMM_URP_SMOKE] PASS attributed native events for two cameras and camera opt-out."
+          --required-marker "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique=Static."
+          --required-marker "[IMM_URP_CONTENT] PASS ten paint, picture and model documents through Unity RenderGraph technique=Pretessellated."
+          --required-marker "[IMM_URP_SMOKE] PASS zero managed allocations in warmed IMM pass callbacks (32 frames)."
+          --required-marker "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down."
+          --client-label "IMM Unity Android Vulkan URP"
+
+      - name: Verify unity-android-vulkan/urp rendered-frame evidence
+        if: always() && matrix.variant == 'urp'
+        shell: pwsh
+        run: |
+          $sample = Get-ChildItem -Path artifacts/unity-android-vulkan/urp -Recurse -Filter performance-measurements-raw.json -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $sample) { throw "Missing rendered-frame performance evidence" }
+          python tests/tools/verify_frame_sample.py $sample.FullName --output artifacts/unity-android-vulkan/urp/performance-verdict.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload Android device evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Intermediate-UnityAndroid-device-${{ matrix.variant }}
+          path: artifacts/unity-android-vulkan
+          if-no-files-found: error
+          retention-days: 14
+
+  unity-android-vulkan:
+    name: Unity Android Vulkan
+    if: >-
+      always() && (github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))
+    needs: [unity-android-player-build, unity-android-device-validation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download Android build and device evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Intermediate-UnityAndroid-*
+          merge-multiple: true
+          path: artifacts/unity-android-vulkan
+
+      - name: Require Android build and device validation success
+        if: always()
+        env:
+          BUILD_RESULT: ${{ needs.unity-android-player-build.result }}
+          DEVICE_RESULT: ${{ needs.unity-android-device-validation.result }}
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$DEVICE_RESULT" = success
+
+      - name: Install physical-device video validator dependency
+        run: |
+          sudo timeout 120 apt-get update
+          sudo timeout 120 apt-get install --yes ffmpeg
+          ffmpeg -version
+
+      - name: Record Unity Android Vulkan visual metrics
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $failed = $false
+          $renderCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-render.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($renderCapture) {
+            python tests/tools/compare_render_metrics.py $renderCapture.FullName `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          } else {
+            '{"passed":false,"errors":["missing Firebase Test Lab unity-android-vulkan-render.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
+            Write-Warning "Missing Firebase Test Lab unity-android-vulkan-render.png"
+            $failed = $true
+          }
+
+          $compositionCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($compositionCapture) {
+            python tests/tools/compare_render_metrics.py $compositionCapture.FullName `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-composition-sample1.json `
+              --diagnostic-overlay-output artifacts/unity-android-vulkan/unity-android-vulkan-composition-probe-overlay.png `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-composition-metrics.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          } else {
+            '{"passed":false,"errors":["missing Firebase Test Lab unity-android-vulkan.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-composition-metrics.json
+            Write-Warning "Missing Firebase Test Lab unity-android-vulkan.png"
+            $failed = $true
+          }
+
+          $stereoCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-synthetic-stereo.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($stereoCapture) {
+            python tests/tools/validate_stereo_capture.py $stereoCapture.FullName `
+              --left-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left.png `
+              --right-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right.png `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-stereo-structure.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+
+            python tests/tools/compare_render_metrics.py artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left.png `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left-metrics.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+
+            python tests/tools/compare_render_metrics.py artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right.png `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right-metrics.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+
+            $firebaseLog = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -File -Filter logcat -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($firebaseLog) {
+              python tests/tools/verify_synthetic_stereo_log.py `
+                --log $firebaseLog.FullName `
+                --output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-stereo-log-contract.json
+              if ($LASTEXITCODE -ne 0) { $failed = $true }
+            } else {
+              '{"status":"failed","failures":["missing Firebase device log for synthetic stereo contract"]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-stereo-log-contract.json
+              Write-Warning "Missing Firebase device log for synthetic stereo contract"
+              $failed = $true
+            }
+          } else {
+            '{"status":"failed","failures":["missing Firebase Test Lab unity-android-vulkan-synthetic-stereo.png"]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-stereo-structure.json
+            Write-Warning "Missing Firebase Test Lab unity-android-vulkan-synthetic-stereo.png"
+            $failed = $true
+          }
+
+          $nativeStereoCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-synthetic-stereo-native.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($nativeStereoCapture) {
+            python tests/tools/validate_stereo_capture.py $nativeStereoCapture.FullName `
+              --left-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-left.png `
+              --right-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-right.png `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-stereo-structure.json
+
+            python tests/tools/compare_render_metrics.py artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-left.png `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-left-metrics.json
+
+            python tests/tools/compare_render_metrics.py artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-right.png `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-right-metrics.json
+          } else {
+            '{"status":"failed","failures":["missing Firebase Test Lab unity-android-vulkan-synthetic-stereo-native.png"]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-stereo-structure.json
+            Write-Warning "Missing Firebase Test Lab native-eye synthetic stereo capture"
+          }
+
+          $deviceVideo = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter video.mp4 -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($deviceVideo) {
+            python tests/tools/validate_render_video.py $deviceVideo.FullName `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-external-render-sample1.json `
+              --capture-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render-video-validation.json `
+              --sample-interval-seconds 2 `
+              --minimum-consecutive-frames 2
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+            $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue
+            if ($externalRenderCapture) {
+              python tests/tools/compare_render_metrics.py $externalRenderCapture.FullName `
+                --reference tests/baselines/render/unity-windows-directx-sample1.png `
+                --contract tests/baselines/render/unity-android-vulkan-external-render-sample1.json `
+                --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render-metrics.json
+              if ($LASTEXITCODE -ne 0) { $failed = $true }
+            }
+
+          } else {
+            '{"passed":false,"errors":["missing Firebase physical-device video"],"frames":[]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-external-render-video-validation.json
+            Write-Warning "Missing Firebase physical-device video"
+            $failed = $true
+          }
+
+          if ($failed) { exit 1 }
+
+      - name: Classify Unity Android Vulkan face orientation
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-face-orientation.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) { throw "Missing Firebase face-orientation capture" }
+          python tests/tools/classify_face_orientation_capture.py $capture.FullName `
+            --status-output artifacts/unity-android-vulkan/face-orientation-status.json `
+            --capture-output artifacts/unity-android-vulkan/captures/face-orientation/unity-android-vulkan.png `
+            --overlay-output artifacts/unity-android-vulkan/captures/face-orientation/unity-android-vulkan-overlay.png
+
+      - name: Write Unity Android Vulkan screenshot report
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-render.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/unity-android-vulkan/missing-unity-android-vulkan-render.png" }
+          python tests/tools/write_render_report.py `
+            --metrics-json artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json `
+            --candidate-capture $captureArg `
+            --output-dir artifacts/unity-android-vulkan/captures `
+            --markdown-output artifacts/unity-android-vulkan/render-report.md
+          $compositionCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($compositionCapture) {
+            New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/composition | Out-Null
+            Copy-Item -LiteralPath $compositionCapture.FullName -Destination artifacts/unity-android-vulkan/captures/composition/unity-android-vulkan-composition.png -Force
+          }
+          $stereoCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-synthetic-stereo.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($stereoCapture) {
+            New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/synthetic-stereo | Out-Null
+            Copy-Item -LiteralPath $stereoCapture.FullName -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-stereo.png -Force
+            Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-left.png -Force -ErrorAction SilentlyContinue
+            Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-right.png -Force -ErrorAction SilentlyContinue
+          }
+          $nativeStereoCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-synthetic-stereo-native.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($nativeStereoCapture) {
+            New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/synthetic-stereo-native | Out-Null
+            Copy-Item -LiteralPath $nativeStereoCapture.FullName -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo-native/unity-android-vulkan-synthetic-stereo-native.png -Force
+            Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-left.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo-native/unity-android-vulkan-synthetic-native-left.png -Force -ErrorAction SilentlyContinue
+            Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-right.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo-native/unity-android-vulkan-synthetic-native-right.png -Force -ErrorAction SilentlyContinue
+          }
+          $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue
+          if ($externalRenderCapture) {
+            New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/external-render | Out-Null
+            Copy-Item -LiteralPath $externalRenderCapture.FullName -Destination artifacts/unity-android-vulkan/captures/external-render/unity-android-vulkan-external-render.png -Force
+          }
+
+      - name: Classify Unity Android Vulkan result
+        if: always()
+        run: python tests/tools/classify_android_unity_vulkan.py --artifact-dir artifacts/unity-android-vulkan --output artifacts/unity-android-vulkan/android-vulkan-status.json
+
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts/unity-android-vulkan/android-vulkan-status.json --output artifacts/unity-android-vulkan/manifest.json --product unity --platform-name android --mode non-vr --renderer vulkan --include artifacts/unity-android-vulkan
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-android-vulkan --require-manifest --output artifacts/unity-android-vulkan/artifact-summary.json
+
+      - name: Upload Unity Android Vulkan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityAndroidVulkan
+          path: artifacts/unity-android-vulkan
+          if-no-files-found: ignore
+          retention-days: 14
