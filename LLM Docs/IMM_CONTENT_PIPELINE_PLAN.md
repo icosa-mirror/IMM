@@ -9,40 +9,23 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
-Current checkpoint (2026-10-22): paint/group lifecycle, spawn cache publication,
-whole-table paint timelines and canonical property publication have local validation
-recorded in 6.53-6.63. Uploaded, unpublished replacement cancellation now passes
-three Windows D3D11 cases (6.64), is committed in f50ec11d and is required in Windows
-CI. Full validation run 39723167991 was cancelled
-after the subsequent source defect below. Hosted acceptance is pending.
-A subsequent ownership audit found a D3D11 structured-buffer view leak (6.66);
-the fix and direct COM lifetime regression are pushed in b4a2c595. Fresh full
-validation run 39724027590 was cancelled after the playback regressions in 6.67
-were established. Playback correction 86fd4645 is now pushed with passing local
-regressions (6.67). Full run 39724961901 is completed/cancelled after the additional root/group
-repeat regressions in 6.68 were reproduced. Correction 3b8589b1 passed local
-playback checks, but the CI audit found an Android compiler failure from the earlier
-paint change (6.69). Run 39725916624 is completed/cancelled; the override
-annotation fix a0f71bd4 is pushed and passes a local Android NDK importer build.
-Run 39726457067 has passed Android native compilation (including importer) and
-required Windows native authoring/frame-table/property checks. Last audit: eleven
-jobs passed, one queued, no failures; full hosted acceptance remains pending.
+Current checkpoint (2026-10-22): full hosted CI run 39726457067 on a0f71bd4
+completed successfully on attempt 2: 49 jobs passed, 22 skipped, no failures.
+Actual final artifact 12409062591 passes all 20 required hosted evidence rows with
+no missing required evidence. The single permitted standalone iOS Simulator retry
+resolved the first attempt's boot timeout; no gate or scope was weakened (6.71).
+The prior Android readiness/composition and compiler failures are closed for this
+validated baseline. CI-built/package macOS and all-platform export checks pass.
+Tracked local non-Windows binaries were not refreshed by the skipped binary-sync
+step; CI artifact acceptance does not claim they were updated in this checkout.
 
-The Android non-XR missing-paint failure is corrected in 1d31040d. Fresh run
-39721181625 has actual non-XR and URP producer passed=true reports. Non-XR captures
-contain visible IMM paint and pass rear occlusion at the unchanged threshold; URP
-content/depth/allocation checks and rendered-frame evidence pass. Both APK native
-payloads match the same-run build. Strict artifact 12401878020 now passes its
-status, manifest, capture/composition, stereo, native-eye, video and face-orientation
-checks. This closes the earlier Android readiness/composition failure for the
-hosted device scope at 1d31040d; full multiplatform CI remains pending. Last checked:
-eighteen jobs passed, two queued, no CI failures observed. Section 6.65 records the preceding false-green job,
-source fix and replacement evidence. No extra infrastructure retry was used.
-Packaged macOS exports remain stale until replacement builds/gates succeed.
-Earlier Unity CS1061 and Godot iOS failures were closed by complete hosted runs
-39645977224/39646549914; those historical passes do not accept later APIs.
-Confirmed regressions take priority over new feature work (6.26). Detailed source,
-local, hosted and hardware evidence is recorded separately in section 6.
+Live static-paint Loop/Offset work (6.70) remains uncommitted and outside this CI
+pass. Its hidden-parent correction still needs a rebuild and revalidation. Full
+M1/M2, revision-selected save, managed live cutover, converter chapter/media/reverse
+fidelity and broader platform acceptance remain open. Hardware-only Unity Windows
+Vulkan evidence is incomplete; the full hosted workflow does not accept that row.
+Earlier numbered checkpoints retain historical results; use this checkpoint and
+6.71 for current CI acceptance.
 
 ## 1. Objective and document ownership
 
@@ -2533,8 +2516,49 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    sounds. A targeted static-paint evaluator path is being implemented. Queued and
    prepared unload, CPU/presentation rejection, stable handles/mappings/tokens and
    visible A/B selection need independent acceptance evidence.
-4. Implementation and tests are in progress. No live-key, M2, managed-cutover or
-   full-platform acceptance is claimed yet.
+4. Six real viewer cases, C ABI validation, converter/policy/sequence regressions
+   and initial Windows/NDK importer builds pass locally. Subsequent audit reproduced
+   stale selection after a hidden paused edit then unhide. The targeted helper now
+   updates latent selection while hidden, but that final source correction has NOT
+   been rebuilt/retested yet. Work is frozen uncommitted while 6.71 takes priority.
+   No live-key, M2, managed-cutover or full-platform acceptance is claimed.
+
+### 6.71. Full hosted CI acceptance restored (2026-10-22)
+
+1. The user identified the acceptance gap: individual successful jobs and cancelled
+   pipelines did not deliver a completed full validation run. Feature work was
+   frozen without committing/pushing its source while full CI took priority.
+2. Run 39726457067 on a0f71bd4 attempt 1 had 44 successful jobs, one cancelled and
+   a failed evidence collector. GitHub's annotation proves standalone iOS exceeded
+   its 30-minute limit during Simulator boot. Compilation passed but application
+   runtime validation never started. Actual Godot iOS artifact 12404142261 passes;
+   its evidence was missing only because the preceding standalone download failure
+   prevented the later Godot download step.
+3. One targeted infrastructure retry of standalone iOS and dependents preserved
+   successful independent jobs. Attempt 2 completed SUCCESS: 49 jobs passed,
+   22 skipped, no failures. Boot, Metal visual/lifecycle, cadence, comparison and
+   final evidence collection all passed. No additional retry, weaker gate, reduced
+   workflow or feature push superseded this run.
+4. Actual CIValidationEvidence artifact 12409062591 identifies source a0f71bd4 and
+   passes all 20 supported hosted rows against that revision's exact matrix file.
+   Required scope is hosted; there are zero invalid or missing required rows.
+   Hardware-only unity/windows/non-vr/vulkan remains evidence_incomplete and is
+   explicitly NOT accepted by this hosted pass. Uncommitted live-key work is also
+   outside the tested source revision.
+5. CI macOS build and Package Unity Plugins export verification pass for all four
+   platforms: 147 unique required player exports (121 managed + 26 native-authoring)
+   and 51 reader bindings. The existing iOS registration wrapper is provided by
+   ImmUnityPluginRegister.mm, rather than the static library. This closes stale
+   CI-package export evidence for a0f71bd4; the skipped binary-sync step did not
+   update this checkout's tracked non-Windows binaries.
+6. Final Android provenance records source a0f71bd4/run 39726457067, passing
+   classification and producer/native payload hashes. Native SHA256:
+   0acfe87911d566056ad6ac2d783d98923809cb887e891baa1373a00b374ad639.
+   Evidence: artifacts/full-ci-39726457067-acceptance-audit.json,
+   full-ci-39726457067-android-provenance.json,
+   full-ci-package-export-verification.log, full-ci-retry-progress2.json and the
+   downloaded final CIValidationEvidence artifact. No full-roadmap completion is
+   claimed; the remaining M1-M5/converter requirements retain their own exit gates.
 
 ## 7. Consolidated documents
 
