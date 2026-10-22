@@ -222,6 +222,10 @@ jobs:
       shell: pwsh
       run: python code/appImmUnity/tests/viewpoint_policy_smoke.py --msbuild (Get-Command msbuild).Source
 
+    - name: Verify bounded native render readiness policy
+      shell: pwsh
+      run: dotnet run --project tests/UnityRenderReadiness/UnityRenderReadiness.csproj
+
     - name: Verify repeated live edit publication and visible target revisions
       shell: pwsh
       run: |

@@ -229,15 +229,34 @@ namespace ImmPlayer
                 }
 #if IMM_UNITY_ANDROID_VULKAN_CI
                 ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
-                PerformanceInfoNative performance = playerManager != null
-                    ? playerManager.GetPerformanceInfo() : default;
-                if (performance.numPaintDrawCalls <= 0 || performance.numTriangles <= 0)
+                const double readinessTimeoutSeconds = 5.0;
+                double readinessStarted = Time.realtimeSinceStartup;
+                PerformanceInfoNative performance = default;
+                ImmUnityRenderReadiness.Result readiness;
+                int readinessSamples = 0;
+                double readinessElapsed;
+                do
                 {
-                    Debug.LogError($"{Prefix}native paint render was not ready before capture");
+                    if (playerManager == null) playerManager = FindObjectOfType<ImmPlayerManager>();
+                    performance = playerManager != null ? playerManager.GetPerformanceInfo() : default;
+                    readinessElapsed = Time.realtimeSinceStartup - readinessStarted;
+                    readiness = ImmUnityRenderReadiness.Evaluate(readinessElapsed, readinessTimeoutSeconds,
+                        performance.numPaintDrawCalls, performance.numTriangles);
+                    ++readinessSamples;
+                    if (readiness == ImmUnityRenderReadiness.Result.Pending)
+                    {
+                        if (readinessSamples == 1)
+                            Debug.Log($"{Prefix}waiting for native paint render paintDrawCalls={performance.numPaintDrawCalls} triangles={performance.numTriangles}");
+                        yield return new WaitForEndOfFrame();
+                    }
+                } while (readiness == ImmUnityRenderReadiness.Result.Pending);
+                if (readiness != ImmUnityRenderReadiness.Result.Ready)
+                {
+                    Debug.LogError($"{Prefix}native paint render was not ready before capture paintDrawCalls={performance.numPaintDrawCalls} triangles={performance.numTriangles} waitedSeconds={readinessElapsed:F3} samples={readinessSamples}");
                     QuitIfRequested(2);
                     yield break;
                 }
-                Debug.Log($"{Prefix}native render ready paintDrawCalls={performance.numPaintDrawCalls} triangles={performance.numTriangles}");
+                Debug.Log($"{Prefix}native render ready paintDrawCalls={performance.numPaintDrawCalls} triangles={performance.numTriangles} waitedSeconds={readinessElapsed:F3} samples={readinessSamples}");
                 // The native eye texture is written on IMM's dedicated queue.
                 // Reading it back directly here bypasses Unity's presentation
                 // synchronization and can capture a black/stale slot even while

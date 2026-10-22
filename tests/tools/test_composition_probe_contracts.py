@@ -25,7 +25,9 @@ def main() -> int:
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs": [
             "AnalyzeProbeRegion",
-            "performance.numPaintDrawCalls <= 0 || performance.numTriangles <= 0",
+            "ImmUnityRenderReadiness.Evaluate(readinessElapsed, readinessTimeoutSeconds,",
+            "if (readiness != ImmUnityRenderReadiness.Result.Ready)",
+            "native paint render was not ready before capture paintDrawCalls=",
             "native render ready paintDrawCalls=",
             "MinFrontProbeShare",
             "MinRearVisibleProbeShare",

@@ -22,7 +22,7 @@ evidence. macOS/iOS builds and all three iOS visual gates passed. Its single
 targeted retry has passed Android, but downstream Android Vulkan validation now
 fails because required Firebase log markers and captures are absent despite both
 Firebase jobs reporting success. This remains unresolved and is under investigation;
-no further retry has been requested (section 6.49).
+no further retry has been requested (sections 6.49-6.50).
 Later APIs still need their own platform/package acceptance;
 hosted success does not establish skipped hardware gates or full content fidelity.
 Confirmed regressions take priority over new feature work. See section 6.26.
@@ -1837,6 +1837,27 @@ replacement-run closure in section 6.26 (20:23 UTC):
    successful native paint submissions; they do not establish the final cause.
    The smoke readiness check still fails afterward. The one targeted retry has
    already been used.
+
+### 6.50. Android Vulkan smoke readiness investigation (2026-10-22)
+
+1. Full Firebase producer logs narrow the failure in 39669262483: early
+   missing-color-buffer messages precede creation of a 2316x1080 offscreen target.
+   Native Vulkan paint pipelines and draw submissions then succeed, but the smoke
+   later reports native paint not ready and exits without required captures.
+   This is not established as infrastructure failure or the local 1x1 display
+   portability issue. Firebase exit zero alone does not establish validation success.
+2. The smoke previously sampled performance counters once. Native render resets
+   triangle counters before repopulating them, so asynchronous observation is a
+   possible cause, not a proven diagnosis. Added a five-second bounded readiness
+   wait requiring positive paint calls AND triangles in the same observation,
+   with actual counters, elapsed time and sample count in ready/timeout logs.
+   Timeout still exits before capture with failure; all later capture and visual
+   classification gates remain required. No native performance behavior changed.
+3. Added a Unity-independent policy test for strict same-observation readiness,
+   delayed readiness and terminal deadline failure, required in Windows CI.
+   Local policy and relevant Firebase/classifier contracts are checked separately
+   from Unity compilation/device execution. The Android failure remains unresolved
+   pending fresh full CI and successful replacement visual evidence.
 
 ## 7. Consolidated documents
 
