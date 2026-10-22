@@ -2195,8 +2195,9 @@ replacement-run closure in section 6.26 (20:23 UTC):
    other fifteen engine jobs are unchanged except the removed collector dependency.
    Evidence: artifacts/android-ci-actionlint.log, android-ci-*-contracts.log,
    android-ci-job-equivalence.log and early-android-workflow-verifier.log.
-   Replacement live CI remains pending. This schedules evidence sooner; it does
-   not close the Android failure.
+   Pushed in 765f9a05; replacement full validation run 39716790347 is queued.
+   Live acceptance remains pending. This schedules evidence sooner; it does not
+   close the Android failure.
 
 ## 7. Consolidated documents
 
