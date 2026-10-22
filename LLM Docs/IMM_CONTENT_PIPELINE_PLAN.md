@@ -126,6 +126,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop and root stop/seek corrections locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D and structural equirectangular mono/stereo conversion, and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Panorama orientation/eye order and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
+| C5: user-facing converter packaging | Agreed 2026-10-22; planned, not implemented. Shared supported converter library, portable Windows application/CLI, and Unity editor entry point; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys and native sound decoding/mapping implemented; codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
@@ -163,6 +164,47 @@ The preferred first candidate is:
    The local Chapters source supplies Stop/MakeDefault cases. A matching Quill IMM
    export has not been located by project/name search; the user has been asked for
    a possible path. Continue other C2 work independently of that optional lookup.
+
+### 4.1. C5 converter packaging plan (agreed 2026-10-22)
+
+The converter must be usable both inside Unity and as a standalone application.
+The current standalone .NET 8 runner under tests proves reuse of the package C#
+sources with Unity-type compatibility definitions; it is not yet a supported
+user-facing distribution. Python remains validation tooling, not a conversion
+dependency. Native C++ exporter libraries remain part of the shipped runtime.
+
+1. Establish a supported shared converter library and production command-line
+   entry point outside the test project. Keep SharpQuill reading, mapping, graph
+   construction and native export shared with Unity; do not fork conversion rules.
+   Separate Unity-specific integration from the reusable conversion API. Retain
+   existing regression coverage and explicit supported/omitted-content reporting.
+2. First user-facing packaging milestone: a portable Windows download. Provide
+   project-folder selection and output selection, conversion progress, readable
+   warnings/errors and a clear report of omitted content. Bundle the .NET runtime,
+   native exporter and required codec dependencies, with applicable notices, so
+   users need neither Unity nor developer tools. Preserve safe output replacement
+   and require explicit opt-in for partial conversion. Choose the desktop UI
+   toolkit during implementation; it is not decided by this plan.
+3. Include a supported CLI for batch conversion and CI, with documented arguments,
+   reliable exit codes and optional machine-readable reports. The desktop and CLI
+   entry points call the same library. Conversion must not require Python.
+4. Provide a Unity "Convert Quill Project..." editor window using the shared
+   converter, with project/output selection and diagnostics, and import the
+   resulting IMM into the Unity project. This is offline conversion integration,
+   separate from managed live scene-graph editing/cutover.
+5. Acceptance: test the extracted portable download on a clean Windows environment
+   with neither Unity nor .NET installed. Exercise representative supported source
+   projects, paths with spaces/non-ASCII characters, invalid input, explicit
+   omissions and output-preservation failure cases. Verify CLI exit/report behavior
+   and a real Unity package consumer. Compare decoded outputs from both hosts on
+   matched inputs; record artifact/version provenance and scope of visual checks.
+   Add appropriate packaging/consumer checks to CI before declaring delivery.
+6. C5 depends on the existing converter contract and regression gates; it does not
+   require completing native live authoring. Packaging may deliver a clearly
+   documented supported subset while C2/C3 fidelity work continues, but must not
+   imply full Quill parity. Regressions and the pending live-key full CI validation
+   retain priority. No packaging implementation or clean-machine acceptance is
+   claimed by adding this plan.
 
 ## 5. Reader and reverse-conversion reference
 
