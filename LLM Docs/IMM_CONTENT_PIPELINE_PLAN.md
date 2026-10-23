@@ -3517,6 +3517,19 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    metadata-batch-cabi/run.log and metadata-batch-cpu-check.log. Broader mixed
    batches, managed transaction mapping and hosted/backend acceptance remain open.
 
+### 6.99. Pivot and metadata batch full validation launched
+
+1. Atomic commits d603a220 (pivot) and ae11ee17 (same-layer metadata) are pushed
+   after an up-to-date pull. The tip starts with `[CI VALIDATION]`; full run
+   39979516973 targets ae11ee17a70628ee97952c3c8a996582b4adb131 and is queued.
+   Evidence: artifacts/metadata-batch-full-runs.json and metadata-batch-push.log.
+2. Earlier rename run 39976407088 remains unresolved. Its latest job snapshot
+   records twenty successes, three active jobs and no failures; no final acceptance
+   is claimed. The last fully accepted hosted baseline remains 47a0240d.
+3. Source review approved the metadata accumulation and exception/publication
+   behavior. Local checks are recorded in 6.97-6.98; full M2, managed cutover,
+   presented-revision save and all remaining conversion tracks retain their scope.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
