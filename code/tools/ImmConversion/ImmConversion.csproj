@@ -24,5 +24,6 @@
     <Compile Include="$(PlayerRuntime)/Authoring/QuillToImmConverter.cs" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <InternalsVisibleTo Include="QuillToImm" />
+    <InternalsVisibleTo Include="ImmConvertTests" />
   </ItemGroup>
 </Project>

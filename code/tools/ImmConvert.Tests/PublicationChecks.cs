@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using ImmPlayer.Conversion;
 
 internal static class PublicationChecks
 {
@@ -21,18 +22,19 @@ internal static class PublicationChecks
         // Simulate a destination created by another process after conversion.
         File.WriteAllText(destination, "other process output");
         bool rejected = false;
-        try { Program.PublishOutput(stage, destination, false); }
+        try { StandaloneConversion.PublishOutput(stage, destination, false); }
         catch (IOException) { rejected = true; }
         Require(rejected, "Late-created output must reject no-overwrite publication");
         Require(File.ReadAllText(destination) == "other process output", "Late output was overwritten");
         Require(File.ReadAllText(stage) == "new conversion", "Rejected staging content was lost");
-        Program.PublishOutput(stage, destination, true);
+        StandaloneConversion.PublishOutput(stage, destination, true);
         Require(File.ReadAllText(destination) == "new conversion" && !File.Exists(stage), "Explicit overwrite failed");
         string fresh = Path.Combine(directory, $"fresh-{Guid.NewGuid():N}.imm");
         File.WriteAllText(stage, "fresh conversion");
-        Program.PublishOutput(stage, fresh, false);
+        StandaloneConversion.PublishOutput(stage, fresh, false);
         Require(File.ReadAllText(fresh) == "fresh conversion" && !File.Exists(stage), "Fresh publication failed");
         File.WriteAllText(report, JsonSerializer.Serialize(new { passed = true, cases = 3 }));
         Console.WriteLine("[IMM_CONVERT_PUBLICATION] late destination preserved; explicit overwrite and fresh publish passed");
+        if (args.Length == 3) HostChecks.Run(directory, args[1], args[2]);
     }
 }

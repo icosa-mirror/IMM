@@ -7,6 +7,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../ImmConversion/ImmConversion.csproj" />
-    <InternalsVisibleTo Include="ImmConvertTests" />
   </ItemGroup>
 </Project>

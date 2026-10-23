@@ -26,8 +26,15 @@ dotnet build code/tools/ImmConversion/ImmConversion.csproj
 The `code/appImmStrokeReader/tests/QuillToImm` regression harness references this
 assembly, rather than recompiling an independent source list. Its existing real
 native converter/import/export checks therefore exercise the extracted library.
-Only that regression assembly receives internal access for codec/ABI checks.
+That regression assembly receives internal access for codec/ABI checks; the
+focused `ImmConvertTests` assembly also exercises the shared publication helper.
 The simulated Unity editor menu remains in the test assembly, outside the library.
+
+`StandaloneConversion` is the .NET-only application service used by the CLI and
+desktop window. It owns native initialization, one active native conversion per
+process, cooperative cancellation, output/report protection and diagnostics.
+Repeated conversions reuse the same configured native directory; changing it
+requires a new process. Original Unity package sources remain unchanged.
 
 User-facing packaging and clean-machine/Unity-consumer acceptance remain tracked
 under C5 in `LLM Docs/IMM_CONTENT_PIPELINE_PLAN.md`.

@@ -6,6 +6,6 @@
     <AssemblyName>ImmConvertTests</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../ImmConvert/ImmConvert.csproj" />
+    <ProjectReference Include="../ImmConversion/ImmConversion.csproj" />
   </ItemGroup>
 </Project>

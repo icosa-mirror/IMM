@@ -25,7 +25,7 @@ CLI (c78d5206), and the prototype self-contained Windows CLI archive (6.75-6.78)
 Real native/CLI tests and the extracted archive's isolated CLR/CRT checks pass,
 but these later sources are outside the accepted 97142c9a CI revision. Include
 them in the next full-validation push. Desktop UI, real Unity consumer integration,
-clean-machine and public-release licensing acceptance remain open. Earlier numbered
+clean-machine and public-dependency licence documentation acceptance remain open. Earlier numbered
 checkpoints retain historical states; use this checkpoint and the latest entries
 for current acceptance. Source chapter/startup mapping, broader timing/navigation,
 media/reverse fidelity and revision-selected live save retain their own exit gates.
@@ -35,8 +35,9 @@ conversion and local-runtime checks passed, but implicit Python text decoding
 corrupted the native ANSI trace's Unicode path. The failure is reproduced/fixed
 under forced Python UTF-8 mode with the exact path checks preserved (6.79).
 Cancellation of that superseded run was requested; fresh full validation of the
-isolated correction is pending. Desktop shared-host preparation is uncommitted
-work in progress (6.80), outside the validation source.
+isolated correction is pending. Desktop shared-host and form work passes local component/runtime checks
+(6.80-6.81), outside the validation source. Live mouse/keyboard acceptance remains
+open because the Computer Use Windows native pipe is unavailable.
 
 ## 1. Objective and document ownership
 
@@ -2904,7 +2905,7 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    public release. Manifest explicitly records licensing review incomplete.
    Existing permissive code licenses do not establish third-party SDK eligibility.
 6. This is a portable CLI prototype, not completion of C5's folder-selection
-   desktop application. Clean Windows VM acceptance, public-release licensing,
+   desktop application. Clean Windows VM acceptance, public-dependency licence documentation,
    desktop UI, GUI cancellation/progress behavior and real Unity editor consumer
    integration remain open. Isolated local CLR/CRT proof is stronger than running
    dotnet from the checkout, but does not substitute for a clean-machine test.
@@ -2946,19 +2947,60 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    [CI VALIDATION]. Desktop shared-host WIP remains uncommitted and is excluded
    from this validation source; no stash or source discard is required.
 
-### 6.80. Desktop shared-host preparation (uncommitted work in progress)
+### 6.80. Shared standalone application host (local milestone)
 
 1. Move standalone native configuration, cancellation, atomic IMM publication,
-   reports and runtime diagnostics from the CLI into a .NET-only host service
-   in ImmConversion. The CLI becomes a consumer; the planned desktop window will
-   use the same service. Original Unity package converter source is unchanged.
-2. Current WIP builds without warnings and passes the existing 15 real CLI cases.
-   The moved publication helper's tests have been retargeted to the shared
-   assembly. Repeated in-process conversions, cancellation/re-entrancy behavior,
-   desktop window and visual/GUI acceptance still need implementation/validation.
-3. Freeze these files while fixing 6.79. No desktop milestone or acceptance is
-   claimed. Computer-use instructions were read; no desktop app has been launched
-   or controlled yet. Do not include this WIP in the isolated CI verifier fix.
+   reports and runtime diagnostics from the CLI into StandaloneConversion in the
+   .NET-only ImmConversion project. Both CLI and desktop call the same host service.
+   Original Unity package converter source is unchanged. Native configuration is
+   fixed once per process; attempts to change its directory require restart. A
+   per-process guard rejects overlapping native conversion work.
+2. The CLI keeps its argument policy, full-project default, exit codes and JSON
+   schema. Publication tests now target the shared helper. Builds pass without
+   warnings; all 15 real CLI cases and three publication checks pass. Six real
+   host cases pass: pre-cancel, first conversion, re-entrant rejection, repeat,
+   cancellation during conversion preserving existing output, and recovery.
+   Staging cleanup is checked. Independent review found no concrete blocker.
+3. Evidence: artifacts/desktop-shared-host-build.log,
+   desktop-shared-host-cli-tests/report.json and desktop-host-tests/host-report.json.
+   Native/operation/UI scope remains bounded by those checks. This is not managed
+   live scene-graph cutover or Unity consumer integration.
+
+### 6.81. Windows desktop converter (locally tested; CI acceptance pending)
+
+1. Add QuillToImm.exe with project/output pickers, drag/drop project selection,
+   strict-by-default omission/overwrite options, input limit, report option,
+   progress, cancellation and readable results. An immutable request is captured
+   before background work. Inputs are disabled during conversion, closing a busy
+   window requests cancellation and waits for the worker, and 100 ms coalesced
+   progress prevents one UI callback per compiled stroke.
+2. Eight real WinForms event-loop/native cases pass: conversion, existing-output
+   refusal, repeated use, strict unsupported-model rejection, explicit labelled
+   partial output, controlled pre-native cancellation, recovery and cooperative
+   close. The shared-host tests separately cover cancellation during conversion.
+   Minimum-size layout overlap was measured and fixed through shared table layout
+   and a usable minimum height; result/action regions cannot overlap. Normal and
+   minimum-size rendered forms were inspected. No live external input is claimed.
+3. Combined portable archive includes the desktop/CLI entry points and matching
+   .NET Core/WindowsDesktop 8.0.30 runtimes. The actual 77,110,679-byte prototype
+   contains 515 verified production files. Extracted CLI checks and the desktop
+   probe pass with global .NET discovery disabled. Only four test-entry files are
+   added to the extracted test copy; production UI, host, WinForms, CLR and native
+   files stay from the ZIP and their hashes remain unchanged after testing. Form,
+   host, Forms and CLR locations are verified inside that extracted folder.
+4. Live input testing is unverified: Computer Use's list_apps cannot connect to
+   its native pipe (os error 2), including retry/reset/reinitialize recovery. No
+   target window or external UI input was available. The renderer/component tests
+   do not substitute for mouse/keyboard, all DPI/monitor, clean-VM or real Unity
+   editor-consumer acceptance. Dependency licence documentation remains a separate
+   unfinished check, not a known prohibition or a proposed new product licence.
+5. Evidence: artifacts/desktop-form-tests-usable-minimum/report.json and PNGs,
+   desktop-portable-bundle/package-report.json, desktop-portable-tests/report.json,
+   desktop-probe-publish.log and desktop workflow-matrix/actionlint logs. Required
+   Windows form/shared-host checks and an extracted desktop probe are wired into
+   CI with always-uploaded reports/renders. Full CI source 47a0240d excludes this
+   later work; keep that run alive while progressing and validate these milestones
+   in the next full push. C5 remains open until its remaining acceptance is proved.
 
 ## 7. Consolidated documents
 
