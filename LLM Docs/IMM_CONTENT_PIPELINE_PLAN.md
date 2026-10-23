@@ -3627,6 +3627,12 @@ the historical sizes/check counts below describe this earlier source only.
    and transform-key-reflection-playback-regressions/report.json. Reflected-key
    rendered/backend acceptance and managed cutover remain open; no broad M2
    acceptance is inferred from these local checks.
+4. Separate commits 4a885990 (held-pose fix) and 38c84dae (reflection keys) are
+   pushed after an up-to-date pull. Full `[CI VALIDATION]` run 39985738393 targets
+   38c84daec7b547920cf24143f56291d98cf91a2f and is queued. Earlier corrected
+   scratch-project run 39984582643 has ten successful jobs and no failures at its
+   latest snapshot, with required work unresolved. Neither source has full hosted
+   acceptance yet. Receipt: artifacts/transform-key-reflection-full-runs.json.
 
 ## 7. Consolidated documents
 
