@@ -9,9 +9,9 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
-Current checkpoint (2026-10-23): full hosted run 39935868460 on 97142c9a
+Current checkpoint (2026-10-23): full hosted run 39945112846 on 47a0240d
 completed SUCCESS: 49 jobs passed, 22 skipped, no failures. Actual final artifact
-12496091571 passes all 20 required hosted evidence rows, with zero invalid/missing
+12501160640 passes all 20 required hosted evidence rows, with zero invalid/missing
 required rows and all 43 preserved manifests identifying the correct source.
 The repeated FFmpeg setup failure is closed by consumer-only pinned provisioning,
 verified on Linux and in both physical-device paths (6.74, 6.77). The native live
@@ -20,12 +20,13 @@ specific acceptance remains scoped to the documented Windows/native tests.
 Hardware-only Unity Windows Vulkan and deferred headset evidence remain outside
 hosted acceptance. Full M2, managed cutover and scene-wide Quill fidelity are open.
 
-Local C5 milestones are now the extracted standalone library (026abe3b), production
+C5 milestones now include the extracted standalone library (026abe3b), production
 CLI (c78d5206), and the prototype self-contained Windows CLI archive (6.75-6.78).
-Real native/CLI tests and the extracted archive's isolated CLR/CRT checks pass,
-but these later sources are outside the accepted 97142c9a CI revision. Include
-them in the next full-validation push. Desktop UI, real Unity consumer integration,
-clean-machine and public-dependency licence documentation acceptance remain open. Earlier numbered
+Those library/CLI/package sources and the ANSI host-trace correction are now
+included in accepted full CI source 47a0240d. The shared application host
+(e7f5c100), desktop window (3ec46758) and Unity editor window (6.82) are later
+milestones: local checks pass, and the next full push must validate them.
+Live UI input, clean-machine and dependency licence documentation acceptance remain open. Earlier numbered
 checkpoints retain historical states; use this checkpoint and the latest entries
 for current acceptance. Source chapter/startup mapping, broader timing/navigation,
 media/reverse fidelity and revision-selected live save retain their own exit gates.
@@ -35,7 +36,8 @@ conversion and local-runtime checks passed, but implicit Python text decoding
 corrupted the native ANSI trace's Unicode path. The failure is reproduced/fixed
 under forced Python UTF-8 mode with the exact path checks preserved (6.79).
 Cancellation of that superseded run was requested; fresh full validation of the
-isolated correction is pending. Desktop shared-host and form work passes local component/runtime checks
+isolated correction passed in run 39945112846, including the Windows archive gate.
+Desktop shared-host and form work passes local component/runtime checks
 (6.80-6.81), outside the validation source. Live mouse/keyboard acceptance remains
 open because the Computer Use Windows native pipe is unavailable.
 
@@ -136,7 +138,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop and root stop/seek corrections locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D and structural equirectangular mono/stereo conversion, and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Panorama orientation/eye order and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| C5: user-facing converter packaging | Standalone library and production CLI implemented with local native/public-consumer/CLI checks (6.75-6.76). Prototype self-contained CLI bundle passes local extraction/runtime checks (6.78); desktop window and extracted form probe pass locally (6.80-6.81); live input, clean-machine/dependency-documentation acceptance and Unity editor integration remain open; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
+| C5: user-facing converter packaging | Standalone library, production CLI and prototype portable CLI have full hosted acceptance on 47a0240d. Desktop window, extracted form probe and Unity editor conversion/import pass locally (6.80-6.82), awaiting next full CI. Live input, clean-machine and dependency-documentation acceptance remain open; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys and native sound decoding/mapping implemented; codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
@@ -3001,6 +3003,40 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    CI with always-uploaded reports/renders. Full CI source 47a0240d excludes this
    later work; keep that run alive while progressing and validate these milestones
    in the next full push. C5 remains open until its remaining acceptance is proved. No new product licence or fee is proposed; dependency documentation is simply unverified where noted.
+
+### 6.82. Unity editor converter and refreshed hosted acceptance
+
+1. Add **IMM > Convert Quill Project...** with source/output pickers, strict
+   defaults, explicit omission/overwrite choices, input limit, cancellable progress,
+   readable conversion issues and selection of the imported asset. An editor-only
+   assembly calls the existing package converter/compiler on the Editor thread;
+   it does not import the standalone compatibility assembly or change mappings.
+2. Publish through a private same-directory staging file. Refusal, cancellation or
+   conversion failure preserves existing output. Successful replacement preserves
+   its Unity asset GUID. Require an IMM inside Assets and reject hidden paths that
+   Unity ignores. Play mode is blocked. Import failure is reported separately from
+   successful file publication. Document the menu workflow in the package README.
+3. All three targeted tests pass in the actual Unity 6000.6.0f1 Windows Editor:
+   path guards; refusal/pre-cancellation preservation; and native project
+   conversion, synchronous AssetDatabase import, repeat refusal and successful
+   replacement with a stable GUID. Initial test compilation exposed a namespace
+   ambiguity, corrected before acceptance. Evidence: ignored
+   artifacts/unity-quill-editor-results.xml, unity-quill-editor.log and CLI log.
+   This proves Editor compilation and import, not live menu/picker input or other
+   Editor platforms. The package-import CI gate now requires these three tests;
+   its Linux execution remains pending the next full run.
+4. Full hosted run 39945112846 on 47a0240d completed SUCCESS (49 passed,
+   22 skipped). Downloaded final evidence artifact 12501160640 proves all 20
+   required hosted rows passed; all 43 manifests identify that source. Windows
+   archive verification and both Firebase Unity producers passed. Audit:
+   artifacts/full-ci-39945112846-acceptance-audit.json. Hardware-only Windows
+   Vulkan remains outside hosted acceptance. Later shared-host, desktop and
+   Editor sources still require their next full-validation run.
+5. Workflow matrix verification and actionlint of the changed engine workflow
+   pass locally. Unity regenerated packages-lock.json to include the existing
+   declared Newtonsoft dependency; this is synchronization of the real package
+   manifest, not a temporary dependency reference. C5 remains open for the
+   documented CI, live-input, clean-machine and dependency-notice acceptance.
 
 ## 7. Consolidated documents
 

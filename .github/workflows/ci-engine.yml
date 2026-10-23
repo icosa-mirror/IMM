@@ -210,7 +210,10 @@ jobs:
           python tests/tools/verify_unity_test_results.py \
             artifacts/unity-package-import/test-runner/editmode-results.xml \
             --require-test PackageImportHarness.PackagesResolveFromArtifactPaths \
-            --require-test PackageImportHarness.UrpRenderGraphAssemblyIsIncluded
+            --require-test PackageImportHarness.UrpRenderGraphAssemblyIsIncluded \
+            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.OutputMustBeAnImmFileInsideAssets \
+            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.ExistingOutputAndPreCancellationArePreserved \
+            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.NativeProjectConversionImportsAnAssetAndProtectsExistingOutput
           python tests/tools/verify_unity_test_results.py \
             artifacts/unity-package-import/test-runner/playmode-results.xml \
             --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.TwoCamerasCanSubmitInTheSameFrameWhileEachReusesItsMultipassPose \

@@ -2,6 +2,22 @@
 
 Local UPM package for the IMM Unity runtime, editor tools, and samples.
 
+## Convert a Quill project
+
+1. Open **IMM > Convert Quill Project...** outside Play mode.
+2. Choose the project folder containing `Quill.json` and `Quill.qbin`, then an
+   `.imm` output inside this project's `Assets` folder.
+3. Select **Convert and import**. Inspect the reported issues, then use
+   **Select converted asset** to find the imported IMM.
+
+Conversion uses the package's shared Quill converter and native IMM compiler.
+Unsupported content rejects conversion by default; enabling partial conversion
+explicitly permits omissions and labels the result. Replacement is also opt-in.
+Existing output is replaced only after successful conversion, retaining its Unity
+asset GUID. Cancellation is cooperative through the progress dialog. The Editor
+stays occupied during conversion; large unattended batches can use the standalone
+`imm-convert` command instead. Ship native plugins matching the managed package.
+
 ## Experimental URP RenderGraph sample
 
 The repository sample project includes `Assets/Scenes/SampleSceneURP.unity` for
