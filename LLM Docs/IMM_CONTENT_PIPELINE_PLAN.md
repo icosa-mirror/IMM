@@ -3756,6 +3756,11 @@ the historical sizes/check counts below describe this earlier source only.
    checkout has the required APIs and the 44-byte diagnostics fix immediately.
    The real-file report records the SHA-256 of the exact locally built DLL used.
    CI may replace it with its independently built binary as usual.
+8. UI commit d822b9c1 and matching Windows plugin commit 15fae5aa are pushed after
+   an up-to-date pull. Full `[CI VALIDATION]` run 40000145212 targets
+   15fae5aa0bae2fd4819b22b5308b10155dd9e576 and is queued. The original Fishgym
+   scene is restored and left playing in the open lab. Manual interaction and
+   full hosted acceptance remain pending. Receipt: artifacts/live-panel-full-runs.json.
 
 ### 6.108. Managed diagnostics buffer boundary correction (local Windows milestone)
 
