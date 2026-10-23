@@ -3589,6 +3589,10 @@ the historical sizes/check counts below describe this earlier source only.
    resolving cancellation. Additional failed collectors and the latest Android
    runtime job are being audited for independent causes; cancellation alone does
    not establish that those failures are harmless.
+6. Fix 8c9d9a3e is pushed after an up-to-date pull. New full `[CI VALIDATION]`
+   run 39984582643 targets 8c9d9a3e32fb2bca2286e9e6c841aeca5c48a67f and is
+   queued. Receipt: artifacts/editor-project-fix-full-runs.json. This source
+   includes the direct-layout correction and all earlier runtime milestones.
 
 ## 7. Consolidated documents
 
