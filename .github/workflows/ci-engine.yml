@@ -266,7 +266,7 @@ jobs:
     name: Unity macOS Metal Composition
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: macos-14
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -291,6 +291,21 @@ jobs:
           chmod +x "$plugin_binary"
           codesign --force --sign - --deep "$destination"
           codesign --verify --deep --strict "$destination"
+
+      - name: Download same-commit macOS reader native plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: Internal-ImmStrokeReaderPlugin-macOS
+          path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS
+
+      - name: Sign same-commit macOS reader native plugin
+        run: |
+          set -euo pipefail
+          reader="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib"
+          test -s "$reader"
+          chmod +x "$reader"
+          codesign --force --sign - "$reader"
+          codesign --verify --strict "$reader"
 
       - name: Restore Unity macOS Library cache
         id: cache_library
@@ -340,17 +355,16 @@ jobs:
           customParameters: -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app -immSmokeCapturePath ${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png
 
       - name: Run native Unity Editor converter tests
-        timeout-minutes: 5
-        run: |
-          set -euo pipefail
-          editor="/Applications/Unity/Hub/Editor/${{ env.UNITY_VERSION }}/Unity.app/Contents/MacOS/Unity"
-          test -x "$editor"
-          "$editor" -batchmode -nographics \
-            -projectPath "$GITHUB_WORKSPACE/code/ImmUnitySampleProject" \
-            -runTests -testPlatform EditMode \
-            -testFilter ImmPlayer.Editor.Tests.QuillToImmEditorTests \
-            -testResults "$GITHUB_WORKSPACE/artifacts/unity-macos-metal-composition/quill-editor-tests.xml" \
-            -logFile "$GITHUB_WORKSPACE/artifacts/unity-macos-metal-composition/quill-editor-tests.log"
+        timeout-minutes: 15
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        run: >
+          python3 tests/tools/run_unity_editor_native_tests.py
+          --editor "/Applications/Unity/Hub/Editor/${{ env.UNITY_VERSION }}/Unity.app/Contents/MacOS/Unity"
+          --project "$GITHUB_WORKSPACE/code/ImmUnitySampleProject"
+          --output-dir "$GITHUB_WORKSPACE/artifacts/unity-macos-metal-composition"
 
       - name: Verify native Unity Editor converter tests ran
         if: always()

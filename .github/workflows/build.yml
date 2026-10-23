@@ -431,6 +431,8 @@ jobs:
       run: |
         python code/appImmUnity/tests/authoring_key_abi_smoke.py
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python tests/tools/test_run_unity_editor_native_tests.py
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python code/appImmUnity/tests/authoring_repeat_cabi_smoke.py --msbuild (Get-Command msbuild).Source --output-dir artifacts/paint-repeat-cabi-ci
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python code/appImmUnity/tests/paint_playback_keys_smoke.py --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/paint-playback-keys-ci

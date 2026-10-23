@@ -3291,7 +3291,7 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    editor-required-verifier-real-evidence.json. This strengthens the existing
    gates; it is not a replacement for the new native macOS execution.
 
-### 6.91. Native Editor licence lifecycle and reader provenance (in progress)
+### 6.91. Native Editor licence lifecycle and reader provenance (local checks pass)
 
 1. Review of official unity-builder v4 at 4423ee75828dff56037d1d1cfdac6b68e3a6ba00
    shows its Personal ULF is decoded to a serial, activated for the build and
@@ -3312,10 +3312,20 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    workflow contract. Budget fifteen minutes for the three bounded four-minute
    phases and cleanup margin, with a sixty-minute macOS job. Existing visual and
    native result gates stay required and unchanged.
-4. Local evidence: artifacts/editor-native-license-runner-tests.log and official
+4. Final read-only review approved the corrected lifecycle, secret handling,
+   strict result gates, reader staging and timeout budget with no remaining
+   concrete blocker. Runner/verifier checks, 53-job workflow contract, actionlint
+   of both changed workflows and whitespace checks pass. The skipped-case gate
+   fix is separately committed as 3cd8473f. Actual activation and all three native
+   macOS Editor cases remain required in the corrected full run; local fake-process
+   checks do not establish that hosted acceptance.
+5. Local evidence: artifacts/editor-native-license-runner-tests.log,
+   editor-native-final-verifier-tests.log, editor-native-final-runner-tests.log,
+   editor-native-final-matrix.log, editor-native-final-actionlint.log and official
    source copies unity-builder-v4-parameters.ts, mac-entrypoint.sh, mac-activate.sh,
-   mac-return_license.sh and setup-mac.ts. Final review, lint/contract checks,
-   atomic commit and a corrected full `[CI VALIDATION]` push are still pending.
+   mac-return_license.sh and setup-mac.ts. Push this independently committed
+   lifecycle correction with `[CI VALIDATION]` and audit its real results before
+   declaring any new full hosted acceptance.
 
 ## 7. Consolidated documents
 

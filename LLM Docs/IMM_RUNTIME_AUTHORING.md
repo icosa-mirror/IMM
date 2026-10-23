@@ -369,7 +369,8 @@ publication/discard, sibling preservation, unsupported-layer and detached access
 Unity/PInvoke live delivery, broader backend and managed transaction mapping
 remain open. Full hosted regression run 39945112846 accepts
 source 47a0240d, including the earlier live-key milestone (roadmap 6.77, 6.82);
-later canonical-repeat milestones await full run 39963637687/cab50dfa. Operation-specific
+later canonical-repeat milestones await the corrected full run in roadmap 6.91.
+Operation-specific
 and broader platform acceptance remain scoped to 6.70. Roadmap 6.67 separates stored
 paint repeat metadata from Loop-evaluated frame selection for both implementations,
 and resets/resolves tick Offset before visibility evaluation. CPU regressions cover
