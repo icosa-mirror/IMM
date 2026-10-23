@@ -3597,6 +3597,21 @@ the historical sizes/check counts below describe this earlier source only.
    queued. Receipt: artifacts/editor-project-fix-full-runs.json. This source
    includes the direct-layout correction and all earlier runtime milestones.
 
+### 6.102. Held transform-key publication correction (local Windows milestone)
+
+1. Existing loaded C-export host reproduces a paused-playback defect: KeySet
+   reaches Presented without updating the evaluated transform. Evidence:
+   artifacts/held-transform-key-red/run.log. This is a confirmed live-edit bug.
+2. Resample only the target transform at publication, invalidate affected spawn
+   pose snapshots, and restore canonical transform after removal of the last key.
+   Preserve playback clocks, actions and transient override precedence.
+3. The same loaded C-export check now passes for insertion and last-key removal
+   during paused playback. Windows Unity/viewer/Godot builds and existing CPU
+   authoring checks pass; source review found no blocker. Evidence:
+   artifacts/held-transform-key-green/report.json, held-transform-key-build.log
+   and held-transform-key-cpu-check.log. No new test framework was introduced.
+   Reflection-key support and hosted/backend acceptance remain separate.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

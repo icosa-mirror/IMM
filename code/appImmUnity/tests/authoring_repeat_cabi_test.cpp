@@ -400,6 +400,27 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(ImmAuthoring_KeyRemove(doc, target, IMM_AUTHORING_ANIM_PROPERTY_OFFSET, 0.0) == IMM_AUTHORING_OK,
         "remove published Offset key");
     presentHierarchyEdit();
+    player.Pause(doc);
+    requireRepeat(wait([&]() {
+        Player::DocumentState state{};
+        player.GetDocumentState(state, doc);
+        return state.mPlaybackState == Player::PlaybackState::Paused;
+    }), "hold playback for transform key edits");
+    ImmAuthoringKey transformKey{};
+    transformKey.structSize = sizeof(transformKey); transformKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    transformKey.property = IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM;
+    transformKey.qw = 1.0f; transformKey.scale = 1.0f; transformKey.tx = 17.0f;
+    requireRepeat(ImmAuthoring_KeySet(doc, target, &transformKey) == IMM_AUTHORING_OK, "queue held transform key");
+    presentHierarchyEdit();
+    Player::LayerDiagnostics heldTransform{};
+    requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.transform.mTranslation.x == 17.0,
+        "presented transform key changes the held pose");
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM, 0.0) == IMM_AUTHORING_OK,
+        "remove held transform key");
+    presentHierarchyEdit();
+    requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) &&
+        heldTransform.transform.mTranslation.x == heldTransform.canonicalTransform.mTranslation.x,
+        "last transform key removal restores canonical held pose");
     requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
     presentHierarchyEdit();
     requireRepeat(std::wstring(savedSpawn.mName) == L"Spawn before" && player.GetSpawnAreaCount(doc) == 0,

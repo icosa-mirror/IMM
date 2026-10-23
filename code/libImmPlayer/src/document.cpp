@@ -1056,6 +1056,12 @@ namespace ImmPlayer
                 {
                     layer->ReplaceAnimKeys(
                         property, std::move(mPendingPresentation.mAnimationKeys));
+                    if (property == Layer::AnimProperty::Transform)
+                    {
+                        layer->ReevaluateTransformAt(mLastCPUTime, log);
+                        if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+                        ++mEvaluationRevision;
+                    }
                     if (paintPlaybackKey)
                     {
                         layer->ReevaluatePaintPlaybackAt(mLastCPUTime, log);

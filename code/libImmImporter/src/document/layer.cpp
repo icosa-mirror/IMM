@@ -785,6 +785,11 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
     void Layer::ReevaluateTransformAt(piTick now, piLog * log)
     {
+        if (GetNumAnimKeys(AnimProperty::Transform) == 0)
+        {
+            mTransform = mCanonicalTransform;
+            return;
+        }
         SetStateAtImpl(now, log, false, true);
     }
 

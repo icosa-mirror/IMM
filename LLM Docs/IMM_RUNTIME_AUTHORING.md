@@ -539,6 +539,10 @@ tick; preparation copies the affected sorted timeline and publication swaps that
 Visibility accepts only `NONE` interpolation because evaluation is stepped. Unsupported
 property/interpolation/value combinations are rejected. `KeyRemove` uses exact converted ticks;
 a missing key rejects the asynchronous commit with `NotFound` and leaves the timeline intact.
+Transform-key publication resamples only the target at held time before reporting
+Presented; removal of the last transform key restores the canonical pose. Clocks,
+actions and transient overrides remain intact. A paused loaded C-export reproduction
+failed before this correction and passes afterward (roadmap 6.102).
 
 Static paint additionally supports stepped Loop and tick-valued Offset keys.
 Offset uses the direct key structure's `uintValue`; Loop retains its strict boolean
