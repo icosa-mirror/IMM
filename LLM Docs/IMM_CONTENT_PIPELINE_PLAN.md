@@ -26,7 +26,8 @@ Those library/CLI/package sources and the ANSI host-trace correction are now
 included in accepted full CI source 47a0240d. The shared application host
 (e7f5c100), desktop window (3ec46758) and Unity editor window (6.82) are later
 milestones: local checks and matched Editor/CLI conversion pass (6.85), and
-full run 39954000025 is validating the shared-host/desktop/Editor checkpoint.
+full run 39954000025 was superseded for the native Editor test-platform
+correction (6.88); the next full push includes all later native repeat milestones.
 Live UI input, clean-machine and dependency licence documentation acceptance remain open. Earlier numbered
 checkpoints retain historical states; use this checkpoint and the latest entries
 for current acceptance. Source chapter/startup mapping, broader timing/navigation,
@@ -3205,6 +3206,45 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    infrastructure job. Both Unity Firebase producers and Windows converter/form/
    archive validation pass. Linux package import/new Editor tests remain active,
    so no full acceptance or successful Firefox retry is claimed.
+
+### 6.88. Correct native Editor CI platform; preserve required coverage
+
+1. Source inspection found a CI configuration error in 6.82: the new positive
+   native Editor conversion/import test was unconditional in the Linux package-
+   import harness, but the Unity packages ship no Linux native Editor plugin.
+   The shipped Windows plugin explicitly excludes Linux in its importer metadata.
+   The actual completed package-import job 120436042600 confirms this was its
+   sole failed test, at native export with an ImmUnityPlugin load failure. Its
+   complete XML is preserved in the job log: four of five EditMode cases passed;
+   38 of 41 PlayMode cases passed and the other three were ignored. This was a
+   test-platform error, not evidence that Linux native import passed.
+2. Restrict only the native test to the supported Windows/macOS Editors. Keep the
+   two platform-independent output/cancellation tests required in Linux package
+   import. Require all three tests in the existing macOS native Editor after its
+   same-source native-plugin staging and player/Editor build. Use the installed
+   Editor directly, preserve the no-quit test-runner lifecycle, require the named
+   results even if an earlier step fails, and always retain its XML/logs in the
+   existing macOS artifact directory. The workflow validator now requires these
+   native test steps, an execution timeout and the always-running result check.
+3. Windows player-build jobs also use Linux Editors to cross-compile players;
+   they cannot establish Windows Editor native conversion. Existing actual local
+   Windows Editor tests and matched Editor/CLI proof remain valid. The macOS
+   Editor execution is new hosted coverage, pending the corrected full run.
+   Workflow-matrix, changed engine-workflow actionlint and whitespace checks pass.
+4. Requested cancellation of source e19db96e run 39954000025 before pushing the
+   source correction. No full acceptance is claimed for that superseded run.
+   Windows converter/form/archive and both Unity Firebase producers passed before
+   cancellation; Firefox had timed out during Ubuntu dependency downloads. The
+   corrected full push keeps that gate and includes b0055332/4c43d0d7 repeat editing
+   and rendered validation plus a360235c positive native C-export delivery. Do not
+   treat local repeat acceptance as a full hosted pass of those later sources.
+5. Evidence: artifacts/converter-checkpoint-source-correction-cancel.log,
+   editor-native-platform-workflow-matrix.log, editor-native-platform-actionlint.log
+   and editor-native-linux-failed-job.log/failure-summary.json plus the run snapshot.
+   The owned 961 MB full-artifact download was stopped after the complete job log
+   supplied the authoritative XML and sole failure; no other process was stopped.
+   This correction does not add Linux Unity runtime support
+   or remove native conversion/import from required hosted coverage.
 
 ## 7. Consolidated documents
 

@@ -496,6 +496,13 @@ Visibility accepts only `NONE` interpolation because evaluation is stepped. Unsu
 property/interpolation/value combinations are rejected. `KeyRemove` uses exact converted ticks;
 a missing key rejects the asynchronous commit with `NotFound` and leaves the timeline intact.
 
+Static paint additionally supports stepped Loop and tick-valued Offset keys.
+Offset requires the additive V2 key structure; Loop retains its strict boolean
+value. Publication reselects at held time, including hidden paint, without changing
+the root playback intent. Other paint implementations reject these live channels.
+Canonical repeat uses the dedicated paint setter/getter described in section 6,
+and remains distinct from the Loop-evaluated repeat count.
+
 ### 8.3 Spawn and hierarchy
 
 Spawn updates support sphere or axis-aligned box volume, floor/eye tracking, per-axis

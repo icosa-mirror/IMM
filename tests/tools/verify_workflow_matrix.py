@@ -44,7 +44,7 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": ["Download same-commit Unity native plugin build artifact", "Stage same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Verify Unity XR matrix regression tests ran", "Write CI manifest", "Collect artifact summary"],
-        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player and run project Play-button smoke", "Confirm Unity project Play-button smoke capture", "Record Unity project Play-button render metrics", "Write Unity project Play-button render report", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Classify Unity macOS Metal evidence", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
+        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player and run project Play-button smoke", "Run native Unity Editor converter tests", "Verify native Unity Editor converter tests ran", "Confirm Unity project Play-button smoke capture", "Record Unity project Play-button render metrics", "Write Unity project Play-button render report", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Classify Unity macOS Metal evidence", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
         "unity-ios-player-build": ["Download same-commit Unity package", "Download same-commit Stroke Reader package", "Stage same-commit iOS native libraries", "Prepare Unity iOS artifact directory", "Export Unity iOS Metal Xcode project", "Verify generated Unity iOS project contract", "Compile generated Unity iOS application without signing", "Write Unity iOS application-build manifest", "Collect Unity iOS application-build summary", "Upload Unity iOS player-build artifacts"],
         "unity-windows-directx-player-build": ["Download same-commit Unity native plugin", "Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Classify Unity DirectX visual evidence", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
@@ -194,7 +194,7 @@ REQUIRED_STEP_TIMEOUTS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": {"Run Unity batchmode package import tests"},
-        "unity-macos-metal-composition": {"Build Unity macOS Metal smoke player and run project Play-button smoke", "Run Unity macOS Metal visual smokes"},
+        "unity-macos-metal-composition": {"Build Unity macOS Metal smoke player and run project Play-button smoke", "Run native Unity Editor converter tests", "Run Unity macOS Metal visual smokes"},
         "unity-windows-directx-composition": {"Run Unity DirectX composition smoke"},
         "unity-windows-vulkan-ordered-overlay": {"Run Unity Vulkan ordered overlay smoke"},
         "unity-windows-vulkan-full-depth": {"Run Unity Vulkan full depth smoke"},
@@ -227,6 +227,7 @@ REQUIRED_ALWAYS_STEPS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-macos-metal-composition": {
+            "Verify native Unity Editor converter tests ran",
             "Classify Unity macOS Metal visual smokes",
             "Record Unity macOS Metal render metrics",
             "Classify Unity macOS Metal evidence",

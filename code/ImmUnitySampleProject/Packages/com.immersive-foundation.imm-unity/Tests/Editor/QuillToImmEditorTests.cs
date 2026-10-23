@@ -58,6 +58,7 @@ namespace ImmPlayer.Editor.Tests
             Assert.That(File.ReadAllText(output), Is.EqualTo("keep original"));
         }
 
+#if UNITY_EDITOR_WIN || UNITY_EDITOR_OSX
         [Test]
         public void NativeProjectConversionImportsAnAssetAndProtectsExistingOutput()
         {
@@ -96,5 +97,6 @@ namespace ImmPlayer.Editor.Tests
             Assert.That(AssetDatabase.AssetPathToGUID(result.AssetPath), Is.EqualTo(guid));
             Assert.That(Directory.GetFiles(Path.GetDirectoryName(full), ".imm-quill-*.imm"), Is.Empty);
         }
+#endif
     }
 }

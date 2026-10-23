@@ -212,8 +212,7 @@ jobs:
             --require-test PackageImportHarness.PackagesResolveFromArtifactPaths \
             --require-test PackageImportHarness.UrpRenderGraphAssemblyIsIncluded \
             --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.OutputMustBeAnImmFileInsideAssets \
-            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.ExistingOutputAndPreCancellationArePreserved \
-            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.NativeProjectConversionImportsAnAssetAndProtectsExistingOutput
+            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.ExistingOutputAndPreCancellationArePreserved
           python tests/tools/verify_unity_test_results.py \
             artifacts/unity-package-import/test-runner/playmode-results.xml \
             --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.TwoCamerasCanSubmitInTheSameFrameWhileEachReusesItsMultipassPose \
@@ -339,6 +338,28 @@ jobs:
           enableGpu: true
           cacheUnityInstallationOnMac: true
           customParameters: -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app -immSmokeCapturePath ${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png
+
+      - name: Run native Unity Editor converter tests
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          editor="/Applications/Unity/Hub/Editor/${{ env.UNITY_VERSION }}/Unity.app/Contents/MacOS/Unity"
+          test -x "$editor"
+          "$editor" -batchmode -nographics \
+            -projectPath "$GITHUB_WORKSPACE/code/ImmUnitySampleProject" \
+            -runTests -testPlatform EditMode \
+            -testFilter ImmPlayer.Editor.Tests.QuillToImmEditorTests \
+            -testResults "$GITHUB_WORKSPACE/artifacts/unity-macos-metal-composition/quill-editor-tests.xml" \
+            -logFile "$GITHUB_WORKSPACE/artifacts/unity-macos-metal-composition/quill-editor-tests.log"
+
+      - name: Verify native Unity Editor converter tests ran
+        if: always()
+        run: |
+          python3 tests/tools/verify_unity_test_results.py \
+            artifacts/unity-macos-metal-composition/quill-editor-tests.xml \
+            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.OutputMustBeAnImmFileInsideAssets \
+            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.ExistingOutputAndPreCancellationArePreserved \
+            --require-test ImmPlayer.Editor.Tests.QuillToImmEditorTests.NativeProjectConversionImportsAnAssetAndProtectsExistingOutput
 
       - name: Confirm Unity project Play-button smoke capture
         id: unity_editor_play
