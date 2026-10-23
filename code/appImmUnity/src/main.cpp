@@ -2214,11 +2214,38 @@ extern "C" bool UNITY_INTERFACE_EXPORT ClearLayerTransformOverride(int docId, in
     return iPlayer().ClearLayerTransformOverride(docId, layerId);
 }
 
-extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerId, Player::LayerDiagnostics *outDiag)
+// Public managed diagnostics are eleven 32-bit scalars. Never expose the larger
+// internal Player snapshot (which also owns canonical data and double transforms).
+struct SerializedLayerDiagnostics
+{
+    int32_t hasVisibilityKeys;
+    int32_t hasOpacityKeys;
+    int32_t isVisible;
+    float opacity;
+    int32_t isWorldVisible;
+    float worldOpacity;
+    int32_t parentId;
+    int32_t visibilityOverrideEnabled;
+    int32_t visibilityOverrideValue;
+    int32_t hasTransformKeys;
+    int32_t transformOverrideEnabled;
+};
+static_assert(sizeof(SerializedLayerDiagnostics) == 44, "Managed layer diagnostics layout changed");
+static_assert(offsetof(SerializedLayerDiagnostics, opacity) == 12, "Managed diagnostics opacity offset changed");
+static_assert(offsetof(SerializedLayerDiagnostics, worldOpacity) == 20, "Managed diagnostics world opacity offset changed");
+static_assert(offsetof(SerializedLayerDiagnostics, transformOverrideEnabled) == 40, "Managed diagnostics tail offset changed");
+
+extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerId, SerializedLayerDiagnostics *outDiag)
 {
     if (outDiag == nullptr)
         return false;
-    return iPlayer().GetLayerDiagnostics(docId, layerId, *outDiag);
+    Player::LayerDiagnostics value;
+    if (!iPlayer().GetLayerDiagnostics(docId, layerId, value)) return false;
+    *outDiag = { value.hasVisibilityKeys, value.hasOpacityKeys, value.isVisible,
+        value.opacity, value.isWorldVisible, value.worldOpacity, value.parentId,
+        value.visibilityOverrideEnabled, value.visibilityOverrideValue,
+        value.hasTransformKeys, value.transformOverrideEnabled };
+    return true;
 }
 
 //----------------------------------------------------------------------------

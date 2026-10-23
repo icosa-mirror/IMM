@@ -69,6 +69,33 @@ int wmain(int argc, wchar_t ** argv)
         if (std::wcscmp(info.name, L"BlueSibling") == 0) sibling = info.id;
     }
     requireRepeat(target >= 0 && sibling >= 0, "paint fixture layers");
+    struct GuardedManagedDiagnostics
+    {
+        SerializedLayerDiagnostics value{};
+        unsigned char guard[512];
+    } managedDiagnostics;
+    std::memset(managedDiagnostics.guard, 0xa5, sizeof(managedDiagnostics.guard));
+    Player::LayerDiagnostics internalDiagnostics{};
+    requireRepeat(player.GetLayerDiagnostics(doc, target, internalDiagnostics) &&
+        ::GetLayerDiagnostics(doc, target, &managedDiagnostics.value), "managed diagnostics export");
+    for (unsigned char byte : managedDiagnostics.guard)
+        requireRepeat(byte == 0xa5, "managed diagnostics never overwrite the 44-byte caller buffer");
+    requireRepeat(managedDiagnostics.value.hasOpacityKeys == internalDiagnostics.hasOpacityKeys &&
+        managedDiagnostics.value.hasVisibilityKeys == internalDiagnostics.hasVisibilityKeys &&
+        managedDiagnostics.value.isVisible == internalDiagnostics.isVisible &&
+        managedDiagnostics.value.opacity == internalDiagnostics.opacity &&
+        managedDiagnostics.value.isWorldVisible == internalDiagnostics.isWorldVisible &&
+        managedDiagnostics.value.worldOpacity == internalDiagnostics.worldOpacity &&
+        managedDiagnostics.value.parentId == internalDiagnostics.parentId &&
+        managedDiagnostics.value.visibilityOverrideEnabled == internalDiagnostics.visibilityOverrideEnabled &&
+        managedDiagnostics.value.visibilityOverrideValue == internalDiagnostics.visibilityOverrideValue &&
+        managedDiagnostics.value.hasTransformKeys == internalDiagnostics.hasTransformKeys &&
+        managedDiagnostics.value.transformOverrideEnabled == internalDiagnostics.transformOverrideEnabled,
+        "managed diagnostics fields map to the public scalar layout");
+    requireRepeat(!::GetLayerDiagnostics(-1, target, &managedDiagnostics.value) &&
+        !::GetLayerDiagnostics(doc, target, nullptr), "managed diagnostics invalid arguments reject");
+    std::printf("[IMM_MANAGED_DIAGNOSTICS_CABI_TEST] pass=1 exportedBytes=%zu internalBytes=%zu guarded=1\n",
+        sizeof(SerializedLayerDiagnostics), sizeof(Player::LayerDiagnostics));
     uint32_t count = 99;
     requireRepeat(root >= 0 && ImmAuthoring_PaintGetMaxRepeatCount(doc, root, &count) == IMM_AUTHORING_UNSUPPORTED && count == 99,
         "non-paint getter preserves caller output");

@@ -590,6 +590,13 @@ not form an atomic whole-document enumeration. Local Windows WARP checks passed
 pass (roadmap 6.93). Stop readers before synchronous shutdown/Deinit. Other legacy
 borrowed queries and concurrent decoding are outside this acceptance.
 
+Unity's exported GetLayerDiagnostics copies exactly the existing 44-byte managed
+scalar contract from an owned internal snapshot. The larger internal Player
+structure must never be passed directly across this boundary. The live-edit lab
+exposed the previous overrun/misordering; a guarded loaded C-export check now
+verifies the output boundary and all eleven fields (roadmap 6.108). The public
+managed signature and structure are unchanged.
+
 External Unity/Godot performance queries return a synchronized numeric snapshot of
 the latest completed display counters, rather than partially reset working counters.
 No-document rendering clears it; disabling also rejects late publication. This is

@@ -144,8 +144,8 @@ The preferred first candidate is:
 Current execution order (2026-10-23):
 
 1. Fix known regressions and restore full CI; regressions interrupt later work.
-2. Finish the agreed native runtime-editing breadth (M2), including the rename
-   milestone now implemented locally.
+2. Deliver the interactive live-edit lab on real IMM files before further batch
+   expansion (user decision). Then finish the remaining native M2 breadth.
 3. Implement presented-revision save/publish (M3).
 4. Connect managed Unity transactions/preview to native live editing (M4).
 5. Complete remaining backend/surface integration (M5).
@@ -3714,7 +3714,49 @@ the historical sizes/check counts below describe this earlier source only.
    held-group-visibility-green/report.json, held-group-visibility-cpu-check.log
    and held-group-visibility-playback-regressions/report.json. Full timeline support
    remains required by M2; no timeline/backend acceptance is claimed. This local
-   source is newer than the current full CI runs and has not been pushed yet.
+   source is included with the diagnostics correction/full-validation source in 6.108.
+
+### 6.107. Interactive native live-edit lab (in progress)
+
+1. User prioritised real-world interactive validation ahead of further batch
+   expansion. Add a small IMGUI panel to the existing Unity sample, using sample-only
+   direct C# bindings to the native live APIs. Keep the public managed SDK unchanged;
+   do not use compile/reload preview or transient layer overrides for edits.
+2. Controls cover real-file load/reload/unload, layer selection, canonical names/
+   visibility/opacity/position/reflections/pivots/repeat, key set/remove at explicit
+   times, playback/seek, marker drawing replacement and hierarchy lifecycle.
+   Display queued/prepared/presented/rejected results and unsupported content.
+3. The scripts compile against installed Unity assemblies with zero warnings/errors
+   and also compile in the actual Editor. A D3D12 Play-mode session loads the real
+   Fishgym export, renders scene content and attaches a live session to nine layers.
+   D3D11 is unsupported for this sample's URP RenderGraph path; use D3D12 on Windows.
+   Screenshot: artifacts/live-panel-fishgym.png. No manual click acceptance is claimed.
+4. Real-scene diagnostics exposed the native/managed buffer mismatch in 6.108.
+   Playback is stopped pending its fix and fresh native DLL. Edit/rejection,
+   geometry/hierarchy and unload/reload interaction acceptance remain in progress.
+   Source IMM files remain unchanged; reload restores the original in-memory scene.
+
+### 6.108. Managed diagnostics buffer boundary correction (local Windows milestone)
+
+1. The real Fishgym lab displays incoherent diagnostics. Source inspection confirms
+   Unity's GetLayerDiagnostics export writes the complete internal Player snapshot
+   into a managed LayerDiagnosticsNative buffer of only 44 bytes. Internal field
+   order differs and includes canonical state plus three double transforms. This is
+   an actual interop memory-safety defect, independent of renderer compatibility.
+2. Stop playback and replace the export with an explicit 44-byte scalar copy in
+   the exact existing managed field order. Add size/offset assertions. Keep the
+   public managed API unchanged; introduce no version or alternate layout.
+3. Existing loaded C-export host adds one canary-guarded query and compares all
+   eleven fields. Windows Unity/viewer/Godot builds and this check pass; the host
+   reports internalBytes=280, exportedBytes=44, guarded=1. Source review approves
+   the exact managed field order and failure handling. Evidence:
+   artifacts/live-panel-diagnostics-native-rebuild.log and
+   managed-diagnostics-cabi/report.json / run.log. Do not resume with the old DLL.
+4. This source includes prior local held-opacity/static-subtree corrections. Old
+   full runs are superseded because they contain the unsafe export. One targeted
+   Unity iOS retry was requested on 39984582643 before discovery; further old-source
+   retries are superseded by the required new full validation of this correction.
+   Existing independent proofs remain scoped to their original sources.
 
 ## 7. Consolidated documents
 
