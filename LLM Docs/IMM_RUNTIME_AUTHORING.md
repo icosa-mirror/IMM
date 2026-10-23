@@ -367,8 +367,9 @@ delivery on a loaded document. A separate native WARP host now passes positive
 delivery through the linked production C exports (roadmap 6.87), including
 publication/discard, sibling preservation, unsupported-layer and detached access.
 Unity/PInvoke live delivery, broader backend and managed transaction mapping
-remain open. Full hosted regression run 39935868460 accepts
-source 97142c9a, including this live-key milestone (roadmap 6.77); operation-specific
+remain open. Full hosted regression run 39945112846 accepts
+source 47a0240d, including the earlier live-key milestone (roadmap 6.77, 6.82);
+later canonical-repeat milestones await full run 39963637687/cab50dfa. Operation-specific
 and broader platform acceptance remain scoped to 6.70. Roadmap 6.67 separates stored
 paint repeat metadata from Loop-evaluated frame selection for both implementations,
 and resets/resolves tick Offset before visibility evaluation. CPU regressions cover
@@ -392,8 +393,9 @@ bundles, injected failures, unload and stable siblings. Existing three deletion 
 five creation cases, native frame-table/ownership tests, viewpoint policy, converter
 round trips and ABI export checks also pass. The async guard test manipulates the
 real worker counter; it does not exercise concurrent decoding. Evidence is recorded
-in roadmap sections 6.60-6.61. Full replacement CI and other backend acceptance remain
-pending; this does not complete M1, M2 or managed live cutover.
+in roadmap sections 6.60-6.61. The earlier Windows frame-sequence slice is included
+in accepted full hosted source 47a0240d; per-operation evidence for other backends
+remains pending. This does not complete M1, M2 or managed live cutover.
 
 ## 7. Atomic preparation, publication, and resource lifetime
 
@@ -695,10 +697,11 @@ clear even when no paint layers are visible. An Android producer exposed the
 missing-paint failure; its replacement non-XR producer now passes with visible IMM
 content and unchanged occlusion thresholds. The URP producer also passes its
 actual acceptance report. The strict Android artifact also passes; full
-multiplatform CI remains pending. Roadmap 6.66 records a newly found D3D11
-structured-buffer view leak fixed locally with direct WARP COM ownership proof
-and passing visible cancellation/property regressions. Full replacement CI remains
-pending; broader resource accounting and in-flight completion remain open.
+multiplatform acceptance is recorded in roadmap 6.77 and 6.82. Roadmap 6.66 records
+the D3D11 structured-buffer view leak repair with direct WARP COM ownership proof
+and passing visible cancellation/property regressions, now included in accepted
+full hosted source 47a0240d. Broader resource accounting and in-flight completion
+remain open; later repeat milestones await the newer full run in roadmap 6.89.
 
 1. Close the acceptance evidence gap for the implemented vertical slice: add matched live-edit
    measurements and audit the regression/failure matrix before claiming M1 completion.

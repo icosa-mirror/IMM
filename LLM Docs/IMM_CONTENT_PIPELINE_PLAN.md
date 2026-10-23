@@ -26,8 +26,9 @@ Those library/CLI/package sources and the ANSI host-trace correction are now
 included in accepted full CI source 47a0240d. The shared application host
 (e7f5c100), desktop window (3ec46758) and Unity editor window (6.82) are later
 milestones: local checks and matched Editor/CLI conversion pass (6.85), and
-full run 39954000025 was superseded for the native Editor test-platform
-correction (6.88); the next full push includes all later native repeat milestones.
+full run 39963637687 on cab50dfa now includes these and all later native repeat
+milestones. Its launch was observed queued; full acceptance is pending. Run 39954000025 was superseded for the
+native Editor test-platform correction (6.88-6.89).
 Live UI input, clean-machine and dependency licence documentation acceptance remain open. Earlier numbered
 checkpoints retain historical states; use this checkpoint and the latest entries
 for current acceptance. Source chapter/startup mapping, broader timing/navigation,
@@ -45,7 +46,7 @@ open because the Computer Use Windows native pipe is unavailable.
 
 Later local native repeat milestones (6.84, 6.86) add canonical static-paint
 setter/getter publication, CPU guards and six rendered Windows DirectX cases.
-They are outside full CI source e19db96e. Linked production C-export delivery
+They are included in pending full CI source cab50dfa. Linked production C-export delivery
 also passes locally in a loaded-document WARP host (6.87). Unity/PInvoke live
 delivery, managed mapping, broader backend and full M2 acceptance remain open.
 
@@ -3240,11 +3241,35 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    treat local repeat acceptance as a full hosted pass of those later sources.
 5. Evidence: artifacts/converter-checkpoint-source-correction-cancel.log,
    editor-native-platform-workflow-matrix.log, editor-native-platform-actionlint.log
-   and editor-native-linux-failed-job.log/failure-summary.json plus the run snapshot.
+   and editor-native-linux-failed-job.log, editor-native-linux-failure-summary.json
+   plus the run snapshot.
    The owned 961 MB full-artifact download was stopped after the complete job log
    supplied the authoritative XML and sole failure; no other process was stopped.
    This correction does not add Linux Unity runtime support
    or remove native conversion/import from required hosted coverage.
+
+### 6.89. Corrected full validation launched
+
+1. Source correction committed/pushed as cab50dfa with `[CI VALIDATION]` at the
+   start of its message. Pull before push was already up to date. Full run
+   39963637687 targets cab50dfa841f3f1aa590ac1863ddce0c1058e9a0; its launch
+   snapshot was queued, and acceptance is pending.
+   It includes all committed desktop/Editor conversion, canonical-repeat native
+   publication, rendered regression and positive linked C-export milestones.
+2. Superseded run 39954000025 is terminal cancelled: 39 successful jobs, three
+   failed, six cancelled and fourteen skipped. The sole failed producer was the
+   confirmed Linux native Editor test in 6.88. Engine Evidence Report and
+   Validation Evidence failed by reporting that failed preflight and cancelled/
+   missing producer results. Their complete logs show no additional producer
+   failure. Firefox's earlier dependency-install timeout remains recorded; no gate
+   was weakened or successful isolated retry claimed. The new full run exercises
+   that unchanged gate again with the source correction.
+3. Evidence: artifacts/editor-native-platform-new-full-runs.json,
+   editor-native-platform-push.log, converter-checkpoint-ci-progress.json,
+   editor-platform-engine-evidence-failed.log and
+   editor-platform-validation-evidence-failed.log. The accepted full hosted
+   baseline remains 39945112846/47a0240d until this newer source passes and its
+   actual evidence is audited. Full M2/M3/M4/M5 and C2-C5 acceptance stay open.
 
 ## 7. Consolidated documents
 
