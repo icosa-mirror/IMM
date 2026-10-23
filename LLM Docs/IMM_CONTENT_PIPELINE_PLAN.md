@@ -3909,6 +3909,27 @@ the historical sizes/check counts below describe this earlier source only.
    semantics/nested context, final layout and full hosted acceptance remain pending. Do not describe the timeline as fully
    functional or the native C ABI test as Unity mouse/drag validation.
 
+### 6.112. Optional lab input dependency correction
+
+1. Full run 40000145212 (15fae5aa) failed both Android URP and non-XR builds with
+   CS0234 for UnityEngine.InputSystem. The prepared project retains active input
+   backend 1 but replaces the manifest without the Input System package and removes
+   its lockfile. ENABLE_INPUT_SYSTEM describes backend selection, not assembly
+   availability; the guard already present in that failed source was insufficient.
+2. The sample lab now resolves optional input devices at runtime and binds typed
+   control delegates when devices change, removing the compile-time package
+   dependency. Legacy input remains a guarded fallback. F9 uses an IMGUI key event.
+   Sample-only link.xml preserves reflected Input System members when installed
+   and allows that assembly to be missing. No CI gate or package policy changed.
+3. Assembly-reference compilation passes with ENABLE_INPUT_SYSTEM defined and the
+   Input System assembly reference removed, matching the failed dependency shape.
+   Evidence: artifacts/live-panel-no-input-system-compile.log. Actual clean hosted
+   Android builds and package-present IL2CPP input remain pending.
+4. Previous native baseline run 39995932133 (a5a1e9ef) completed successfully with
+   49 passing jobs. The later failed run also had an independent hosted iOS runner
+   acquisition failure. Neither that infrastructure issue nor the Android source
+   failures are described as passing; the next source push requires full validation.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

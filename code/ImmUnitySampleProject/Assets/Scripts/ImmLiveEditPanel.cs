@@ -6,9 +6,6 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 using N = ImmPlayer.ImmLiveEditNative;
-#if ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem;
-#endif
 
 namespace ImmPlayer
 {
@@ -16,6 +13,7 @@ namespace ImmPlayer
     public sealed class ImmLiveEditPanel : MonoBehaviour
     {
         private const string Prefix = "[IMM_LIVE_PANEL]";
+        private readonly ImmLiveEditInput labInput = new ImmLiveEditInput();
         private ImmDocument document;
         private ImmPlayerManager manager;
         private ImmDocument.LayerInfo[] layers = Array.Empty<ImmDocument.LayerInfo>();
@@ -118,24 +116,21 @@ namespace ImmPlayer
                 }
                 catch (Exception error) { pending = 0; Log(error.Message); }
             }
-#if ENABLE_INPUT_SYSTEM
-            if (Keyboard.current != null && Keyboard.current.f9Key.wasPressedThisFrame) visible = !visible;
-            if (view != null && Mouse.current != null && Keyboard.current != null && Mouse.current.rightButton.isPressed &&
-                (!visible || !window.Contains(new Vector2(Mouse.current.position.x.ReadValue(), Screen.height - Mouse.current.position.y.ReadValue()))))
+            if (view != null && labInput.Read(out bool looking, out Vector2 pointer, out Vector2 motion, out Vector3 movement, out bool faster) && looking &&
+                (!visible || !window.Contains(new Vector2(pointer.x, Screen.height - pointer.y))))
             {
-                var delta = Mouse.current.delta.ReadValue();
-                view.transform.rotation = Quaternion.Euler(-delta.y * 0.12f, delta.x * 0.12f, 0) * view.transform.rotation;
-                var keyboard = Keyboard.current;
-                var movement = new Vector3((keyboard.dKey.isPressed ? 1 : 0) - (keyboard.aKey.isPressed ? 1 : 0),
-                    (keyboard.eKey.isPressed ? 1 : 0) - (keyboard.qKey.isPressed ? 1 : 0),
-                    (keyboard.wKey.isPressed ? 1 : 0) - (keyboard.sKey.isPressed ? 1 : 0));
-                view.transform.Translate(movement * Time.unscaledDeltaTime * (keyboard.leftShiftKey.isPressed ? 8 : 2));
+                view.transform.rotation = Quaternion.Euler(-motion.y * 0.12f, motion.x * 0.12f, 0) * view.transform.rotation;
+                view.transform.Translate(movement * Time.unscaledDeltaTime * (faster ? 8 : 2));
             }
-#endif
+
         }
 
         private void OnGUI()
         {
+            if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.F9)
+            {
+                visible = !visible; Event.current.Use();
+            }
             if (!visible) return;
             window.height = Mathf.Max(250, Screen.height - 24);
             window.width = Mathf.Min(440, Screen.width - 24);
