@@ -155,6 +155,26 @@ Current execution order (2026-10-23):
 Continue independent roadmap work while full CI runs. The dependency rationale
 and initial conversion milestones below remain part of the original scope.
 
+M2 implementation exit work (source audit, 2026-10-23):
+
+1. Finish held-time key/cache correctness, including group/timeline visibility;
+   static-paint visibility and opacity corrections are recorded in 6.104.
+2. Broaden native atomic batches to represent managed transactions spanning keys,
+   drawings, layers and hierarchy operations. Current CommitEdits still accepts
+   restricted single-operation shapes; same-layer metadata accumulation is not
+   general transaction support.
+3. Retain the managed graph's timeline properties and supported channels through
+   live mutation: timeline flag/duration/group repeat, DrawInTime/Action and
+   applicable group/root timing controls. Timeline-containing subtree lifecycle
+   must also be supported where the managed API permits it. Do not silently
+   reduce the full cutover to a static-only subset. Component position/rotation/
+   scale channels already reject in the managed API and are not new requirements.
+4. Existing static group/paint/spawn lifecycle, names, pivots, common properties,
+   reflections, paint repeat and frame tables are implemented within their stated
+   limits. Their remaining cache/backend/latency acceptance is separate from new
+   implementation work. Picture/model/sound/effect lifecycle is outside agreed
+   live scope. M3 save and M4 managed preview cutover follow these M2 requirements.
+
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
@@ -3633,6 +3653,21 @@ the historical sizes/check counts below describe this earlier source only.
    scratch-project run 39984582643 has ten successful jobs and no failures at its
    latest snapshot, with required work unresolved. Neither source has full hosted
    acceptance yet. Receipt: artifacts/transform-key-reflection-full-runs.json.
+
+### 6.104. Held opacity/static-paint visibility key correction (local Windows milestone)
+
+1. Existing loaded C-export host reproduces the same Presented-but-stale defect
+   for opacity while paused (artifacts/held-key-properties-red/run.log). Refresh
+   only opacity at publication, restoring canonical opacity after last-key removal.
+2. Static-paint visibility key publication uses the existing held-time paint
+   reselection path; removing its last visibility key restores canonical visibility.
+   Loop/Offset edits retain their existing visibility policy. Group/timeline
+   visibility and descendant-clock implications remain open.
+3. Windows Unity/viewer/Godot builds, loaded C-export paused opacity/paint-visibility
+   insertion/removal checks and existing CPU authoring checks pass. Source review
+   found no blocker. Evidence: artifacts/held-key-properties-final-build.log,
+   held-key-properties-green/report.json and held-key-properties-cpu-check.log.
+   This source is newer than current full runs and has no hosted acceptance yet.
 
 ## 7. Consolidated documents
 

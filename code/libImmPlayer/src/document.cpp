@@ -1062,8 +1062,20 @@ namespace ImmPlayer
                         if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
                         ++mEvaluationRevision;
                     }
-                    if (paintPlaybackKey)
+                    if (property == Layer::AnimProperty::Opacity)
                     {
+                        layer->ReevaluateOpacityAt(mLastCPUTime, log);
+                        ++mEvaluationRevision;
+                    }
+                    const bool paintVisibilityKey = property == Layer::AnimProperty::Visibility &&
+                        layer->GetType() == Layer::Type::Paint &&
+                        dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) != nullptr;
+                    if (paintPlaybackKey || paintVisibilityKey)
+                    {
+                        // Only visibility-key removal restores canonical visibility;
+                        // Loop/Offset edits retain their existing visibility policy.
+                        if (paintVisibilityKey && layer->GetNumAnimKeys(Layer::AnimProperty::Visibility) == 0)
+                            layer->SetCanonicalVisible(layer->GetCanonicalVisible());
                         layer->ReevaluatePaintPlaybackAt(mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }

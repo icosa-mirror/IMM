@@ -426,6 +426,30 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) &&
         heldTransform.transform.mTranslation.x == heldTransform.canonicalTransform.mTranslation.x,
         "last transform key removal restores canonical held pose");
+    ImmAuthoringKey opacityKey{};
+    opacityKey.structSize = sizeof(opacityKey); opacityKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    opacityKey.property = IMM_AUTHORING_ANIM_PROPERTY_OPACITY; opacityKey.floatValue = 0.9f;
+    requireRepeat(ImmAuthoring_KeySet(doc, target, &opacityKey) == IMM_AUTHORING_OK, "queue held opacity key");
+    presentHierarchyEdit();
+    requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.opacity == 0.9f,
+        "presented opacity key changes the held opacity");
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, IMM_AUTHORING_ANIM_PROPERTY_OPACITY, 0.0) == IMM_AUTHORING_OK,
+        "remove held opacity key");
+    presentHierarchyEdit();
+    requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.opacity == heldTransform.canonicalOpacity,
+        "last opacity key removal restores canonical held opacity");
+    ImmAuthoringKey visibilityKey{};
+    visibilityKey.structSize = sizeof(visibilityKey); visibilityKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    visibilityKey.property = IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY;
+    requireRepeat(ImmAuthoring_KeySet(doc, target, &visibilityKey) == IMM_AUTHORING_OK, "queue held visibility key");
+    presentHierarchyEdit();
+    requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.isVisible == 0,
+        "presented paint visibility key changes held visibility");
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY, 0.0) == IMM_AUTHORING_OK,
+        "remove held visibility key");
+    presentHierarchyEdit();
+    requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.isVisible == heldTransform.canonicalVisible,
+        "last paint visibility key removal restores canonical held visibility");
     requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
     presentHierarchyEdit();
     requireRepeat(std::wstring(savedSpawn.mName) == L"Spawn before" && player.GetSpawnAreaCount(doc) == 0,

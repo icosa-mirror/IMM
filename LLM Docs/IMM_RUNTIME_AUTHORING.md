@@ -60,7 +60,7 @@ slice does not establish acceptance of every later command on every platform.
 |---|---|---|
 | Original managed authoring engine | Delivered; preview still compiles and reloads IMM bytes | Retain as explicit compatibility path during cutover |
 | Native atomic live-edit foundation | Implemented with recorded failure and frame-consistency evidence | Matched latency measurements and complete acceptance audit |
-| Native editing breadth | Drawings, properties, keys, spawn areas, and group hierarchy supported within limits | Resource-owning layer lifecycle and broader batch combinations |
+| Native editing breadth | Drawings, properties, keys, spawn areas, and static group/paint/spawn hierarchy supported within limits | Broader atomic batches, timeline/channel compatibility and complete cache acceptance |
 | Save/publish from live revision | Not delivered by the current live authoring surface | Writer projection, revision selection, round-trip acceptance |
 | Managed live authoring | Not delivered | Bindings, transaction/revision mapping, preview cutover |
 | Surfaces/platforms | Shared viewer probe and substantial backend/build evidence | Complete live SDK integration and per-operation acceptance |
@@ -546,6 +546,10 @@ Transform-key publication resamples only the target at held time before reportin
 Presented; removal of the last transform key restores the canonical pose. Clocks,
 actions and transient overrides remain intact. A paused loaded C-export reproduction
 failed before this correction and passes afterward (roadmap 6.102).
+Opacity keys likewise resample at publication and restore canonical opacity after
+last-key removal. Static-paint visibility keys refresh held drawing selection;
+last-key removal restores canonical visibility. These pass paused loaded C-export
+checks (roadmap 6.104). Group/timeline visibility and descendant clocks remain open.
 
 Static paint additionally supports stepped Loop and tick-valued Offset keys.
 Offset uses the direct key structure's `uintValue`; Loop retains its strict boolean

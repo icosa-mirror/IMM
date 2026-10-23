@@ -790,11 +790,20 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             mTransform = mCanonicalTransform;
             return;
         }
-        SetStateAtImpl(now, log, false, true);
+        SetStateAtImpl(now, log, false, AnimProperty::Transform);
     }
 
-    void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint, bool transformOnly)
+    void Layer::ReevaluateOpacityAt(piTick now, piLog * log)
     {
+        if (GetNumAnimKeys(AnimProperty::Opacity) == 0) mOpacity = mCanonicalOpacity;
+        else SetStateAtImpl(now, log, false, AnimProperty::Opacity);
+        if (mType == Type::Sound)
+            static_cast<LayerSound *>(GetImplementation())->SetVolume(GetWorldOpacity());
+    }
+
+    void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint, AnimProperty onlyProperty)
+    {
+        const bool propertyOnly = onlyProperty != AnimProperty::MAX;
         Layer* root = mSequence->GetRoot();
         const bool isRoot = this == root;
         const bool isGroup = mType == Type::Group;
@@ -808,7 +817,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         Layer* timeline = GetTimeline();
         const piTick timelineDuration = timeline->GetDuration();
 
-        if (!reevaluatePaint && !transformOnly && mParent && !mParent->GetWorldVisible())
+        if (!reevaluatePaint && !propertyOnly && mParent && !mParent->GetWorldVisible())
         {
             if (isSoundLayer) ls->SetPlaying(false);
             return;
@@ -831,7 +840,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         };
         // The root's Loop control uses its unwrapped clock, avoiding a lookup
         // whose own wrap/clamp decision changes which Loop key is selected.
-        if (isRoot && !transformOnly)
+        if (isRoot && !propertyOnly)
             resolveTimelineRepeat(timeFromStart);
 
         const piTick timelineWrapped = (timelineDuration != 0) ? timeFromStart % timelineDuration : timeFromStart;
@@ -843,18 +852,18 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
         // Other timeline controls belong to their parent's effective clock.
         // Resolve before descendants read this timeline's repeat behavior.
-        if (!isRoot && !isPaintLayer && !transformOnly)
+        if (!isRoot && !isPaintLayer && !propertyOnly)
             resolveTimelineRepeat(timelineTime);
 
         // Resolve step playback keys before Visibility computes the clip's local
         // time. Missing keys (including a seek before the first key) restore the
         // canonical repeat and zero tick offset on every evaluation.
-        if (!transformOnly) mStartOffset = piTick(0);
-        if (isPaintLayer && !transformOnly)
+        if (!propertyOnly) mStartOffset = piTick(0);
+        if (isPaintLayer && !propertyOnly)
             lp->SetEvaluatedMaxRepeatCount(lp->GetMaxRepeatCount());
         for (const AnimProperty prop : { AnimProperty::Loop, AnimProperty::Offset })
         {
-            if (transformOnly) break;
+            if (propertyOnly) break;
             if (prop == AnimProperty::Loop && !isPaintLayer)
                 continue;
             const AnimKey * activeKey = nullptr;
@@ -880,7 +889,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         for (int i = 0; i < maxProps; i++)
         {
             const AnimProperty prop = static_cast<AnimProperty>(i);
-            if (transformOnly && prop != AnimProperty::Transform) continue;
+            if (propertyOnly && prop != onlyProperty) continue;
             if (prop == AnimProperty::Offset || prop == AnimProperty::Loop)
                 continue;
             if (reevaluatePaint && prop != AnimProperty::Visibility)
@@ -1135,7 +1144,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         // A published paint key must also refresh latent selection while hidden,
         // so later unhide does not expose the previous key's frame. Visibility
         // spans still define local time; inactive/keyless spans retain local0.
-        if (transformOnly) return;
+        if (propertyOnly) return;
         if (reevaluatePaint)
         {
             static_cast<LayerPaintStatic *>(lp)->SelectFrameAtTime(timeSinceStart);
