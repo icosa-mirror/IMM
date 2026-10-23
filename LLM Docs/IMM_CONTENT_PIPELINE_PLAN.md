@@ -3586,9 +3586,12 @@ the historical sizes/check counts below describe this earlier source only.
    The last fully accepted hosted baseline remains 47a0240d.
 5. Final cancellation snapshots are retained as editor-project-fix-final-*.json.
    Runs 39976407088 and 39981424089 are terminal cancelled; 39979516973 is still
-   resolving cancellation. Additional failed collectors and the latest Android
-   runtime job are being audited for independent causes; cancellation alone does
-   not establish that those failures are harmless.
+   resolving cancellation at that snapshot. Subsequent log audit establishes
+   Android builds were cancelled before the strict collector started, whose actual
+   inputs were BUILD_RESULT=cancelled and DEVICE_RESULT=cancelled. Device collectors
+   lacked iOS artifacts because those producer jobs were cancelled without a runner
+   or executed steps. These are cancellation consequences; no independent Android
+   runtime regression was found. Evidence: artifacts/post-cancel-ci-agent-*.log.
 6. Fix 8c9d9a3e is pushed after an up-to-date pull. New full `[CI VALIDATION]`
    run 39984582643 targets 8c9d9a3e32fb2bca2286e9e6c841aeca5c48a67f and is
    queued. Receipt: artifacts/editor-project-fix-full-runs.json. This source
