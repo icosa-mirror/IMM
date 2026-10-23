@@ -141,6 +141,20 @@ The preferred first candidate is:
 
 ## 4. Delivery tracks and dependencies
 
+Current execution order (2026-10-23):
+
+1. Fix known regressions and restore full CI; regressions interrupt later work.
+2. Finish the agreed native runtime-editing breadth (M2), including the rename
+   milestone now implemented locally.
+3. Implement presented-revision save/publish (M3).
+4. Connect managed Unity transactions/preview to native live editing (M4).
+5. Complete remaining backend/surface integration (M5).
+6. Close remaining Quill conversion and reverse-conversion fidelity gaps.
+7. Complete distribution dependency-licence/notices documentation.
+
+Continue independent roadmap work while full CI runs. The dependency rationale
+and initial conversion milestones below remain part of the original scope.
+
 | Milestone | Work and dependency | Exit evidence |
 |---|---|---|
 | C0: reference and reuse decision | Initial evidence and C1 scope recorded in converter findings: all 21 source inventories, four decoded pairs and one large metadata pair | Four-brush/static reuse supported; reflected-transform gap demonstrated; controlled re-export, rotational-opacity case and playback remain unverified |
@@ -3436,6 +3450,29 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    reader-package-fix-actionlint.log and reader-package-source-fix-cancel.log.
    This CI correction is committed independently of local rename source. The
    next full push must still prove actual native macOS Editor execution.
+
+### 6.96. Rename milestone and retained-package correction in full CI
+
+1. Commit bfa2405d adds atomic UTF-8 live rename, owned spawn label snapshots and
+   the existing six-case rendered harness mode. Commit 316ace94 independently
+   fixes the macOS reader-package source. Both were pushed after an up-to-date
+   pull. Full `[CI VALIDATION]` run 39976407088 targets
+   bfa2405d010ac5aabf614621bb851164de24156c; its launch is in progress and no full
+   acceptance is claimed. The accepted hosted baseline remains 47a0240d.
+2. Rename functional/ownership/ABI, six rendered rename, twelve existing playback
+   and full converter regressions pass locally. No additional rename test scope
+   was added after completing that six-case mode. Full hosted and other backend
+   acceptance remain separate from this local implementation milestone.
+3. Superseded 2b7d3671 run 39966625591 is terminal cancelled: 35 successful jobs,
+   four failed, twelve cancelled and eleven skipped. The failed producer was the
+   macOS artifact download in 6.95; three evidence collectors reported that failure
+   and cancelled/missing results. Android Godot's smoke was cancelled at 14:57:41
+   UTC and its failed verification/classification steps ran afterward, so those
+   incomplete results are not treated as a separate reproduced product regression.
+4. Evidence: artifacts/layer-rename-full-runs.json, layer-rename-full-push.log,
+   reader-package-source-fix-old-run.json and reader-package-fix-device/engine/
+   validation-collector.log. Next source work follows the current execution order
+   above while preserving all remaining roadmap requirements.
 
 ## 7. Consolidated documents
 
