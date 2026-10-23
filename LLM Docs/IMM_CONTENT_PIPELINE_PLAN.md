@@ -30,6 +30,14 @@ checkpoints retain historical states; use this checkpoint and the latest entries
 for current acceptance. Source chapter/startup mapping, broader timing/navigation,
 media/reverse fidelity and revision-selected live save retain their own exit gates.
 
+The C5 full run 39942955962 on fe5d91ed failed in the Windows archive verifier:
+conversion and local-runtime checks passed, but implicit Python text decoding
+corrupted the native ANSI trace's Unicode path. The failure is reproduced/fixed
+under forced Python UTF-8 mode with the exact path checks preserved (6.79).
+Cancellation of that superseded run was requested; fresh full validation of the
+isolated correction is pending. Desktop shared-host preparation is uncommitted
+work in progress (6.80), outside the validation source.
+
 ## 1. Objective and document ownership
 
 Provide reusable content reading, representation and writing so applications can
@@ -2910,6 +2918,47 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    imm-convert-portable-post-sync-tests/report.json, imm-convert-cli-post-sync-tests/
    report.json and post-sync converter/exports logs. Preserve that source commit
    in history; a final [CI VALIDATION] evidence commit triggers the new full run.
+
+### 6.79. Windows archive trace decoding regression (2026-10-23)
+
+1. Full run 39942955962 at fe5d91ed failed Windows job 120378619910 during the
+   archive verifier, after package creation. Actual WindowsImmConvertPortable
+   artifact 12496797547 confirms conversion succeeded, output was published with
+   no omissions, and CoreCLR/vcruntime140/ImmUnityPlugin loaded from the archive.
+   The failed assertion was the additional host-trace path check, not conversion
+   or the typed JSON module-location checks.
+2. The 400,929-byte native Windows host trace uses Windows ANSI bytes. Its Å byte
+   0xC5 is valid in the runner's ACP but invalid standalone UTF-8. Python UTF-8
+   mode changed read_text's implicit decoding and replaced that byte, so the
+   exact Unicode-path comparison failed. Local default-mode testing had missed
+   the environment difference. Independent artifact-byte review confirms cause.
+3. Read the native trace explicitly with strict encoding='mbcs' and force
+   python -X utf8 in the required CI invocation. Keep the exact Unicode path,
+   all 232 manifest/hash checks, actual local-module checks and real conversion
+   acceptance unchanged. No gate relaxation, timeout change or native fix.
+4. Reproduce the old failure locally with forced UTF-8 mode on the same real ZIP;
+   the corrected verifier passes in that mode. Workflow matrix and lint pass.
+   Evidence: artifacts/portable-trace-utf8-red.log,
+   portable-trace-utf8-green/report.json, portable-trace matrix/actionlint logs,
+   imm-convert-portable-windows-job.log and portable-ci-failure-evidence/.
+5. Requested force cancellation of the source-failed superseded run before
+   restarting full validation. Commit/push this isolated correction with
+   [CI VALIDATION]. Desktop shared-host WIP remains uncommitted and is excluded
+   from this validation source; no stash or source discard is required.
+
+### 6.80. Desktop shared-host preparation (uncommitted work in progress)
+
+1. Move standalone native configuration, cancellation, atomic IMM publication,
+   reports and runtime diagnostics from the CLI into a .NET-only host service
+   in ImmConversion. The CLI becomes a consumer; the planned desktop window will
+   use the same service. Original Unity package converter source is unchanged.
+2. Current WIP builds without warnings and passes the existing 15 real CLI cases.
+   The moved publication helper's tests have been retargeted to the shared
+   assembly. Repeated in-process conversions, cancellation/re-entrancy behavior,
+   desktop window and visual/GUI acceptance still need implementation/validation.
+3. Freeze these files while fixing 6.79. No desktop milestone or acceptance is
+   claimed. Computer-use instructions were read; no desktop app has been launched
+   or controlled yet. Do not include this WIP in the isolated CI verifier fix.
 
 ## 7. Consolidated documents
 

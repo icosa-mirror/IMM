@@ -82,7 +82,10 @@ def main() -> None:
     assert runtime['moduleInspectionError'] is None, runtime['moduleInspectionError']
     for name in ('coreclr.dll', 'vcruntime140.dll', 'immunityplugin.dll'):
         assert Path(runtime['modules'][name]).resolve() == (application / name).resolve(), name
-    assert str(application).casefold() in (out / 'host-trace.log').read_text(errors='replace').casefold()
+    # Windows .NET host tracing uses the native ANSI code page. Python UTF-8
+    # mode changes read_text's default, not the encoding written by that host.
+    trace = (out / 'host-trace.log').read_text(encoding='mbcs')
+    assert str(application).casefold() in trace.casefold()
     assert not list(out.rglob('.imm-convert-*.imm'))
     report.update({'passed': True, 'sourceRevision': manifest['sourceRevision'],
                    'workingTreeDirty': manifest['workingTreeDirty'], 'runtime': runtime,

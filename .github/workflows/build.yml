@@ -246,7 +246,7 @@ jobs:
       run: |
         & code/tools/ImmConvert/package-windows.ps1 -OutputDirectory artifacts/imm-convert-portable-ci
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        python tests/tools/test_imm_convert_portable.py --archive artifacts/imm-convert-portable-ci/imm-convert-win-x64.zip --source artifacts/quill-converter-regressions/animated-source --output-dir artifacts/imm-convert-portable-ci-tests
+        python -X utf8 tests/tools/test_imm_convert_portable.py --archive artifacts/imm-convert-portable-ci/imm-convert-win-x64.zip --source artifacts/quill-converter-regressions/animated-source --output-dir artifacts/imm-convert-portable-ci-tests
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     - name: Upload portable converter archive and validation evidence
