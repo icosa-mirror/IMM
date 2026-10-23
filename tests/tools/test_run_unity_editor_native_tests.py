@@ -26,6 +26,15 @@ class NativeEditorRunnerTests(unittest.TestCase):
             def runner(arguments, **kwargs):
                 phase = 'activation' if '-serial' in arguments else 'return' if '-returnlicense' in arguments else 'tests'
                 calls.append(phase)
+                if phase == 'activation':
+                    self.assertNotIn('-projectPath', arguments)
+                    scratch = Path(arguments[arguments.index('-createProject') + 1])
+                    self.assertFalse(scratch.exists())
+                    self.assertTrue(Path(kwargs['cwd']).is_dir())
+                    scratch.mkdir()
+                elif phase == 'return':
+                    self.assertNotIn('-createProject', arguments)
+                    self.assertEqual(Path(arguments[arguments.index('-projectPath') + 1]), Path(kwargs['cwd']) / 'project')
                 log = Path(arguments[arguments.index('-logFile') + 1])
                 log.write_text(f'{serial} {password} {env["UNITY_EMAIL"]}')
                 kwargs['stdout'].write(f'{serial} {password}')

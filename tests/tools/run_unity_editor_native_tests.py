@@ -80,11 +80,15 @@ def run_tests(editor: Path, project: Path, output: Path, env: dict[str, str],
         return state['exitCode'] == 0
 
     with tempfile.TemporaryDirectory(prefix='imm-editor-license-') as temporary:
-        activation_project = Path(temporary)
+        activation_root = Path(temporary)
+        activation_project = activation_root / 'project'
         common = ['-batchmode', '-nographics', '-quit', '-username', email,
-                  '-password', password, '-projectPath', str(activation_project)]
+                  '-password', password]
         try:
-            if phase('activation', [*common, '-serial', serial], activation_project):
+            # -projectPath only opens an existing project. Let Unity create the
+            # scratch project rather than treating an empty directory as one.
+            if phase('activation', [*common, '-createProject', str(activation_project),
+                                    '-serial', serial], activation_root):
                 tests_ok = phase('tests', ['-batchmode', '-nographics', '-projectPath', str(project),
                     '-runTests', '-testPlatform', 'EditMode', '-testFilter', TEST_CLASS,
                     '-testResults', str(result_path)], project)
@@ -92,7 +96,8 @@ def run_tests(editor: Path, project: Path, output: Path, env: dict[str, str],
                 report['testResultErrors'] = errors
                 report['testsPassed'] = tests_ok and not errors
         finally:
-            returned = phase('return', [*common, '-returnlicense'], activation_project)
+            returned = phase('return', [*common, '-projectPath', str(activation_project),
+                                       '-returnlicense'], activation_root)
             redact(result_path)
             report['passed'] = report.get('testsPassed', False) and returned
             (output / 'quill-editor-runner.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')

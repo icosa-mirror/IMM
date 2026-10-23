@@ -3563,6 +3563,33 @@ the historical sizes/check counts below describe this earlier source only.
    a8c23f2e692b0a33863e3a657a39b36aef728fcd and is queued; no hosted acceptance
    is claimed. Receipt: artifacts/direct-live-layout-full-runs.json.
 
+### 6.101. Native macOS Editor scratch-project setup correction
+
+1. Full run 39976407088 reached the new native Editor wrapper. The retained reader
+   package download/signing passed. Its activation log confirms licence activation
+   succeeded, then Unity exited with `Couldn't set project path to` because the
+   wrapper passed an empty temporary directory as an existing project. Runner JSON
+   records activation exit 1, return exit 0 and no tests phase/XML. This is a source
+   setup defect, not an unproven converter test failure or a licence-service outage.
+2. Activation now uses Unity's documented `-createProject` on a fresh child path;
+   return uses `-projectPath` for that created scratch project. Both run from the
+   owned temporary parent, including cleanup after failure. Strict three-case XML
+   checks, credential redaction and unconditional licence return remain required.
+3. Existing wrapper lifecycle tests now check creation/opening arguments. They,
+   strict result-verifier self-tests, workflow matrix and whitespace checks pass
+   locally. No actual corrected macOS acceptance is claimed before the new full run.
+4. Cancelled remaining work in source-affected runs 39976407088, 39979516973 and
+   39981424089; no weakened gates or repeated infrastructure retry. Evidence:
+   artifacts/converter-checkpoint-ci-agent-mac-artifact/quill-editor-runner.json,
+   quill-editor-activation.log, editor-project-fix-cancel-*.log,
+   editor-project-fix-runner-tests.log and editor-project-fix-verifier-tests.log.
+   The last fully accepted hosted baseline remains 47a0240d.
+5. Final cancellation snapshots are retained as editor-project-fix-final-*.json.
+   Runs 39976407088 and 39981424089 are terminal cancelled; 39979516973 is still
+   resolving cancellation. Additional failed collectors and the latest Android
+   runtime job are being audited for independent causes; cancellation alone does
+   not establish that those failures are harmless.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
