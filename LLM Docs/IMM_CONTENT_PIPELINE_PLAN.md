@@ -3925,8 +3925,12 @@ the historical sizes/check counts below describe this earlier source only.
 10. Fresh Editor native load, paused seek and optional installed-input binding pass.
     Compile checks pass without an Input System reference even with the backend
     symbol defined. Native C ABI evidence remains distinct from Unity event/visual
-    checks and hosted acceptance. Full CI for this milestone must be queued after
-    the source and matching Windows plugin are committed and synchronized.
+    checks and hosted acceptance. Source and matching Windows plugin were committed
+    and pushed as 9901c28e445bd812cb8742dfd1ea9406e62a4b60 after pulling main.
+    FULL [validation run 40038310055](https://github.com/icosa-mirror/IMM/actions/runs/40038310055)
+    is in progress; native Windows/Android/macOS/iOS, iOS visual, Core and Web lanes
+    are present. No passing conclusion is claimed. Receipt:
+    artifacts/live-panel-timeline-ci-runs.json.
 11. Injected actual Game-view input verified F9 hide/show and a ruler click at
     0.75 seconds (paused native time 9451 ticks). The first drag exposed command
     ownership bugs: immediate Pause could make Commit busy, and a later playback
