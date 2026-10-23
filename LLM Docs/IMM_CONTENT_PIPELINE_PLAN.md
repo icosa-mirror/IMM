@@ -4007,6 +4007,14 @@ the historical sizes/check counts below describe this earlier source only.
    Stop boundaries prevent a general managed root-time delta. A native context
    clock/resolver with an explicit seek policy is needed; no guessed mapping has
    been implemented or accepted.
+6. History source was committed and pushed as d35ae2e6 with the required
+   [CI VALIDATION] marker after pulling main. FULL
+   [run 40040654620](https://github.com/icosa-mirror/IMM/actions/runs/40040654620)
+   is queued; local evidence does not establish hosted acceptance. Prior timeline
+   run 40038310055 remains active, with Windows native delivery and Godot iOS visual
+   success; both clean Android Unity builds are still running at the last confirmed
+   snapshot. They are not reported as passing. Receipt:
+   artifacts/live-timeline-history-validation.json.
 
 ## 7. Consolidated documents
 
