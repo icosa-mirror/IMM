@@ -3898,8 +3898,15 @@ the historical sizes/check counts below describe this earlier source only.
    integer offset values, reflected transforms, atomic move and rollback cases,
    alongside existing metadata, rename, reflection and repeat checks. Evidence:
    artifacts/live-timeline-query-retime-cabi-fixed/report.json and run.log.
-6. UI interaction, drawing timing semantics/nested context, final layout and full
-   hosted acceptance remain pending. Do not describe the timeline as fully
+6. Playback clock publication now shares the scene-update mutex with time queries,
+   preventing readers from seeing a next-tick clock with the previous pose. Native
+   Release build and the loaded C ABI suite pass after this focused correction
+   (artifacts/live-timeline-final-native-build.log, artifacts/live-timeline-final-cabi).
+7. UI callbacks on real Snoopy published an opacity key (revision 1), moved it from
+   0.5 to 0.75 seconds (revision 2), then deleted it (revision 3), restoring the
+   evaluated opacity to 1 with no opacity keys. This verifies callback/PInvoke
+   publication, not physical mouse dragging. UI interaction, drawing timing
+   semantics/nested context, final layout and full hosted acceptance remain pending. Do not describe the timeline as fully
    functional or the native C ABI test as Unity mouse/drag validation.
 
 ## 7. Consolidated documents

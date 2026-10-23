@@ -1457,23 +1457,27 @@ namespace ImmPlayer
         // set global info
         //-----------------------------
         double validationFixedDt = 0.0;
+        piTick frameTime;
         if (iGetValidationFixedDt(&validationFixedDt))
         {
             const uint64_t validationTimeFrame = mAnyDocToRender ? mValidationTimeFrame++ : 0;
-            mTime = int64_t(piTick::CastInt(piTick::FromSeconds(double(validationTimeFrame) * validationFixedDt)));
+            frameTime = piTick::FromSeconds(double(validationTimeFrame) * validationFixedDt);
         }
         else
         {
-            mTime = int64_t(mTimer->GetTimeTicks());
+            frameTime = piTick(int64_t(mTimer->GetTimeTicks()));
         }
-        mFrameState.mTime = static_cast<float>(piTick::ToSeconds(mTime));
-        mFrameState.mFrameID = mFrame++;
 
         // We lock here to prevent updating the scenegraphs while the renderer is going.
         // Ideally we can do this with double buffering. But we are in a hurry right now
         bool anyDocReady = false;
         mMutex.lock();
         {
+            // Queries use this mutex too: publish the clock with the scene
+            // update, rather than exposing the next tick with the previous pose.
+            mTime = frameTime;
+            mFrameState.mTime = static_cast<float>(piTick::ToSeconds(mTime));
+            mFrameState.mFrameID = mFrame++;
 
             // handle global player state
             const bool needDisable = (mEnabled && !enabled);
