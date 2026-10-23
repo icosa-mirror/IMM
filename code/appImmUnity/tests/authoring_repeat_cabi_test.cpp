@@ -410,11 +410,16 @@ int wmain(int argc, wchar_t ** argv)
     transformKey.structSize = sizeof(transformKey); transformKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
     transformKey.property = IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM;
     transformKey.qw = 1.0f; transformKey.scale = 1.0f; transformKey.tx = 17.0f;
-    requireRepeat(ImmAuthoring_KeySet(doc, target, &transformKey) == IMM_AUTHORING_OK, "queue held transform key");
-    presentHierarchyEdit();
     Player::LayerDiagnostics heldTransform{};
-    requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.transform.mTranslation.x == 17.0,
-        "presented transform key changes the held pose");
+    for (int flip = 0; flip <= 3; ++flip)
+    {
+        transformKey.transformFlip = flip;
+        requireRepeat(ImmAuthoring_KeySet(doc, target, &transformKey) == IMM_AUTHORING_OK, "queue held transform key");
+        presentHierarchyEdit();
+        requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.transform.mTranslation.x == 17.0 &&
+            static_cast<int>(heldTransform.transform.mFlip) == flip,
+            "presented transform key changes the held reflected pose");
+    }
     requireRepeat(ImmAuthoring_KeyRemove(doc, target, IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM, 0.0) == IMM_AUTHORING_OK,
         "remove held transform key");
     presentHierarchyEdit();

@@ -204,7 +204,8 @@ typedef struct ImmAuthoringKey
     float qx, qy, qz, qw;
     float scale;
     uint32_t uintValue; // Offset uses exact IMM ticks, never float seconds.
-    uint32_t reserved[3];
+    int32_t transformFlip; // 0=None, 1=X, 2=Y, 3=Z.
+    uint32_t reserved[2];
 } ImmAuthoringKey;
 
 typedef struct ImmAuthoringSpawnArea
@@ -247,6 +248,7 @@ static_assert(offsetof(ImmAuthoringLayerProperties, transformFlip) == 56,
 static_assert(sizeof(ImmAuthoringLayerPivot) == 48, "ImmAuthoringLayerPivot ABI changed");
 static_assert(sizeof(ImmAuthoringKey) == 80, "ImmAuthoringKey ABI changed");
 static_assert(offsetof(ImmAuthoringKey, uintValue) == 64, "ImmAuthoringKey value offset changed");
+static_assert(offsetof(ImmAuthoringKey, transformFlip) == 68, "ImmAuthoringKey reflection offset changed");
 static_assert(sizeof(ImmAuthoringSpawnArea) == 112, "ImmAuthoringSpawnArea ABI changed");
 #endif
 

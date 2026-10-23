@@ -23,7 +23,7 @@ class Key(c.Structure):
                 ('property', c.c_int32), ('interpolation', c.c_int32), ('timeSeconds', c.c_double),
                 ('boolValue', c.c_int32), ('floatValue', c.c_float),
                 *[(name, c.c_float) for name in ('tx', 'ty', 'tz', 'qx', 'qy', 'qz', 'qw', 'scale')],
-                ('uintValue', c.c_uint32), ('reserved', c.c_uint32 * 3)]
+                ('uintValue', c.c_uint32), ('transformFlip', c.c_int32), ('reserved', c.c_uint32 * 2)]
 
 
 def main():
@@ -32,7 +32,7 @@ def main():
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows native plugin required')
-    assert c.sizeof(Key) == 80 and Key.uintValue.offset == 64
+    assert c.sizeof(Key) == 80 and Key.uintValue.offset == 64 and Key.transformFlip.offset == 68
     output = ROOT / 'artifacts/authoring-key-abi'
     output.mkdir(parents=True, exist_ok=True)
     report_path = output / 'report.json'
@@ -79,7 +79,10 @@ def main():
     key = descriptor(8)
     key.uintValue, key.interpolation = 0xFFFFFFFF, 1
     check('Offset step only with full-width unsigned payload', key, -2)
-    for index in range(3):
+    key = descriptor()
+    key.transformFlip = 4
+    check('invalid transform reflection', key, -2)
+    for index in range(2):
         key = descriptor(8)
         key.reserved[index] = 1
         check(f'reserved slot {index}', key, -2)

@@ -2613,7 +2613,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
     if (key->structSize < sizeof(ImmAuthoringKey) || !std::isfinite(key->timeSeconds) ||
         key->timeSeconds < 0.0 || key->timeSeconds >= maximumTimeSeconds ||
         key->reserved[0] != 0 || key->reserved[1] != 0 ||
-        key->reserved[2] != 0)
+        key->transformFlip < 0 || key->transformFlip > 3)
         return IMM_AUTHORING_INVALID_ARGUMENT;
     if (key->interpolation < IMM_AUTHORING_INTERPOLATION_NONE ||
         key->interpolation > IMM_AUTHORING_INTERPOLATION_AUTO)
@@ -2668,7 +2668,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
         property = ImmImporter::Layer::AnimProperty::Transform;
         value.mTransform = ImmCore::trans3d(
             ImmCore::quatd(key->qx, key->qy, key->qz, key->qw), key->scale,
-            ImmCore::flip3::N, ImmCore::vec3d(key->tx, key->ty, key->tz));
+            static_cast<ImmCore::flip3>(key->transformFlip), ImmCore::vec3d(key->tx, key->ty, key->tz));
         break;
     }
     default:

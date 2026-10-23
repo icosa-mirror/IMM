@@ -3612,6 +3612,22 @@ the historical sizes/check counts below describe this earlier source only.
    and held-transform-key-cpu-check.log. No new test framework was introduced.
    Reflection-key support and hosted/backend acceptance remain separate.
 
+### 6.103. Direct live transform-key reflections (local Windows milestone)
+
+1. Add transformFlip directly to the single 80-byte key structure at byte 68.
+   Canonical and animated transform edits then both support None/X/Y/Z reflection;
+   no alternate layout, new version or managed C# API change is introduced.
+2. Existing paused C-export checks cover insertion/replacement across all four
+   reflection values and canonical restoration after removing the last key.
+   Windows Unity/viewer/Godot builds, loaded C-export delivery and 21 ABI guard
+   checks pass. The existing six-case rendered Loop/Offset playback regression
+   check also passes. Independent source review found no stale caller/layout issue.
+3. Evidence: artifacts/transform-key-reflection-build.log,
+   transform-key-reflection-cabi/report.json, transform-key-reflection-abi-check.log
+   and transform-key-reflection-playback-regressions/report.json. Reflected-key
+   rendered/backend acceptance and managed cutover remain open; no broad M2
+   acceptance is inferred from these local checks.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

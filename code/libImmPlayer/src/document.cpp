@@ -1903,7 +1903,7 @@ namespace ImmPlayer
                 !std::isfinite(transform.mRotation.w) ||
                 !std::isfinite(transform.mScale) || transform.mScale <= 0.0 ||
                 std::fabs(quaternionLengthSquared - 1.0) > 0.001 ||
-                transform.mFlip != flip3::N)
+                transform.mFlip < flip3::N || transform.mFlip > flip3::Z)
                 return -2;
         }
         mOpenAnimationKeyEdits.push_back(AnimationKeyEdit{

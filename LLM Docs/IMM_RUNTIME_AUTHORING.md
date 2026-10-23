@@ -135,9 +135,9 @@ run 39609583383. Unity package compilation/tests also pass, including the reflec
 graph/comparison test and all 15 authoring document tests. Three D3D12 runtime tests
 were skipped on the Linux host. Unity player integration and device acceptance
 remain pending; the shared roadmap tracks current failures and validation status.
-Live canonical transform reflection now has a separate V2 property structure
-(section 8.2); live transform-key and spawn-specific transform reflection remain
-outside the current mutation contract.
+Live canonical and transform-key reflections use direct fields in the native
+structures (section 8.2); spawn-specific transform reflection remains outside the
+current mutation contract.
 
 The offline graph also has optional `SetRootProperties` / snapshot `RootProperties`
 for the canonical Root group: visibility, opacity, transform/pivot flips and timeline
@@ -509,7 +509,7 @@ byte 56 and remains 64 bytes. Readback reports the canonical reflection;
 transform writes publish it with translation, rotation and scale. Use None
 explicitly to remove a reflection. There is one layout, with no V2 wrapper.
 Opacity/visibility-only updates preserve the existing transform. This does not
-extend live transform-key or spawn-specific transform reflection. Property
+extend spawn-specific transform reflection. Property
 readback now obtains the owned diagnostic snapshot under the publication lock.
 
 `LayerSetName` copies 1-4096 UTF-8 bytes for a nonroot group, paint or spawn layer.
@@ -536,6 +536,9 @@ Pivot-specific rendered/backend acceptance and managed integration remain open.
 
 Live keys support visibility, opacity, and transform. `KeySet` inserts/replaces at the converted
 tick; preparation copies the affected sorted timeline and publication swaps that vector.
+The single 80-byte key directly includes `transformFlip` at byte 68 for
+None/X/Y/Z reflection. Existing transform interpolation/easing applies unchanged;
+this introduces no alternate layout or managed API change (roadmap 6.103).
 Visibility accepts only `NONE` interpolation because evaluation is stepped. Unsupported
 property/interpolation/value combinations are rejected. `KeyRemove` uses exact converted ticks;
 a missing key rejects the asynchronous commit with `NotFound` and leaves the timeline intact.
