@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -211,6 +213,7 @@ internal static class Program
         {
             Schema = "imm-quill-conversion-report-v1", Source = options.Source, Output = options.Output,
             ToolVersion = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+            Runtime = RuntimeDetails(),
             StartedUtc = started, FinishedUtc = DateTimeOffset.UtcNow, ExitCode = exitCode,
             Succeeded = published, OutputPublished = published, Partial = result?.IsPartial ?? false,
             BytesWritten = published ? result.Export.BytesWritten : 0, Error = error,
@@ -225,5 +228,31 @@ internal static class Program
             File.Move(temporary, options.Report, true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    private static object RuntimeDetails()
+    {
+        var modules = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string moduleError = null;
+        try
+        {
+            using Process process = Process.GetCurrentProcess();
+            foreach (ProcessModule module in process.Modules)
+            {
+                string name = module.ModuleName.ToLowerInvariant();
+                if (name == "coreclr.dll" || name == "vcruntime140.dll" ||
+                    name == "immunityplugin.dll" || name == "immstrokereader.dll")
+                    modules[name] = module.FileName;
+            }
+        }
+        catch (Exception exception) when (exception is Win32Exception || exception is NotSupportedException ||
+            exception is InvalidOperationException)
+        { moduleError = exception.Message; }
+        return new
+        {
+            Framework = RuntimeInformation.FrameworkDescription,
+            Directory = RuntimeEnvironment.GetRuntimeDirectory(),
+            Modules = modules, ModuleInspectionError = moduleError
+        };
     }
 }

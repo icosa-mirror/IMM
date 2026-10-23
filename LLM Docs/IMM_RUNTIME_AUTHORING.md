@@ -349,8 +349,9 @@ key insertion, replacement and removal now pass local Windows CPU and six render
 publication/rollback/unload cases (roadmap 6.70). Publication reselects at the held
 parent clock, including latent selection while hidden, without a seek or changing
 playback intent/root actions. Canonical repeat property editing and managed
-transaction mapping remain open. Full hosted CI for this live-key milestone is
-pending; the earlier a0f71bd4 full CI pass does not cover it. Roadmap 6.67 separates stored
+transaction mapping remain open. Full hosted regression run 39935868460 accepts
+source 97142c9a, including this live-key milestone (roadmap 6.77); operation-specific
+and broader platform acceptance remain scoped to 6.70. Roadmap 6.67 separates stored
 paint repeat metadata from Loop-evaluated frame selection for both implementations,
 and resets/resolves tick Offset before visibility evaluation. CPU regressions cover
 key removal/backward seeks and sound span restart metadata; content-offset changes

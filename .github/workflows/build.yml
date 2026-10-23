@@ -241,6 +241,28 @@ jobs:
           artifacts/imm-convert-cli-ci/*.json
           artifacts/imm-convert-publication-ci/publication-report.json
 
+    - name: Package and validate portable converter archive
+      shell: pwsh
+      run: |
+        & code/tools/ImmConvert/package-windows.ps1 -OutputDirectory artifacts/imm-convert-portable-ci
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python tests/tools/test_imm_convert_portable.py --archive artifacts/imm-convert-portable-ci/imm-convert-win-x64.zip --source artifacts/quill-converter-regressions/animated-source --output-dir artifacts/imm-convert-portable-ci-tests
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Upload portable converter archive and validation evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: WindowsImmConvertPortable
+        if-no-files-found: ignore
+        path: |
+          artifacts/imm-convert-portable-ci/imm-convert-win-x64.zip
+          artifacts/imm-convert-portable-ci/package-report.json
+          artifacts/imm-convert-portable-ci/publish.log
+          artifacts/imm-convert-portable-ci-tests/report.json
+          artifacts/imm-convert-portable-ci-tests/conversion.json
+          artifacts/imm-convert-portable-ci-tests/*.log
+
     - name: Compare native evaluated animation states
       shell: pwsh
       run: |

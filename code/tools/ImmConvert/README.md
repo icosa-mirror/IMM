@@ -39,9 +39,12 @@ the successful output summary goes to stdout.
 
 ## Current build and native dependencies
 
-This is the production CLI entry point, not yet the planned portable download.
-The current build requires Windows x64, .NET 8 and the native runtime files.
-Self-contained publishing, a desktop interface and clean-machine acceptance
+This is the production CLI entry point. Development builds require Windows x64,
+.NET 8 and the native runtime files. `package-windows.ps1` now creates a prototype
+self-contained ZIP with the native and app-local Microsoft CRT files and notices.
+The extracted app is tested with global .NET discovery disabled and its actual
+local CLR/CRT/native module locations checked. This is not a clean Windows VM
+test. A desktop interface, clean-machine and public-release licensing acceptance
 remain C5 work in `LLM Docs/IMM_CONTENT_PIPELINE_PLAN.md`.
 
 Build from the repository root:
@@ -49,6 +52,19 @@ Build from the repository root:
 ```powershell
 dotnet build code/tools/ImmConvert/ImmConvert.csproj --configuration Release
 ```
+
+Build the portable CLI archive into a new output directory:
+
+```powershell
+pwsh -NoProfile -File code/tools/ImmConvert/package-windows.ps1 -OutputDirectory artifacts/imm-convert-portable
+```
+
+The packager uses Visual Studio's redistributable CRT directory (or an explicit
+`-CrtDirectory`), not Windows system DLLs. It preserves .NET/NuGet and native
+dependency notices and records source revision, dirty-tree state and file hashes.
+An existing output directory is rejected to preserve previous artifacts. The
+prototype's public-release licensing review is explicitly incomplete; see
+`THIRD_PARTY.md`. No GitHub release is created by this script.
 
 Place the complete native runtime alongside the application, or use
 `--native-directory <directory>` during development. The CLI checks for missing
@@ -62,6 +78,10 @@ These files currently come from the two Unity packages' `Plugins/x86_64`
 directories. No Unity Editor or Python process participates in conversion.
 Resolving native files uses the application/explicit native directory, not the
 process working directory.
+
+When a JSON report is requested, its `runtime` section records the actual CLR
+directory and selected loaded native module paths. Module-inspection errors are
+reported without turning a successful conversion into a failure.
 
 The required Windows CI step builds this CLI, runs the real-filesystem atomic
 publication checks and exercises actual native conversion from an unrelated

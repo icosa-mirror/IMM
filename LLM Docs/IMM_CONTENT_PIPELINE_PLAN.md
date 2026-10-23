@@ -9,45 +9,26 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
-Current checkpoint (2026-10-22): full hosted CI run 39726457067 on a0f71bd4
-completed successfully on attempt 2: 49 jobs passed, 22 skipped, no failures.
-Actual final artifact 12409062591 passes all 20 required hosted evidence rows with
-no missing required evidence. The single permitted standalone iOS Simulator retry
-resolved the first attempt's boot timeout; no gate or scope was weakened (6.71).
-The prior Android readiness/composition and compiler failures are closed for this
-validated baseline. CI-built/package macOS and all-platform export checks pass.
-That run's binary-sync step was skipped. The subsequent upstream CI binary-refresh
-commit 2316ebc9 has now been merged into this checkout; these replacement binaries
-do not establish acceptance of the newer live-key milestone.
+Current checkpoint (2026-10-23): full hosted run 39935868460 on 97142c9a
+completed SUCCESS: 49 jobs passed, 22 skipped, no failures. Actual final artifact
+12496091571 passes all 20 required hosted evidence rows, with zero invalid/missing
+required rows and all 43 preserved manifests identifying the correct source.
+The repeated FFmpeg setup failure is closed by consumer-only pinned provisioning,
+verified on Linux and in both physical-device paths (6.74, 6.77). The native live
+Loop/Offset milestone is included in that full regression source; its operation-
+specific acceptance remains scoped to the documented Windows/native tests.
+Hardware-only Unity Windows Vulkan and deferred headset evidence remain outside
+hosted acceptance. Full M2, managed cutover and scene-wide Quill fidelity are open.
 
-Live static-paint Loop/Offset key editing (6.70) now passes final local rebuild,
-hidden-parent CPU regression, six viewer cases and regression checks. This
-milestone remains outside the a0f71bd4 CI pass; its full hosted CI is pending. Full
-M1/M2, revision-selected save, managed live cutover, converter chapter/media/reverse
-fidelity and broader platform acceptance remain open. Hardware-only Unity Windows
-Vulkan evidence is incomplete; the full hosted workflow does not accept that row.
-Earlier numbered checkpoints retain historical results; use this checkpoint and
-6.70 for current live-key evidence and 6.71 for current CI acceptance.
-
-Live-key validation run 39748355080 on b5c43743 failed on attempt 1: both Unity
-Android Firebase jobs timed out installing FFmpeg before device runtime started.
-The Windows job, including the new live-key and authoring regression steps,
-passed. The single failed-job/dependent retry also completed with failure: URP
-again timed out installing FFmpeg, while non-XR passed. A premature fresh run
-was requested before diagnosing that retry; cancellation has been requested.
-The first dependency fix (6.73) also failed: run 39798342624 at bb97268a timed
-out after 600 seconds downloading FFmpeg for URP. The new correction (6.74)
-removes that unused producer dependency and provisions a pinned bundled executable
-only in the evidence collector. Local real-codec checks and hosted Linux/Android
-producer/collector evidence now pass; the full hosted verdict remains pending.
-Full validation of the live-key
-milestone remains unresolved.
-
-FFmpeg correction 97142c9a is pushed with [CI VALIDATION]; full run 39935868460
-is in progress at the latest check. C5's standalone-library extraction and production
-CLI now pass local native regressions and public-consumer/command-line checks
-(6.75-6.76), but are outside that running CI revision. No distribution or clean-machine
-acceptance is claimed.
+Local C5 milestones are now the extracted standalone library (026abe3b), production
+CLI (c78d5206), and the prototype self-contained Windows CLI archive (6.75-6.78).
+Real native/CLI tests and the extracted archive's isolated CLR/CRT checks pass,
+but these later sources are outside the accepted 97142c9a CI revision. Include
+them in the next full-validation push. Desktop UI, real Unity consumer integration,
+clean-machine and public-release licensing acceptance remain open. Earlier numbered
+checkpoints retain historical states; use this checkpoint and the latest entries
+for current acceptance. Source chapter/startup mapping, broader timing/navigation,
+media/reverse fidelity and revision-selected live save retain their own exit gates.
 
 ## 1. Objective and document ownership
 
@@ -146,7 +127,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop and root stop/seek corrections locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D and structural equirectangular mono/stereo conversion, and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Panorama orientation/eye order and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| C5: user-facing converter packaging | Standalone library and production CLI implemented with local native/public-consumer/CLI checks (6.75-6.76). Portable Windows application, native bundling/publish and Unity editor entry point remain planned; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
+| C5: user-facing converter packaging | Standalone library and production CLI implemented with local native/public-consumer/CLI checks (6.75-6.76). Prototype self-contained CLI bundle passes local extraction/runtime checks (6.78); desktop UI, clean-machine/public-release acceptance and Unity editor entry point remain open; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys and native sound decoding/mapping implemented; codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
@@ -2611,7 +2592,7 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    artifacts/paint-playback-milestone-ndk/report.json and the matching
    paint-playback-milestone converter/sequence/policy/exports/workflow/lint logs.
    CI requires the ABI and six viewer cases and uploads WindowsPaintPlaybackKeys.
-   Full hosted CI for this milestone is pending; 6.71 accepts only a0f71bd4.
+   Full hosted regression run 39935868460 accepts source 97142c9a (6.77), including this milestone; operation-specific/platform breadth remains bounded above.
    Canonical paint-repeat property editing, full M2, managed cutover and broader
    platform acceptance remain open.
 8. Implementation committed as 76c46f1d. The pre-push pull merged upstream
@@ -2857,6 +2838,68 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Unity editor consumer integration are outstanding. These changes remain outside
    running CI source 97142c9a; keep its full validation alive while working and
    include these packaging milestones in the next full validation push.
+
+### 6.77. Full hosted acceptance for live keys and FFmpeg correction (2026-10-23)
+
+1. Run 39935868460 at 97142c9a1885d0d344fa0317b3f686d296cedaf8 completed
+   SUCCESS, with 49 successful jobs, 22 skipped and no failures. No retry was
+   required. The native live-key implementation and corrected Android dependency
+   placement/provisioning are included in that validated source.
+2. Actual CIValidationEvidence artifact 12496091571 was downloaded and audited
+   against that exact source's matrix. All 20 required supported hosted rows pass;
+   there are zero missing/invalid required rows. All 43 preserved manifests have
+   the matching source SHA. Final producer/native-payload/FFmpeg/video proofs are
+   retained under 6.74, not inferred from green orchestration alone.
+3. Hardware-only unity/windows/non-vr/vulkan has hosted_gate=null and remains
+   evidence_incomplete; deferred headset/hardware gates are not accepted by this
+   hosted pass. Passing regression rows do not establish every live operation's
+   platform breadth, successful loaded-document V2 C ABI delivery, audio acceptance,
+   complete Quill fidelity or completion of the whole roadmap.
+4. Evidence: artifacts/full-ci-39935868460-acceptance-audit.json and preserved
+   final/producer artifacts. Later C5 library/CLI/package sources are outside
+   this accepted revision and need their own new full-validation run.
+
+### 6.78. Self-contained Windows CLI archive prototype (2026-10-23)
+
+1. Add package-windows.ps1 to publish a self-contained, untrimmed win-x64 CLI,
+   stage the complete native package DLL set and Visual Studio's app-local
+   redistributable CRT files, preserve available notices and create a ZIP.
+   Existing output directories are rejected; no old artifacts or user files are
+   deleted. CLI/library/native file hashes, source revision and dirty-tree state
+   are recorded. Do not present a dirty-tree prototype as an exact clean revision.
+2. Native import inspection found VCRUNTIME140.dll required by the codec DLLs
+   and Windows Media Foundation required by Audio360. The prototype includes the
+   redistributable CRT files rather than depending on a global Visual Studio/VC
+   runtime install; normal Windows Media Foundation availability remains a stated
+   platform requirement. No Windows system DLLs are copied into the bundle.
+3. Actual local archive build passes: 232 recorded files, 39,221,930-byte ZIP in
+   artifacts/imm-convert-portable-run1. Extracted tests verify every file/hash and
+   manifest inventory, then run help and real conversion with absent DOTNET_ROOT,
+   Windows-only PATH and an unrelated working directory. Actual loaded CoreCLR,
+   vcruntime140.dll and ImmUnityPlugin.dll paths are inside the extracted Unicode/
+   spaced folder. These are selected module-path proofs, not an audit of every
+   loaded dependency. Reports include runtime details without failing successful
+   conversion if optional module inspection is unavailable.
+4. The self-contained .NET runtime is 8.0.30 for this local build. Actual extracted
+   conversion and all 15 normal CLI regressions pass; workflow matrix/lint pass.
+   Add required Windows packaging/extracted-runtime checks with always-uploaded
+   WindowsImmConvertPortable ZIP, build/report and execution evidence. No public
+   GitHub release is created. Local evidence: artifacts/imm-convert-portable-run1/
+   package-report.json, imm-convert-portable-tests/report.json,
+   imm-convert-cli-portable-regressions.log, dependency import report and the
+   portable matrix/actionlint logs. Final source must be validated in fresh full CI.
+5. Preserve repository/Core/SharpQuill, exact available codec, .NET/Newtonsoft and
+   supplied Audio360/Oculus notices. Trimmed codec notices recovered from exact
+   upstream version tags are retained with their URLs. Audio360's third-party
+   notices are not its own acquisition grant; recovery/review of original
+   Audio360 1.7.12 and Oculus 32 acquisition terms remains open before external
+   public release. Manifest explicitly records licensing review incomplete.
+   Existing permissive code licenses do not establish third-party SDK eligibility.
+6. This is a portable CLI prototype, not completion of C5's folder-selection
+   desktop application. Clean Windows VM acceptance, public-release licensing,
+   desktop UI, GUI cancellation/progress behavior and real Unity editor consumer
+   integration remain open. Isolated local CLR/CRT proof is stronger than running
+   dotnet from the checkout, but does not substitute for a clean-machine test.
 
 ## 7. Consolidated documents
 
