@@ -2487,6 +2487,32 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_PaintSetMaxRepeatCount(
+    int32_t docId, int32_t layerId, uint32_t count)
+{
+    if (layerId < 0)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    try
+    {
+        return iPlayer().QueuePaintMaxRepeatCount(docId, static_cast<uint32_t>(layerId), count);
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_PaintGetMaxRepeatCount(
+    int32_t docId, int32_t layerId, uint32_t * countOut)
+{
+    if (layerId < 0 || countOut == nullptr)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
+    return iPlayer().GetPaintMaxRepeatCount(docId, static_cast<uint32_t>(layerId), countOut);
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySet(
     int32_t docId, int32_t layerId, const ImmAuthoringKey *key)
 {

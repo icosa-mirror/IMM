@@ -267,6 +267,12 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetProperties(
     const ImmAuthoringLayerProperties * properties);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeySet(int32_t docId, int32_t layerId,
     const ImmAuthoringKey * key);
+// Canonical static-paint repeat count; zero repeats indefinitely. Publication
+// re-evaluates active Loop keys without replacing the canonical value.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_PaintSetMaxRepeatCount(int32_t docId,
+    int32_t layerId, uint32_t count);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_PaintGetMaxRepeatCount(int32_t docId,
+    int32_t layerId, uint32_t * countOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeyRemove(int32_t docId, int32_t layerId,
     int32_t property, double timeSeconds);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_SetInitialSpawnArea(int32_t docId,

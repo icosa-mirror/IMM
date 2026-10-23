@@ -252,7 +252,8 @@ namespace ImmPlayer {
         int32_t QueueFrameSequence(uint32_t layerId, std::vector<uint64_t> drawingIds);
         int32_t QueueLayerProperties(uint32_t layerId, bool setVisibility, bool visible,
             bool setOpacity, float opacity, bool setTransform,
-            const ImmCore::trans3d & transform);
+            const ImmCore::trans3d & transform, bool setPaintRepeat = false,
+            uint32_t paintRepeat = 0);
         int32_t QueueAnimationKey(uint32_t layerId, ImmImporter::Layer::AnimProperty property,
             ImmCore::piTick time, const ImmImporter::Layer::AnimValue & value,
             ImmImporter::Layer::InterpolationType interpolation);
@@ -345,6 +346,8 @@ namespace ImmPlayer {
             float mOpacity = 1.0f;
             bool mSetTransform = false;
             ImmCore::trans3d mTransform = ImmCore::trans3d::identity();
+            bool mSetPaintRepeat = false;
+            uint32_t mPaintRepeat = 0;
         };
 
         struct AnimationKeyEdit
@@ -479,6 +482,8 @@ namespace ImmPlayer {
             float mLayerOpacity = 1.0f;
             bool mSetLayerTransform = false;
             ImmCore::trans3d mLayerTransform = ImmCore::trans3d::identity();
+            bool mSetPaintRepeat = false;
+            uint32_t mPaintRepeat = 0;
             ImmImporter::Layer * mLayer = nullptr;
             std::vector<ImmImporter::Layer *> mDeletedLayers;
             std::vector<ImmImporter::Drawing *> mDeletedDrawings;

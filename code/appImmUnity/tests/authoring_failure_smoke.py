@@ -25,7 +25,7 @@ def main() -> None:
     out = ROOT / 'artifacts/authoring-failure'
     out.mkdir(parents=True, exist_ok=True)
     report_path = out / 'report.json'
-    report = {'passed': False, 'scope': 'CPU authoring, frame-table and playback-key regressions'}
+    report = {'passed': False, 'scope': 'CPU authoring, frame-table, playback-key and canonical paint-repeat regressions'}
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     (out / 'run.log').write_text('', encoding='utf-8')
     plugin = ROOT / 'code/appImmUnity/exe/ImmUnityPlugin.dll'

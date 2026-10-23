@@ -3077,6 +3077,42 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    zero/finite counts, active-key precedence/removal, hidden paint, rollback and
    stable unrelated renderer state in the next implementation milestone.
 
+### 6.84. Native canonical paint-repeat editing (local CPU milestone)
+
+1. Add dedicated ImmAuthoring_PaintSetMaxRepeatCount and
+   ImmAuthoring_PaintGetMaxRepeatCount exports for canonical static-paint repeat
+   counts. Zero means indefinitely; finite and full uint32 counts are retained.
+   Keep the existing 64-byte LayerProperties ABI and strict reserved fields
+   unchanged. Other layer types/paint implementations are explicitly unsupported
+   in this slice. The getter returns presented canonical metadata, not a Loop
+   key's evaluated override.
+2. Use the existing one-layer metadata batch path, rechecking type at preparation.
+   No drawing/resource replacement or GPU upload is required. Publication updates
+   the canonical repeat count, re-evaluates paint at the held parent clock, and
+   increments evaluation revision. Active Loop keys take precedence; removing
+   them restores the edited canonical count. Preserve playback/root actions,
+   hidden-layer policy, sibling geometry and the existing presentation lifecycle.
+3. Windows Unity/viewer/Godot/reader build passes. New CPU cases pass zero,
+   finite and UINT32_MAX publication, unchanged state before publication,
+   non-paint/second-edit rejection, discard, injected preparation/presentation
+   rejection and stable drawing handles/table. Held-clock helper cases pass
+   finite/infinite selection and active-key precedence/removal. Nineteen additive
+   C ABI validation checks pass, including the new exports' early argument checks;
+   loaded-document delivery through those C exports is still unverified.
+4. Existing six rendered Loop/Offset publication, rejection and unload cases pass
+   against the rebuilt native code. These are regression checks, not rendered
+   acceptance of the new repeat setter. Strict Windows package exports pass.
+   Full native converter regression checks also pass against the rebuilt plugin.
+   Evidence: artifacts/paint-repeat-native-build.log, paint-repeat-cpu-tests.log,
+   authoring-failure/report.json and run.log, authoring-key-abi/report.json,
+   paint-repeat-playback-regressions-staged/report.json and
+   paint-repeat-windows-exports.json.
+5. This milestone is outside active full CI source e19db96e. Required existing
+   CPU/ABI jobs consume the added cases in the next full push. New rendered
+   repeat-specific rollback/unload cases, loaded C ABI delivery, backend breadth,
+   managed transaction mapping and full M2 acceptance remain open. Do not count
+   this CPU slice as completing canonical-repeat integration across all hosts.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

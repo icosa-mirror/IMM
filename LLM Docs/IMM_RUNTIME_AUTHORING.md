@@ -330,6 +330,7 @@ Current supported batch shapes are:
 | Drawing deletion | One drawing, unreferenced in the resulting frame table |
 | Frame remap + drawing deletion | Remap first; no other remaining frame may reference the deleted drawing |
 | Canonical layer properties | One layer; visibility/opacity/transform masks may be combined |
+| Canonical paint repeat | One static-paint layer; dedicated setter/getter; zero is indefinite. Local CPU publication/rejection checks pass; rendered repeat-specific and hosted acceptance pending (roadmap 6.84) |
 | Animation key insertion/replacement/removal | One key edit |
 | Default spawn selection | One existing spawn layer |
 | Spawn state update | One existing spawn layer |
@@ -338,6 +339,14 @@ Current supported batch shapes are:
 The `DependencyFailed` result is reserved in the ABI. Its presence does not imply an implemented
 multi-commit dependency queue. Managed expected-revision transactions likewise must not be
 assumed to exist in the native ABI before M4 maps their semantics explicitly.
+
+`ImmAuthoring_PaintSetMaxRepeatCount(docId, layerId, uint32 count)` queues one
+static-paint metadata edit; use the existing commit/status/presentation lifecycle.
+`ImmAuthoring_PaintGetMaxRepeatCount(docId, layerId, uint32* countOut)` requires an
+attached session and reads the presented canonical count, including zero for
+indefinite repetition. A pending edit does not change this getter. An active Loop
+key may override evaluated playback without changing the returned canonical count.
+The dedicated exports add no fields to `ImmAuthoringLayerProperties`.
 
 `ImmAuthoring_FrameSequenceSetHandles` copies the caller's handle table. Publication
 swaps a detached, validated table without replacing geometry resources and reselects
@@ -348,8 +357,12 @@ Existing explicitly keyless paint retains its semantics. Static-paint Loop/Offse
 key insertion, replacement and removal now pass local Windows CPU and six rendered
 publication/rollback/unload cases (roadmap 6.70). Publication reselects at the held
 parent clock, including latent selection while hidden, without a seek or changing
-playback intent/root actions. Canonical repeat property editing and managed
-transaction mapping remain open. Full hosted regression run 39935868460 accepts
+playback intent/root actions. Canonical static-paint repeat editing now has a
+dedicated native setter/getter and local CPU publication/rejection checks (roadmap
+6.84). The unchanged property ABI stays 64 bytes; publication reselects at held
+time and active Loop keys retain precedence over the edited canonical count.
+Loaded C ABI delivery, new repeat-specific rendering and managed transaction
+mapping remain open. Full hosted regression run 39935868460 accepts
 source 97142c9a, including this live-key milestone (roadmap 6.77); operation-specific
 and broader platform acceptance remain scoped to 6.70. Roadmap 6.67 separates stored
 paint repeat metadata from Loop-evaluated frame selection for both implementations,

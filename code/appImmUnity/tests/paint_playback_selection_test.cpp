@@ -46,7 +46,7 @@ void CheckPaintPlaybackReselection()
     Layer::AnimValue value{};
     value.mBool = true;
     require(layer->AddKey(piTick(0), Layer::AnimProperty::Visibility, value, Layer::InterpolationType::None), "visibility key");
-    const auto select = [&](uint32_t expected) {
+    const auto select = [&](uint32_t expected, uint32_t canonicalRepeat = 0) {
         layer->ReevaluatePaintPlaybackAt(piTick::FromFrames(100, 30), &log);
         require(paint->GetCurrentDrawing() == paint->GetDrawing(expected), "held key reselection");
         require(!paint->GetPlaying() && !root->GetPlaying() && root->HasStopTime() &&
@@ -54,7 +54,7 @@ void CheckPaintPlaybackReselection()
             "reselection preserves paused intent and parent clock");
         require(!root->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool,
             "reselection does not consume root actions");
-        require(paint->GetMaxRepeatCount() == 0, "reselection preserves canonical paint repeat");
+        require(paint->GetMaxRepeatCount() == canonicalRepeat, "reselection preserves canonical paint repeat");
     };
     const auto replace = [&](Layer::AnimProperty property, const Layer::AnimValue & replacement) {
         std::vector<Layer::AnimKey> keys;
@@ -79,6 +79,24 @@ void CheckPaintPlaybackReselection()
     replace(Layer::AnimProperty::Offset, value);
     select(0);
     layer->ReplaceAnimKeys(Layer::AnimProperty::Offset, {});
+    select(1);
+    paint->SetMaxRepeatCount(1);
+    select(2, 1);
+    paint->SetMaxRepeatCount(3);
+    select(1, 3);
+    paint->SetMaxRepeatCount(UINT32_MAX);
+    select(1, UINT32_MAX);
+    value.mBool = false;
+    require(layer->AddKey(piTick(0), Layer::AnimProperty::Loop, value, Layer::InterpolationType::None), "Loop overrides canonical repeat");
+    paint->SetMaxRepeatCount(0);
+    select(2);
+    value.mBool = true;
+    replace(Layer::AnimProperty::Loop, value);
+    paint->SetMaxRepeatCount(1);
+    select(1, 1);
+    layer->ReplaceAnimKeys(Layer::AnimProperty::Loop, {});
+    select(2, 1);
+    paint->SetMaxRepeatCount(0);
     select(1);
     root->SetCanonicalVisible(false);
     value.mBool = false;

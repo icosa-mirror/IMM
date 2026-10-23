@@ -17,6 +17,7 @@
 #include "libImmImporter/src/document/layerEffect.h"
 #include "libImmImporter/src/document/layerInstance.h"
 #include "libImmImporter/src/document/layerPaint.h"
+#include "libImmImporter/src/document/layerPaintStatic.h"
 #include "libImmImporter/src/document/layerPaint/drawing.h"
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
@@ -727,6 +728,41 @@ namespace ImmPlayer
             return -1;
         return doc->QueueLayerProperties(
             layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform);
+    }
+
+    int32_t Player::QueuePaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t count)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId))
+            return -1;
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueLayerProperties(layerId, false, false, false, 1.0f,
+            false, ImmCore::trans3d::identity(), true, count);
+    }
+
+    int32_t Player::GetPaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t * count)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (count == nullptr)
+            return -2;
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId))
+            return -1;
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded)
+            return -4;
+        Layer * layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (layer == nullptr)
+            return -1;
+        auto * paint = layer->GetType() == Layer::Type::Paint ?
+            dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) : nullptr;
+        if (paint == nullptr)
+            return -3;
+        *count = paint->GetMaxRepeatCount();
+        return 0;
     }
 
     int32_t Player::QueueAnimationKey(int docId, uint32_t layerId,

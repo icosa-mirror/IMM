@@ -159,6 +159,8 @@ namespace ImmPlayer {
         int32_t QueueLayerProperties(int docId, uint32_t layerId,
             bool setVisibility, bool visible, bool setOpacity, float opacity,
             bool setTransform, const ImmCore::trans3d & transform);
+        int32_t QueuePaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t count);
+        int32_t GetPaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t * count);
         int32_t QueueAnimationKey(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time,
             const ImmImporter::Layer::AnimValue & value,

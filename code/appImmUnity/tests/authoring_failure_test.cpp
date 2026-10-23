@@ -503,6 +503,51 @@ int wmain(int argc, wchar_t** argv)
             guardPaint->GetNumDrawings() == 1 && guardPaint->GetNumFrames() == 0,
             "CPU preparation rechecks import activity and preserves drawing/table state");
     }
+    const auto queueRepeat = [&](uint32_t count) {
+        return doc.QueueLayerProperties(guardLayer->GetID(), false, false, false, 1.0f,
+            false, trans3d::identity(), true, count);
+    };
+    require(doc.QueueLayerProperties(root->GetID(), false, false, false, 1.0f,
+        false, trans3d::identity(), true, 0) == -3, "repeat edits reject non-paint layers");
+    for (uint32_t count : { 0u, 2u, UINT32_MAX })
+    {
+        const uint32_t previous = guardPaint->GetMaxRepeatCount();
+        require(queueRepeat(count) == 0 && queueRepeat(count) == -7, "single repeat edit queued, second edit rejected");
+        int32_t result = -99;
+        const uint64_t revision = doc.CommitEdits(&result);
+        require(revision != 0 && result == 0, "repeat edit committed");
+        cpu(&commit);
+        Document::AuthoringCommitStatus status{};
+        require(doc.GetAuthoringCommitStatus(revision, &status) &&
+            status.mState == Document::AuthoringCommitState::Prepared &&
+            guardPaint->GetMaxRepeatCount() == previous, "prepared repeat preserves canonical state");
+        gpu();
+        uint64_t handle = 0;
+        require(doc.GetAuthoringCommitStatus(revision, &status) &&
+            status.mState == Document::AuthoringCommitState::Presented &&
+            guardPaint->GetMaxRepeatCount() == count &&
+            doc.GetDrawingHandle(guardLayer->GetID(), 0, &handle) && handle == guardHandle &&
+            guardPaint->GetNumDrawings() == 1 && guardPaint->GetNumFrames() == 0,
+            "repeat publication preserves drawing handles and frame table");
+    }
+    for (const char * failure : { "IMM_LIVE_EDIT_FAIL_PREPARE_CPU", "IMM_LIVE_EDIT_FAIL_PRESENT" })
+    {
+        require(queueRepeat(1) == 0, "queue rejected repeat");
+        int32_t result = -99;
+        const uint64_t revision = doc.CommitEdits(&result);
+        require(revision != 0 && result == 0, "commit rejected repeat");
+        _putenv_s(failure, "1");
+        cpu(&commit); gpu();
+        _putenv_s(failure, "");
+        Document::AuthoringCommitStatus status{};
+        require(doc.GetAuthoringCommitStatus(revision, &status) &&
+            status.mState == Document::AuthoringCommitState::Rejected && status.mResult == -10 &&
+            guardPaint->GetMaxRepeatCount() == UINT32_MAX, "repeat failure preserves canonical state");
+    }
+    require(queueRepeat(1) == 0, "queue repeat before discard");
+    require(doc.DiscardPendingEdits() && guardPaint->GetMaxRepeatCount() == UINT32_MAX,
+        "discard preserves canonical repeat");
+    std::puts("[IMM_PAINT_REPEAT_EDIT_TEST] canonical zero/finite/maximum publication, stable handles, prepare/present rejection and discard passed (CPU-only)");
     require(doc.DetachEditing() && root->RemovePublishedChild(guardLayer) &&
         doc.GetSequence()->RemovePublishedLayer(guardLayer), "remove CPU-only guard fixture before GPU unload");
     guardLayer->Deinit(&log);

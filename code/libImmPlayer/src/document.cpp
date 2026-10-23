@@ -1054,6 +1054,13 @@ namespace ImmPlayer
             {
                 Layer * layer = mPendingPresentation.mLayer;
                 const uint64_t layerId = mPendingPresentation.mObject;
+                if (mPendingPresentation.mSetPaintRepeat &&
+                    std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
+                {
+                    iRejectCommit(revision, -10, 0, layerId);
+                    mPendingPresentation = PendingPresentation{};
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                }
                 if (layer == nullptr)
                 {
                     iRejectCommit(revision, -1, 0, layerId);
@@ -1067,6 +1074,13 @@ namespace ImmPlayer
                         layer->SetCanonicalOpacity(mPendingPresentation.mLayerOpacity);
                     if (mPendingPresentation.mSetLayerTransform)
                         layer->SetCanonicalTransform(mPendingPresentation.mLayerTransform);
+                    if (mPendingPresentation.mSetPaintRepeat)
+                    {
+                        auto * paint = static_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation());
+                        paint->SetMaxRepeatCount(mPendingPresentation.mPaintRepeat);
+                        layer->ReevaluatePaintPlaybackAt(mLastCPUTime, log);
+                        ++mEvaluationRevision;
+                    }
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         iSetCommitState(status, AuthoringCommitState::Presented);
@@ -1708,7 +1722,7 @@ namespace ImmPlayer
 
     int32_t Document::QueueLayerProperties(uint32_t layerId,
         bool setVisibility, bool visible, bool setOpacity, float opacity,
-        bool setTransform, const trans3d & transform)
+        bool setTransform, const trans3d & transform, bool setPaintRepeat, uint32_t paintRepeat)
     {
         if (!mEditing)
             return -4;
@@ -1722,8 +1736,11 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
-        if (!setVisibility && !setOpacity && !setTransform)
+        if (!setVisibility && !setOpacity && !setTransform && !setPaintRepeat)
             return -2;
+        if (setPaintRepeat && (layer->GetType() != Layer::Type::Paint ||
+            dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
+            return -3;
         if (setOpacity && (!std::isfinite(opacity) || opacity < 0.0f || opacity > 1.0f))
             return -2;
         if (setTransform)
@@ -1746,7 +1763,8 @@ namespace ImmPlayer
                 return -2;
         }
         mOpenLayerPropertyEdits.push_back(LayerPropertyEdit{
-            layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform });
+            layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform,
+            setPaintRepeat, paintRepeat });
         return 0;
     }
 
@@ -2860,6 +2878,17 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
                 return;
             }
+            if (edit.mSetPaintRepeat && (layer->GetType() != Layer::Type::Paint ||
+                dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
+            {
+                iRejectCommit(batch.mRevision, -3, 0, edit.mLayerId);
+                return;
+            }
+            if (edit.mSetPaintRepeat && std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
+            {
+                iRejectCommit(batch.mRevision, -10, 0, edit.mLayerId);
+                return;
+            }
             if (status != nullptr)
             {
                 iSetCommitState(status, AuthoringCommitState::Prepared);
@@ -2875,6 +2904,8 @@ namespace ImmPlayer
             mPendingPresentation.mLayerOpacity = edit.mOpacity;
             mPendingPresentation.mSetLayerTransform = edit.mSetTransform;
             mPendingPresentation.mLayerTransform = edit.mTransform;
+            mPendingPresentation.mSetPaintRepeat = edit.mSetPaintRepeat;
+            mPendingPresentation.mPaintRepeat = edit.mPaintRepeat;
             mPendingPresentation.mLayer = layer;
             return;
         }

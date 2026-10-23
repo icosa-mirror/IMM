@@ -101,6 +101,21 @@ def main():
         key = v2(8)
         key.reserved3[index] = 1
         check(f'V2 reserved slot {index}', key, -2)
+    repeat_set = plugin.ImmAuthoring_PaintSetMaxRepeatCount
+    repeat_set.argtypes = [c.c_int32, c.c_int32, c.c_uint32]
+    repeat_set.restype = c.c_int32
+    repeat_get = plugin.ImmAuthoring_PaintGetMaxRepeatCount
+    repeat_get.argtypes = [c.c_int32, c.c_int32, c.POINTER(c.c_uint32)]
+    repeat_get.restype = c.c_int32
+    sentinel = c.c_uint32(123)
+    for name, actual in (
+        ('repeat setter negative layer', repeat_set(0, -1, 0)),
+        ('repeat getter negative layer', repeat_get(0, -1, c.byref(sentinel))),
+        ('repeat getter null output', repeat_get(0, 0, None)),
+    ):
+        results.append({'case': name, 'expected': -2, 'actual': actual})
+        assert actual == -2, f'{name}: expected -2, got {actual}'
+    assert sentinel.value == 123, 'rejected getter must not modify caller output'
     report['passed'] = True
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(f'[IMM_AUTHORING_KEY_ABI] passed {len(results)} additive layout/validation checks')
