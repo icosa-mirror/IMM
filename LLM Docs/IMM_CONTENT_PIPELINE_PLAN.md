@@ -3043,6 +3043,40 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    that refreshed payload and all three implementation milestones. Its outcome
    is pending; local Editor proof is not full hosted acceptance of this source.
 
+### 6.83. Checkpoint validation in progress; cross-host proof unfinished
+
+1. Full run 39954000025 validates e19db96e (the shared-host, desktop and Editor
+   milestones plus merged replacement binaries). It is still in progress, not
+   accepted. Firefox browser verification was cancelled after its 15-minute job
+   limit while Playwright's Ubuntu system-package downloads stalled. Its log
+   contains repeated slow/retried Azure Ubuntu mirror fetches, not a browser test
+   verdict. GitHub rejected a job-specific retry while the workflow was active;
+   no successful retry or full-run pass is claimed. Retry only this infrastructure
+   job and its dependents once when GitHub permits it, preserving independent jobs.
+2. Additional local Editor/CLI cross-host proof is incomplete. A temporary owned
+   Editor probe was retained under ignored artifacts and removed from Assets after
+   its processes exited. Unity startup failed to allocate its 1 GiB UDS shared
+   memory; the machine had roughly 400 MiB physical memory and 1.8 GiB virtual
+   memory free. No Library deletion or interruption of other Editors was used.
+   This does not invalidate the earlier passing Editor tests, but supplies no
+   output for the intended matched native-decoded comparison. Do not relaunch
+   repeatedly under memory pressure. CLI conversion with the complete refreshed
+   native dependency folder passes; using just the player package folder correctly
+   rejected missing reader/codec dependencies before conversion.
+3. Evidence: artifacts/converter-checkpoint-ci-progress.json,
+   converter-checkpoint-firefox.log, converter-checkpoint-firefox-retry.log,
+   quill-editor-cli-cross-host-editor.log and quill-editor-cli-cross-host/cli-report.json.
+   The cross-host comparison remains a required C5 check, alongside clean-machine,
+   live-input and dependency documentation acceptance.
+4. The next native M2 implementation remains canonical paint-repeat editing.
+   Source review confirms live LayerSetProperties only exposes visibility,
+   opacity and transform; Loop keys edit evaluated playback instead. Existing
+   paint SetMaxRepeatCount updates canonical and effective counts, so publication
+   must re-evaluate active Loop keys and held-time frame selection before claiming
+   correctness. Keep the existing strict 64-byte property ABI intact and cover
+   zero/finite counts, active-key precedence/removal, hidden paint, rollback and
+   stable unrelated renderer state in the next implementation milestone.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
