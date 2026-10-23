@@ -3814,6 +3814,60 @@ the historical sizes/check counts below describe this earlier source only.
    Apply and inspect changes in the running UI without another refresh handoff;
    preserve unsaved work and other application instances.
 
+### 6.110. Snoopy baking comparison and workflow research (local diagnostic milestone)
+
+1. Compared five visible `_baked` paint layers against their hidden source groups
+   using temporary project variants and the same existing standalone converter.
+   Original input files were untouched. Both conversions explicitly allowed the
+   same unsupported Camera-layer omission; this is a comparison of the supported
+   scene content, not complete Quill-project acceptance. Input/output and native
+   library hashes are retained in artifacts/snoopy-baking-benchmark/identities.json.
+2. Recorded the bounded experiment before sampling. Used the owned Unity 6000.6.0f1
+   D3D12 Editor, RTX 4090, 1920x888, 8x MSAA, render scale 1, fixed authored camera,
+   muted audio, hidden/disabled authoring panel, vsync off during sampling. Warmed
+   two 1.25-second export segments, then sampled 10 seconds per run in order
+   baked/original/original/baked/baked/original. Reset playback to zero every
+   1.25 seconds in both variants to compare the export range, not differing loops.
+3. Results: baked uses 18 paint submissions versus 58 original, with approximately
+   455,600 triangles in both. Median Editor frame intervals across three runs were
+   6.79/7.66/7.27 ms baked versus 80.28/86.42/77.61 ms original. A separate five-second
+   control pair without ProfilerRecorders retained a large gap (8.88 versus
+   93.32 ms). This does not isolate native CPU submission, GPU execution, or the
+   cause of the unusually large D3D12 slowdown. Do not generalize the speedup to
+   Quill, other backends, devices or release players; the cause remains unresolved.
+4. Baked output is 8,505,507 bytes versus 7,270,662 original (about 17% larger).
+   Warm-process load/attach observations overlap and do not establish a loading
+   benefit. In-Editor process private-memory counters returned zero and are unusable;
+   no memory-saving claim is accepted. Raw per-frame records and summaries are in
+   artifacts/snoopy-baking-benchmark/run-*.json and summary.json.
+5. Correctness limitation: matching-time captures at 0.5 and 1.0 seconds have similar
+   composition/geometry but differ visibly in the reins' colour/shape. About 0.27%
+   to 0.31% of pixels differ by more than 20 RGB levels. The initial zero-time
+   captures did not settle at the same time and are excluded. Therefore these are
+   existing-artifact comparisons, not proof of a lossless baking optimization.
+   Retain this rendering/content discrepancy as unresolved; source edits after
+   baking, bake semantics and converter/renderer behavior have not been separated.
+6. Workflow research: the official [timeline guide](https://quill.art/tutorials_timeline.html)
+   documents group flattening and the file-size advantage of transform keys.
+   [Dan Franke's production tips](https://www.creativebloq.com/how-to/get-started-in-quill)
+   recommend layer merging to reduce draw calls for Quest, cite a historical
+   65-draw-call budget, and warn against merging static content into animation.
+   His account supports a deliberate playback-optimization workflow rather than
+   assuming cargo culting. The hidden editable groups plus visible flattened
+   copies in Snoopy fit that workflow; the artist's actual intention is unproven.
+7. Export is another plausible motive: Snoopy's local source folder also contains
+   Alembic and FBX outputs. A [first-person Quill production case study](https://www.opastpublishers.com/open-access-articles/challenges-and-opportunities-of-virtual-reality-painting-animation-in-mainland-china-a-case-study-of-dark-tide.pdf)
+   describes baking transform animation to cel animation for interchange. This is
+   supporting workflow evidence, not evidence that Snoopy's artist followed it.
+   The export-dialog Bake Transforms option is distinct from the saved flattened
+   paint layers observed here; do not conflate them.
+8. Decision: baking has a measured submission-count benefit for these artifacts,
+   plus a larger output and reduced editability. Automatic converter baking is not
+   justified by this diagnostic. Further work must first explain the local D3D12
+   cost and establish equivalent source/baked content. Restored the original
+   Snoopy IMM, authoring panel, and previous vsync/frame-rate settings after sampling.
+   No production behavior or validation gate changed.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
