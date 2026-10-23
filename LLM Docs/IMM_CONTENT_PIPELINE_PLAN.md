@@ -180,9 +180,9 @@ The preferred first candidate is:
 ### 4.1. C5 converter packaging plan (agreed 2026-10-22)
 
 The converter must be usable both inside Unity and as a standalone application.
-The current standalone .NET 8 runner under tests proves reuse of the package C#
-sources with Unity-type compatibility definitions; it is not yet a supported
-user-facing distribution. Python remains validation tooling, not a conversion
+The standalone .NET 8 library and application hosts reuse the package C#
+sources with Unity-type compatibility definitions. The portable distribution is
+still awaiting its remaining acceptance. Python remains validation tooling, not a conversion
 dependency. Native C++ exporter libraries remain part of the shipped runtime.
 
 1. Establish a supported shared converter library and production command-line
@@ -201,8 +201,8 @@ dependency. Native C++ exporter libraries remain part of the shipped runtime.
    warnings/errors and a clear report of omitted content. Bundle the .NET runtime,
    native exporter and required codec dependencies, with applicable notices, so
    users need neither Unity nor developer tools. Preserve safe output replacement
-   and require explicit opt-in for partial conversion. Choose the desktop UI
-   toolkit during implementation; it is not decided by this plan.
+   and require explicit opt-in for partial conversion. The implemented desktop
+   toolkit is WinForms; see 6.81 for local component and extracted archive checks.
 3. Include a supported CLI for batch conversion and CI, with documented arguments,
    reliable exit codes and optional machine-readable reports. The desktop and CLI
    entry points call the same library. Conversion must not require Python.
@@ -3037,6 +3037,11 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    declared Newtonsoft dependency; this is synchronization of the real package
    manifest, not a temporary dependency reference. C5 remains open for the
    documented CI, live-input, clean-machine and dependency-notice acceptance.
+6. Editor milestone committed as 8cab3bff alongside separate shared-host and
+   desktop commits e7f5c100 and 3ec46758. Pulled and merged CI binary refresh
+   724b538e before pushing. A new full `[CI VALIDATION]` checkpoint push includes
+   that refreshed payload and all three implementation milestones. Its outcome
+   is pending; local Editor proof is not full hosted acceptance of this source.
 
 ## 7. Consolidated documents
 
