@@ -3904,10 +3904,40 @@ the historical sizes/check counts below describe this earlier source only.
    (artifacts/live-timeline-final-native-build.log, artifacts/live-timeline-final-cabi).
 7. UI callbacks on real Snoopy published an opacity key (revision 1), moved it from
    0.5 to 0.75 seconds (revision 2), then deleted it (revision 3), restoring the
-   evaluated opacity to 1 with no opacity keys. This verifies callback/PInvoke
-   publication, not physical mouse dragging. UI interaction, drawing timing
-   semantics/nested context, final layout and full hosted acceptance remain pending. Do not describe the timeline as fully
-   functional or the native C ABI test as Unity mouse/drag validation.
+   evaluated opacity to 1 with no opacity keys. A separate fresh load inserted a
+   drawing hold (30 to 31 frames, repeated handle verified) and removed it (back to
+   30). These checks verify callback/PInvoke publication, not physical mouse dragging.
+8. First timeline workspace implementation: full-width bottom tracks, aligned layer
+   and channel rows, time ruler/playhead, frame stepping, queued paused scrubbing,
+   zoom/range/Fit/Follow/Snap, key selection/add/delete/atomic drag or entered-time
+   move/interpolation, and drawing/hold frame-table controls. A side inspector keeps
+   existing layer edits available. Input capture releases on hide/disable/unload;
+   blank track selection clears an old key target. Drawing work is bounded by
+   visible rows and resolves subpixel frames as a bar. Smaller views can scroll
+   toolbars rather than losing controls. Frame selected now transforms local IMM
+   bounds through the evaluated ancestor transform and coordinate conversion.
+9. Nested key lanes and complex drawing-clock projections are not presented as
+   root-time data. Correct nested scope mapping (including finite repeats, offsets,
+   visibility starts and held actions), remaining channel types, timeline undo,
+   and broader usability/interaction acceptance remain unfinished. There is no
+   graph editor or save support in this milestone. The goal remains active; do not
+   describe this first workspace as the completed fully functional timeline.
+10. Fresh Editor native load, paused seek and optional installed-input binding pass.
+    Compile checks pass without an Input System reference even with the backend
+    symbol defined. Native C ABI evidence remains distinct from Unity event/visual
+    checks and hosted acceptance. Full CI for this milestone must be queued after
+    the source and matching Windows plugin are committed and synchronized.
+11. Injected actual Game-view input verified F9 hide/show and a ruler click at
+    0.75 seconds (paused native time 9451 ticks). The first drag exposed command
+    ownership bugs: immediate Pause could make Commit busy, and a later playback
+    command could replace an authoring command before it ran. The sample now keeps
+    its owned batch while waiting to commit and serializes playback behind edits.
+    Repeating the Game-view mouse down/drag/up moved the opacity key from 0.5 to
+    0.75 seconds and published revision 2. Clicking Delete key through Game-view
+    mouse events published revision 3, removed the key and restored opacity 1.
+    Evidence: artifacts/live-panel-timeline-final-drag-result.json,
+    artifacts/live-panel-timeline-final-delete-result.json and the validation
+    receipt. This is injected UI event delivery, not a claim of human acceptance.
 
 ### 6.112. Optional lab input dependency correction
 
@@ -3924,7 +3954,9 @@ the historical sizes/check counts below describe this earlier source only.
 3. Assembly-reference compilation passes with ENABLE_INPUT_SYSTEM defined and the
    Input System assembly reference removed, matching the failed dependency shape.
    Evidence: artifacts/live-panel-no-input-system-compile.log. Actual clean hosted
-   Android builds and package-present IL2CPP input remain pending.
+   Android builds and package-present IL2CPP input remain pending. Installed-package
+   Editor binding was exercised against FastKeyboard/FastMouse successfully
+   (artifacts/live-panel-input-adapter-check.json).
 4. Previous native baseline run 39995932133 (a5a1e9ef) completed successfully with
    49 passing jobs. The later failed run also had an independent hosted iOS runner
    acquisition failure. Neither that infrastructure issue nor the Android source

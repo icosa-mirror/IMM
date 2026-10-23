@@ -10,7 +10,7 @@ using N = ImmPlayer.ImmLiveEditNative;
 namespace ImmPlayer
 {
     /// <summary>Interactive, in-memory native live editing of real IMM documents.</summary>
-    public sealed class ImmLiveEditPanel : MonoBehaviour
+    public sealed partial class ImmLiveEditPanel : MonoBehaviour
     {
         private const string Prefix = "[IMM_LIVE_PANEL]";
         private readonly ImmLiveEditInput labInput = new ImmLiveEditInput();
@@ -23,6 +23,9 @@ namespace ImmPlayer
         private N.Status commit;
         private N.Revisions revisions;
         private ulong pending;
+        private bool awaitingCommit;
+        private string awaitingCommitLabel;
+        private float commitDeadline;
         private bool attached, loading, visible = true, pivotSupported, keyVisible = true;
         private string file = "", status = "Load a real IMM file to begin.", layerName = "";
         private string seek = "0", keyTime = "0", frame = "0", repeat = "1", parent = "0", childIndex = "0";
@@ -43,7 +46,7 @@ namespace ImmPlayer
         private readonly Dictionary<int, LayerNode> treeNodes = new Dictionary<int, LayerNode>();
         private readonly HashSet<int> collapsedNodes = new HashSet<int>();
         private readonly HashSet<int> filteredNodes = new HashSet<int>();
-        private int keyChannel;
+        private int keyChannel, keyInterpolation;
         private int selectedViewpoint = -1;
         private int[] viewpoints = Array.Empty<int>();
         private Vector2 scroll, layerScroll;
@@ -84,6 +87,9 @@ namespace ImmPlayer
 
         private void Update()
         {
+            if (awaitingCommit) Run(TryPublishQueuedCommit);
+            UpdateTimelinePlayback();
+            timelinePlayTime = attached && !loading && document != null ? document.GetPlayTime() / 12600.0 : 0;
             if (attached && selected >= 0 && Time.unscaledTime >= nextDiagnostics)
             {
                 nextDiagnostics = Time.unscaledTime + 0.2f;
@@ -117,7 +123,7 @@ namespace ImmPlayer
                 catch (Exception error) { pending = 0; Log(error.Message); }
             }
             if (view != null && labInput.Read(out bool looking, out Vector2 pointer, out Vector2 motion, out Vector3 movement, out bool faster) && looking &&
-                (!visible || !window.Contains(new Vector2(pointer.x, Screen.height - pointer.y))))
+                (!visible || !OverPanel(new Vector2(pointer.x, Screen.height - pointer.y))))
             {
                 view.transform.rotation = Quaternion.Euler(-motion.y * 0.12f, motion.x * 0.12f, 0) * view.transform.rotation;
                 view.transform.Translate(movement * Time.unscaledDeltaTime * (faster ? 8 : 2));
@@ -129,75 +135,16 @@ namespace ImmPlayer
         {
             if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.F9)
             {
-                visible = !visible; Event.current.Use();
+                visible = !visible; if (!visible) ReleaseTimelineCapture(); Event.current.Use();
             }
             if (!visible) return;
-            window.height = Mathf.Max(250, Screen.height - 24);
-            window.width = Mathf.Min(440, Screen.width - 24);
-            Color tint = GUI.color;
-            GUI.color = new Color(0.12f, 0.14f, 0.18f, 1);
-            GUI.DrawTexture(window, Texture2D.whiteTexture);
-            GUI.color = tint;
-            window = GUILayout.Window(GetEntityId().GetHashCode(), window, DrawPanel, "IMM Live Edit Lab — native edits");
+            DrawWorkspace();
         }
 
         private void DrawPanel(int id)
         {
-            if (wrapped == null) wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
             scroll = GUILayout.BeginScrollView(scroll);
-            GUILayout.Label("Memory only. Reload restores the file. F9 hides panel.", wrapped, GUILayout.Width(window.width - 50));
-            GUILayout.BeginHorizontal();
-            file = GUILayout.TextField(file, GUILayout.Width(Mathf.Max(80, window.width - 125)));
-#if UNITY_EDITOR
-            if (GUILayout.Button("Browse", GUILayout.Width(65)))
-            {
-                string picked = UnityEditor.EditorUtility.OpenFilePanel("Open IMM", "", "imm");
-                if (!string.IsNullOrEmpty(picked)) file = picked;
-            }
-#endif
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            GUI.enabled = !loading && pending == 0;
-            if (GUILayout.Button("Load / Reload")) BeginLoad();
-            GUI.enabled = document != null || loading;
-            if (GUILayout.Button("Unload")) Unload();
-            GUI.enabled = document != null && !loading;
-            if (GUILayout.Button("Frame scene")) FrameScene();
-            if (GUILayout.Button("Frame selected")) FrameSelected();
-            GUILayout.EndHorizontal();
-            GUILayout.Label(status, wrapped, GUILayout.Width(window.width - 50), GUILayout.MinHeight(38));
-            if (pending != 0) GUILayout.Label($"Revision {pending}: {StateName(commit.state)}");
-            GUILayout.Label($"Requested {revisions.requested} / Prepared {revisions.prepared} / Presented {revisions.presented}");
-            GUI.enabled = document != null && !loading;
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Play")) document.Resume();
-            if (GUILayout.Button("Pause")) document.Pause();
-            if (GUILayout.Button("Restart")) document.Restart();
-            seek = GUILayout.TextField(seek, GUILayout.Width(55));
-            if (GUILayout.Button("Seek s")) Run(() => { document.SetTime(checked((long)(Number(seek) * 12600)), 0); });
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            int viewIndex = Array.IndexOf(viewpoints, selectedViewpoint);
-            GUI.enabled = document != null && viewpoints.Length > 0;
-            if (GUILayout.Button("<", GUILayout.Width(28))) selectedViewpoint = viewpoints[(viewIndex - 1 + viewpoints.Length) % viewpoints.Length];
-            GUILayout.Label($"Viewpoint {Mathf.Max(0, Array.IndexOf(viewpoints, selectedViewpoint) + 1)} / {viewpoints.Length}");
-            if (GUILayout.Button(">", GUILayout.Width(28))) selectedViewpoint = viewpoints[(viewIndex + 1) % viewpoints.Length];
-            if (GUILayout.Button("Move to view")) MoveToViewpoint();
-            GUILayout.EndHorizontal();
-            GUI.enabled = attached && pending == 0 && !loading;
-            if (GUILayout.Button($"Refresh layers ({layers.Length})")) Run(Refresh);
-            GUILayout.Label("Filter layer name/path or ID");
-            string nextFilter = GUILayout.TextField(filter, GUILayout.Width(window.width - 50));
-            if (nextFilter != filter) { filter = nextFilter; FilterTree(); }
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Expand all")) collapsedNodes.Clear();
-            if (GUILayout.Button("Collapse all"))
-                foreach (var pair in treeNodes) if (pair.Value.Children.Count > 0) collapsedNodes.Add(pair.Key);
-            GUILayout.EndHorizontal();
-            if (treeButton == null) treeButton = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleLeft };
-            layerScroll = GUILayout.BeginScrollView(layerScroll, GUILayout.Height(Mathf.Clamp(Screen.height * 0.42f, 210, 460)));
-            foreach (var root in treeRoots) DrawLayerNode(root, 0);
-            GUILayout.EndScrollView();
+            GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading;
             GUI.enabled &= selected >= 0;
             GUILayout.Label($"Selected layer {selected}");
             GUILayout.Label(evaluated, wrapped, GUILayout.Width(window.width - 50));
@@ -224,7 +171,7 @@ namespace ImmPlayer
             GUILayout.Label($"Pivot ({pivot.tx:F2}, {pivot.ty:F2}, {pivot.tz:F2})");
             GUI.enabled &= pivotSupported;
             if (GUILayout.Button("Pivot +0.1m X")) Submit("Pivot", () => { pivot.tx += 0.1f; return N.ImmAuthoring_LayerSetPivot(Doc, selected, ref pivot); });
-            GUI.enabled = attached && pending == 0 && !loading && selected >= 0;
+            GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading && selected >= 0;
             GUILayout.BeginHorizontal();
             repeat = GUILayout.TextField(repeat, GUILayout.Width(70));
             if (GUILayout.Button("Set paint repeat (0 = loop)")) Submit("Paint repeat", () => N.ImmAuthoring_PaintSetMaxRepeatCount(Doc, selected, Unsigned(repeat)));
@@ -232,12 +179,17 @@ namespace ImmPlayer
             GUILayout.Space(8);
             GUILayout.Label("Keys — uses current inspector values at the entered time", wrapped, GUILayout.Width(window.width - 50));
             keyChannel = GUILayout.SelectionGrid(keyChannel, channels, 3);
+            keyInterpolation = GUILayout.SelectionGrid(keyInterpolation, new[] { "Step", "Linear", "Smooth", "Ease in", "Ease out", "Spline", "Auto" }, 3);
             if (keyChannel == 0) keyVisible = GUILayout.Toggle(keyVisible, "Key visible");
             GUILayout.BeginHorizontal();
             keyTime = GUILayout.TextField(keyTime, GUILayout.Width(65));
             if (GUILayout.Button("Set key")) Submit("Set key", SetKey);
             if (GUILayout.Button("Remove key")) Submit("Remove key", () => N.ImmAuthoring_KeyRemove(Doc, selected, channelIds[keyChannel], Number(keyTime)));
             GUILayout.EndHorizontal();
+            bool canEditKey = GUI.enabled;
+            GUI.enabled &= selectedTimelineKey.HasValue;
+            if (GUILayout.Button("Move selected key to entered time")) Run(() => MoveTimelineKey(Number(keyTime)));
+            GUI.enabled = canEditKey;
             GUILayout.Label("Loop key uses repeat=0 as true; Offset uses repeat field as exact ticks.", wrapped, GUILayout.Width(window.width - 50));
             GUILayout.Space(8);
             GUILayout.Label("Drawing replacement — changes the selected frame's drawing", wrapped, GUILayout.Width(window.width - 50));
@@ -245,6 +197,7 @@ namespace ImmPlayer
             GUILayout.Label("Frame", GUILayout.Width(40)); frame = GUILayout.TextField(frame, GUILayout.Width(50));
             GUILayout.Label("Marker m", GUILayout.Width(65)); markerSize = GUILayout.TextField(markerSize, GUILayout.Width(55));
             GUILayout.EndHorizontal();
+            DrawTimelineFrameTools();
             if (GUILayout.Button("Replace frame's drawing with marker at local origin")) Submit("Drawing geometry", ReplaceDrawing);
             GUILayout.Space(8);
             GUILayout.Label("Hierarchy — parent is a layer ID, index is its child position", wrapped, GUILayout.Width(window.width - 50));
@@ -286,27 +239,46 @@ namespace ImmPlayer
 
         private void Submit(string label, Func<int> queue)
         {
-            if (!attached || pending != 0) return;
+            if (!attached || pending != 0 || awaitingCommit) return;
             try
             {
                 N.Check(queue());
-                N.Check(N.ImmAuthoring_Commit(Doc, out pending));
-                ReadRevisions();
-                commit = N.Status.Empty; commit.state = 1;
-                Log($"{label}: queued revision {pending}");
+                awaitingCommit = true; awaitingCommitLabel = label;
+                commitDeadline = Time.unscaledTime + 5;
+                TryPublishQueuedCommit();
+                if (awaitingCommit) Log($"{label}: waiting for the pending playback command");
             }
             catch (Exception error)
             {
+                awaitingCommit = false;
                 try { N.ImmAuthoring_DiscardPending(Doc); } catch (Exception) { }
                 Log($"{label}: {error.Message}");
                 Run(ReadSelected);
             }
         }
 
+        private void TryPublishQueuedCommit()
+        {
+            if (!awaitingCommit || document == null) return;
+            int result = N.ImmAuthoring_Commit(Doc, out ulong revision);
+            if (result == -7 && Time.unscaledTime < commitDeadline) return;
+            awaitingCommit = false;
+            if (result != 0)
+            {
+                N.ImmAuthoring_DiscardPending(Doc);
+                Log($"{awaitingCommitLabel}: {N.Result(result)}. No edit was committed.");
+                Run(ReadSelected);
+                return;
+            }
+            pending = revision; ReadRevisions();
+            commit = N.Status.Empty; commit.state = 1;
+            Log($"{awaitingCommitLabel}: queued revision {pending}");
+        }
+
         private int SetKey()
         {
             if (keyChannel == 2) ReadPositionFields();
-            var key = new N.Key { size = 80, version = 1, property = channelIds[keyChannel], seconds = Number(keyTime),
+            var key = new N.Key { size = 80, version = 1, property = channelIds[keyChannel], interpolation = keyInterpolation, seconds = Number(keyTime),
                 boolean = keyChannel == 3 ? (Unsigned(repeat) == 0 ? 1 : 0) : (keyVisible ? 1 : 0),
                 value = properties.opacity, tx = properties.tx, ty = properties.ty, tz = properties.tz,
                 qx = properties.qx, qy = properties.qy, qz = properties.qz, qw = properties.qw,
@@ -335,10 +307,11 @@ namespace ImmPlayer
         {
             layers = document.GetLayersManaged();
             BuildTree();
+            ReadTimeline();
             ReadViewpoints();
             bool found = false;
             foreach (var layer in layers) if (layer.Id == selected) found = true;
-            if (!found) selected = layers.Length > 0 ? layers[0].Id : -1;
+            if (!found) { selected = layers.Length > 0 ? layers[0].Id : -1; if (selected >= 0) expandedKeyLayers.Add(selected); }
             ReadRevisions();
             ReadSelected();
         }
@@ -496,8 +469,10 @@ namespace ImmPlayer
         private int retiring = -1;
         private void Unload()
         {
+            ReleaseTimelineCapture();
+            timelinePlayTime = 0; queuedTimelineSeek = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
             if (load != null) { StopCoroutine(load); load = null; }
-            loading = false; attached = false; pending = 0;
+            loading = false; attached = false; pending = 0; awaitingCommit = false;
             if (document != null)
             {
                 retiring = document.DocumentId;
@@ -506,6 +481,7 @@ namespace ImmPlayer
             }
             layers = Array.Empty<ImmDocument.LayerInfo>(); selected = -1; revisions = default;
             treeRoots.Clear(); treeNodes.Clear(); collapsedNodes.Clear(); filteredNodes.Clear(); layerScroll = Vector2.zero;
+            timelineData.Clear(); expandedKeyLayers.Clear(); selectedTimelineKey = null;
             viewpoints = Array.Empty<int>(); selectedViewpoint = -1;
             Log("Unloaded. Reload restores the original file; no edits were saved.");
         }
@@ -519,7 +495,25 @@ namespace ImmPlayer
         private void FrameSelected()
         {
             foreach (var layer in layers)
-                if (layer.Id == selected && layer.HasBounds) { FrameBounds(layer.Bounds); return; }
+                if (layer.Id == selected && layer.HasBounds)
+                {
+                    Run(() =>
+                    {
+                        var pose = N.Pivot.Empty;
+                        N.Check(N.ImmAuthoring_LayerGetWorldTransform(Doc, selected, ref pose));
+                        Vector3 scale = Vector3.one * pose.scale;
+                        if (pose.flip >= 1 && pose.flip <= 3) scale[pose.flip - 1] = -scale[pose.flip - 1];
+                        Matrix4x4 matrix = transform.localToWorldMatrix * Matrix4x4.Scale(new Vector3(1, 1, -1)) * Matrix4x4.TRS(new Vector3(pose.tx, pose.ty, pose.tz),
+                            new Quaternion(pose.qx, pose.qy, pose.qz, pose.qw), scale);
+                        Bounds local = layer.Bounds;
+                        Bounds world = new Bounds(matrix.MultiplyPoint3x4(local.center), Vector3.zero);
+                        for (int corner = 0; corner < 8; corner++)
+                            world.Encapsulate(matrix.MultiplyPoint3x4(local.center + Vector3.Scale(local.extents,
+                                new Vector3((corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1))));
+                        FrameBounds(world);
+                    });
+                    return;
+                }
             Log("Select a layer with visible bounds first.");
         }
 
@@ -532,8 +526,11 @@ namespace ImmPlayer
             view.farClipPlane = Mathf.Max(1000, radius * 20);
         }
 
+        private void OnDisable() => ReleaseTimelineCapture();
+
         private void OnDestroy()
         {
+            ReleaseTimelineCapture();
             if (document != null && manager != null) Unload();
         }
     }

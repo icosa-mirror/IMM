@@ -97,12 +97,19 @@ namespace ImmPlayer
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerSetName(int doc, int layer, byte[] name, uint count);
         [DllImport(Library)] private static extern int ImmAuthoring_LayerGetName(int doc, int layer, [Out] byte[] name, uint capacity, out uint required);
         [DllImport(Library)] internal static extern int ImmAuthoring_KeySet(int doc, int layer, ref Key key);
+        [DllImport(Library)] internal static extern int ImmAuthoring_KeyGetCount(int doc, int layer, int property, out uint count);
+        [DllImport(Library)] internal static extern int ImmAuthoring_KeyGet(int doc, int layer, int property, uint index, ref Key key);
+        [DllImport(Library)] internal static extern int ImmAuthoring_LayerGetTimeline(int doc, int layer, out int isTimeline,
+            out double duration, out double offset, out uint frameRate, out uint frames, out uint maxRepeat);
+        [DllImport(Library)] internal static extern int ImmAuthoring_LayerGetWorldTransform(int doc, int layer, ref Pivot transform);
         [DllImport(Library)] internal static extern int ImmAuthoring_KeyRemove(int doc, int layer, int property, double seconds);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerCreate(int doc, int parent, int type, byte[] name, uint count, out int layer);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerDestroy(int doc, int layer);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerReparent(int doc, int layer, int parent, int index);
         [DllImport(Library)] internal static extern int ImmAuthoring_PaintSetMaxRepeatCount(int doc, int layer, uint count);
         [DllImport(Library)] internal static extern int ImmAuthoring_FrameGetDrawingHandle(int doc, int layer, int frame, out ulong drawing);
+        [DllImport(Library)] internal static extern int ImmAuthoring_FrameSetHandle(int doc, int layer, int frame, ulong drawing);
+        [DllImport(Library)] internal static extern int ImmAuthoring_FrameSequenceSetHandles(int doc, int layer, ulong[] drawings, uint count);
         [DllImport(Library)] internal static extern int ImmAuthoring_DrawingGetHandle(int doc, int layer, int index, out ulong drawing);
         [DllImport(Library)] private static extern int ImmAuthoring_DrawingSetGeometry(int doc, int layer, ulong drawing, ref Geometry geometry);
 
@@ -130,7 +137,7 @@ namespace ImmPlayer
                 case -4: return "Invalid session/batch state";
                 case -5: return "Out of memory";
                 case -6: return "Validation failed";
-                case -7: return "Busy / importer owns data";
+                case -7: return "Busy / pending command or data ownership";
                 case -9: return "Cancelled";
                 case -10: return "Renderer preparation/publication failed";
                 default: return $"Native result {result}";
