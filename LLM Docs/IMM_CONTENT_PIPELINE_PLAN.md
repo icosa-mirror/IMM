@@ -3750,8 +3750,9 @@ the historical sizes/check counts below describe this earlier source only.
    live-panel-after-edits.json, live-panel-reloaded-status.json and
    live-panel-reloaded-diagnostics.json. The sample opens a maximized Game view;
    Windows has an explicit D3D12 restart menu. Manual interaction, additional real
-   scenes and broader backend acceptance remain open. No save/undo/general mixed
-   transaction support is implied. Source IMM files are not written by the lab.
+   scenes and broader backend acceptance remained open at this milestone. No save
+   or general mixed transaction support is implied. Timeline undo was subsequently
+   added in 6.113; source IMM files are not written by the lab.
 7. Commit the matching tracked Windows plugin with this lab delivery so a fresh
    checkout has the required APIs and the 44-byte diagnostics fix immediately.
    The real-file report records the SHA-256 of the exact locally built DLL used.
@@ -3919,8 +3920,9 @@ the historical sizes/check counts below describe this earlier source only.
    bounds through the evaluated ancestor transform and coordinate conversion.
 9. Nested key lanes and complex drawing-clock projections are not presented as
    root-time data. Correct nested scope mapping (including finite repeats, offsets,
-   visibility starts and held actions), remaining channel types, timeline undo,
-   and broader usability/interaction acceptance remain unfinished. There is no
+   visibility starts and held actions), remaining channel types and broader
+   usability/interaction acceptance remain unfinished. Timeline undo was added
+   subsequently in 6.113. There is no
    graph editor or save support in this milestone. The goal remains active; do not
    describe this first workspace as the completed fully functional timeline.
 10. Fresh Editor native load, paused seek and optional installed-input binding pass.
@@ -3967,17 +3969,28 @@ the historical sizes/check counts below describe this earlier source only.
    acquisition failure. Neither that infrastructure issue nor the Android source
    failures are described as passing; the next source push requires full validation.
 
-### 6.113. Timeline history and stable key times (active)
+### 6.113. Timeline history and stable key times (local milestone)
 
-1. Timeline undo/redo is being implemented for key channels, drawing frame tables
-   and canonical paint repeat counts. History will move only after Presented,
-   retain stacks after rejected edits, clear after incompatible document edits,
-   and check observed revisions/track contents before replay. These checks do not
+1. Timeline undo/redo now covers key channels, drawing frame tables and canonical
+   paint repeat counts. History moves only after Presented, retains stacks after
+   rejected edits, clears after incompatible document edits, and checks observed
+   revisions/track contents before replay. It retains at most 64 actions and 32 MiB
+   of snapshot payload; buttons and focused Ctrl/Cmd shortcuts are provided. These checks do not
    constitute atomic protection against an independent concurrent writer.
 2. Review found that requested > presented is not sufficient evidence of an active
    edit: rejected commits leave the requested revision ahead permanently. History
-   readiness now checks the requested commit's terminal status instead. Actual
-   rejection/undo/redo Editor verification is still pending.
+   readiness now checks the requested commit's terminal status instead. A live
+   Snoopy probe passed 20 steps, including actual Game-view Undo/Redo button events,
+   exact frame-13 key restoration, a multiple-key track move/restore, redo branching,
+   an asynchronously rejected missing-key removal followed by successful undo,
+   frame holds, canonical repeat counts, synchronous invalid-input rejection and
+   history clearing after another document edit. Evidence:
+   artifacts/live-timeline-history-probe.json. These are injected UI events and
+   native publication checks, not human acceptance or hosted validation.
+   A second five-step paused probe passed reflected/Smoothstep transform restoration,
+   Ctrl+Z/Ctrl+Shift+Z Game-view input, and observed external-edit invalidation
+   without undoing that edit. The workspace refreshed after detecting the changed
+   revision. Evidence: artifacts/live-timeline-history-packed-probe.json.
 3. Preparing lossless replay exposed a key-time conversion bug: 24 fps frame 13
    is 6825 ticks, but converting its queried seconds back through truncation yielded
    6824. KeySet and KeyRemove now quantize to nearest native tick with finite,

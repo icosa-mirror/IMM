@@ -110,17 +110,19 @@ namespace ImmPlayer
                         if (commit.state == 4)
                         {
                             Refresh();
+                            FinishTimelineHistory(true);
                             Log($"Revision {completed}: Presented");
                         }
                         else
                         {
                             string reason = $"Revision {completed}: Rejected — {N.Result(commit.result)}; command {commit.command}, target {commit.target}";
                             Run(Refresh);
+                            FinishTimelineHistory(false);
                             Log(reason);
                         }
                     }
                 }
-                catch (Exception error) { pending = 0; Log(error.Message); }
+                catch (Exception error) { pending = 0; AbandonHistoryRequest(); Log(error.Message); }
             }
             if (view != null && labInput.Read(out bool looking, out Vector2 pointer, out Vector2 motion, out Vector3 movement, out bool faster) && looking &&
                 (!visible || !OverPanel(new Vector2(pointer.x, Screen.height - pointer.y))))
@@ -138,6 +140,13 @@ namespace ImmPlayer
                 visible = !visible; if (!visible) ReleaseTimelineCapture(); Event.current.Use();
             }
             if (!visible) return;
+            if (Event.current.type == EventType.KeyDown && (Event.current.control || Event.current.command) && GUIUtility.keyboardControl == 0 && scrubControl == 0)
+            {
+                if (Event.current.keyCode == KeyCode.Z)
+                { Run(() => ReplayTimelineHistory(!Event.current.shift)); Event.current.Use(); }
+                else if (Event.current.keyCode == KeyCode.Y)
+                { Run(() => ReplayTimelineHistory(false)); Event.current.Use(); }
+            }
             DrawWorkspace();
         }
 
@@ -174,7 +183,8 @@ namespace ImmPlayer
             GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading && selected >= 0;
             GUILayout.BeginHorizontal();
             repeat = GUILayout.TextField(repeat, GUILayout.Width(70));
-            if (GUILayout.Button("Set paint repeat (0 = loop)")) Submit("Paint repeat", () => N.ImmAuthoring_PaintSetMaxRepeatCount(Doc, selected, Unsigned(repeat)));
+            if (GUILayout.Button("Set paint repeat (0 = loop)")) Submit("Paint repeat", () =>
+            { RecordTimelineBefore(selected, -2); return N.ImmAuthoring_PaintSetMaxRepeatCount(Doc, selected, Unsigned(repeat)); });
             GUILayout.EndHorizontal();
             GUILayout.Space(8);
             GUILayout.Label("Keys — uses current inspector values at the entered time", wrapped, GUILayout.Width(window.width - 50));
@@ -184,7 +194,8 @@ namespace ImmPlayer
             GUILayout.BeginHorizontal();
             keyTime = GUILayout.TextField(keyTime, GUILayout.Width(65));
             if (GUILayout.Button("Set key")) Submit("Set key", SetKey);
-            if (GUILayout.Button("Remove key")) Submit("Remove key", () => N.ImmAuthoring_KeyRemove(Doc, selected, channelIds[keyChannel], Number(keyTime)));
+            if (GUILayout.Button("Remove key")) Submit("Remove key", () =>
+            { RecordTimelineBefore(selected, channelIds[keyChannel]); return N.ImmAuthoring_KeyRemove(Doc, selected, channelIds[keyChannel], Number(keyTime)); });
             GUILayout.EndHorizontal();
             bool canEditKey = GUI.enabled;
             GUI.enabled &= selectedTimelineKey.HasValue;
@@ -240,6 +251,7 @@ namespace ImmPlayer
         private void Submit(string label, Func<int> queue)
         {
             if (!attached || pending != 0 || awaitingCommit) return;
+            historyRecording = null;
             try
             {
                 N.Check(queue());
@@ -250,7 +262,7 @@ namespace ImmPlayer
             }
             catch (Exception error)
             {
-                awaitingCommit = false;
+                awaitingCommit = false; AbandonHistoryRequest();
                 try { N.ImmAuthoring_DiscardPending(Doc); } catch (Exception) { }
                 Log($"{label}: {error.Message}");
                 Run(ReadSelected);
@@ -266,6 +278,7 @@ namespace ImmPlayer
             if (result != 0)
             {
                 N.ImmAuthoring_DiscardPending(Doc);
+                AbandonHistoryRequest();
                 Log($"{awaitingCommitLabel}: {N.Result(result)}. No edit was committed.");
                 Run(ReadSelected);
                 return;
@@ -277,6 +290,7 @@ namespace ImmPlayer
 
         private int SetKey()
         {
+            RecordTimelineBefore(selected, channelIds[keyChannel]);
             if (keyChannel == 2) ReadPositionFields();
             var key = new N.Key { size = 80, version = 1, property = channelIds[keyChannel], interpolation = keyInterpolation, seconds = Number(keyTime),
                 boolean = keyChannel == 3 ? (Unsigned(repeat) == 0 ? 1 : 0) : (keyVisible ? 1 : 0),
@@ -470,6 +484,7 @@ namespace ImmPlayer
         private void Unload()
         {
             ReleaseTimelineCapture();
+            ClearTimelineHistory();
             timelinePlayTime = 0; queuedTimelineSeek = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
             if (load != null) { StopCoroutine(load); load = null; }
             loading = false; attached = false; pending = 0; awaitingCommit = false;

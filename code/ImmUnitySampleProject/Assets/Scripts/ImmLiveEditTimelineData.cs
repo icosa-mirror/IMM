@@ -40,6 +40,7 @@ namespace ImmPlayer
             drawingIndex = GUILayout.TextField(drawingIndex, GUILayout.Width(50));
             if (GUILayout.Button("Use drawing at frame")) Submit("Set frame drawing", () =>
             {
+                RecordTimelineBefore(selected, -1);
                 N.Check(N.ImmAuthoring_DrawingGetHandle(Doc, selected, Integer(drawingIndex), out ulong drawing));
                 return N.ImmAuthoring_FrameSetHandle(Doc, selected, Integer(frame), drawing);
             });
@@ -51,6 +52,7 @@ namespace ImmPlayer
         {
             Submit(insertHold ? "Insert hold" : "Remove frame", () =>
             {
+                RecordTimelineBefore(selected, -1);
                 if (!timelineData.TryGetValue(selected, out TimelineData data)) throw new InvalidOperationException("Refresh the selected track first.");
                 int index = Integer(frame);
                 if (index < 0 || index >= data.Drawings.Length) throw new ArgumentOutOfRangeException(nameof(frame));
@@ -142,6 +144,7 @@ namespace ImmPlayer
             selected = selectedKeyLayer;
             Submit("Move key", () =>
             {
+                RecordTimelineBefore(selectedKeyLayer, key.property);
                 N.Check(N.ImmAuthoring_KeyRemove(Doc, selectedKeyLayer, key.property, original));
                 return N.ImmAuthoring_KeySet(Doc, selectedKeyLayer, ref key);
             });
@@ -154,7 +157,8 @@ namespace ImmPlayer
             if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit) return;
             N.Key key = selectedTimelineKey.Value;
             selected = selectedKeyLayer;
-            Submit("Delete key", () => N.ImmAuthoring_KeyRemove(Doc, selectedKeyLayer, key.property, key.seconds));
+            Submit("Delete key", () =>
+            { RecordTimelineBefore(selectedKeyLayer, key.property); return N.ImmAuthoring_KeyRemove(Doc, selectedKeyLayer, key.property, key.seconds); });
             selectedTimelineKey = null;
         }
 
@@ -238,6 +242,7 @@ namespace ImmPlayer
                 Event input = Event.current;
                 if (timelineBodyHasMouse && attached && pending == 0 && !awaitingCommit && input.type == EventType.MouseDown && input.button == 0 && hit.Contains(input.mousePosition))
                 {
+                    GUI.FocusControl(null);
                     SelectTimelineKey(node.Info.Id, key);
                     draggingKey = true; draggedKeyTime = key.seconds;
                     scrubControl = GUIUtility.GetControlID(FocusType.Passive); GUIUtility.hotControl = scrubControl;

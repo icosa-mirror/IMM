@@ -526,6 +526,12 @@ The sample-only Live Edit Lab now exposes native rename and other edits through
 thin bindings, without completing the managed SDK cutover. Two real Fishgym rename
 attempts returned Busy; their cause remains unresolved and real-file rename
 acceptance is not established (roadmap 6.107).
+The sample workspace now has full-width key/frame tracks and publication-gated
+undo/redo for key channels, frame tables and canonical paint repeat counts. History
+checks observed revisions and track values, but is not an atomic multi-writer
+protocol. Other document edits and unload clear it; native rejection preserves it.
+This remains sample UI, with nested clock mapping and other editor capabilities
+unfinished, rather than completion of the managed SDK cutover (roadmap 6.111–6.113).
 
 `LayerSetPivot` / `LayerGetPivot` use a separate 48-byte versioned structure:
 translation, unit quaternion, positive uniform scale and None/X/Y/Z reflection.
@@ -540,6 +546,10 @@ Pivot-specific rendered/backend acceptance and managed integration remain open.
 
 Live keys support visibility, opacity, and transform. `KeySet` inserts/replaces at the converted
 tick; preparation copies the affected sorted timeline and publication swaps that vector.
+Authoring `KeySet`/`KeyRemove` round seconds to the nearest 1/12600-second tick, so
+normal-range `KeyGet` read/edit round trips do not truncate a key one tick earlier.
+Multiple ordered key edits for one layer/property publish atomically; mixed-track
+batches reject without partial changes. The playback clock conversion is unchanged.
 The single 80-byte key directly includes `transformFlip` at byte 68 for
 None/X/Y/Z reflection. Existing transform interpolation/easing applies unchanged;
 this introduces no alternate layout or managed API change (roadmap 6.103).

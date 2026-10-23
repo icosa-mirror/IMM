@@ -103,7 +103,7 @@ namespace ImmPlayer
             float tracksWidth = Mathf.Max(50, timelineWindow.width - namesWidth - 20);
             float headerExtra = timelineWindow.width < 1320 ? 20 : 0;
             timelineToolbarScroll = GUI.BeginScrollView(new Rect(0, 0, timelineWindow.width, 30 + headerExtra), timelineToolbarScroll,
-                new Rect(0, 0, Math.Max(1320, timelineWindow.width - 1), 28), false, false);
+                new Rect(0, 0, Math.Max(1520, timelineWindow.width - 1), 28), false, false);
             GUI.Label(new Rect(8, 4, 76, 22), "Timeline");
             GUI.enabled = attached && !loading;
             string nextFilter = GUI.TextField(new Rect(84, 4, Mathf.Max(80, namesWidth - 92), 22), filter);
@@ -133,6 +133,7 @@ namespace ImmPlayer
             GUI.enabled &= selectedTimelineKey.HasValue;
             if (GUI.Button(new Rect(namesWidth + 884, 4, 80, 22), "Delete key")) DeleteTimelineKey();
             GUI.enabled = true;
+            DrawTimelineHistory(namesWidth + 972);
             GUI.EndScrollView();
             GUI.BeginGroup(new Rect(0, headerExtra, timelineWindow.width, timelineWindow.height - headerExtra));
             GUI.Label(new Rect(8, 30, namesWidth - 12, 22), $"Layers ({layers.Length}) / drawing frames");
@@ -209,7 +210,7 @@ namespace ImmPlayer
             int control = GUIUtility.GetControlID(FocusType.Passive);
             Event input = Event.current;
             if (document != null && !loading && input.type == EventType.MouseDown && input.button == 0 && scrubArea.Contains(input.mousePosition))
-            { scrubControl = control; GUIUtility.hotControl = control; ScrubAt(input.mousePosition.x, namesWidth, tracksWidth); input.Use(); }
+            { GUI.FocusControl(null); scrubControl = control; GUIUtility.hotControl = control; ScrubAt(input.mousePosition.x, namesWidth, tracksWidth); input.Use(); }
             else if (scrubControl != 0 && GUIUtility.hotControl == scrubControl)
             {
                 if (input.type == EventType.MouseDrag)
