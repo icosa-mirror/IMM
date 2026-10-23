@@ -2423,8 +2423,8 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     propertiesOut->qz = static_cast<float>(transform.mRotation.z);
     propertiesOut->qw = static_cast<float>(transform.mRotation.w);
     propertiesOut->scale = static_cast<float>(transform.mScale);
-    propertiesOut->reserved1[0] = 0;
-    propertiesOut->reserved1[1] = 0;
+    propertiesOut->transformFlip = static_cast<int32_t>(transform.mFlip);
+    propertiesOut->reserved1 = 0;
     return IMM_AUTHORING_OK;
 }
 
@@ -2434,8 +2434,8 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     if (layerId < 0 || properties == nullptr ||
         properties->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
         properties->structSize < sizeof(ImmAuthoringLayerProperties) ||
-        properties->reserved0 != 0 || properties->reserved1[0] != 0 ||
-        properties->reserved1[1] != 0)
+        properties->reserved0 != 0 || properties->reserved1 != 0 ||
+        properties->transformFlip < 0 || properties->transformFlip > 3)
         return IMM_AUTHORING_INVALID_ARGUMENT;
     const uint32_t supportedMask = IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY |
         IMM_AUTHORING_LAYER_PROPERTY_OPACITY |
@@ -2467,7 +2467,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
             return IMM_AUTHORING_INVALID_ARGUMENT;
         transform = ImmCore::trans3d(
             ImmCore::quatd(properties->qx, properties->qy, properties->qz, properties->qw),
-            properties->scale, ImmCore::flip3::N,
+            properties->scale, static_cast<ImmCore::flip3>(properties->transformFlip),
             ImmCore::vec3d(properties->tx, properties->ty, properties->tz));
     }
     try
@@ -2606,24 +2606,14 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
 {
     if (layerId < 0 || key == nullptr)
         return IMM_AUTHORING_INVALID_ARGUMENT;
-    if (key->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 &&
-        key->structVersion != IMM_AUTHORING_STRUCT_VERSION_2)
+    if (key->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
         return IMM_AUTHORING_UNSUPPORTED;
-    const ImmAuthoringKeyV2 * keyV2 = nullptr;
-    if (key->structVersion == IMM_AUTHORING_STRUCT_VERSION_2)
-    {
-        if (key->structSize < sizeof(ImmAuthoringKeyV2))
-            return IMM_AUTHORING_INVALID_ARGUMENT;
-        keyV2 = reinterpret_cast<const ImmAuthoringKeyV2 *>(key);
-        if (keyV2->reserved3[0] != 0 || keyV2->reserved3[1] != 0 || keyV2->reserved3[2] != 0)
-            return IMM_AUTHORING_INVALID_ARGUMENT;
-    }
     const double maximumTimeSeconds = static_cast<double>(INT64_MAX) /
         static_cast<double>(ImmCore::piTick::FromOneSecond());
     if (key->structSize < sizeof(ImmAuthoringKey) || !std::isfinite(key->timeSeconds) ||
         key->timeSeconds < 0.0 || key->timeSeconds >= maximumTimeSeconds ||
         key->reserved[0] != 0 || key->reserved[1] != 0 ||
-        key->reserved[2] != 0 || key->reserved[3] != 0)
+        key->reserved[2] != 0)
         return IMM_AUTHORING_INVALID_ARGUMENT;
     if (key->interpolation < IMM_AUTHORING_INTERPOLATION_NONE ||
         key->interpolation > IMM_AUTHORING_INTERPOLATION_AUTO)
@@ -2656,12 +2646,10 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
         value.mBool = key->boolValue != 0;
         break;
     case IMM_AUTHORING_ANIM_PROPERTY_OFFSET:
-        if (keyV2 == nullptr)
-            return IMM_AUTHORING_UNSUPPORTED;
         if (key->interpolation != IMM_AUTHORING_INTERPOLATION_NONE)
             return IMM_AUTHORING_INVALID_ARGUMENT;
         property = ImmImporter::Layer::AnimProperty::Offset;
-        value.mInt = keyV2->uintValue;
+        value.mInt = key->uintValue;
         break;
     case IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM:
     {

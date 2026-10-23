@@ -135,7 +135,9 @@ run 39609583383. Unity package compilation/tests also pass, including the reflec
 graph/comparison test and all 15 authoring document tests. Three D3D12 runtime tests
 were skipped on the Linux host. Unity player integration and device acceptance
 remain pending; the shared roadmap tracks current failures and validation status.
-This does not expand the current live mutation ABI's transform contract.
+Live canonical transform reflection now has a separate V2 property structure
+(section 8.2); live transform-key and spawn-specific transform reflection remain
+outside the current mutation contract.
 
 The offline graph also has optional `SetRootProperties` / snapshot `RootProperties`
 for the canonical Root group: visibility, opacity, transform/pivot flips and timeline
@@ -452,14 +454,13 @@ Exports return signed `int32_t` result codes; Windows uses `__stdcall`, other su
 use the header's platform visibility/calling convention. Structures use fixed-width scalar
 fields and explicit pointer/count spans, without C++ containers or `bool`. Versioned descriptors
 start with `structSize`/`structVersion`; callers supply a supported version and at least
-its required size. Most descriptors remain version 1. `ImmAuthoringKey` V1 retains
-its 80-byte layout; additive `ImmAuthoringKeyV2` is 96 bytes and carries exact
-uint32 Offset ticks in `uintValue` at byte 80. Offset requires V2; Loop uses a strict
-0/1 boolean. Both channels require `None` interpolation and zero reserved fields.
-V2 size is checked before reading its extension. No new export is required.
-Local ABI tests cover layout/rejection; successful V2 delivery through the exported
-C ABI is source-reviewed rather than exercised on a loaded document. Do not assume
-arbitrary older structure prefixes are accepted.
+its required size. The current descriptors use version 1; no alternate layouts
+are maintained for this unreleased live API. `ImmAuthoringKey` is 80 bytes and
+carries exact uint32 Offset ticks directly in `uintValue` at byte 64. Loop uses a
+strict 0/1 boolean. Both channels require `None` interpolation and zero reserved
+fields. Size is checked before accessing payload fields. The previously added V2
+key layout has been removed; repository native callers use the direct structure.
+Open Brush consumes the managed C# API, whose public surface is unchanged.
 
 Pointer-backed mutation data is copied before return. Strings are explicitly sized UTF-8 spans.
 Reserved input fields must meet the declared validation; readback normalizes reserved/inactive
@@ -498,10 +499,18 @@ not the supported deletion path.
 ### 8.2 Properties and keys
 
 `LayerSetProperties` supports canonical visibility, opacity, and uniform-scale rigid transform,
-individually or together. Version 1 carries translation, unit quaternion, and positive uniform
+individually or together. The structure carries translation, unit quaternion, and positive uniform
 scale. Names and pivots use dedicated APIs below; timing and other property masks
 are not implemented. Readback excludes
 animation-evaluated values and transient overrides.
+
+`ImmAuthoringLayerProperties` directly includes `transformFlip` (None/X/Y/Z) at
+byte 56 and remains 64 bytes. Readback reports the canonical reflection;
+transform writes publish it with translation, rotation and scale. Use None
+explicitly to remove a reflection. There is one layout, with no V2 wrapper.
+Opacity/visibility-only updates preserve the existing transform. This does not
+extend live transform-key or spawn-specific transform reflection. Property
+readback now obtains the owned diagnostic snapshot under the publication lock.
 
 `LayerSetName` copies 1-4096 UTF-8 bytes for a nonroot group, paint or spawn layer.
 Preparation builds the target short name and all descendant full paths; publication
@@ -532,7 +541,7 @@ property/interpolation/value combinations are rejected. `KeyRemove` uses exact c
 a missing key rejects the asynchronous commit with `NotFound` and leaves the timeline intact.
 
 Static paint additionally supports stepped Loop and tick-valued Offset keys.
-Offset requires the additive V2 key structure; Loop retains its strict boolean
+Offset uses the direct key structure's `uintValue`; Loop retains its strict boolean
 value. Publication reselects at held time, including hidden paint, without changing
 the root playback intent. Other paint implementations reject these live channels.
 Canonical repeat uses the dedicated paint setter/getter described in section 6,

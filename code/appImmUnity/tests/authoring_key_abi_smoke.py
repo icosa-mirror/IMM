@@ -1,4 +1,4 @@
-"""Check additive key layouts and C ABI validation without initializing a player.
+"""Check the native key layout and C ABI validation without initializing a player.
 
 All calls deliberately reject before accessing the player's document table.
 Loaded-document mutation and rendered held selection are separate integration tests.
@@ -18,16 +18,12 @@ from exporter_bridge_smoke import runtime_dependencies
 ROOT = Path(__file__).resolve().parents[3]
 
 
-class KeyV1(c.Structure):
+class Key(c.Structure):
     _fields_ = [('structSize', c.c_uint32), ('structVersion', c.c_uint32),
                 ('property', c.c_int32), ('interpolation', c.c_int32), ('timeSeconds', c.c_double),
                 ('boolValue', c.c_int32), ('floatValue', c.c_float),
                 *[(name, c.c_float) for name in ('tx', 'ty', 'tz', 'qx', 'qy', 'qz', 'qw', 'scale')],
-                ('reserved', c.c_uint32 * 4)]
-
-
-class KeyV2(c.Structure):
-    _fields_ = [('base', KeyV1), ('uintValue', c.c_uint32), ('reserved3', c.c_uint32 * 3)]
+                ('uintValue', c.c_uint32), ('reserved', c.c_uint32 * 3)]
 
 
 def main():
@@ -36,13 +32,13 @@ def main():
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows native plugin required')
-    assert c.sizeof(KeyV1) == 80 and c.sizeof(KeyV2) == 96 and KeyV2.uintValue.offset == 80
+    assert c.sizeof(Key) == 80 and Key.uintValue.offset == 64
     output = ROOT / 'artifacts/authoring-key-abi'
     output.mkdir(parents=True, exist_ok=True)
     report_path = output / 'report.json'
     results = []
     report = {'passed': False, 'pluginSha256': hashlib.sha256(args.plugin.read_bytes()).hexdigest(),
-              'v1Size': c.sizeof(KeyV1), 'v2Size': c.sizeof(KeyV2), 'uintValueOffset': KeyV2.uintValue.offset,
+              'keySize': c.sizeof(Key), 'uintValueOffset': Key.uintValue.offset,
               'scope': 'ABI layout and pre-player validation only', 'cases': results}
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     staging = Path(tempfile.mkdtemp(prefix='imm-authoring-key-abi-'))
@@ -62,45 +58,31 @@ def main():
         if actual != expected:
             raise AssertionError(f'{name}: expected {expected}, got {actual}')
 
-    def v1(prop=99):
-        key = KeyV1()
-        key.structSize, key.structVersion, key.property = c.sizeof(KeyV1), 1, prop
+    def descriptor(prop=99):
+        key = Key()
+        key.structSize, key.structVersion, key.property = c.sizeof(Key), 1, prop
         return key
 
-    def v2(prop=99):
-        key = KeyV2()
-        key.base.structSize, key.base.structVersion, key.base.property = c.sizeof(KeyV2), 2, prop
-        return key
-
-    check('V1 unchanged layout accepted before unsupported property', v1(), -3)
-    check('V2 prefix accepted before unsupported property', v2(), -3)
-    check('V1 Offset cannot reinterpret reserved or float fields', v1(8), -3)
-    key = v2(8)
-    key.base.structSize = c.sizeof(KeyV1)
-    check('V2 truncated extension', key, -2)
-    key = v2(8)
-    key.base.structVersion = 3
+    check('layout accepted before unsupported property', descriptor(), -3)
+    key = descriptor(8)
+    key.structSize = c.sizeof(Key) - 4
+    check('truncated key', key, -2)
+    key = descriptor(8)
+    key.structVersion = 2
     check('unknown version', key, -3)
-    key = v1(7)
+    key = descriptor(7)
     key.boolValue = 2
-    check('Loop V1 strict boolean', key, -2)
-    key = v1(7)
+    check('Loop strict boolean', key, -2)
+    key = descriptor(7)
     key.interpolation = 1
-    check('Loop V1 step only', key, -2)
-    key = v2(7)
-    key.base.boolValue = -1
-    check('Loop V2 strict boolean', key, -2)
-    key = v2(8)
-    key.uintValue, key.base.interpolation = 0xFFFFFFFF, 1
-    check('Offset V2 step only with full-width unsigned payload', key, -2)
-    for index in range(4):
-        key = v2(8)
-        key.base.reserved[index] = 1
-        check(f'V1 reserved slot {index} stays reserved in V2', key, -2)
+    check('Loop step only', key, -2)
+    key = descriptor(8)
+    key.uintValue, key.interpolation = 0xFFFFFFFF, 1
+    check('Offset step only with full-width unsigned payload', key, -2)
     for index in range(3):
-        key = v2(8)
-        key.reserved3[index] = 1
-        check(f'V2 reserved slot {index}', key, -2)
+        key = descriptor(8)
+        key.reserved[index] = 1
+        check(f'reserved slot {index}', key, -2)
     repeat_set = plugin.ImmAuthoring_PaintSetMaxRepeatCount
     repeat_set.argtypes = [c.c_int32, c.c_int32, c.c_uint32]
     repeat_set.restype = c.c_int32
@@ -138,7 +120,7 @@ def main():
     assert sentinel.value == 123, 'rejected name getter must preserve size output'
     report['passed'] = True
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
-    print(f'[IMM_AUTHORING_KEY_ABI] passed {len(results)} additive layout/validation checks')
+    print(f'[IMM_AUTHORING_KEY_ABI] passed {len(results)} layout/validation checks')
 
 
 if __name__ == '__main__':

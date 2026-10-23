@@ -47,7 +47,6 @@ typedef enum ImmAuthoringCommitState
 enum
 {
     IMM_AUTHORING_STRUCT_VERSION_1 = 1,
-    IMM_AUTHORING_STRUCT_VERSION_2 = 2,
     IMM_AUTHORING_MIN_POINTS_PER_ELEMENT = 2,
     IMM_AUTHORING_MAX_POINTS_PER_ELEMENT = 8192,
     IMM_AUTHORING_MAX_ELEMENTS_PER_DRAWING = 65536,
@@ -176,7 +175,8 @@ typedef struct ImmAuthoringLayerProperties
     float tx, ty, tz;
     float qx, qy, qz, qw;
     float scale;
-    uint32_t reserved1[2];
+    int32_t transformFlip; // 0=None, 1=X, 2=Y, 3=Z.
+    uint32_t reserved1;
 } ImmAuthoringLayerProperties;
 
 // Pivot is independent of canonical and animated transforms. Flip: 0=None, 1=X, 2=Y, 3=Z.
@@ -203,16 +203,9 @@ typedef struct ImmAuthoringKey
     float tx, ty, tz;
     float qx, qy, qz, qw;
     float scale;
-    uint32_t reserved[4];
+    uint32_t uintValue; // Offset uses exact IMM ticks, never float seconds.
+    uint32_t reserved[3];
 } ImmAuthoringKey;
-
-// V1 remains unchanged. Offset values are exact IMM ticks, never float seconds.
-typedef struct ImmAuthoringKeyV2
-{
-    ImmAuthoringKey base;
-    uint32_t uintValue;
-    uint32_t reserved3[3];
-} ImmAuthoringKeyV2;
 
 typedef struct ImmAuthoringSpawnArea
 {
@@ -249,11 +242,11 @@ static_assert(sizeof(ImmAuthoringRevisions) == 32, "ImmAuthoringRevisions ABI ch
 static_assert(sizeof(ImmAuthoringCommitStatus) == 40, "ImmAuthoringCommitStatus ABI changed");
 static_assert(sizeof(ImmAuthoringLayerProperties) == 64,
     "ImmAuthoringLayerProperties ABI changed");
+static_assert(offsetof(ImmAuthoringLayerProperties, transformFlip) == 56,
+    "ImmAuthoringLayerProperties reflection offset changed");
 static_assert(sizeof(ImmAuthoringLayerPivot) == 48, "ImmAuthoringLayerPivot ABI changed");
 static_assert(sizeof(ImmAuthoringKey) == 80, "ImmAuthoringKey ABI changed");
-static_assert(offsetof(ImmAuthoringKeyV2, base) == 0, "ImmAuthoringKeyV2 prefix changed");
-static_assert(offsetof(ImmAuthoringKeyV2, uintValue) == 80, "ImmAuthoringKeyV2 value offset changed");
-static_assert(sizeof(ImmAuthoringKeyV2) == 96, "ImmAuthoringKeyV2 ABI changed");
+static_assert(offsetof(ImmAuthoringKey, uintValue) == 64, "ImmAuthoringKey value offset changed");
 static_assert(sizeof(ImmAuthoringSpawnArea) == 112, "ImmAuthoringSpawnArea ABI changed");
 #endif
 

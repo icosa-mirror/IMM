@@ -2590,6 +2590,10 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
 
 ### 6.70. Live static-paint Loop/Offset keys (local milestone complete)
 
+Layout follow-up: the versioned key layouts recorded at this checkpoint were
+removed in 6.100. The current single 80-byte key directly carries Offset ticks;
+the historical sizes/check counts below describe this earlier source only.
+
 1. Extend the existing atomic key edit path to static-paint Loop/Offset insertion,
    replacement and removal. Both channels are stepped; other layer implementations
    remain unsupported for these live channels. This is the key-editing portion of
@@ -3529,6 +3533,31 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
 3. Source review approved the metadata accumulation and exception/publication
    behavior. Local checks are recorded in 6.97-6.98; full M2, managed cutover,
    presented-revision save and all remaining conversion tracks retain their scope.
+
+### 6.100. Direct live property/key layouts and reflections (local Windows milestone)
+
+1. User confirmed Open Brush is the sole consumer and uses the managed C# API.
+   Update the unreleased native layouts and repository callers directly; do not
+   introduce API versions without asking or evidence of real external usage.
+   Remove the uncommitted V2 property wrapper and the earlier V2 key wrapper.
+2. The 64-byte property structure directly carries transformFlip at byte 56.
+   The 80-byte key structure directly carries uintValue at byte 64 for exact
+   Offset ticks. Existing property/key exports use one layout each; managed C#
+   APIs remain unchanged. Property readback uses a synchronized owned snapshot.
+3. Windows Unity/viewer/Godot builds pass. The existing loaded production C-export
+   host proves all four canonical reflection values, queued-state isolation,
+   invalid/truncated input rejection, explicit reflection clearing, and successful
+   full-width Offset key insertion/removal through the direct layout. The existing
+   ABI script now checks the single layout and passes 21 applicable guard cases;
+   obsolete alternate-layout cases were removed. No new test framework was added.
+4. Evidence: artifacts/direct-live-layout-native-build.log,
+   direct-live-layout-cabi/report.json, direct-live-layout-cabi/run.log,
+   direct-live-layout-abi-check.log and direct-live-layout-whitespace.log.
+   Live transform-key reflections, spawn-specific transforms, managed cutover and
+   broader backend acceptance remain open. Earlier full runs 39976407088 and
+   39979516973 do not cover this source. Their latest snapshots have 36 and 14
+   successful jobs respectively, no failed jobs and unresolved work; the fully
+   accepted hosted baseline remains 47a0240d.
 
 ## 7. Consolidated documents
 

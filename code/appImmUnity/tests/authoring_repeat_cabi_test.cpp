@@ -358,6 +358,48 @@ int wmain(int argc, wchar_t ** argv)
         ImmAuthoring_PaintGetMaxRepeatCount(doc, target, &count) == IMM_AUTHORING_OK && count == 2,
         "discard drops all accumulated fields");
     std::puts("[IMM_METADATA_BATCH_CABI_TEST] pass=1 combinedPublication=1 lastValueWins=1 invalidPreservesQueue=1 discard=1");
+    ImmAuthoringLayerProperties reflected{};
+    reflected.structSize = sizeof(reflected); reflected.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    reflected.updateMask = IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM;
+    reflected.qw = 1.0f; reflected.scale = 1.0f;
+    ImmAuthoringLayerProperties reflectionRead = reflected;
+    for (int flip = 0; flip <= 3; ++flip)
+    {
+        requireRepeat(ImmAuthoring_LayerGetProperties(doc, target, &reflectionRead) == IMM_AUTHORING_OK,
+            "read canonical reflection");
+        const int oldFlip = reflectionRead.transformFlip;
+        reflected.transformFlip = flip; reflected.tx = static_cast<float>(flip);
+        requireRepeat(ImmAuthoring_LayerSetProperties(doc, target, &reflected) == IMM_AUTHORING_OK &&
+            ImmAuthoring_LayerGetProperties(doc, target, &reflectionRead) == IMM_AUTHORING_OK &&
+            reflectionRead.transformFlip == oldFlip, "queued reflection remains unpublished");
+        presentHierarchyEdit();
+        requireRepeat(ImmAuthoring_LayerGetProperties(doc, target, &reflectionRead) == IMM_AUTHORING_OK &&
+            reflectionRead.transformFlip == flip && reflectionRead.tx == reflected.tx,
+            "publishes all four transform reflection values");
+    }
+    reflected.transformFlip = 4;
+    requireRepeat(ImmAuthoring_LayerSetProperties(doc, target, &reflected) == IMM_AUTHORING_INVALID_ARGUMENT,
+        "invalid reflection rejects");
+    reflected.transformFlip = 0; reflected.structSize = sizeof(ImmAuthoringLayerProperties) - 4;
+    requireRepeat(ImmAuthoring_LayerSetProperties(doc, target, &reflected) == IMM_AUTHORING_INVALID_ARGUMENT &&
+        ImmAuthoring_LayerGetProperties(doc, target, &reflected) == IMM_AUTHORING_INVALID_ARGUMENT,
+        "truncated properties reject");
+    reflected.structSize = sizeof(reflected);
+    requireRepeat(ImmAuthoring_LayerSetProperties(doc, target, &reflected) == IMM_AUTHORING_OK,
+        "explicitly clear transform reflection");
+    presentHierarchyEdit();
+    requireRepeat(ImmAuthoring_LayerGetProperties(doc, target, &reflectionRead) == IMM_AUTHORING_OK &&
+        reflectionRead.transformFlip == 0, "explicit None publishes an unreflected transform");
+    std::puts("[IMM_REFLECTION_CABI_TEST] pass=1 allFlips=1 queuedState=1 invalidAndTruncated=1 explicitClear=1");
+    ImmAuthoringKey offsetKey{};
+    offsetKey.structSize = sizeof(offsetKey); offsetKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    offsetKey.property = IMM_AUTHORING_ANIM_PROPERTY_OFFSET; offsetKey.uintValue = UINT32_MAX;
+    requireRepeat(ImmAuthoring_KeySet(doc, target, &offsetKey) == IMM_AUTHORING_OK,
+        "direct key layout submits full-width Offset ticks");
+    presentHierarchyEdit();
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, IMM_AUTHORING_ANIM_PROPERTY_OFFSET, 0.0) == IMM_AUTHORING_OK,
+        "remove published Offset key");
+    presentHierarchyEdit();
     requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
     presentHierarchyEdit();
     requireRepeat(std::wstring(savedSpawn.mName) == L"Spawn before" && player.GetSpawnAreaCount(doc) == 0,

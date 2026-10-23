@@ -998,6 +998,9 @@ namespace ImmPlayer
 
     bool Player::GetLayerDiagnostics(int docId, int layerId, LayerDiagnostics & outDiag) const
     {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId))
+            return false;
         Document *doc = (Document *)mDocuments.GetAddress(docId);
         if (!doc)
             return false;
