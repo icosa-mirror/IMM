@@ -35,8 +35,17 @@ int wmain(int argc, wchar_t ** argv)
     config.tmpFolderName = ".";
     requireRepeat(gImmUnityPlugin.mBridge.Init(config), "initialize production bridge");
     auto & player = iPlayer();
+    const auto requireEmptyTime = [&](int id) {
+        int64_t elapsed = 99, stopped = 99;
+        ::GetTime(id, &elapsed, &stopped);
+        requireRepeat(elapsed == 0 && stopped == 0 && ::GetPlayTime(id) == 0,
+            "unready/invalid playback time is defined and does not dereference root");
+    };
+    requireEmptyTime(-1);
+    requireEmptyTime(INT32_MAX);
     const int doc = player.Load(argv[1]);
     requireRepeat(doc >= 0, "load fixture");
+    requireEmptyTime(doc); // No GlobalWork has initialized the root/player manager yet.
     const auto tick = [&]() {
         gImmUnityPlugin.mBridge.GlobalWork(true);
         player.MaintainGPU();
@@ -69,6 +78,30 @@ int wmain(int argc, wchar_t ** argv)
         if (std::wcscmp(info.name, L"BlueSibling") == 0) sibling = info.id;
     }
     requireRepeat(target >= 0 && sibling >= 0, "paint fixture layers");
+    int32_t isTimeline = -1;
+    double duration = -1, offset = -1;
+    uint32_t frameRate = 0, frameCount = 0, canonicalRepeat = 0;
+    requireRepeat(ImmAuthoring_LayerGetTimeline(doc, target, &isTimeline, &duration, &offset,
+        &frameRate, &frameCount, &canonicalRepeat) == IMM_AUTHORING_OK &&
+        frameRate == 30 && frameCount == 2 && canonicalRepeat == 1 &&
+        std::isfinite(duration) && std::isfinite(offset), "paint timeline through C export");
+    uint32_t visibilityCount = 0;
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, target, IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY,
+        &visibilityCount) == IMM_AUTHORING_OK && visibilityCount == 1, "canonical visibility key count");
+    ImmAuthoringKey readKey{};
+    readKey.structSize = sizeof(readKey); readKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY, 0, &readKey) ==
+        IMM_AUTHORING_OK && readKey.boolValue == 1 && readKey.timeSeconds == 0, "read canonical key");
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY, visibilityCount, &readKey) ==
+        IMM_AUTHORING_NOT_FOUND, "key query rejects out-of-range index");
+    readKey.structSize = sizeof(readKey) - 1;
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY, 0, &readKey) ==
+        IMM_AUTHORING_INVALID_ARGUMENT, "key query rejects undersized output");
+    readKey.structSize = sizeof(readKey);
+    readKey.structVersion = 99;
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY, 0, &readKey) ==
+        IMM_AUTHORING_UNSUPPORTED, "key query rejects unknown output version");
+    readKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
     struct GuardedManagedDiagnostics
     {
         SerializedLayerDiagnostics value{};
@@ -164,7 +197,11 @@ int wmain(int argc, wchar_t ** argv)
     });
     const auto presentHierarchyEdit = [&]() {
         uint64_t revision = 0;
-        requireRepeat(ImmAuthoring_Commit(doc, &revision) == IMM_AUTHORING_OK && revision != 0,
+        const int32_t result = ImmAuthoring_Commit(doc, &revision);
+        if (result != IMM_AUTHORING_OK || revision == 0)
+            std::fprintf(stderr, "[IMM_REPEAT_CABI_TEST] commit result=%d revision=%llu\n",
+                result, static_cast<unsigned long long>(revision));
+        requireRepeat(result == IMM_AUTHORING_OK && revision != 0,
             "commit concurrent hierarchy edit");
         requireRepeat(wait([&]() {
             ImmAuthoringCommitStatus status{};
@@ -424,6 +461,9 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(ImmAuthoring_KeySet(doc, target, &offsetKey) == IMM_AUTHORING_OK,
         "direct key layout submits full-width Offset ticks");
     presentHierarchyEdit();
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, IMM_AUTHORING_ANIM_PROPERTY_OFFSET, 0, &readKey) ==
+        IMM_AUTHORING_OK && readKey.uintValue == UINT32_MAX && readKey.timeSeconds == 0,
+        "key query preserves all unsigned Offset bits");
     requireRepeat(ImmAuthoring_KeyRemove(doc, target, IMM_AUTHORING_ANIM_PROPERTY_OFFSET, 0.0) == IMM_AUTHORING_OK,
         "remove published Offset key");
     presentHierarchyEdit();
@@ -446,6 +486,18 @@ int wmain(int argc, wchar_t ** argv)
         requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.transform.mTranslation.x == 17.0 &&
             static_cast<int>(heldTransform.transform.mFlip) == flip,
             "presented transform key changes the held reflected pose");
+        requireRepeat(ImmAuthoring_KeyGet(doc, target, IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM, 0, &readKey) ==
+            IMM_AUTHORING_OK && readKey.tx == 17.0f && readKey.transformFlip == flip,
+            "key query preserves reflected transform fields");
+        ImmAuthoringLayerPivot world{};
+        world.structSize = sizeof(world); world.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+        ImmCore::trans3d expectedWorld;
+        requireRepeat(player.GetLayerWorldTransform(doc, target, expectedWorld) == IMM_AUTHORING_OK &&
+            ImmAuthoring_LayerGetWorldTransform(doc, target, &world) == IMM_AUTHORING_OK &&
+            std::fabs(world.tx - expectedWorld.mTranslation.x) < 0.00001 &&
+            std::fabs(world.ty - expectedWorld.mTranslation.y) < 0.00001 &&
+            std::fabs(world.tz - expectedWorld.mTranslation.z) < 0.00001 &&
+            world.flip == static_cast<int32_t>(expectedWorld.mFlip), "evaluated accumulated transform export");
     }
     requireRepeat(ImmAuthoring_KeyRemove(doc, target, IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM, 0.0) == IMM_AUTHORING_OK,
         "remove held transform key");
@@ -489,6 +541,52 @@ int wmain(int argc, wchar_t ** argv)
         heldTransform.isVisible == heldTransform.canonicalVisible &&
         player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.isWorldVisible == 1,
         "group key removal restores canonical held subtree visibility");
+    ImmAuthoringKey movedKey{};
+    movedKey.structSize = sizeof(movedKey); movedKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    movedKey.property = IMM_AUTHORING_ANIM_PROPERTY_OPACITY;
+    movedKey.timeSeconds = 0.125; movedKey.floatValue = 0.4f;
+    requireRepeat(ImmAuthoring_KeySet(doc, target, &movedKey) == IMM_AUTHORING_OK, "seed movable key");
+    presentHierarchyEdit();
+    movedKey.timeSeconds = 0.25;
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, movedKey.property, 0.125) == IMM_AUTHORING_OK &&
+        ImmAuthoring_KeySet(doc, target, &movedKey) == IMM_AUTHORING_OK,
+        "queue ordered same-track remove/set");
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, movedKey.property, 0, &readKey) == IMM_AUTHORING_OK &&
+        readKey.timeSeconds == 0.125, "queued retime preserves complete old track");
+    presentHierarchyEdit();
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, target, movedKey.property, &visibilityCount) == IMM_AUTHORING_OK &&
+        visibilityCount == 1 && ImmAuthoring_KeyGet(doc, target, movedKey.property, 0, &readKey) == IMM_AUTHORING_OK &&
+        readKey.timeSeconds == 0.25 && readKey.floatValue == 0.4f, "retime publishes complete replacement once");
+    const auto requireRejectedTrackBatch = [&](int32_t expected) {
+        uint64_t revision = 0;
+        requireRepeat(ImmAuthoring_Commit(doc, &revision) == IMM_AUTHORING_OK && revision != 0, "seal rejected track batch");
+        ImmAuthoringCommitStatus status{};
+        requireRepeat(wait([&]() {
+            status.structSize = sizeof(status); status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(doc, revision, &status) == IMM_AUTHORING_OK, "track batch status");
+            return status.state == IMM_AUTHORING_COMMIT_REJECTED || status.state == IMM_AUTHORING_COMMIT_PRESENTED;
+        }), "track batch terminal status");
+        requireRepeat(status.state == IMM_AUTHORING_COMMIT_REJECTED && status.result == expected &&
+            ImmAuthoring_KeyGet(doc, target, movedKey.property, 0, &readKey) == IMM_AUTHORING_OK &&
+            readKey.timeSeconds == 0.25, "rejected batch preserves entire original track");
+    };
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, movedKey.property, 0.25) == IMM_AUTHORING_OK &&
+        ImmAuthoring_KeyRemove(doc, target, movedKey.property, 0.75) == IMM_AUTHORING_OK,
+        "queue invalid second removal after valid removal");
+    requireRejectedTrackBatch(IMM_AUTHORING_NOT_FOUND);
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, movedKey.property, 0.25) == IMM_AUTHORING_OK &&
+        ImmAuthoring_KeySet(doc, sibling, &movedKey) == IMM_AUTHORING_OK, "queue mixed layer track batch");
+    requireRejectedTrackBatch(IMM_AUTHORING_UNSUPPORTED);
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, sibling, movedKey.property, &visibilityCount) == IMM_AUTHORING_OK &&
+        visibilityCount == 0, "mixed layer batch preserves sibling track");
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, movedKey.property, 0.25) == IMM_AUTHORING_OK &&
+        ImmAuthoring_KeySet(doc, target, &offsetKey) == IMM_AUTHORING_OK, "queue mixed channel track batch");
+    requireRejectedTrackBatch(IMM_AUTHORING_UNSUPPORTED);
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, target, IMM_AUTHORING_ANIM_PROPERTY_OFFSET, &visibilityCount) ==
+        IMM_AUTHORING_OK && visibilityCount == 0, "mixed channel batch preserves Offset track");
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, movedKey.property, 0.25) == IMM_AUTHORING_OK, "remove moved key");
+    presentHierarchyEdit();
+    std::puts("[IMM_TIMELINE_QUERY_RETIME_TEST] pass=1 safeUnreadyTime=1 keyQueries=1 exactOffset=1 reflectedWorldTransform=1 atomicMove=1 invalidRemovalRollback=1 mixedTracksRollback=1");
     requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
     presentHierarchyEdit();
     requireRepeat(std::wstring(savedSpawn.mName) == L"Spawn before" && player.GetSpawnAreaCount(doc) == 0,

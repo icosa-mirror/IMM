@@ -1920,7 +1920,7 @@ namespace ImmPlayer
             return -4;
         if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
             (!mOpenFrameMappings.empty() || !mOpenFrameSequences.empty()) || !mOpenDrawingDeletions.empty() ||
-            !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
+            !mOpenLayerPropertyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
             !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
             !mOpenLayerReparents.empty())
@@ -1983,7 +1983,7 @@ namespace ImmPlayer
             return -4;
         if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
             (!mOpenFrameMappings.empty() || !mOpenFrameSequences.empty()) || !mOpenDrawingDeletions.empty() ||
-            !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
+            !mOpenLayerPropertyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
             !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
             !mOpenLayerReparents.empty())
@@ -2930,7 +2930,7 @@ namespace ImmPlayer
             return;
         }
 
-        if (batch.mAnimationKeyEdits.size() == 1 && batch.mLayerPropertyEdits.empty() &&
+        if (!batch.mAnimationKeyEdits.empty() && batch.mLayerPropertyEdits.empty() &&
             batch.mInitialSpawnAreaEdits.empty() &&
             batch.mSpawnAreaEdits.empty() &&
             batch.mLayerCreations.empty() &&
@@ -2940,6 +2940,16 @@ namespace ImmPlayer
             batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
         {
             const AnimationKeyEdit & edit = batch.mAnimationKeyEdits[0];
+            // A key move is an ordered remove/set on one detached track.
+            // Mixed tracks cannot share this single-vector publication boundary.
+            for (const AnimationKeyEdit & candidate : batch.mAnimationKeyEdits)
+            {
+                if (candidate.mLayerId != edit.mLayerId || candidate.mProperty != edit.mProperty)
+                {
+                    iRejectCommit(batch.mRevision, -3, 0, candidate.mLayerId);
+                    return;
+                }
+            }
             Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), edit.mLayerId);
             std::vector<Layer::AnimKey> keys;
             if (layer == nullptr)
@@ -2975,19 +2985,27 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId);
                 return;
             }
-            if (edit.mRemove)
+            for (const AnimationKeyEdit & candidate : batch.mAnimationKeyEdits)
             {
-                if (!Layer::RemoveAnimKey(keys, edit.mTime))
+                if (paintPlaybackKey && candidate.mInterpolation != Layer::InterpolationType::None)
                 {
-                    iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
+                    iRejectCommit(batch.mRevision, -2, 0, candidate.mLayerId);
                     return;
                 }
-            }
-            else if (!Layer::SetAnimKey(
-                keys, edit.mTime, edit.mValue, edit.mInterpolation))
-            {
-                iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId);
-                return;
+                if (candidate.mRemove)
+                {
+                    if (!Layer::RemoveAnimKey(keys, candidate.mTime))
+                    {
+                        iRejectCommit(batch.mRevision, -1, 0, candidate.mLayerId);
+                        return;
+                    }
+                }
+                else if (!Layer::SetAnimKey(
+                    keys, candidate.mTime, candidate.mValue, candidate.mInterpolation))
+                {
+                    iRejectCommit(batch.mRevision, -5, 0, candidate.mLayerId);
+                    return;
+                }
             }
             if (status != nullptr)
             {
@@ -3361,7 +3379,7 @@ namespace ImmPlayer
             mOpenAnimationKeyEdits.empty() && mOpenInitialSpawnAreaEdits.empty() &&
             mOpenSpawnAreaEdits.empty() && mOpenLayerCreations.empty() &&
             mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
-        const bool hasAnimationKeyEdit = mOpenAnimationKeyEdits.size() == 1 &&
+        const bool hasAnimationKeyEdit = !mOpenAnimationKeyEdits.empty() &&
             mOpenLayerPropertyEdits.empty() && mOpenDrawingDeletions.empty() &&
             mOpenFrameMappings.empty() && mOpenGeometryEdits.empty() &&
             mOpenDrawingCreations.empty() && mOpenInitialSpawnAreaEdits.empty() &&

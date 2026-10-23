@@ -3886,11 +3886,21 @@ the historical sizes/check counts below describe this earlier source only.
    key enumeration exports. They reuse the existing 48-byte transform and 80-byte
    key layouts; no API versions were added. Transform queries also support fixing
    Frame selected, which previously treated local bounds as world bounds.
-4. The native Windows Release x64 plugin target compiled successfully after these
-   changes, with the matching DLL copied while the Editor was closed. Evidence:
-   artifacts/live-timeline-native-query-build.log. Getter runtime/ABI checks,
-   the new UI, atomic same-channel retiming and full hosted acceptance remain
-   pending. Do not describe the timeline as fully functional or visually accepted.
+4. Native Windows Release x64 builds pass. Fresh D3D12 Editor load/attachment
+   succeeded with the guarded time path and query exports; the initial full-width
+   timeline was visually inspected. Layout and direct interaction work continues.
+5. Atomic same-layer/same-channel key batches now prepare an owned key vector and
+   publish it once. This supports remove-old/set-new retiming without a partial
+   move. Mixed layer/channel batches and invalid later removals reject atomically.
+   The first focused run exposed a missed exactly-one-key seal classifier; it was
+   corrected rather than weakening the assertion. The existing loaded WARP C ABI
+   harness now passes safe unready time reads, key queries/layout errors, exact
+   integer offset values, reflected transforms, atomic move and rollback cases,
+   alongside existing metadata, rename, reflection and repeat checks. Evidence:
+   artifacts/live-timeline-query-retime-cabi-fixed/report.json and run.log.
+6. UI interaction, drawing timing semantics/nested context, final layout and full
+   hosted acceptance remain pending. Do not describe the timeline as fully
+   functional or the native C ABI test as Unity mouse/drag validation.
 
 ## 7. Consolidated documents
 
