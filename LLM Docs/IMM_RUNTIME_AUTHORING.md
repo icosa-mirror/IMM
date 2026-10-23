@@ -522,6 +522,10 @@ size and preserves the buffer instead of truncating. Names remain unchanged unti
 publication and after discard or rejection. Windows native-export, ownership and
 six rendered rejection/unload/recovery cases pass locally (roadmap 6.94); managed
 live rename UI and full hosted/backend acceptance are not established.
+The sample-only Live Edit Lab now exposes native rename and other edits through
+thin bindings, without completing the managed SDK cutover. Two real Fishgym rename
+attempts returned Busy; their cause remains unresolved and real-file rename
+acceptance is not established (roadmap 6.107).
 
 `LayerSetPivot` / `LayerGetPivot` use a separate 48-byte versioned structure:
 translation, unit quaternion, positive uniform scale and None/X/Y/Z reflection.

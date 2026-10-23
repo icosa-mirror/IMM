@@ -157,6 +157,9 @@ and initial conversion milestones below remain part of the original scope.
 
 M2 implementation exit work (source audit, 2026-10-23):
 
+Investigate the real-file rename Busy result recorded in 6.107 before claiming
+real-world rename acceptance. Its cause has not been established.
+
 1. Finish held-time key/cache correctness, including group/timeline visibility;
    static-paint visibility and opacity corrections are recorded in 6.104.
 2. Broaden native atomic batches to represent managed transactions spanning keys,
@@ -3716,7 +3719,7 @@ the historical sizes/check counts below describe this earlier source only.
    remains required by M2; no timeline/backend acceptance is claimed. This local
    source is included with the diagnostics correction/full-validation source in 6.108.
 
-### 6.107. Interactive native live-edit lab (in progress)
+### 6.107. Interactive native live-edit lab (local Windows milestone)
 
 1. User prioritised real-world interactive validation ahead of further batch
    expansion. Add a small IMGUI panel to the existing Unity sample, using sample-only
@@ -3732,9 +3735,23 @@ the historical sizes/check counts below describe this earlier source only.
    D3D11 is unsupported for this sample's URP RenderGraph path; use D3D12 on Windows.
    Screenshot: artifacts/live-panel-fishgym.png. No manual click acceptance is claimed.
 4. Real-scene diagnostics exposed the native/managed buffer mismatch in 6.108.
-   Playback is stopped pending its fix and fresh native DLL. Edit/rejection,
-   geometry/hierarchy and unload/reload interaction acceptance remain in progress.
-   Source IMM files remain unchanged; reload restores the original in-memory scene.
+   After its fix and a fresh DLL/Editor, diagnostics are coherent. The actual panel
+   callbacks on paused Fishgym publish eight revisions: opacity 0.35, transform-key
+   insertion, group creation, paint creation, visible magenta marker geometry,
+   reparent, transform-key removal and geometry-containing subtree deletion.
+   Reload restores nine layers, opacity 1 and no added transform key, with playback
+   running. This uses real files/rendering and the panel's paths, not a synthetic
+   managed graph; it is automated Editor callback exercise, not physical click QA.
+5. Rename returned Busy (-7) twice on the imported Fishgym paint. This is unresolved;
+   the code permits that result for incompatible queued work or active importer
+   ownership, and neither cause is proven by the available observations. Do not
+   dismiss it as expected background activity or claim real-file rename success.
+6. Evidence: artifacts/live-panel-real-file-report.json, live-panel-marker-visible.png,
+   live-panel-after-edits.json, live-panel-reloaded-status.json and
+   live-panel-reloaded-diagnostics.json. The sample opens a maximized Game view;
+   Windows has an explicit D3D12 restart menu. Manual interaction, additional real
+   scenes and broader backend acceptance remain open. No save/undo/general mixed
+   transaction support is implied. Source IMM files are not written by the lab.
 
 ### 6.108. Managed diagnostics buffer boundary correction (local Windows milestone)
 
@@ -3757,6 +3774,13 @@ the historical sizes/check counts below describe this earlier source only.
    Unity iOS retry was requested on 39984582643 before discovery; further old-source
    retries are superseded by the required new full validation of this correction.
    Existing independent proofs remain scoped to their original sources.
+5. Fix a5a1e9ef is pushed after an up-to-date pull. Full run 39995932133 targets
+   a5a1e9efcffe106b8d9e5b90796728d25e41457b. Its Windows native build and required
+   authoring/frame-table/key steps pass; full hosted acceptance is pending.
+   Receipt: artifacts/managed-diagnostics-full-runs.json. The old Unity iOS isolated
+   retry also failed to acquire a runner; its one permitted retry is exhausted and
+   that infrastructure failure remains unresolved (converter-checkpoint-ci-agent-
+   399845-retry-outcome.json). No further old-source retry is scheduled.
 
 ## 7. Consolidated documents
 
