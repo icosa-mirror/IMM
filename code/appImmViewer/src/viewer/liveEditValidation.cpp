@@ -767,6 +767,8 @@ namespace ExePlayer
     void LiveEditValidation::TickPaintPlaybackKeys(Viewer & viewer, ImmCore::piLog * log,
         uint64_t frame, uint64_t requestedFrame)
     {
+        const bool canonicalRepeat = std::getenv("IMM_VIEWER_LIVE_PAINT_CANONICAL_REPEAT") != nullptr;
+        static constexpr uint32_t repeatCounts[] = { 0, 1, 3, UINT32_MAX, 1, 0 };
         if (mMeasured || frame < requestedFrame) return;
         const auto fail = [&](const wchar_t * reason) {
             log->Printf(LT_ERROR, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=0 stage=%d step=%d reason=%ls",
@@ -857,6 +859,12 @@ namespace ExePlayer
             const auto * target = find(mStandaloneTarget);
             if (!target || target->paintNumFrames != 2 || target->paintNumDrawings != 2)
             { fail(L"fixture target"); return; }
+            if (canonicalRepeat)
+            {
+                uint32_t count = 99;
+                if (player->GetPaintMaxRepeatCount(doc, target->id, &count) != 0 || count != 1)
+                { fail(L"initial canonical repeat"); return; }
+            }
             const auto perf = player->GetRenderPerformanceSnapshot();
             mFrameSequenceTrianglesB = perf.numTriangles;
             mFrameSequenceDrawCalls = perf.numPaintDrawCalls;
@@ -927,6 +935,8 @@ namespace ExePlayer
             {
                 mStandaloneSuccessful = true; mMeasured = true;
                 log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=1 edits=6 heldWithoutSeek=1 restoredFiniteClamp=1 backwardSeek=1 playingBoth=1 stableGeometry=1 siblingStable=1 reloaded=%d", mPaintPlaybackReloaded ? 1 : 0);
+                if (canonicalRepeat)
+                    log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_REPEAT] pass=1 edits=6 canonicalGetter=1 heldWithoutSeek=1 stableGeometry=1 siblingStable=1");
             }
             return;
         }
@@ -936,7 +946,9 @@ namespace ExePlayer
             const auto property = offset ? ImmImporter::Layer::AnimProperty::Offset : ImmImporter::Layer::AnimProperty::Loop;
             const auto keyTime = ImmCore::piTick::FromFrames(1, 30);
             int32_t queued = -99;
-            if (mFrameSequenceIndex == 1 || mFrameSequenceIndex == 5)
+            if (canonicalRepeat)
+                queued = player->QueuePaintMaxRepeatCount(doc, target->id, repeatCounts[mFrameSequenceIndex]);
+            else if (mFrameSequenceIndex == 1 || mFrameSequenceIndex == 5)
                 queued = player->QueueAnimationKeyRemoval(doc, target->id, property, keyTime);
             else
             {
@@ -966,6 +978,9 @@ namespace ExePlayer
         if (!mPaintPlaybackReloaded && unload != nullptr && std::string(unload) == "prepared" &&
             status.mState == ImmPlayer::Document::AuthoringCommitState::Prepared)
         {
+            uint32_t count = 99;
+            if (canonicalRepeat && (player->GetPaintMaxRepeatCount(doc, target->id, &count) != 0 || count != 1))
+            { fail(L"prepared repeat mutation"); return; }
             if (!iSubtreeBoxesMatch(current->bbox, target->boxes[1])) { fail(L"prepared mutation"); return; }
             player->Unload(doc); mPaintPlaybackKeysStage = 6; return;
         }
@@ -978,6 +993,9 @@ namespace ExePlayer
         const auto perf = player->GetRenderPerformanceSnapshot();
         if (rejected)
         {
+            uint32_t count = 99;
+            if (canonicalRepeat && (player->GetPaintMaxRepeatCount(doc, target->id, &count) != 0 || count != 1))
+            { fail(L"rejected repeat mutation"); return; }
             mStandaloneSuccessful = mStandaloneExpectRejection && status.mResult == -10 &&
                 revisions.mPresented == mStandaloneOldRevision && current->hasBBox &&
                 iSubtreeBoxesMatch(current->bbox, target->boxes[1]) &&
@@ -987,7 +1005,14 @@ namespace ExePlayer
                 mStandaloneSuccessful ? 1 : 0, status.mResult);
             return;
         }
-        const int selected = mFrameSequenceIndex == 1 || mFrameSequenceIndex == 3 ? 1 : 0;
+        const int selected = mFrameSequenceIndex == 1 || mFrameSequenceIndex == (canonicalRepeat ? 4 : 3) ? 1 : 0;
+        if (canonicalRepeat)
+        {
+            uint32_t count = 99;
+            if (player->GetPaintMaxRepeatCount(doc, target->id, &count) != 0 || count != repeatCounts[mFrameSequenceIndex])
+            { fail(L"presented canonical repeat"); return; }
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_REPEAT_SAMPLE] step=%d canonical=%u", mFrameSequenceIndex, count);
+        }
         if (mStandaloneExpectRejection || revisions.mPresented != mRevision || !current->hasBBox ||
             !iSubtreeBoxesMatch(current->bbox, target->boxes[selected]) || perf.numPaintDrawCalls != mFrameSequenceDrawCalls ||
             (selected == 1 && perf.numTriangles != mFrameSequenceTrianglesB))

@@ -53,6 +53,7 @@ def main():
     parser.add_argument('--viewer', type=Path, required=True)
     parser.add_argument('--plugin', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--canonical-repeat', action='store_true', help='Validate canonical repeat edits instead of Loop/Offset keys.')
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows D3D11 viewer required')
@@ -67,6 +68,7 @@ def main():
               'pluginSha256': hashlib.sha256(plugin.read_bytes()).hexdigest(),
               'fixtureSha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'cases': {}}
     report_path = output / 'report.json'
+    report['operation'] = 'canonical static-paint repeat' if args.canonical_repeat else 'Loop/Offset keys'
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     template = json.loads((viewer.parent / 'settings-baseline-directx-sample1.json').read_text(encoding='utf-8'))
     for case in ('normal', 'cpu-failure', 'gpu-flag', 'present-failure', 'queued-unload', 'prepared-unload'):
@@ -96,6 +98,8 @@ def main():
             'IMM_VIEWER_VALIDATE_MIN_DRAWCALLS': '1', 'IMM_VIEWER_VALIDATE_MIN_TRIANGLES': '1',
             'IMM_VIEWER_VALIDATE_DISABLE_AUDIO': '1', 'IMM_VIEWER_VALIDATE_LOCK_CAMERA': '1',
             'IMM_VIEWER_VALIDATE_CAPTURE_PATH': str(runtime / 'capture.ppm')})
+        if args.canonical_repeat:
+            env['IMM_VIEWER_LIVE_PAINT_CANONICAL_REPEAT'] = '1'
         for suffix in ('PICTURE', 'PICTURE360', 'PICTURE360_EQUIRECT', 'PICTURE360_CUBEMAP'):
             env[f'IMM_VIEWER_VALIDATE_MIN_{suffix}_DRAWCALLS'] = '0'
         if case in ('cpu-failure', 'gpu-flag', 'present-failure'):
@@ -128,8 +132,13 @@ def main():
         if rejected:
             smoke.require('rejected=1 result=-10 unchanged=1' in text and not samples, f'{case}: rollback')
         else:
+            expected = [0, 1, 0, 0, 1, 0, 0] if args.canonical_repeat else [0, 1, 0, 1, 0, 0, 0]
             smoke.require([int(row[0]) for row in samples] == list(range(7)) and
-                [int(row[2]) for row in samples] == [0, 1, 0, 1, 0, 0, 0], f'{case}: selected transitions')
+                [int(row[2]) for row in samples] == expected, f'{case}: selected transitions')
+            if args.canonical_repeat:
+                smoke.require('[IMM_LIVE_PAINT_REPEAT] pass=1' in text and
+                    [int(value) for value in re.findall(r'\[IMM_LIVE_PAINT_REPEAT_SAMPLE\] step=\d+ canonical=(\d+)', text)] ==
+                    [0, 1, 3, 4294967295, 1, 0], f'{case}: canonical repeat getter')
             smoke.require('playingBoth=1 stableGeometry=1 siblingStable=1' in text, f'{case}: playing/sibling proof')
         if case.endswith('-unload'):
             smoke.require('sessionInvalid=1 beforeReload=1' in text and 'reloaded=1' in text, f'{case}: unload/recovery')

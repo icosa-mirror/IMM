@@ -1055,6 +1055,9 @@ namespace ImmPlayer
                 Layer * layer = mPendingPresentation.mLayer;
                 const uint64_t layerId = mPendingPresentation.mObject;
                 if (mPendingPresentation.mSetPaintRepeat &&
+                    std::getenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS") != nullptr)
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                if (mPendingPresentation.mSetPaintRepeat &&
                     std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
                 {
                     iRejectCommit(revision, -10, 0, layerId);

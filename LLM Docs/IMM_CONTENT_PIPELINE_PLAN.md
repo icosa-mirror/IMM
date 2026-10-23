@@ -42,6 +42,11 @@ Desktop shared-host and form work passes local component/runtime checks
 (6.80-6.81), outside the validation source. Live mouse/keyboard acceptance remains
 open because the Computer Use Windows native pipe is unavailable.
 
+Later local native repeat milestones (6.84, 6.86) add canonical static-paint
+setter/getter publication, CPU guards and six rendered Windows DirectX cases.
+They are outside full CI source e19db96e. Positive C-export delivery, managed
+mapping, broader backend and full M2 acceptance remain open.
+
 ## 1. Objective and document ownership
 
 Provide reusable content reading, representation and writing so applications can
@@ -3142,6 +3147,35 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    pass; latest snapshot has 18 successful jobs, three active and one cancelled
    Firefox infrastructure job. Full acceptance and the single isolated retry
    remain pending. C5 and M2 retain all remaining acceptance requirements above.
+
+### 6.86. Canonical repeat rendered acceptance (local Windows milestone)
+
+1. Extend the existing viewer playback-validation harness with an explicit
+   canonical-repeat mode, retaining the Loop/Offset mode and its existing gates.
+   Exercise six held-time count edits, canonical getter values, advancing playback,
+   stable drawing/renderer identities and sibling state. Reuse the failure/unload
+   matrix for CPU rejection, irrelevant GPU-failure flag, presentation rejection,
+   queued unload and held-prepared unload followed by recovery.
+2. Wire both modes into the required Windows paint-playback step and always-upload
+   the additional repeat report, logs, settings and rendered captures. The native
+   presentation hold switch now also covers repeat metadata for the prepared
+   unload case. Windows Unity/viewer/Godot rebuild passes. Both modes pass all six
+   real rendered cases against the rebuilt native code, including unload/recovery,
+   rejection preserving canonical state, count getter values 0/1/3/UINT32_MAX,
+   held-clock A/B transitions, backward seek and advancing playback. The irrelevant
+   GPU-failure flag does not reject this metadata-only path.
+3. Native Player getter/setter delivery on a loaded document is now exercised,
+   with unchanged canonical state before publication and after rejection. The
+   C-export positive delivery requirement remains separate. Windows DirectX
+   evidence does not establish other backends or complete upload accounting.
+   Workflow matrix and actionlint of the changed build workflow pass locally.
+4. Evidence: artifacts/paint-repeat-render-build.log,
+   paint-repeat-rendered/report.json, paint-repeat-rendered-key-regressions/report.json,
+   and their six runtime directories with actual captures, logs and hashes;
+   paint-repeat-render-workflow-matrix.log and paint-repeat-render-actionlint.log.
+   Earlier cross-host evidence retains its original b0055332 native payload and
+   hashes; the rendered tests retain separate runtime copies of this later build.
+   Full hosted acceptance of these later native milestones remains pending.
 
 ## 7. Consolidated documents
 

@@ -330,7 +330,7 @@ Current supported batch shapes are:
 | Drawing deletion | One drawing, unreferenced in the resulting frame table |
 | Frame remap + drawing deletion | Remap first; no other remaining frame may reference the deleted drawing |
 | Canonical layer properties | One layer; visibility/opacity/transform masks may be combined |
-| Canonical paint repeat | One static-paint layer; dedicated setter/getter; zero is indefinite. Local CPU publication/rejection checks pass; rendered repeat-specific and hosted acceptance pending (roadmap 6.84) |
+| Canonical paint repeat | One static-paint layer; dedicated setter/getter; zero is indefinite. Local CPU checks and six rendered Windows DirectX cases pass; hosted and broader backend acceptance pending (roadmap 6.84, 6.86) |
 | Animation key insertion/replacement/removal | One key edit |
 | Default spawn selection | One existing spawn layer |
 | Spawn state update | One existing spawn layer |
@@ -361,8 +361,10 @@ playback intent/root actions. Canonical static-paint repeat editing now has a
 dedicated native setter/getter and local CPU publication/rejection checks (roadmap
 6.84). The unchanged property ABI stays 64 bytes; publication reselects at held
 time and active Loop keys retain precedence over the edited canonical count.
-Loaded C ABI delivery, new repeat-specific rendering and managed transaction
-mapping remain open. Full hosted regression run 39935868460 accepts
+Six repeat-specific rendered Windows DirectX publication, rejection and unload/
+recovery cases now pass (roadmap 6.86), including native Player getter/setter
+delivery on a loaded document. Positive C ABI delivery, broader backend and
+managed transaction mapping remain open. Full hosted regression run 39935868460 accepts
 source 97142c9a, including this live-key milestone (roadmap 6.77); operation-specific
 and broader platform acceptance remain scoped to 6.70. Roadmap 6.67 separates stored
 paint repeat metadata from Loop-evaluated frame selection for both implementations,
