@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -33,7 +34,20 @@ namespace ImmPlayer
         private string filter = "", evaluated = "";
         private float nextDiagnostics;
         private GUIStyle wrapped;
+        private GUIStyle treeButton;
+        private sealed class LayerNode
+        {
+            internal ImmDocument.LayerInfo Info;
+            internal LayerNode Parent;
+            internal readonly List<LayerNode> Children = new List<LayerNode>();
+        }
+        private readonly List<LayerNode> treeRoots = new List<LayerNode>();
+        private readonly Dictionary<int, LayerNode> treeNodes = new Dictionary<int, LayerNode>();
+        private readonly HashSet<int> collapsedNodes = new HashSet<int>();
+        private readonly HashSet<int> filteredNodes = new HashSet<int>();
         private int keyChannel;
+        private int selectedViewpoint = -1;
+        private int[] viewpoints = Array.Empty<int>();
         private Vector2 scroll, layerScroll;
         private Rect window;
         private Coroutine load;
@@ -76,6 +90,7 @@ namespace ImmPlayer
             {
                 nextDiagnostics = Time.unscaledTime + 0.2f;
                 Run(ReadDiagnostics);
+                ReadViewpoints();
             }
             if (pending != 0 && document != null)
             {
@@ -153,6 +168,7 @@ namespace ImmPlayer
             if (GUILayout.Button("Unload")) Unload();
             GUI.enabled = document != null && !loading;
             if (GUILayout.Button("Frame scene")) FrameScene();
+            if (GUILayout.Button("Frame selected")) FrameSelected();
             GUILayout.EndHorizontal();
             GUILayout.Label(status, wrapped, GUILayout.Width(window.width - 50), GUILayout.MinHeight(38));
             if (pending != 0) GUILayout.Label($"Revision {pending}: {StateName(commit.state)}");
@@ -165,19 +181,27 @@ namespace ImmPlayer
             seek = GUILayout.TextField(seek, GUILayout.Width(55));
             if (GUILayout.Button("Seek s")) Run(() => { document.SetTime(checked((long)(Number(seek) * 12600)), 0); });
             GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            int viewIndex = Array.IndexOf(viewpoints, selectedViewpoint);
+            GUI.enabled = document != null && viewpoints.Length > 0;
+            if (GUILayout.Button("<", GUILayout.Width(28))) selectedViewpoint = viewpoints[(viewIndex - 1 + viewpoints.Length) % viewpoints.Length];
+            GUILayout.Label($"Viewpoint {Mathf.Max(0, Array.IndexOf(viewpoints, selectedViewpoint) + 1)} / {viewpoints.Length}");
+            if (GUILayout.Button(">", GUILayout.Width(28))) selectedViewpoint = viewpoints[(viewIndex + 1) % viewpoints.Length];
+            if (GUILayout.Button("Move to view")) MoveToViewpoint();
+            GUILayout.EndHorizontal();
             GUI.enabled = attached && pending == 0 && !loading;
             if (GUILayout.Button($"Refresh layers ({layers.Length})")) Run(Refresh);
             GUILayout.Label("Filter layer name/path or ID");
-            filter = GUILayout.TextField(filter, GUILayout.Width(window.width - 50));
-            layerScroll = GUILayout.BeginScrollView(layerScroll, GUILayout.Height(145));
-            for (int index = 0; index < layers.Length; ++index)
-            {
-                var layer = layers[index];
-                if (!string.IsNullOrEmpty(filter) && !layer.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
-                    layer.Id.ToString(CultureInfo.InvariantCulture) != filter) continue;
-                if (GUILayout.Toggle(selected == layer.Id, $"{layer.Id}  {layer.Type}  {layer.FullName}", "Button", GUILayout.Width(window.width - 56)) && selected != layer.Id)
-                { selected = layer.Id; Run(ReadSelected); }
-            }
+            string nextFilter = GUILayout.TextField(filter, GUILayout.Width(window.width - 50));
+            if (nextFilter != filter) { filter = nextFilter; FilterTree(); }
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Expand all")) collapsedNodes.Clear();
+            if (GUILayout.Button("Collapse all"))
+                foreach (var pair in treeNodes) if (pair.Value.Children.Count > 0) collapsedNodes.Add(pair.Key);
+            GUILayout.EndHorizontal();
+            if (treeButton == null) treeButton = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleLeft };
+            layerScroll = GUILayout.BeginScrollView(layerScroll, GUILayout.Height(Mathf.Clamp(Screen.height * 0.42f, 210, 460)));
+            foreach (var root in treeRoots) DrawLayerNode(root, 0);
             GUILayout.EndScrollView();
             GUI.enabled &= selected >= 0;
             GUILayout.Label($"Selected layer {selected}");
@@ -315,6 +339,8 @@ namespace ImmPlayer
         private void Refresh()
         {
             layers = document.GetLayersManaged();
+            BuildTree();
+            ReadViewpoints();
             bool found = false;
             foreach (var layer in layers) if (layer.Id == selected) found = true;
             if (!found) selected = layers.Length > 0 ? layers[0].Id : -1;
@@ -322,10 +348,81 @@ namespace ImmPlayer
             ReadSelected();
         }
 
+        private void BuildTree()
+        {
+            treeRoots.Clear(); treeNodes.Clear();
+            foreach (var layer in layers) treeNodes[layer.Id] = new LayerNode { Info = layer };
+            foreach (var layer in layers)
+            {
+                LayerNode node = treeNodes[layer.Id];
+                if (layer.ParentId != layer.Id && treeNodes.TryGetValue(layer.ParentId, out LayerNode parentNode))
+                { node.Parent = parentNode; parentNode.Children.Add(node); }
+                else treeRoots.Add(node);
+            }
+            FilterTree();
+        }
+
+        private void FilterTree()
+        {
+            filteredNodes.Clear();
+            if (string.IsNullOrEmpty(filter)) return;
+            foreach (var pair in treeNodes)
+            {
+                LayerNode node = pair.Value;
+                if (!node.Info.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
+                    node.Info.Id.ToString(CultureInfo.InvariantCulture) != filter) continue;
+                for (LayerNode ancestor = node; ancestor != null; ancestor = ancestor.Parent)
+                    filteredNodes.Add(ancestor.Info.Id);
+            }
+        }
+
+        private void DrawLayerNode(LayerNode node, int depth)
+        {
+            bool filtering = !string.IsNullOrEmpty(filter);
+            if (filtering && !filteredNodes.Contains(node.Info.Id)) return;
+            bool expanded = filtering || !collapsedNodes.Contains(node.Info.Id);
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(depth * 18);
+            if (node.Children.Count > 0)
+            {
+                if (GUILayout.Button(expanded ? "▼" : "▶", GUILayout.Width(22)))
+                { if (expanded) collapsedNodes.Add(node.Info.Id); else collapsedNodes.Remove(node.Info.Id); }
+            }
+            else GUILayout.Space(26);
+            string label = string.IsNullOrEmpty(node.Info.Name) ? "(unnamed)" : node.Info.Name;
+            var content = new GUIContent(label, node.Info.FullName);
+            if (GUILayout.Toggle(selected == node.Info.Id, content, treeButton,
+                GUILayout.Width(Mathf.Max(110, window.width - 170 - depth * 18))) && selected != node.Info.Id)
+            { selected = node.Info.Id; Run(ReadSelected); }
+            GUILayout.Label($"{node.Info.Type}  {node.Info.Id}", GUILayout.Width(88));
+            GUILayout.EndHorizontal();
+            if (expanded) foreach (var child in node.Children) DrawLayerNode(child, depth + 1);
+        }
+
         private void ReadRevisions()
         {
             revisions = new N.Revisions { size = 32, version = 1 };
             N.Check(N.ImmAuthoring_GetRevisions(Doc, ref revisions));
+        }
+
+        private void ReadViewpoints()
+        {
+            viewpoints = document.GetAvailableSpawnAreaIds();
+            if (Array.IndexOf(viewpoints, selectedViewpoint) < 0)
+            {
+                int active = document.GetActiveSpawnAreaId();
+                selectedViewpoint = Array.IndexOf(viewpoints, active) >= 0 ? active : viewpoints.Length > 0 ? viewpoints[0] : -1;
+            }
+        }
+
+        private void MoveToViewpoint()
+        {
+            if (view == null || document == null || !document.TryGetSpawnAreaWorldPose(selectedViewpoint, transform, out Pose pose))
+            { Log("No evaluated viewpoint is available at this time."); return; }
+            view.transform.SetPositionAndRotation(pose.position, pose.rotation);
+            view.nearClipPlane = 0.01f;
+            view.farClipPlane = 10000;
+            Log($"Moved to viewpoint {Array.IndexOf(viewpoints, selectedViewpoint) + 1}");
         }
 
         private void ReadSelected()
@@ -385,7 +482,12 @@ namespace ImmPlayer
                 if (document.IsSequenceReady())
                 {
                     int result = N.ImmAuthoring_Attach(Doc);
-                    if (result == 0) { attached = true; loading = false; Run(Refresh); FrameScene(); Log($"Attached live session: {Path.GetFileName(path)}"); yield break; }
+                    if (result == 0)
+                    {
+                        attached = true; loading = false; Run(Refresh);
+                        if (selectedViewpoint >= 0) MoveToViewpoint(); else FrameScene();
+                        Log($"Attached live session: {Path.GetFileName(path)}"); yield break;
+                    }
                     if (result != -7 && result != -4) { Log($"Attach: {N.Result(result)}"); break; }
                 }
                 if (Time.realtimeSinceStartup > deadline)
@@ -408,13 +510,27 @@ namespace ImmPlayer
                 document = null;
             }
             layers = Array.Empty<ImmDocument.LayerInfo>(); selected = -1; revisions = default;
+            treeRoots.Clear(); treeNodes.Clear(); collapsedNodes.Clear(); filteredNodes.Clear(); layerScroll = Vector2.zero;
+            viewpoints = Array.Empty<int>(); selectedViewpoint = -1;
             Log("Unloaded. Reload restores the original file; no edits were saved.");
         }
 
         private void FrameScene()
         {
             if (view == null || document == null) return;
-            Bounds bounds = document.GetBoundingBox();
+            FrameBounds(document.GetBoundingBox());
+        }
+
+        private void FrameSelected()
+        {
+            foreach (var layer in layers)
+                if (layer.Id == selected && layer.HasBounds) { FrameBounds(layer.Bounds); return; }
+            Log("Select a layer with visible bounds first.");
+        }
+
+        private void FrameBounds(Bounds bounds)
+        {
+            if (view == null) return;
             float radius = Mathf.Max(0.1f, bounds.extents.magnitude);
             view.transform.position = bounds.center - view.transform.forward * radius / Mathf.Sin(view.fieldOfView * Mathf.Deg2Rad * 0.5f) * 1.15f;
             view.nearClipPlane = Mathf.Max(0.01f, radius / 1000);

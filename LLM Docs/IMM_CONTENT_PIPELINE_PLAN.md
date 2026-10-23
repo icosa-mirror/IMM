@@ -3791,6 +3791,29 @@ the historical sizes/check counts below describe this earlier source only.
    that infrastructure failure remains unresolved (converter-checkpoint-ci-agent-
    399845-retry-outcome.json). No further old-source retry is scheduled.
 
+### 6.109. Snoopy hierarchy and camera controls (local Editor milestone)
+
+1. User requested a middle-ground real scene and chose Snoopy over the larger Alex
+   scene. Snoopy is loaded with 52 layers and three available viewpoints. The camera
+   was moved to an authored view; whole-scene bounds had placed it too far out.
+2. Replaced centred flat layer buttons with a left-aligned expandable tree based on
+   parent IDs, explicit 18-pixel indentation and separate type/ID columns. Enlarge
+   the tree pane, retain ancestors during filtering, and add expand/collapse controls.
+3. Added authored-view selection arrows plus a separate Move action, Frame selected,
+   and authored-view initial placement. Keep model/scene scale unchanged.
+4. Stopped Play, refreshed scripts and reopened Snoopy in the owned D3D12 Editor.
+   Verified the loaded assembly contains the tree and viewpoint methods, compilation
+   is idle, and the real document is attached with 52 layers, sequence ready and
+   playback Playing. Inspected the actual Game-view capture: left-aligned names,
+   hierarchy indentation, foldout arrows, type/ID column and viewpoint controls are
+   visible; the authored initial camera frames the scene closely. Evidence:
+   artifacts/live-panel-tree-ready.json, artifacts/live-panel-tree-status.json and
+   artifacts/live-panel-snoopy-tree.png. This is local visual inspection, not hosted
+   acceptance or a manual exercise of every control.
+5. User explicitly delegates restarts/reloads needed for requested UI changes.
+   Apply and inspect changes in the running UI without another refresh handoff;
+   preserve unsaved work and other application instances.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

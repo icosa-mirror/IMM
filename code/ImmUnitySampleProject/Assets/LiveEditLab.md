@@ -4,7 +4,9 @@
    **IMM > Live Edit Lab > Restart Editor with Direct3D12 (Windows)** switches it.
    Then choose **IMM > Live Edit Lab > Open sample and play**.
 2. In the Game view, browse to a real `.imm` file and choose **Load / Reload**.
-3. Filter/select a layer by ID/path. Use the property controls to edit it. Watch the scene
+3. Select a layer in the left-aligned tree. Children are indented; arrows expand
+   groups. Filtering keeps matching layers and their ancestors visible. Use the
+   property controls to edit it. Watch the scene
    and the revision status: **Presented** means published; **Rejected** reports the
    native error. A busy/loading document cannot accept another edit yet.
 4. Try the same operations while playing, paused and after seeking. Enter key
@@ -23,6 +25,9 @@
    stack yet.
 
 The Game view opens maximized; Shift+Space toggles its size.
+Viewpoint arrows select an authored view; **Move to view** moves the camera once.
+New documents initially use their available authored view. **Frame selected** fits
+one layer; **Frame scene** includes every bound, including large backgrounds.
 Right mouse + WASD flies the camera, Q/E moves down/up, and Shift moves faster.
 F9 hides or shows the panel. Stop Play mode to close the session. Choose **IMM >
 Live Edit Lab > Disable automatic panel** to keep the panel out of later Play sessions.
