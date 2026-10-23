@@ -87,6 +87,35 @@ def main() -> int:
         assert failed.returncode == 1
         assert "reported 1 failed test" in failed.stderr
 
+        for result_name, attributes in (
+            ("Skipped", 'label="Ignored"'),
+            ("Inconclusive", ''),
+            ("Passed", 'executed="false"'),
+        ):
+            ignored = temp / "ignored.xml"
+            ignored.write_text(f'''<test-run result="Passed" total="1" passed="0" failed="0">
+              <test-case name="First" fullname="{TEST_CLASS}.First" result="{result_name}" {attributes}/>
+            </test-run>''', encoding="utf-8")
+            rejected = run_verifier(ignored, f"{TEST_CLASS}.First")
+            assert rejected.returncode == 1, result_name
+            assert "Required Unity test did not pass" in rejected.stderr
+
+        prefix = run_verifier(passing, f"{TEST_CLASS}.Firs")
+        assert prefix.returncode == 1, "A similar method prefix must not satisfy an exact required name"
+
+        parameters = temp / "parameters.xml"
+        parameters.write_text(f'''<test-run result="Passed" total="2" passed="1" failed="0">
+          <test-case name="First(1)" fullname="{TEST_CLASS}.First(1)" result="Passed"/>
+          <test-case name="First(2)" fullname="{TEST_CLASS}.First(2)" result="Skipped"/>
+        </test-run>''', encoding="utf-8")
+        assert run_verifier(parameters, f"{TEST_CLASS}.First").returncode == 1
+
+        legacy = temp / "legacy.xml"
+        legacy.write_text(f'''<test-results failures="0" errors="0">
+          <test-case name="{TEST_CLASS}.First" result="Success" executed="True"/>
+        </test-results>''', encoding="utf-8")
+        assert run_verifier(legacy, f"{TEST_CLASS}.First").returncode == 0
+
         no_results = run_verifier(temp / "missing.xml", f"{TEST_CLASS}.First")
         assert no_results.returncode == 1
         assert "result XML is missing" in no_results.stderr

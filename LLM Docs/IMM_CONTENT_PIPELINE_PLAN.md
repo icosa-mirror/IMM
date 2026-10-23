@@ -26,9 +26,10 @@ Those library/CLI/package sources and the ANSI host-trace correction are now
 included in accepted full CI source 47a0240d. The shared application host
 (e7f5c100), desktop window (3ec46758) and Unity editor window (6.82) are later
 milestones: local checks and matched Editor/CLI conversion pass (6.85), and
-full run 39963637687 on cab50dfa now includes these and all later native repeat
-milestones. Its launch was observed queued; full acceptance is pending. Run 39954000025 was superseded for the
-native Editor test-platform correction (6.88-6.89).
+full run 39963637687 on cab50dfa included these and all later native repeat
+milestones, but is superseded for the reviewed native Editor licence lifecycle
+correction (6.91). A corrected replacement is pending; full acceptance remains
+unproved. Run 39954000025 was superseded for the test-platform correction (6.88-6.89).
 Live UI input, clean-machine and dependency licence documentation acceptance remain open. Earlier numbered
 checkpoints retain historical states; use this checkpoint and the latest entries
 for current acceptance. Source chapter/startup mapping, broader timing/navigation,
@@ -46,7 +47,8 @@ open because the Computer Use Windows native pipe is unavailable.
 
 Later local native repeat milestones (6.84, 6.86) add canonical static-paint
 setter/getter publication, CPU guards and six rendered Windows DirectX cases.
-They are included in pending full CI source cab50dfa. Linked production C-export delivery
+They were included in superseded full CI source cab50dfa and remain required in
+its corrected replacement. Linked production C-export delivery
 also passes locally in a loaded-document WARP host (6.87). Unity/PInvoke live
 delivery, managed mapping, broader backend and full M2 acceptance remain open.
 
@@ -3270,6 +3272,50 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    editor-platform-validation-evidence-failed.log. The accepted full hosted
    baseline remains 39945112846/47a0240d until this newer source passes and its
    actual evidence is audited. Full M2/M3/M4/M5 and C2-C5 acceptance stay open.
+
+### 6.90. Require passing results for named Unity test gates
+
+1. Read-only regression review found that the shared XML verifier accepted three
+   required cases marked Skipped when aggregate failures were zero. Reproduce
+   that exact false acceptance, then require every matching named case to have
+   Passed/Success results and no ignored/skipped or explicitly unexecuted state.
+   Match exact names or their parameterized variants, not an unrelated name prefix.
+2. Focused checks pass for skipped/inconclusive/unexecuted cases, similar prefixes,
+   partially skipped parameter sets and legacy NUnit Success results. The stronger
+   verifier also accepts actual CI PlayMode required cases and the actual local
+   Windows native Editor result; it preserves their successful evidence while
+   rejecting skipped required coverage. Native-runner tests also reject skipped
+   XML and still return the licence.
+3. Evidence: artifacts/editor-required-tests-skipped-red.json and green.json,
+   editor-required-tests-verifier-tests.log and
+   editor-required-verifier-real-evidence.json. This strengthens the existing
+   gates; it is not a replacement for the new native macOS execution.
+
+### 6.91. Native Editor licence lifecycle and reader provenance (in progress)
+
+1. Review of official unity-builder v4 at 4423ee75828dff56037d1d1cfdac6b68e3a6ba00
+   shows its Personal ULF is decoded to a serial, activated for the build and
+   returned before the action completes. The direct test step added in cab50dfa
+   therefore needs its own licence lifecycle. Requested cancellation of that
+   superseded full run before a corrected push. This is a reviewed source issue;
+   no native macOS test pass or licence failure observed on that run is claimed.
+2. Add a native Editor runner using the same existing licence/credentials and the
+   official activate/test/finally-return flow, a temporary activation project,
+   bounded processes and strict required-case XML verification. Never echo argv
+   or derived credentials; sanitize phase logs and XML before upload. Both test
+   and licence-return success are required. Local fake-process checks pass for
+   success, activation/test/return errors, timeout, missing/skipped tests, invalid
+   ULF data and credential redaction; actual macOS execution remains pending.
+3. Download/sign the same-run Internal-ImmStrokeReaderPlugin-macOS artifact too:
+   the native test reads the produced IMM through the reader, so player-only
+   staging is insufficient provenance. Require both reader-staging steps in the
+   workflow contract. Budget fifteen minutes for the three bounded four-minute
+   phases and cleanup margin, with a sixty-minute macOS job. Existing visual and
+   native result gates stay required and unchanged.
+4. Local evidence: artifacts/editor-native-license-runner-tests.log and official
+   source copies unity-builder-v4-parameters.ts, mac-entrypoint.sh, mac-activate.sh,
+   mac-return_license.sh and setup-mac.ts. Final review, lint/contract checks,
+   atomic commit and a corrected full `[CI VALIDATION]` push are still pending.
 
 ## 7. Consolidated documents
 

@@ -43,15 +43,19 @@ def verify_results(path: Path, required_tests: list[str]) -> list[str]:
     if errors_count not in (None, 0):
         errors.append(f"Unity test run reported {errors_count} error(s)")
 
-    executed_names = {
-        value
-        for test_case in test_cases
-        for value in (test_case.get("fullname"), test_case.get("name"))
-        if value
-    }
     for required in required_tests:
-        if not any(required in executed for executed in executed_names):
+        matches = [test_case for test_case in test_cases if any(
+            value == required or value.startswith(f"{required}(")
+            for value in (test_case.get("fullname", ""), test_case.get("name", "")))]
+        if not matches:
             errors.append(f"Required Unity test did not run: {required}")
+        for test_case in matches:
+            result = test_case.get("result", "").lower()
+            label = test_case.get("label", "").lower()
+            if result not in {"passed", "success"} or test_case.get("executed", "true").lower() == "false" or label in {
+                "ignored", "skipped", "cancelled", "canceled", "invalid", "notrunnable"
+            }:
+                errors.append(f"Required Unity test did not pass: {required} (result={result}, label={label})")
 
     return errors
 
