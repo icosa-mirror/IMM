@@ -16,8 +16,10 @@ from live_edit_benchmark_report import runtime_provenance
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def fixture(plugin, output):
-    exporter = Exporter(c.CDLL(str(plugin)))
+def fixture(plugin, output, repeat=1):
+    library = c.CDLL(str(plugin))
+    exporter = Exporter(library)
+    set_repeat = smoke.bind(library, 'ImmExporter_PaintSetMaxRepeatCount', c.c_bool, c.c_void_p, c.c_uint32)
     identity = Transform(0, 0, 0, 0, 0, 0, 1, 1)
     sequence = smoke.require(exporter.create_sequence(1, 0, 0, 0, 0, 30, 0, 0, 0, 0), 'sequence')
     try:
@@ -25,6 +27,7 @@ def fixture(plugin, output):
                                         (b'BlueSibling', 1, (16,), (.1, .2, 1))):
             paint = smoke.require(exporter.create_paint_layer(sequence, None, name, 1, 1,
                 c.byref(identity), c.byref(identity), 0, 0, 1), 'paint')
+            smoke.require(set_repeat(paint, repeat), 'paint repeat')
             for drawing_index, count in enumerate(counts):
                 drawing = smoke.require(exporter.create_drawing(paint), 'drawing')
                 try:
@@ -53,7 +56,9 @@ def main():
     parser.add_argument('--viewer', type=Path, required=True)
     parser.add_argument('--plugin', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
-    parser.add_argument('--canonical-repeat', action='store_true', help='Validate canonical repeat edits instead of Loop/Offset keys.')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--canonical-repeat', action='store_true', help='Validate canonical repeat edits instead of Loop/Offset keys.')
+    mode.add_argument('--layer-rename', action='store_true', help='Validate name-only edits without geometry changes.')
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows D3D11 viewer required')
@@ -62,13 +67,13 @@ def main():
     viewer, plugin = args.viewer.resolve(), args.plugin.resolve()
     handles = [os.add_dll_directory(str(path.parent)) for path in smoke.runtime_dependencies(ROOT)]
     source = output / 'playback-keys.imm'
-    fixture(plugin, source)
+    fixture(plugin, source, repeat=0 if args.layer_rename else 1)
     report = {'passed': False, 'scope': 'static paint selection and stable selected renderer resources; no in-flight or complete upload accounting claim',
               'viewerSha256': hashlib.sha256(viewer.read_bytes()).hexdigest(),
               'pluginSha256': hashlib.sha256(plugin.read_bytes()).hexdigest(),
               'fixtureSha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'cases': {}}
     report_path = output / 'report.json'
-    report['operation'] = 'canonical static-paint repeat' if args.canonical_repeat else 'Loop/Offset keys'
+    report['operation'] = 'nonroot layer rename' if args.layer_rename else 'canonical static-paint repeat' if args.canonical_repeat else 'Loop/Offset keys'
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     template = json.loads((viewer.parent / 'settings-baseline-directx-sample1.json').read_text(encoding='utf-8'))
     for case in ('normal', 'cpu-failure', 'gpu-flag', 'present-failure', 'queued-unload', 'prepared-unload'):
@@ -100,6 +105,8 @@ def main():
             'IMM_VIEWER_VALIDATE_CAPTURE_PATH': str(runtime / 'capture.ppm')})
         if args.canonical_repeat:
             env['IMM_VIEWER_LIVE_PAINT_CANONICAL_REPEAT'] = '1'
+        if args.layer_rename:
+            env['IMM_VIEWER_LIVE_LAYER_RENAME'] = '1'
         for suffix in ('PICTURE', 'PICTURE360', 'PICTURE360_EQUIRECT', 'PICTURE360_CUBEMAP'):
             env[f'IMM_VIEWER_VALIDATE_MIN_{suffix}_DRAWCALLS'] = '0'
         if case in ('cpu-failure', 'gpu-flag', 'present-failure'):
@@ -108,7 +115,7 @@ def main():
         if case.endswith('-unload'):
             env['IMM_VIEWER_LIVE_PAINT_PLAYBACK_KEYS_UNLOAD'] = case.split('-')[0]
         if case == 'prepared-unload':
-            env['IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS'] = '1'
+            env['IMM_LIVE_EDIT_HOLD_LAYER_RENAME' if args.layer_rename else 'IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS'] = '1'
         startup = subprocess.STARTUPINFO()
         startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startup.wShowWindow = subprocess.SW_HIDE
@@ -126,19 +133,23 @@ def main():
                     child.wait(timeout=10)
                 raise RuntimeError(f'{case}: owned viewer timeout')
         text = (runtime / 'debug.txt').read_text(encoding='utf-8', errors='replace')
-        smoke.require(code == 0 and '[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=1' in text, f'{case}: native probe failed')
+        marker = '[IMM_LIVE_LAYER_RENAME]' if args.layer_rename else '[IMM_LIVE_PAINT_PLAYBACK_KEYS]'
+        smoke.require(code == 0 and f'{marker} pass=1' in text, f'{case}: native probe failed')
         rejected = case in ('cpu-failure', 'present-failure')
         samples = re.findall(r'\[IMM_LIVE_PAINT_PLAYBACK_KEYS_SAMPLE\] step=(\d+) revision=(\d+) selected=(\d+)', text)
         if rejected:
             smoke.require('rejected=1 result=-10 unchanged=1' in text and not samples, f'{case}: rollback')
         else:
-            expected = [0, 1, 0, 0, 1, 0, 0] if args.canonical_repeat else [0, 1, 0, 1, 0, 0, 0]
+            expected = [1, 1, 1, 1, 1, 1, 0] if args.layer_rename else [0, 1, 0, 0, 1, 0, 0] if args.canonical_repeat else [0, 1, 0, 1, 0, 0, 0]
             smoke.require([int(row[0]) for row in samples] == list(range(7)) and
                 [int(row[2]) for row in samples] == expected, f'{case}: selected transitions')
             if args.canonical_repeat:
                 smoke.require('[IMM_LIVE_PAINT_REPEAT] pass=1' in text and
                     [int(value) for value in re.findall(r'\[IMM_LIVE_PAINT_REPEAT_SAMPLE\] step=\d+ canonical=(\d+)', text)] ==
                     [0, 1, 3, 4294967295, 1, 0], f'{case}: canonical repeat getter')
+            if args.layer_rename:
+                smoke.require(re.findall(r'\[IMM_LIVE_LAYER_RENAME_SAMPLE\] step=(\d+) nameVerified=1', text) ==
+                    [str(step) for step in range(6)], f'{case}: presented names')
             smoke.require('playingBoth=1 stableGeometry=1 siblingStable=1' in text, f'{case}: playing/sibling proof')
         if case.endswith('-unload'):
             smoke.require('sessionInvalid=1 beforeReload=1' in text and 'reloaded=1' in text, f'{case}: unload/recovery')
@@ -159,7 +170,7 @@ def main():
                 layer, token = map(int, trace.groups())
                 last_tokens[layer] = token
                 layer_tokens.setdefault(layer, set()).add(token)
-            sample = re.search(r'\[IMM_LIVE_PAINT_PLAYBACK_KEYS_SAMPLE\] step=[0-5] revision=\d+ selected=(\d+) layer=(\d+)', line)
+            sample = re.search(r'\[IMM_LIVE_PAINT_PLAYBACK_KEYS_SAMPLE\] step=[0-6] revision=\d+ selected=(\d+) layer=(\d+)', line)
             if sample:
                 selected, target_layer = map(int, sample.groups())
                 smoke.require(target_layer in last_tokens, f'{case}: missing selected render trace')

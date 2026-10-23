@@ -57,20 +57,42 @@ namespace ImmPlayer
     {
         if (mInitialized)
             mFullName.End();
+        if (mHasName)
+            mName.End();
     }
 
-    bool Document::PreparedLayerFullName::Init(Layer * layer, const wchar_t * fullName)
+    bool Document::PreparedLayerFullName::Init(Layer * layer, const wchar_t * fullName, const wchar_t * name)
     {
         mLayer = layer;
         mInitialized = true;
-        return mFullName.InitCopyW(fullName);
+        if (!mFullName.InitCopyW(fullName)) return false;
+        if (name == nullptr) return true;
+        mHasName = true;
+        return mName.InitCopyW(name);
     }
 
     void Document::PreparedLayerFullName::Publish(void)
     {
         piAssert(mLayer != nullptr && mInitialized);
+        if (mHasName) mLayer->PublishPreparedName(&mName);
         mLayer->PublishPreparedFullName(&mFullName);
         mInitialized = false;
+        mHasName = false;
+    }
+
+    bool Document::iPrepareLayerFullNames(Layer * layer, const std::wstring & prefix,
+        std::vector<std::unique_ptr<PreparedLayerFullName>> & prepared, const wchar_t * newName)
+    {
+        std::wstring fullName = prefix;
+        fullName.push_back(L'/');
+        fullName.append(newName != nullptr ? newName : layer->GetName().GetS());
+        auto entry = std::make_unique<PreparedLayerFullName>();
+        if (!entry->Init(layer, fullName.c_str(), newName)) return false;
+        prepared.push_back(std::move(entry));
+        if (layer->GetType() == Layer::Type::Group)
+            for (uint32_t index = 0; index < layer->GetNumChildren(); ++index)
+                if (!iPrepareLayerFullNames(layer->GetChild(index), fullName, prepared)) return false;
+        return true;
     }
 
     static bool iEnvFlagEnabled(const char *name)
@@ -1054,10 +1076,19 @@ namespace ImmPlayer
             {
                 Layer * layer = mPendingPresentation.mLayer;
                 const uint64_t layerId = mPendingPresentation.mObject;
+                const bool rename = !mPendingPresentation.mPreparedLayerFullNames.empty();
+                if (rename && std::getenv("IMM_LIVE_EDIT_HOLD_LAYER_RENAME") != nullptr)
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                if (rename && IsLoadingAsync(&mSequence))
+                {
+                    iRejectCommit(revision, -7, 0, layerId);
+                    mPendingPresentation = PendingPresentation{};
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                }
                 if (mPendingPresentation.mSetPaintRepeat &&
                     std::getenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS") != nullptr)
                     return mState.mPlaybackState != PlaybackState::PausedAndHidden;
-                if (mPendingPresentation.mSetPaintRepeat &&
+                if ((mPendingPresentation.mSetPaintRepeat || rename) &&
                     std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
                 {
                     iRejectCommit(revision, -10, 0, layerId);
@@ -1077,6 +1108,12 @@ namespace ImmPlayer
                         layer->SetCanonicalOpacity(mPendingPresentation.mLayerOpacity);
                     if (mPendingPresentation.mSetLayerTransform)
                         layer->SetCanonicalTransform(mPendingPresentation.mLayerTransform);
+                    if (rename)
+                    {
+                        for (const auto & name : mPendingPresentation.mPreparedLayerFullNames) name->Publish();
+                        if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+                        ++mEvaluationRevision;
+                    }
                     if (mPendingPresentation.mSetPaintRepeat)
                     {
                         auto * paint = static_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation());
@@ -1725,7 +1762,8 @@ namespace ImmPlayer
 
     int32_t Document::QueueLayerProperties(uint32_t layerId,
         bool setVisibility, bool visible, bool setOpacity, float opacity,
-        bool setTransform, const trans3d & transform, bool setPaintRepeat, uint32_t paintRepeat)
+        bool setTransform, const trans3d & transform, bool setPaintRepeat, uint32_t paintRepeat,
+        const wchar_t * newName)
     {
         if (!mEditing)
             return -4;
@@ -1739,8 +1777,15 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
-        if (!setVisibility && !setOpacity && !setTransform && !setPaintRepeat)
+        if (!setVisibility && !setOpacity && !setTransform && !setPaintRepeat && newName == nullptr)
             return -2;
+        if (newName != nullptr)
+        {
+            if (*newName == 0) return -2;
+            if (layer->GetParent() == nullptr || (layer->GetType() != Layer::Type::Group &&
+                layer->GetType() != Layer::Type::Paint && layer->GetType() != Layer::Type::SpawnArea)) return -3;
+            if (IsLoadingAsync(&mSequence)) return -7;
+        }
         if (setPaintRepeat && (layer->GetType() != Layer::Type::Paint ||
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
             return -3;
@@ -1767,7 +1812,7 @@ namespace ImmPlayer
         }
         mOpenLayerPropertyEdits.push_back(LayerPropertyEdit{
             layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform,
-            setPaintRepeat, paintRepeat });
+            setPaintRepeat, paintRepeat, newName != nullptr ? newName : L"" });
         return 0;
     }
 
@@ -2404,25 +2449,7 @@ namespace ImmPlayer
                 }
                 try
                 {
-                    std::function<bool(Layer *, const std::wstring &)> prepareSubtree;
-                    prepareSubtree = [&](Layer * current, const std::wstring & prefix)
-                    {
-                        std::wstring fullName = prefix;
-                        fullName.push_back(L'/');
-                        fullName.append(current->GetName().GetS());
-                        auto prepared = std::make_unique<PreparedLayerFullName>();
-                        if (!prepared->Init(current, fullName.c_str()))
-                            return false;
-                        preparedFullNames.push_back(std::move(prepared));
-                        if (current->GetType() == Layer::Type::Group)
-                            for (uint32_t index = 0; index < current->GetNumChildren(); index++)
-                            {
-                                if (!prepareSubtree(current->GetChild(index), fullName))
-                                    return false;
-                            }
-                        return true;
-                    };
-                    if (!prepareSubtree(layer, parent->GetFullName()->GetS()))
+                    if (!iPrepareLayerFullNames(layer, parent->GetFullName()->GetS(), preparedFullNames))
                     {
                         iRejectCommit(batch.mRevision, -5, 0, reparent.mLayerId);
                         return;
@@ -2881,13 +2908,29 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
                 return;
             }
+            std::vector<std::unique_ptr<PreparedLayerFullName>> preparedNames;
+            if (!edit.mName.empty())
+            {
+                if (layer->GetParent() == nullptr || (layer->GetType() != Layer::Type::Group &&
+                    layer->GetType() != Layer::Type::Paint && layer->GetType() != Layer::Type::SpawnArea))
+                { iRejectCommit(batch.mRevision, -3, 0, edit.mLayerId); return; }
+                if (IsLoadingAsync(&mSequence))
+                { iRejectCommit(batch.mRevision, -7, 0, edit.mLayerId); return; }
+                try
+                {
+                    if (!iPrepareLayerFullNames(layer, layer->GetParent()->GetFullName()->GetS(), preparedNames, edit.mName.c_str()))
+                    { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
+                }
+                catch (const std::bad_alloc &)
+                { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
+            }
             if (edit.mSetPaintRepeat && (layer->GetType() != Layer::Type::Paint ||
                 dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
             {
                 iRejectCommit(batch.mRevision, -3, 0, edit.mLayerId);
                 return;
             }
-            if (edit.mSetPaintRepeat && std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
+            if ((edit.mSetPaintRepeat || !edit.mName.empty()) && std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
             {
                 iRejectCommit(batch.mRevision, -10, 0, edit.mLayerId);
                 return;
@@ -2901,6 +2944,7 @@ namespace ImmPlayer
             mPendingPresentation.mRevision = batch.mRevision;
             mPendingPresentation.mObject = edit.mLayerId;
             mPendingPresentation.mIsLayerPropertyEdit = true;
+            mPendingPresentation.mPreparedLayerFullNames = std::move(preparedNames);
             mPendingPresentation.mSetLayerVisibility = edit.mSetVisibility;
             mPendingPresentation.mLayerVisible = edit.mVisible;
             mPendingPresentation.mSetLayerOpacity = edit.mSetOpacity;

@@ -330,6 +330,7 @@ Current supported batch shapes are:
 | Drawing deletion | One drawing, unreferenced in the resulting frame table |
 | Frame remap + drawing deletion | Remap first; no other remaining frame may reference the deleted drawing |
 | Canonical layer properties | One layer; visibility/opacity/transform masks may be combined |
+| Layer name | One nonroot group/paint/spawn; copied UTF-8 input, prepared descendant paths, importer-busy guards and atomic publication (roadmap 6.94) |
 | Canonical paint repeat | One static-paint layer; dedicated setter/getter; zero is indefinite. Local CPU checks and six rendered Windows DirectX cases pass; hosted and broader backend acceptance pending (roadmap 6.84, 6.86) |
 | Animation key insertion/replacement/removal | One key edit |
 | Default spawn selection | One existing spawn layer |
@@ -490,8 +491,20 @@ not the supported deletion path.
 
 `LayerSetProperties` supports canonical visibility, opacity, and uniform-scale rigid transform,
 individually or together. Version 1 carries translation, unit quaternion, and positive uniform
-scale. Name, pivot, timing, and other property masks are not implemented. Readback excludes
+scale. Names use the dedicated API below; pivot, timing and other property masks
+are not implemented. Readback excludes
 animation-evaluated values and transient overrides.
+
+`LayerSetName` copies 1-4096 UTF-8 bytes for a nonroot group, paint or spawn layer.
+Preparation builds the target short name and all descendant full paths; publication
+moves them together without changing drawing handles, frame tables or spawn ordinal
+selection. Active importer ownership rejects at queue/preparation/publication.
+Root labels and other layer types reject explicitly. `LayerGetName` supports a
+null-buffer size query (NUL included); insufficient capacity reports the required
+size and preserves the buffer instead of truncating. Names remain unchanged until
+publication and after discard or rejection. Windows native-export, ownership and
+six rendered rejection/unload/recovery cases pass locally (roadmap 6.94); managed
+live rename UI and full hosted/backend acceptance are not established.
 
 Live keys support visibility, opacity, and transform. `KeySet` inserts/replaces at the converted
 tick; preparation copies the affected sorted timeline and publication swaps that vector.
@@ -516,7 +529,13 @@ Manager Exit clears cached spawn pointers/selection before layer disposal, and E
 resets selection when the next document has no default. Invalid/unloaded spawn queries
 return empty defaults; invalid ordinals cannot change a valid selection. Native lifecycle,
 viewpoint policy and DirectX paint regressions pass locally (roadmap 6.56). Returned
-names remain borrowed; this does not establish concurrent query/teardown safety.
+names remain borrowed through the legacy native getter; this does not establish
+concurrent query/teardown safety. Unity/Godot wrappers now use a protected snapshot
+and copy labels into caller-owned storage before UTF-8 encoding. Unity's returned
+UTF-8 buffer is per-thread until its next query; Godot retains its fixed-size ABI
+and truncates only at a code-point boundary. A native Windows export check proves
+Unicode spawn labels and owned snapshots across rename/deletion; positive Godot
+runtime acceptance remains separate.
 
 Layer enumeration is a separate owned-copy path: GetLayerCount/GetLayerInfoByIndex
 now validate document-table bounds/usage and synchronize with CPU/GPU publication.

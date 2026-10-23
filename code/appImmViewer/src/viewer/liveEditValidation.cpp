@@ -768,10 +768,14 @@ namespace ExePlayer
         uint64_t frame, uint64_t requestedFrame)
     {
         const bool canonicalRepeat = std::getenv("IMM_VIEWER_LIVE_PAINT_CANONICAL_REPEAT") != nullptr;
+        const bool rename = std::getenv("IMM_VIEWER_LIVE_LAYER_RENAME") != nullptr;
+        static const wchar_t * renameValues[] = { L"Name A", L"Name \u00c5", L"Name C", L"Name D", L"Name E", L"KeepPaint" };
+        const int heldFrame = rename ? 5 : 4;
         static constexpr uint32_t repeatCounts[] = { 0, 1, 3, UINT32_MAX, 1, 0 };
         if (mMeasured || frame < requestedFrame) return;
         const auto fail = [&](const wchar_t * reason) {
-            log->Printf(LT_ERROR, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=0 stage=%d step=%d reason=%ls",
+            log->Printf(LT_ERROR, L"%ls pass=0 stage=%d step=%d reason=%ls",
+                rename ? L"[IMM_LIVE_LAYER_RENAME]" : L"[IMM_LIVE_PAINT_PLAYBACK_KEYS]",
                 mPaintPlaybackKeysStage, mFrameSequenceIndex, reason);
             mMeasured = true;
         };
@@ -790,8 +794,10 @@ namespace ExePlayer
             log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS_UNLOAD] sessionInvalid=1 beforeReload=1");
 #if defined(_WIN32)
             _putenv_s("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS", "");
+            _putenv_s("IMM_LIVE_EDIT_HOLD_LAYER_RENAME", "");
 #else
             unsetenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS");
+            unsetenv("IMM_LIVE_EDIT_HOLD_LAYER_RENAME");
 #endif
             mFrameSequenceReload = player->Load(L"playback-keys.imm");
             if (mFrameSequenceReload < 0) { fail(L"reload"); return; }
@@ -829,7 +835,7 @@ namespace ExePlayer
         }
         if (mPaintPlaybackKeysStage == 1)
         {
-            player->SetTime(doc, ImmCore::piTick::FromFrames(4, 30) + ImmCore::piTick(1), ImmCore::piTick(1));
+            player->SetTime(doc, ImmCore::piTick::FromFrames(heldFrame, 30) + ImmCore::piTick(1), ImmCore::piTick(1));
             mStandaloneTerminalFrame = frame;
             mPaintPlaybackKeysStage = 2;
             return;
@@ -859,10 +865,10 @@ namespace ExePlayer
             const auto * target = find(mStandaloneTarget);
             if (!target || target->paintNumFrames != 2 || target->paintNumDrawings != 2)
             { fail(L"fixture target"); return; }
-            if (canonicalRepeat)
+            if (canonicalRepeat || rename)
             {
                 uint32_t count = 99;
-                if (player->GetPaintMaxRepeatCount(doc, target->id, &count) != 0 || count != 1)
+                if (player->GetPaintMaxRepeatCount(doc, target->id, &count) != 0 || count != (rename ? 0u : 1u))
                 { fail(L"initial canonical repeat"); return; }
             }
             const auto perf = player->GetRenderPerformanceSnapshot();
@@ -910,7 +916,7 @@ namespace ExePlayer
         {
             ImmCore::piTick position(0), stopped(0);
             player->GetTime(doc, &position, &stopped);
-            if (ImmCore::piTick::ToFramesFloor(position, 30) != 4 || stopped <= ImmCore::piTick(0))
+            if (ImmCore::piTick::ToFramesFloor(position, 30) != heldFrame || stopped <= ImmCore::piTick(0))
             { fail(L"held clock changed during publication"); return; }
         }
         if (mPaintPlaybackKeysStage == 4)
@@ -918,7 +924,7 @@ namespace ExePlayer
             if (frame < mStandaloneTerminalFrame + 3) return;
             if (!current->hasBBox || !iSubtreeBoxesMatch(current->bbox, target->boxes[0]))
             { fail(L"backward seek before key"); return; }
-            log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS_SAMPLE] step=6 revision=%llu selected=0 backwardSeek=1", mRevision);
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS_SAMPLE] step=6 revision=%llu selected=0 layer=%d backwardSeek=1", mRevision, target->id);
             player->Resume(doc);
             mStandaloneTerminalFrame = frame;
             mPaintPlaybackKeysStage = 5;
@@ -934,7 +940,10 @@ namespace ExePlayer
             if (mPaintPlaybackSeen == 3 && position > ImmCore::piTick::FromFrames(8, 30))
             {
                 mStandaloneSuccessful = true; mMeasured = true;
-                log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=1 edits=6 heldWithoutSeek=1 restoredFiniteClamp=1 backwardSeek=1 playingBoth=1 stableGeometry=1 siblingStable=1 reloaded=%d", mPaintPlaybackReloaded ? 1 : 0);
+                if (rename)
+                    log->Printf(LT_MESSAGE, L"[IMM_LIVE_LAYER_RENAME] pass=1 edits=6 heldWithoutSeek=1 backwardSeek=1 playingBoth=1 stableGeometry=1 siblingStable=1 reloaded=%d", mPaintPlaybackReloaded ? 1 : 0);
+                else
+                    log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=1 edits=6 heldWithoutSeek=1 restoredFiniteClamp=1 backwardSeek=1 playingBoth=1 stableGeometry=1 siblingStable=1 reloaded=%d", mPaintPlaybackReloaded ? 1 : 0);
                 if (canonicalRepeat)
                     log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_REPEAT] pass=1 edits=6 canonicalGetter=1 heldWithoutSeek=1 stableGeometry=1 siblingStable=1");
             }
@@ -946,7 +955,9 @@ namespace ExePlayer
             const auto property = offset ? ImmImporter::Layer::AnimProperty::Offset : ImmImporter::Layer::AnimProperty::Loop;
             const auto keyTime = ImmCore::piTick::FromFrames(1, 30);
             int32_t queued = -99;
-            if (canonicalRepeat)
+            if (rename)
+                queued = player->QueueLayerName(doc, target->id, renameValues[mFrameSequenceIndex]);
+            else if (canonicalRepeat)
                 queued = player->QueuePaintMaxRepeatCount(doc, target->id, repeatCounts[mFrameSequenceIndex]);
             else if (mFrameSequenceIndex == 1 || mFrameSequenceIndex == 5)
                 queued = player->QueueAnimationKeyRemoval(doc, target->id, property, keyTime);
@@ -978,6 +989,9 @@ namespace ExePlayer
         if (!mPaintPlaybackReloaded && unload != nullptr && std::string(unload) == "prepared" &&
             status.mState == ImmPlayer::Document::AuthoringCommitState::Prepared)
         {
+            std::wstring name;
+            if (rename && (player->GetLayerName(doc, target->id, name) != 0 || name != L"KeepPaint"))
+            { fail(L"prepared name mutation"); return; }
             uint32_t count = 99;
             if (canonicalRepeat && (player->GetPaintMaxRepeatCount(doc, target->id, &count) != 0 || count != 1))
             { fail(L"prepared repeat mutation"); return; }
@@ -993,6 +1007,9 @@ namespace ExePlayer
         const auto perf = player->GetRenderPerformanceSnapshot();
         if (rejected)
         {
+            std::wstring name;
+            if (rename && (player->GetLayerName(doc, target->id, name) != 0 || name != L"KeepPaint"))
+            { fail(L"rejected name mutation"); return; }
             uint32_t count = 99;
             if (canonicalRepeat && (player->GetPaintMaxRepeatCount(doc, target->id, &count) != 0 || count != 1))
             { fail(L"rejected repeat mutation"); return; }
@@ -1003,9 +1020,18 @@ namespace ExePlayer
             mMeasured = true;
             log->Printf(LT_MESSAGE, L"[IMM_LIVE_PAINT_PLAYBACK_KEYS] pass=%d rejected=1 result=%d unchanged=1",
                 mStandaloneSuccessful ? 1 : 0, status.mResult);
+            if (rename)
+                log->Printf(LT_MESSAGE, L"[IMM_LIVE_LAYER_RENAME] pass=%d rejected=1 result=%d unchanged=1", mStandaloneSuccessful ? 1 : 0, status.mResult);
             return;
         }
-        const int selected = mFrameSequenceIndex == 1 || mFrameSequenceIndex == (canonicalRepeat ? 4 : 3) ? 1 : 0;
+        const int selected = rename || mFrameSequenceIndex == 1 || mFrameSequenceIndex == (canonicalRepeat ? 4 : 3) ? 1 : 0;
+        if (rename)
+        {
+            std::wstring name;
+            if (player->GetLayerName(doc, target->id, name) != 0 || name != renameValues[mFrameSequenceIndex])
+            { fail(L"presented name"); return; }
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_LAYER_RENAME_SAMPLE] step=%d nameVerified=1", mFrameSequenceIndex);
+        }
         if (canonicalRepeat)
         {
             uint32_t count = 99;

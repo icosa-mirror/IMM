@@ -253,7 +253,7 @@ namespace ImmPlayer {
         int32_t QueueLayerProperties(uint32_t layerId, bool setVisibility, bool visible,
             bool setOpacity, float opacity, bool setTransform,
             const ImmCore::trans3d & transform, bool setPaintRepeat = false,
-            uint32_t paintRepeat = 0);
+            uint32_t paintRepeat = 0, const wchar_t * newName = nullptr);
         int32_t QueueAnimationKey(uint32_t layerId, ImmImporter::Layer::AnimProperty property,
             ImmCore::piTick time, const ImmImporter::Layer::AnimValue & value,
             ImmImporter::Layer::InterpolationType interpolation);
@@ -348,6 +348,7 @@ namespace ImmPlayer {
             ImmCore::trans3d mTransform = ImmCore::trans3d::identity();
             bool mSetPaintRepeat = false;
             uint32_t mPaintRepeat = 0;
+            std::wstring mName;
         };
 
         struct AnimationKeyEdit
@@ -400,12 +401,17 @@ namespace ImmPlayer {
         {
             ImmImporter::Layer * mLayer = nullptr;
             ImmCore::piString mFullName;
+            ImmCore::piString mName;
             bool mInitialized = false;
+            bool mHasName = false;
 
             ~PreparedLayerFullName();
-            bool Init(ImmImporter::Layer * layer, const wchar_t * fullName);
+            bool Init(ImmImporter::Layer * layer, const wchar_t * fullName, const wchar_t * name = nullptr);
             void Publish(void);
         };
+
+        static bool iPrepareLayerFullNames(ImmImporter::Layer * layer, const std::wstring & prefix,
+            std::vector<std::unique_ptr<PreparedLayerFullName>> & prepared, const wchar_t * newName = nullptr);
 
         struct SealedBatch
         {

@@ -116,6 +116,26 @@ def main():
         results.append({'case': name, 'expected': -2, 'actual': actual})
         assert actual == -2, f'{name}: expected -2, got {actual}'
     assert sentinel.value == 123, 'rejected getter must not modify caller output'
+    name_set = plugin.ImmAuthoring_LayerSetName
+    name_set.argtypes = [c.c_int32, c.c_int32, c.c_char_p, c.c_uint32]
+    name_set.restype = c.c_int32
+    name_get = plugin.ImmAuthoring_LayerGetName
+    name_get.argtypes = [c.c_int32, c.c_int32, c.c_void_p, c.c_uint32, c.POINTER(c.c_uint32)]
+    name_get.restype = c.c_int32
+    for name, actual in (
+        ('name setter negative layer', name_set(0, -1, b'x', 1)),
+        ('name setter null input', name_set(0, 0, None, 1)),
+        ('name setter empty input', name_set(0, 0, b'', 0)),
+        ('name setter oversized input', name_set(0, 0, b'x', 4097)),
+        ('name setter malformed UTF8', name_set(0, 0, b'\xc0\xaf', 2)),
+        ('name setter embedded NUL', name_set(0, 0, b'a\0b', 3)),
+        ('name getter negative layer', name_get(0, -1, None, 0, c.byref(sentinel))),
+        ('name getter null size output', name_get(0, 0, None, 0, None)),
+        ('name getter invalid null capacity', name_get(0, 0, None, 1, c.byref(sentinel))),
+    ):
+        results.append({'case': name, 'expected': -2, 'actual': actual})
+        assert actual == -2, f'{name}: expected -2, got {actual}'
+    assert sentinel.value == 123, 'rejected name getter must preserve size output'
     report['passed'] = True
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(f'[IMM_AUTHORING_KEY_ABI] passed {len(results)} additive layout/validation checks')

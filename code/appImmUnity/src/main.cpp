@@ -2487,6 +2487,43 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerSetName(
+    int32_t docId, int32_t layerId, const char * nameUtf8, uint32_t nameLength)
+{
+    if (layerId < 0 || nameUtf8 == nullptr || nameLength == 0 || nameLength > 4096)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    try
+    {
+        std::wstring name;
+        if (!ImmUnity::DecodeUtf8(nameUtf8, nameLength, name)) return IMM_AUTHORING_INVALID_ARGUMENT;
+        return iPlayer().QueueLayerName(docId, static_cast<uint32_t>(layerId), std::move(name));
+    }
+    catch (const std::bad_alloc &) { return IMM_AUTHORING_OUT_OF_MEMORY; }
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetName(
+    int32_t docId, int32_t layerId, char * nameUtf8, uint32_t capacity, uint32_t * requiredBytes)
+{
+    if (layerId < 0 || requiredBytes == nullptr || (nameUtf8 == nullptr && capacity != 0))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const int32_t state = iRequireAttachedAuthoringDocument(docId);
+    if (state != IMM_AUTHORING_OK) return state;
+    try
+    {
+        std::wstring name;
+        const int32_t result = iPlayer().GetLayerName(docId, static_cast<uint32_t>(layerId), name);
+        if (result != IMM_AUTHORING_OK) return result;
+        const std::string encoded = ImmCore::EncodeUtf8(name.c_str());
+        if (encoded.size() >= UINT32_MAX) return IMM_AUTHORING_OUT_OF_MEMORY;
+        *requiredBytes = static_cast<uint32_t>(encoded.size() + 1);
+        if (nameUtf8 == nullptr) return IMM_AUTHORING_OK;
+        if (capacity < *requiredBytes) return IMM_AUTHORING_INVALID_ARGUMENT;
+        std::memcpy(nameUtf8, encoded.c_str(), *requiredBytes);
+        return IMM_AUTHORING_OK;
+    }
+    catch (const std::bad_alloc &) { return IMM_AUTHORING_OUT_OF_MEMORY; }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_PaintSetMaxRepeatCount(
     int32_t docId, int32_t layerId, uint32_t count)
 {
@@ -3492,22 +3529,18 @@ struct SerializedSpawnArea
 extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaInfo(int docId, int spawnareaId, SerializedSpawnArea& serializedSpawnArea)
 {
     Document::SpawnAreaInfo spawnAreaInfo;
-    if (!iPlayer().GetSpawnAreaInfo(spawnAreaInfo, docId, spawnareaId))
+    std::wstring ownedName;
+    if (!iPlayer().GetSpawnAreaInfoSnapshot(spawnAreaInfo, docId, spawnareaId, &ownedName))
         return false;
-    // The C# marshaller copies the string during the call; hand it a static
-    // buffer instead of a malloc'd one (piws2str allocates - the old direct
-    // assignment leaked a buffer per call).
+    // The marshaller copies during the call. Keep a per-thread UTF-8 buffer,
+    // not a pointer into layer storage that publication can replace.
+    try
     {
-        static char sSpawnAreaNameUtf8[256];
-        sSpawnAreaNameUtf8[0] = '\0';
-        char* nameUtf8 = piws2str(spawnAreaInfo.mName);
-        if (nameUtf8 != nullptr)
-        {
-            std::snprintf(sSpawnAreaNameUtf8, sizeof(sSpawnAreaNameUtf8), "%s", nameUtf8);
-            std::free(nameUtf8);
-        }
-        serializedSpawnArea.mName = sSpawnAreaNameUtf8;
+        static thread_local std::string nameUtf8;
+        nameUtf8 = ImmCore::EncodeUtf8(ownedName.c_str());
+        serializedSpawnArea.mName = nameUtf8.c_str();
     }
+    catch (const std::bad_alloc &) { return false; }
     serializedSpawnArea.mVersion = spawnAreaInfo.mVersion;
     serializedSpawnArea.mType = spawnAreaInfo.mIsFloorLevel ? SerializedSpawnArea::Type::FloorLevel : SerializedSpawnArea::Type::EyeLevel;
     serializedSpawnArea.mAnimated = spawnAreaInfo.mAnimated;
@@ -3604,7 +3637,7 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaPose(int docId, int spawnarea
     if (pose == nullptr || spawnareaId < 0) // Player checks the upper bound only
         return false;
     Document::SpawnAreaInfo spawnAreaInfo;
-    if (!iPlayer().GetSpawnAreaInfo(spawnAreaInfo, docId, spawnareaId))
+    if (!iPlayer().GetSpawnAreaInfoSnapshot(spawnAreaInfo, docId, spawnareaId))
         return false;
     const trans3d mat = spawnAreaInfo.mSpawnAreaToWorld;
     pose->posx = (float)mat.mTranslation.x;

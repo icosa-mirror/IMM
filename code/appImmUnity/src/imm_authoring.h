@@ -265,6 +265,13 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetProperties(
     ImmAuthoringLayerProperties * propertiesOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetProperties(int32_t docId, int32_t layerId,
     const ImmAuthoringLayerProperties * properties);
+// Nonroot group/paint/spawn name edit. UTF-8 bytes are copied when queued.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetName(int32_t docId,
+    int32_t layerId, const char * nameUtf8, uint32_t nameLength);
+// requiredBytes includes the terminating NUL. Null buffer/capacity zero queries
+// size. Insufficient capacity reports requiredBytes and preserves the buffer.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetName(int32_t docId,
+    int32_t layerId, char * nameUtf8, uint32_t capacity, uint32_t * requiredBytes);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeySet(int32_t docId, int32_t layerId,
     const ImmAuthoringKey * key);
 // Canonical static-paint repeat count; zero repeats indefinitely. Publication

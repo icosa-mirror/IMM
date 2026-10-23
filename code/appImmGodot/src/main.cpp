@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include "libImmCore/src/libBasics/piUtf8.h"
 
 using namespace ImmCore;
 using namespace ImmImporter;
@@ -785,15 +786,19 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_GetSpawnAreaInfo(int docId, int spawnAre
     *serializedSpawnArea = {};
 
     Document::SpawnAreaInfo spawnAreaInfo;
-    if (!iPlayer().GetSpawnAreaInfo(spawnAreaInfo, docId, spawnAreaId))
+    std::wstring ownedName;
+    if (!iPlayer().GetSpawnAreaInfoSnapshot(spawnAreaInfo, docId, spawnAreaId, &ownedName))
         return -1;
 
-    char *name = piws2str(spawnAreaInfo.mName);
-    if (name != nullptr)
+    try
     {
-        std::snprintf(serializedSpawnArea->name, sizeof(serializedSpawnArea->name), "%s", name);
-        std::free(name);
+        const std::string name = ImmCore::EncodeUtf8(ownedName.c_str());
+        size_t length = name.size() < sizeof(serializedSpawnArea->name) - 1 ? name.size() : sizeof(serializedSpawnArea->name) - 1;
+        while (length != 0 && length < name.size() && (static_cast<unsigned char>(name[length]) & 0xc0) == 0x80) --length;
+        std::memcpy(serializedSpawnArea->name, name.data(), length);
+        serializedSpawnArea->name[length] = '\0';
     }
+    catch (const std::bad_alloc &) { return -1; }
     serializedSpawnArea->version = spawnAreaInfo.mVersion;
     serializedSpawnArea->type = spawnAreaInfo.mIsFloorLevel ? ImmGodotSpawnArea::FloorLevel : ImmGodotSpawnArea::EyeLevel;
     serializedSpawnArea->animated = spawnAreaInfo.mAnimated;

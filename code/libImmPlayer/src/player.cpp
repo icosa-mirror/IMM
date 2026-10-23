@@ -736,6 +736,30 @@ namespace ImmPlayer
             layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform);
     }
 
+    int32_t Player::QueueLayerName(int docId, uint32_t layerId, std::wstring name)
+    {
+        if (name.empty() || name.find(L'\0') != std::wstring::npos) return -2;
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId))
+            return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        return doc->QueueLayerProperties(layerId, false, false, false, 1.0f,
+            false, ImmCore::trans3d::identity(), false, 0, name.c_str());
+    }
+
+    int32_t Player::GetLayerName(int docId, uint32_t layerId, std::wstring & name)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId))
+            return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded) return -4;
+        Layer * layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (layer == nullptr) return -1;
+        name.assign(layer->GetName().GetS());
+        return 0;
+    }
+
     int32_t Player::QueuePaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t count)
     {
         std::lock_guard<std::mutex> guard(mMutex);
@@ -1272,6 +1296,36 @@ namespace ImmPlayer
         }
         doc->GetSpawnAreaInfo(info, spawnAreaId);
         return true;
+    }
+
+    bool Player::GetSpawnAreaInfoSnapshot(Document::SpawnAreaInfo & info, int docId, int spawnAreaId,
+        std::wstring * ownedName)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        info = Document::SpawnAreaInfo{};
+        if (ownedName != nullptr) ownedName->clear();
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId))
+            return false;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded || spawnAreaId < 0 ||
+            spawnAreaId >= doc->GetSpawnAreaCount()) return false;
+        doc->GetSpawnAreaInfo(info, spawnAreaId);
+        if (ownedName == nullptr)
+        {
+            info.mName = nullptr;
+            return true;
+        }
+        try
+        {
+            ownedName->assign(info.mName != nullptr ? info.mName : L"");
+            info.mName = ownedName->c_str();
+            return true;
+        }
+        catch (const std::bad_alloc &)
+        {
+            info = Document::SpawnAreaInfo{};
+            return false;
+        }
     }
 
     static const Document::Command cmdHide = { Document::Command::Type::Hide };

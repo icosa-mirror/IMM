@@ -3375,7 +3375,7 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    is outside active full run 39966625591/2b7d3671. Threaded decoding, synchronous
    teardown concurrency and other backend/per-operation acceptance remain open.
 
-### 6.94. Live nonroot layer names (functional checks pass; render acceptance pending)
+### 6.94. Live nonroot layer names (local Windows milestone)
 
 1. Add dedicated UTF-8 LayerSetName/LayerGetName C exports without changing the
    existing property ABI. Nonroot group, paint and spawn names are supported;
@@ -3400,10 +3400,21 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    all twenty-eight cases, including nine new name validation cases.
 4. Evidence: artifacts/layer-rename-native-build.log, layer-rename-cabi/report.json
    and run.log, layer-rename-cpu-tests.log and layer-rename-abi-tests.log. Source
-   review and rendered rename publication/rollback/unload checks are in progress.
+   review found no remaining concrete blocker. All six rendered rename cases
+   pass: publication, CPU rejection, irrelevant GPU-failure flag, presentation
+   rejection, queued unload and prepared unload/recovery. All twelve existing
+   repeat/key rendered regressions and full converter regressions pass as well.
+   The initial name-only probe revealed its old checker excluded the backward-
+   seek sample from A/B renderer-token matching; include that actual sample and
+   its layer ID, preserving the same required token/geometry checks.
    No full acceptance, live managed rename UI, root/media rename, positive Godot
-   runtime label query or other backend coverage is claimed. This uncommitted
-   source is outside active full CI source 2b7d3671.
+   runtime label query or other backend coverage is claimed. This later local
+   source is outside superseded full CI source 2b7d3671. Additional evidence:
+   layer-rename-rendered-corrected/report.json, layer-rename-repeat-regressions/
+   report.json, layer-rename-key-regressions/report.json and
+   layer-rename-converter-regressions.log. Required Windows CI runs all three
+   existing playback-harness modes and retains their reports/captures. The local
+   milestone leaves full hosted and broader backend acceptance open.
 
 ### 6.95. Consume the retained reader package in macOS CI
 

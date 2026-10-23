@@ -548,6 +548,43 @@ int wmain(int argc, wchar_t** argv)
     require(doc.DiscardPendingEdits() && guardPaint->GetMaxRepeatCount() == UINT32_MAX,
         "discard preserves canonical repeat");
     std::puts("[IMM_PAINT_REPEAT_EDIT_TEST] canonical zero/finite/maximum publication, stable handles, prepare/present rejection and discard passed (CPU-only)");
+    const auto queueName = [&](const wchar_t * name) {
+        return doc.QueueLayerProperties(guardLayer->GetID(), false, false, false, 1.0f,
+            false, trans3d::identity(), false, 0, name);
+    };
+    const std::wstring originalName = guardLayer->GetName().GetS();
+    const std::wstring originalPath = guardLayer->GetFullName()->GetS();
+    workers.fetch_add(1);
+    require(queueName(L"busy") == -7, "rename queue rejects importer ownership");
+    workers.fetch_sub(1);
+    for (bool preparing : { true, false })
+    {
+        require(queueName(L"must not publish") == 0, "queue rename owner recheck");
+        int32_t result = -99;
+        const uint64_t revision = doc.CommitEdits(&result);
+        require(revision != 0 && result == 0, "commit rename owner recheck");
+        if (preparing) workers.fetch_add(1);
+        cpu(&commit);
+        if (!preparing) workers.fetch_add(1);
+        gpu();
+        workers.fetch_sub(1);
+        Document::AuthoringCommitStatus status{};
+        require(doc.GetAuthoringCommitStatus(revision, &status) &&
+            status.mState == Document::AuthoringCommitState::Rejected && status.mResult == -7 &&
+            originalName == guardLayer->GetName().GetS() && originalPath == guardLayer->GetFullName()->GetS(),
+            "rename preparation/publication ownership recheck preserves names");
+    }
+    require(queueName(L"guard renamed \u03a9") == 0, "queue rename after ownership release");
+    int32_t renameResult = -99;
+    const uint64_t renamed = doc.CommitEdits(&renameResult);
+    require(renamed != 0 && renameResult == 0, "commit rename recovery");
+    cpu(&commit);
+    require(originalName == guardLayer->GetName().GetS(), "prepared rename preserves short name");
+    gpu();
+    require(std::wstring(guardLayer->GetName().GetS()) == L"guard renamed \u03a9" &&
+        std::wstring(guardLayer->GetFullName()->GetS()) == std::wstring(root->GetFullName()->GetS()) + L"/guard renamed \u03a9",
+        "rename recovery publishes short name and full path");
+    std::puts("[IMM_LAYER_RENAME_OWNER_TEST] queue/preparation/publication importer ownership guards and recovery passed (counter guard, no concurrent decode)");
     require(doc.DetachEditing() && root->RemovePublishedChild(guardLayer) &&
         doc.GetSequence()->RemovePublishedLayer(guardLayer), "remove CPU-only guard fixture before GPU unload");
     guardLayer->Deinit(&log);

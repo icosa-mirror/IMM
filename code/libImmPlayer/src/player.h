@@ -95,6 +95,10 @@ namespace ImmPlayer {
         void SetSpawnAreaNeedsUpdate(int docId, bool state);
         const ImmCore::piImage* GetSpawnAreaScreenshot(int docId, int spawnAreaId);
         bool GetSpawnAreaInfo(Document::SpawnAreaInfo & info, int docId, int spawnAreaId);
+        // Numeric values and an optional caller-owned name are copied under the
+        // publication lock. Without ownedName, mName is deliberately null.
+        bool GetSpawnAreaInfoSnapshot(Document::SpawnAreaInfo & info, int docId, int spawnAreaId,
+            std::wstring * ownedName = nullptr);
 
         bool IsSpawnAreaAvailable(int docId, int spawnAreaId);
         int GetAvailableSpawnAreaIds(int docId, int capacity, int * ids);
@@ -164,6 +168,8 @@ namespace ImmPlayer {
             bool setTransform, const ImmCore::trans3d & transform);
         int32_t QueuePaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t count);
         int32_t GetPaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t * count);
+        int32_t QueueLayerName(int docId, uint32_t layerId, std::wstring name);
+        int32_t GetLayerName(int docId, uint32_t layerId, std::wstring & name);
         int32_t QueueAnimationKey(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time,
             const ImmImporter::Layer::AnimValue & value,

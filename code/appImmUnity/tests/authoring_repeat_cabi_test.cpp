@@ -163,6 +163,117 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(validSnapshots.load() && snapshots.load() > 0, "owned layer snapshots survive concurrent publication");
     std::printf("[IMM_LAYER_QUERY_SNAPSHOT_TEST] pass=1 publications=200 snapshots=%llu perCallSnapshot=1\n",
         static_cast<unsigned long long>(snapshots.load()));
+    const auto readName = [&](int layer) {
+        uint32_t bytes = 0;
+        requireRepeat(ImmAuthoring_LayerGetName(doc, layer, nullptr, 0, &bytes) == IMM_AUTHORING_OK && bytes > 0,
+            "query name buffer size");
+        std::vector<char> value(bytes);
+        requireRepeat(ImmAuthoring_LayerGetName(doc, layer, value.data(), bytes, &bytes) == IMM_AUTHORING_OK,
+            "copy owned UTF-8 name");
+        return std::string(value.data());
+    };
+    const auto layerInfo = [&](int id) {
+        Player::LayerInfo result{};
+        for (int index = 0; index < player.GetLayerCount(doc); ++index)
+            if (player.GetLayerInfoByIndex(doc, index, result) && result.id == id) return result;
+        requireRepeat(false, "named layer info exists");
+        return result;
+    };
+    requireRepeat(ImmAuthoring_LayerSetName(doc, root, "Root changed", 12) == IMM_AUTHORING_UNSUPPORTED,
+        "root label stays read-only");
+    const char badUtf8[] = { char(0xc0), char(0xaf) };
+    requireRepeat(ImmAuthoring_LayerSetName(doc, target, badUtf8, sizeof(badUtf8)) == IMM_AUTHORING_INVALID_ARGUMENT &&
+        ImmAuthoring_LayerSetName(doc, target, "", 0) == IMM_AUTHORING_INVALID_ARGUMENT,
+        "malformed and empty names rejected");
+    int32_t group = -1, spawn = -1;
+    const char groupName[] = "Rename group";
+    requireRepeat(ImmAuthoring_LayerCreate(doc, root, IMM_AUTHORING_LAYER_GROUP, groupName,
+        sizeof(groupName) - 1, &group) == IMM_AUTHORING_OK, "create rename group");
+    presentHierarchyEdit();
+    requireRepeat(ImmAuthoring_LayerReparent(doc, target, group, 0) == IMM_AUTHORING_OK, "move paint into rename group");
+    presentHierarchyEdit();
+    const char spawnName[] = "Spawn before";
+    requireRepeat(ImmAuthoring_LayerCreate(doc, group, IMM_AUTHORING_LAYER_SPAWN_AREA,
+        spawnName, sizeof(spawnName) - 1, &spawn) == IMM_AUTHORING_OK, "create rename spawn");
+    presentHierarchyEdit();
+    const int oldActive = player.GetSpawnArea(doc), oldDefault = player.GetInitialSpawnArea(doc);
+    uint64_t drawingBefore = 0, drawingAfter = 0;
+    requireRepeat(player.GetDrawingHandle(doc, target, 0, drawingBefore), "drawing handle before rename");
+    char paintName[] = "Paint \xc3\x85 \xf0\x9f\x9a\x80";
+    const std::string expectedPaint = paintName;
+    requireRepeat(ImmAuthoring_LayerSetName(doc, target, paintName, sizeof(paintName) - 1) == IMM_AUTHORING_OK,
+        "queue UTF-8 paint rename");
+    paintName[0] = 'X';
+    requireRepeat(readName(target) == "KeepPaint", "queued name remains unpublished and input is copied");
+    _putenv_s("IMM_LIVE_EDIT_HOLD_LAYER_RENAME", "1");
+    uint64_t nameRevision = 0;
+    requireRepeat(ImmAuthoring_Commit(doc, &nameRevision) == IMM_AUTHORING_OK, "commit held rename");
+    requireRepeat(wait([&]() {
+        ImmAuthoringCommitStatus status{};
+        status.structSize = sizeof(status); status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+        requireRepeat(ImmAuthoring_GetCommitStatus(doc, nameRevision, &status) == IMM_AUTHORING_OK,
+            "held rename status");
+        return status.state == IMM_AUTHORING_COMMIT_PREPARED;
+    }), "rename prepared");
+    requireRepeat(readName(target) == "KeepPaint", "prepared name remains unpublished");
+    _putenv_s("IMM_LIVE_EDIT_HOLD_LAYER_RENAME", "");
+    requireRepeat(wait([&]() { return readName(target) == expectedPaint; }), "UTF-8 paint name presented");
+    char tooSmall[] = { '!', 0 };
+    uint32_t required = 0;
+    requireRepeat(ImmAuthoring_LayerGetName(doc, target, tooSmall, sizeof(tooSmall), &required) ==
+        IMM_AUTHORING_INVALID_ARGUMENT && tooSmall[0] == '!' && required == expectedPaint.size() + 1,
+        "insufficient buffer reports size without truncation");
+    const char renamedGroup[] = "Group \xce\xa9";
+    player.SetSpawnAreaNeedsUpdate(doc, false);
+    requireRepeat(ImmAuthoring_LayerSetName(doc, group, renamedGroup, sizeof(renamedGroup) - 1) == IMM_AUTHORING_OK,
+        "queue ancestor rename");
+    presentHierarchyEdit();
+    const auto paintInfo = layerInfo(target), spawnInfo = layerInfo(spawn);
+    const std::wstring prefix = std::wstring(layerInfo(root).fullName) + L"/Group \u03a9/";
+    requireRepeat(std::wstring(paintInfo.fullName) == prefix + L"Paint \u00c5 \U0001f680" &&
+        std::wstring(spawnInfo.fullName) == prefix + L"Spawn before" &&
+        readName(sibling) == "BlueSibling", "ancestor rename updates descendant paths and preserves sibling");
+    requireRepeat(player.GetSpawnAreaNeedsUpdate(doc) && player.GetSpawnAreaCount(doc) == 1 &&
+        player.GetSpawnArea(doc) == oldActive && player.GetInitialSpawnArea(doc) == oldDefault &&
+        player.GetDrawingHandle(doc, target, 0, drawingAfter) && drawingAfter == drawingBefore,
+        "rename notifies labels without changing ordinal selection or drawing handles");
+    Document::SpawnAreaInfo savedSpawn{};
+    std::wstring savedName;
+    requireRepeat(player.GetSpawnAreaInfoSnapshot(savedSpawn, doc, 0, &savedName) && savedName == L"Spawn before",
+        "owned spawn name snapshot");
+    const char renamedSpawn[] = "Spawn \xe6\x97\xa5 \xf0\x9f\x9a\x80";
+    requireRepeat(ImmAuthoring_LayerSetName(doc, spawn, renamedSpawn, sizeof(renamedSpawn) - 1) == IMM_AUTHORING_OK,
+        "queue Unicode spawn rename");
+    presentHierarchyEdit();
+    SerializedSpawnArea serialized{};
+    requireRepeat(::GetSpawnAreaInfo(doc, 0, serialized) && std::strcmp(serialized.mName, renamedSpawn) == 0 &&
+        std::wstring(savedSpawn.mName) == L"Spawn before", "UTF-8 bridge and old owned snapshot survive rename");
+    requireRepeat(ImmAuthoring_LayerSetName(doc, group, "Discarded", 9) == IMM_AUTHORING_OK &&
+        ImmAuthoring_DiscardPending(doc) == IMM_AUTHORING_OK && readName(group) == renamedGroup,
+        "discard preserves name");
+    for (const char * failure : { "IMM_LIVE_EDIT_FAIL_PREPARE_CPU", "IMM_LIVE_EDIT_FAIL_PRESENT" })
+    {
+        requireRepeat(ImmAuthoring_LayerSetName(doc, group, "Rejected", 8) == IMM_AUTHORING_OK,
+            "queue rejected rename");
+        uint64_t revision = 0;
+        requireRepeat(ImmAuthoring_Commit(doc, &revision) == IMM_AUTHORING_OK, "commit rejected rename");
+        _putenv_s(failure, "1");
+        ImmAuthoringCommitStatus status{};
+        requireRepeat(wait([&]() {
+            status.structSize = sizeof(status); status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(doc, revision, &status) == IMM_AUTHORING_OK, "rename rejection status");
+            return status.state == IMM_AUTHORING_COMMIT_REJECTED || status.state == IMM_AUTHORING_COMMIT_PRESENTED;
+        }), "rename reaches terminal state");
+        _putenv_s(failure, "");
+        requireRepeat(status.state == IMM_AUTHORING_COMMIT_REJECTED && status.result == -10 &&
+            readName(group) == renamedGroup && std::wstring(layerInfo(target).fullName) == paintInfo.fullName,
+            "rename failure preserves canonical name and descendant paths");
+    }
+    requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
+    presentHierarchyEdit();
+    requireRepeat(std::wstring(savedSpawn.mName) == L"Spawn before" && player.GetSpawnAreaCount(doc) == 0,
+        "owned spawn name survives deletion");
+    std::puts("[IMM_LAYER_RENAME_CABI_TEST] pass=1 paintGroupSpawn=1 utf8=1 copiedInput=1 queuedPreparedPreserved=1 descendants=1 stableHandles=1 ownedSpawnName=1 discardAndRejection=1");
     requireRepeat(ImmAuthoring_Detach(doc) == IMM_AUTHORING_OK, "detach through C export");
     count = 123;
     requireRepeat(ImmAuthoring_PaintGetMaxRepeatCount(doc, target, &count) == IMM_AUTHORING_INVALID_STATE && count == 123,

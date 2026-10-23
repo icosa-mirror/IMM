@@ -439,6 +439,8 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python code/appImmUnity/tests/paint_playback_keys_smoke.py --canonical-repeat --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/paint-repeat-ci
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python code/appImmUnity/tests/paint_playback_keys_smoke.py --layer-rename --viewer code/appImmViewer/exe/appImmViewer_Release.exe --plugin code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll --output-dir artifacts/layer-rename-ci
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     - name: Upload Windows paint playback key evidence
       if: always()
@@ -462,6 +464,11 @@ jobs:
           artifacts/paint-repeat-ci/*/stdout.log
           artifacts/paint-repeat-ci/*/settings.json
           artifacts/paint-repeat-ci/*/capture.ppm
+          artifacts/layer-rename-ci/report.json
+          artifacts/layer-rename-ci/*/debug.txt
+          artifacts/layer-rename-ci/*/stdout.log
+          artifacts/layer-rename-ci/*/settings.json
+          artifacts/layer-rename-ci/*/capture.ppm
 
     - name: Verify D3D11 structured buffer ownership
       shell: pwsh

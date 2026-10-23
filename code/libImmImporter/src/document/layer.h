@@ -165,6 +165,7 @@ namespace ImmImporter
 		bool ReorderPublishedChild(Layer * child, uint32_t childIndex);
 		void SetPublishedParent(Layer * parent);
 		void PublishPreparedFullName(ImmCore::piString * fullName);
+        void PublishPreparedName(ImmCore::piString * name);
 		uint32_t GetNumAnimKeys(AnimProperty property) const;
 		const AnimKey* GetAnimKey(AnimProperty property, unsigned int index) const;
         bool GetLoaded(void) const;

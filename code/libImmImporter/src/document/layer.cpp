@@ -516,6 +516,12 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		mFullName = std::move(*fullName);
 	}
 
+    void Layer::PublishPreparedName(piString * name)
+    {
+        piAssert(name != nullptr);
+        mName = std::move(*name);
+    }
+
 	Layer* Layer::GetParent() const { return mParent; }
 
 	bool Layer::Recurse(VisitorF func, int level, unsigned int child, bool instance, bool doNotRecurseCollapsedGroups, bool doNotRecurseHiddenGroups, bool doNotRecurseLockedGroups, bool doPostExec)
