@@ -295,13 +295,16 @@ jobs:
       - name: Download same-commit macOS reader native plugin
         uses: actions/download-artifact@v4
         with:
-          name: Internal-ImmStrokeReaderPlugin-macOS
-          path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS
+          name: ImmStrokeReaderPlugin-Unity
+          path: artifacts/prebuilt-reader-package
 
       - name: Sign same-commit macOS reader native plugin
         run: |
           set -euo pipefail
+          source="artifacts/prebuilt-reader-package/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib"
           reader="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib"
+          test -s "$source"
+          cp "$source" "$reader"
           test -s "$reader"
           chmod +x "$reader"
           codesign --force --sign - "$reader"

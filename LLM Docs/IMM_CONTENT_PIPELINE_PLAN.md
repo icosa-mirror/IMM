@@ -3375,6 +3375,57 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    is outside active full run 39966625591/2b7d3671. Threaded decoding, synchronous
    teardown concurrency and other backend/per-operation acceptance remain open.
 
+### 6.94. Live nonroot layer names (functional checks pass; render acceptance pending)
+
+1. Add dedicated UTF-8 LayerSetName/LayerGetName C exports without changing the
+   existing property ABI. Nonroot group, paint and spawn names are supported;
+   root labels and the other live layer types remain explicitly unsupported.
+   Input is copied at queue time, malformed/empty/NUL-containing or oversized
+   UTF-8 rejects, and size-query readback includes NUL. Insufficient output
+   capacity reports the required size and preserves the caller's buffer.
+2. Reuse/generalize the existing prepared full-name path used by reparenting:
+   prepare a short name and descendant full paths, then publish them together.
+   Check importer ownership at queue, preparation and publication. Notify spawn
+   label consumers/evaluation revision without rebuilding stable ordinal caches.
+   Unity/Godot wrappers copy spawn data under the Player lock before encoding
+   owned names; Unity retains per-thread UTF-8, and Godot's fixed ABI buffer
+   truncates only at a code-point boundary. Existing borrowed native queries
+   retain their restricted lifetime contract.
+3. Windows Unity/viewer/Godot build passes. Loaded-document C-export checks pass
+   paint/group/spawn Unicode, copied input, queued/prepared old state, descendant
+   paths, stable drawing handles/selection ordinals, owned spawn labels across
+   rename/deletion, discard and injected CPU/presentation rejection. CPU counter
+   checks pass ownership rejection at all three boundaries plus recovery; these
+   do not exercise a real concurrent decoder. Dynamic-DLL early ABI checks pass
+   all twenty-eight cases, including nine new name validation cases.
+4. Evidence: artifacts/layer-rename-native-build.log, layer-rename-cabi/report.json
+   and run.log, layer-rename-cpu-tests.log and layer-rename-abi-tests.log. Source
+   review and rendered rename publication/rollback/unload checks are in progress.
+   No full acceptance, live managed rename UI, root/media rename, positive Godot
+   runtime label query or other backend coverage is claimed. This uncommitted
+   source is outside active full CI source 2b7d3671.
+
+### 6.95. Consume the retained reader package in macOS CI
+
+1. Full run 39966625591 failed macOS job 120480879733 before Editor tests:
+   Internal-ImmStrokeReaderPlugin-macOS was absent. Build packaging explicitly
+   deletes that intermediate after producing the retained aggregate package.
+   Requested cancellation for the source correction; no hosted licence/Editor
+   acceptance is inferred from the resulting missing XML and downstream failures.
+2. Download the same-run retained ImmStrokeReaderPlugin-Unity package instead,
+   and copy its exact com.immersive-foundation.imm-stroke-reader/Plugins/macOS/
+   libImmStrokeReader.dylib before signing. Actual artifact 12507683874 was
+   downloaded and inspected: its manifest reports passed source 2b7d3671 and the
+   expected 1,984,776-byte reader exists. Workflow contract now rejects the deleted
+   internal reference and requires the retained package/copy. No licence or test
+   acceptance gate changes. Read-only review approved producer/consumer lifecycle
+   and path correctness; workflow-matrix and changed engine-workflow lint pass.
+3. Evidence: artifacts/native-editor-macos-failed-job.log,
+   reader-package-source-fix-proof.json, reader-package-fix-matrix.log,
+   reader-package-fix-actionlint.log and reader-package-source-fix-cancel.log.
+   This CI correction is committed independently of local rename source. The
+   next full push must still prove actual native macOS Editor execution.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

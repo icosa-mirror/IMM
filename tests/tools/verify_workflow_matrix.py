@@ -738,8 +738,13 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
             errors.append(f"{workflow_rel} unity-windows-openxr-vr missing URP player contract token: {token}")
 
     macos_body = job_bodies.get("unity-macos-metal-composition", "")
+    if "name: Internal-ImmStrokeReaderPlugin-macOS" in macos_body:
+        errors.append(f"{workflow_rel} macOS Editor must consume the retained reader package, not a deleted internal artifact")
     for token in [
         "name: ImmPlayerPlugin-Unity",
+        "name: ImmStrokeReaderPlugin-Unity",
+        "path: artifacts/prebuilt-reader-package",
+        'cp "$source" "$reader"',
         "Plugins/OSX/ImmUnityPlugin.bundle",
         'chmod +x "$plugin_binary"',
         "codesign --verify --deep --strict",
