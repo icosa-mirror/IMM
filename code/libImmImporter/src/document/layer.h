@@ -201,6 +201,7 @@ namespace ImmImporter
         void ReevaluatePaintPlaybackAt(ImmCore::piTick time, ImmCore::piLog * log);
         void ReevaluateTransformAt(ImmCore::piTick time, ImmCore::piLog * log);
         void ReevaluateOpacityAt(ImmCore::piTick time, ImmCore::piLog * log);
+        void ReevaluateVisibilityAt(ImmCore::piTick time, ImmCore::piLog * log);
 
         // sets default pass through visiblity of groups without animation keys, hides all layers that have keys
         void SetDefaultPlaybackVisibility();

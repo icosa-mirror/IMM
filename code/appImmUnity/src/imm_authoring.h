@@ -285,6 +285,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetName(int32_
 // size. Insufficient capacity reports requiredBytes and preserves the buffer.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetName(int32_t docId,
     int32_t layerId, char * nameUtf8, uint32_t capacity, uint32_t * requiredBytes);
+// Visibility keys refresh ordinary group/static-paint/spawn subtrees. Nonroot
+// timeline groups and media/instance/other-resource descendants are unsupported.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeySet(int32_t docId, int32_t layerId,
     const ImmAuthoringKey * key);
 // Canonical static-paint repeat count; zero repeats indefinitely. Publication

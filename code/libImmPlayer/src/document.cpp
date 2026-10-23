@@ -25,6 +25,45 @@ using namespace ImmImporter;
 
 namespace ImmPlayer
 {
+    // Visibility publication can refresh these descendants without restarting
+    // timeline clocks, executing actions or touching media playback lifecycles.
+    static bool iCanRefreshStaticVisibility(Layer * layer)
+    {
+        if (layer->GetType() == Layer::Type::Group)
+        {
+            if (layer->GetParent() != nullptr && layer->GetIsTimeline()) return false;
+            for (uint32_t index = 0; index < layer->GetNumChildren(); ++index)
+                if (!iCanRefreshStaticVisibility(layer->GetChild(index))) return false;
+            return true;
+        }
+        if (layer->GetType() == Layer::Type::SpawnArea) return true;
+        return layer->GetType() == Layer::Type::Paint &&
+            dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) != nullptr;
+    }
+
+    static int32_t iValidateStaticVisibility(Sequence * sequence, Layer * layer)
+    {
+        if (layer == nullptr) return -1;
+        if (IsLoadingAsync(sequence)) return -7;
+        return iCanRefreshStaticVisibility(layer) ? 0 : -3;
+    }
+
+    static void iRefreshStaticVisibility(Layer * layer, piTick now, piLog * log)
+    {
+        if (layer->GetType() == Layer::Type::Paint)
+        {
+            if (layer->GetNumAnimKeys(Layer::AnimProperty::Visibility) == 0)
+                layer->SetCanonicalVisible(layer->GetCanonicalVisible());
+            layer->ReevaluatePaintPlaybackAt(now, log);
+        }
+        else layer->ReevaluateVisibilityAt(now, log);
+        layer->ReevaluateTransformAt(now, log);
+        layer->ReevaluateOpacityAt(now, log);
+        if (layer->GetType() == Layer::Type::Group)
+            for (uint32_t index = 0; index < layer->GetNumChildren(); ++index)
+                iRefreshStaticVisibility(layer->GetChild(index), now, log);
+    }
+
     // Instance links can reach into a subtree from outside its parent hierarchy.
     // Reject those deletions until reference retargeting is part of the contract.
     static bool iHasInstanceReferenceToSubtree(Layer * current, Layer * subtree)
@@ -1038,6 +1077,16 @@ namespace ImmPlayer
                 Layer * layer = mPendingPresentation.mLayer;
                 const uint64_t layerId = mPendingPresentation.mObject;
                 const Layer::AnimProperty property = mPendingPresentation.mAnimationProperty;
+                if (property == Layer::AnimProperty::Visibility)
+                {
+                    const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
+                    if (visibilityResult != 0)
+                    {
+                        iRejectCommit(revision, visibilityResult, 0, layerId);
+                        mPendingPresentation = PendingPresentation{};
+                        return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                    }
+                }
                 const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
                 if (paintPlaybackKey && std::getenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS") != nullptr)
                     return mState.mPlaybackState != PlaybackState::PausedAndHidden;
@@ -1067,15 +1116,14 @@ namespace ImmPlayer
                         layer->ReevaluateOpacityAt(mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
-                    const bool paintVisibilityKey = property == Layer::AnimProperty::Visibility &&
-                        layer->GetType() == Layer::Type::Paint &&
-                        dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) != nullptr;
-                    if (paintPlaybackKey || paintVisibilityKey)
+                    if (property == Layer::AnimProperty::Visibility)
                     {
-                        // Only visibility-key removal restores canonical visibility;
-                        // Loop/Offset edits retain their existing visibility policy.
-                        if (paintVisibilityKey && layer->GetNumAnimKeys(Layer::AnimProperty::Visibility) == 0)
-                            layer->SetCanonicalVisible(layer->GetCanonicalVisible());
+                        iRefreshStaticVisibility(layer, mLastCPUTime, log);
+                        if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+                        ++mEvaluationRevision;
+                    }
+                    if (paintPlaybackKey)
+                    {
                         layer->ReevaluatePaintPlaybackAt(mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
@@ -1880,6 +1928,11 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
+        if (property == Layer::AnimProperty::Visibility)
+        {
+            const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
+            if (visibilityResult != 0) return visibilityResult;
+        }
         const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
         if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
@@ -1938,6 +1991,11 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
+        if (property == Layer::AnimProperty::Visibility)
+        {
+            const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
+            if (visibilityResult != 0) return visibilityResult;
+        }
         const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
         if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
@@ -2888,6 +2946,12 @@ namespace ImmPlayer
             {
                 iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
                 return;
+            }
+            if (edit.mProperty == Layer::AnimProperty::Visibility)
+            {
+                const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
+                if (visibilityResult != 0)
+                { iRejectCommit(batch.mRevision, visibilityResult, 0, edit.mLayerId); return; }
             }
             const bool paintPlaybackKey = edit.mProperty == Layer::AnimProperty::Loop || edit.mProperty == Layer::AnimProperty::Offset;
             if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||

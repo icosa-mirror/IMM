@@ -3685,6 +3685,30 @@ the historical sizes/check counts below describe this earlier source only.
    converter-checkpoint-ci-agent-ios-cancel-annotations.json and
    held-key-properties-ci-39984582643.json.
 
+### 6.106. Held static subtree visibility correction (local Windows milestone)
+
+1. Existing loaded C-export host reproduces a stale paused group/subtree after
+   visibility-key publication (artifacts/held-group-visibility-red/run.log).
+   Refresh supported subtrees parent before child at the latest held CPU time;
+   resample visibility, opacity, transforms and static-paint frame selection while
+   bypassing actions, playback toggles and root/chapter/default-spawn state.
+2. Support ordinary group/static-paint/spawn descendants, including a root whose
+   clock is preserved. Validate topology and importer ownership at queue, prepare
+   and publication. Nonroot timeline groups and media/instance/other-resource
+   descendants explicitly return Unsupported until their clock/lifecycle refresh
+   is implemented. This is an honest live-operation limit, not full M2 acceptance;
+   timeline mutation remains required before full managed cutover.
+3. Windows Unity/viewer/Godot builds, loaded C-export paused group hide/remove and
+   descendant-world-visibility checks, existing CPU authoring and six rendered
+   playback regression cases pass. Source review found no blocker. Do not reuse full
+   manager seek/update for this operation: those paths can execute actions and
+   restart unrelated sound playback.
+4. Evidence: artifacts/held-group-visibility-build.log,
+   held-group-visibility-green/report.json, held-group-visibility-cpu-check.log
+   and held-group-visibility-playback-regressions/report.json. Full timeline support
+   remains required by M2; no timeline/backend acceptance is claimed. This local
+   source is newer than the current full CI runs and has not been pushed yet.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

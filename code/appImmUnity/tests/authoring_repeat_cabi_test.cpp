@@ -450,6 +450,18 @@ int wmain(int argc, wchar_t ** argv)
     presentHierarchyEdit();
     requireRepeat(player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.isVisible == heldTransform.canonicalVisible,
         "last paint visibility key removal restores canonical held visibility");
+    requireRepeat(ImmAuthoring_KeySet(doc, group, &visibilityKey) == IMM_AUTHORING_OK, "queue held group visibility key");
+    presentHierarchyEdit();
+    requireRepeat(player.GetLayerDiagnostics(doc, group, heldTransform) && heldTransform.isVisible == 0 &&
+        player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.isWorldVisible == 0,
+        "presented group visibility refreshes its held subtree");
+    requireRepeat(ImmAuthoring_KeyRemove(doc, group, IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY, 0.0) == IMM_AUTHORING_OK,
+        "remove held group visibility key");
+    presentHierarchyEdit();
+    requireRepeat(player.GetLayerDiagnostics(doc, group, heldTransform) &&
+        heldTransform.isVisible == heldTransform.canonicalVisible &&
+        player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.isWorldVisible == 1,
+        "group key removal restores canonical held subtree visibility");
     requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
     presentHierarchyEdit();
     requireRepeat(std::wstring(savedSpawn.mName) == L"Spawn before" && player.GetSpawnAreaCount(doc) == 0,

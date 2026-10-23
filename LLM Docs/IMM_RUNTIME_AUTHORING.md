@@ -549,7 +549,13 @@ failed before this correction and passes afterward (roadmap 6.102).
 Opacity keys likewise resample at publication and restore canonical opacity after
 last-key removal. Static-paint visibility keys refresh held drawing selection;
 last-key removal restores canonical visibility. These pass paused loaded C-export
-checks (roadmap 6.104). Group/timeline visibility and descendant clocks remain open.
+checks (roadmap 6.104). Ordinary group/spawn visibility publication now refreshes
+supported descendants parent before child, including latent paint/pose state while
+hidden. Root clocks, action flags, chapter/default-spawn state and overrides remain
+intact. Queue/preparation/publication revalidate importer ownership and subtree
+support (roadmap 6.106). Nonroot timeline groups and media/instance/other-resource
+descendants explicitly reject visibility-key edits as Unsupported; their clock and
+lifecycle refresh remains open. These limits also apply to visibility-key removal.
 
 Static paint additionally supports stepped Loop and tick-valued Offset keys.
 Offset uses the direct key structure's `uintValue`; Loop retains its strict boolean

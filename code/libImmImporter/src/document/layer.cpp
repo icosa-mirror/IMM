@@ -793,6 +793,12 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         SetStateAtImpl(now, log, false, AnimProperty::Transform);
     }
 
+    void Layer::ReevaluateVisibilityAt(piTick now, piLog * log)
+    {
+        if (GetNumAnimKeys(AnimProperty::Visibility) == 0) mVisible = mCanonicalVisible;
+        else SetStateAtImpl(now, log, false, AnimProperty::Visibility);
+    }
+
     void Layer::ReevaluateOpacityAt(piTick now, piLog * log)
     {
         if (GetNumAnimKeys(AnimProperty::Opacity) == 0) mOpacity = mCanonicalOpacity;
@@ -986,6 +992,11 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             }
             case AnimProperty::Visibility:
             {
+                if (propertyOnly)
+                {
+                    mVisible = lastKey->mValue.mBool;
+                    break;
+                }
                 // Visibility controls if some layers are alive or dead for playback
 
                  // span change since last evaluation retriggers sounds
