@@ -2900,6 +2900,16 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    desktop UI, GUI cancellation/progress behavior and real Unity editor consumer
    integration remain open. Isolated local CLR/CRT proof is stronger than running
    dotnet from the checkout, but does not substitute for a clean-machine test.
+7. Packaging implementation committed as 443ce76c. Pre-push pull merged CI
+   binary refresh a821203c without conflicts in e3f23f60. Repeated full converter
+   regressions, strict Windows exports, 15 CLI cases and extracted-archive tests
+   all pass with the refreshed DLLs. The new clean-tree archive records e3f23f60,
+   232 files and 39,221,454 bytes; SHA256:
+   9cf7152439c626b23ed504821b087160e184bdd857ac1fca6c3fad03622a6a0b.
+   Evidence: artifacts/imm-convert-portable-post-sync/package-report.json,
+   imm-convert-portable-post-sync-tests/report.json, imm-convert-cli-post-sync-tests/
+   report.json and post-sync converter/exports logs. Preserve that source commit
+   in history; a final [CI VALIDATION] evidence commit triggers the new full run.
 
 ## 7. Consolidated documents
 
