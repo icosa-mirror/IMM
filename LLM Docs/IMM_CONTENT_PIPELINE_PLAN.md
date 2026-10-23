@@ -25,7 +25,8 @@ CLI (c78d5206), and the prototype self-contained Windows CLI archive (6.75-6.78)
 Those library/CLI/package sources and the ANSI host-trace correction are now
 included in accepted full CI source 47a0240d. The shared application host
 (e7f5c100), desktop window (3ec46758) and Unity editor window (6.82) are later
-milestones: local checks pass, and the next full push must validate them.
+milestones: local checks and matched Editor/CLI conversion pass (6.85), and
+full run 39954000025 is validating the shared-host/desktop/Editor checkpoint.
 Live UI input, clean-machine and dependency licence documentation acceptance remain open. Earlier numbered
 checkpoints retain historical states; use this checkpoint and the latest entries
 for current acceptance. Source chapter/startup mapping, broader timing/navigation,
@@ -3112,6 +3113,35 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    repeat-specific rollback/unload cases, loaded C ABI delivery, backend breadth,
    managed transaction mapping and full M2 acceptance remain open. Do not count
    this CPU slice as completing canonical-repeat integration across all hosts.
+
+### 6.85. Matched real Editor and standalone output proof
+
+1. After checking that no IMM Editor owned the project and available memory had
+   recovered, run the owned cross-host probe in Unity 6000.6.0f1. Actual Editor
+   conversion and synchronous AssetDatabase import pass. Convert the same
+   synthetic animated source with the production CLI and complete native staging
+   folder. Both use the same rebuilt exporter DLL hash, now committed in native
+   milestone b0055332. The earlier UDS failure in 6.83 remains a recorded failed
+   attempt, not the final outcome of this local check.
+2. Editor and CLI IMM outputs are byte-identical. Independent native decoding
+   exactly matches one paint layer, four strokes, twelve points, hierarchy,
+   transforms, pivots, frame tables, root metadata, root/layer keys and nested
+   timing. This fixture has zero viewpoints, pictures or sounds, so those empty
+   comparisons provide no additional content coverage. No evaluated playback,
+   navigation, media, clean-machine or live mouse/keyboard acceptance is claimed.
+3. Retain input/output/native hashes and decoded comparison evidence under ignored
+   artifacts/quill-editor-cli-cross-host/provenance.json and decoded-comparison.log;
+   the source JSON/QBIN and both output IMM files remain available locally.
+   Editor evidence is quill-editor-cli-cross-host-editor-refreshed.log and its CLI
+   log. The owned temporary Editor source/output assets were removed after the
+   process completed, with its probe source retained in artifacts. No changes to
+   other open Editors or user assets were made.
+4. Canonical-repeat CPU milestone is committed as b0055332, separate from this
+   acceptance record. Active full run 39954000025 still targets e19db96e and does
+   not validate that later native source. Its Windows converter/form/archive gates
+   pass; latest snapshot has 18 successful jobs, three active and one cancelled
+   Firefox infrastructure job. Full acceptance and the single isolated retry
+   remain pending. C5 and M2 retain all remaining acceptance requirements above.
 
 ## 7. Consolidated documents
 
