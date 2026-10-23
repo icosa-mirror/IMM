@@ -3870,6 +3870,28 @@ the historical sizes/check counts below describe this earlier source only.
    runtime optimization candidates are planned in the root-level
    [runtime rendering optimization plan](../IMM_RUNTIME_RENDER_OPTIMIZATION_PLAN.md).
 
+### 6.111. Timeline workspace (active)
+
+1. User requested an animation-editor layout and set the active goal to finish a
+   fully functional timeline UI. Work is in the sample lab; public managed SDK
+   behavior remains unchanged. Planned delivery: full-width tracks and ruler,
+   playback/scrubbing, actual drawing/key data, key selection/editing/retiming,
+   nested timeline context, frame navigation and usable inspector layout.
+2. The first live reload exposed a native GetPlayTime crash while a document had
+   not yet loaded its root. Crash stack is retained in the current Editor log;
+   the owned Editor exited. UI now reads playhead state only after attachment.
+   Native time queries now zero outputs and guard invalid/loading/rootless
+   documents under the Player mutex. Actual fresh-Editor confirmation is pending.
+3. Added read-only layer timing, evaluated layer-to-document transform and stored
+   key enumeration exports. They reuse the existing 48-byte transform and 80-byte
+   key layouts; no API versions were added. Transform queries also support fixing
+   Frame selected, which previously treated local bounds as world bounds.
+4. The native Windows Release x64 plugin target compiled successfully after these
+   changes, with the matching DLL copied while the Editor was closed. Evidence:
+   artifacts/live-timeline-native-query-build.log. Getter runtime/ABI checks,
+   the new UI, atomic same-channel retiming and full hosted acceptance remain
+   pending. Do not describe the timeline as fully functional or visually accepted.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

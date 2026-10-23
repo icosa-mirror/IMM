@@ -172,6 +172,21 @@ namespace ImmPlayer {
         int32_t GetLayerName(int docId, uint32_t layerId, std::wstring & name);
         int32_t QueueLayerPivot(int docId, uint32_t layerId, const ImmCore::trans3d & pivot);
         int32_t GetLayerPivot(int docId, uint32_t layerId, ImmCore::trans3d & pivot);
+        int32_t GetLayerWorldTransform(int docId, uint32_t layerId, ImmCore::trans3d & transform);
+        struct LayerTimeline
+        {
+            bool isTimeline = false;
+            double durationSeconds = 0;
+            double startOffsetSeconds = 0;
+            uint32_t paintFrameRate = 0;
+            uint32_t paintNumFrames = 0;
+            uint32_t maxRepeatCount = 0;
+        };
+        int32_t GetLayerTimeline(int docId, uint32_t layerId, LayerTimeline & timing);
+        int32_t GetAnimationKeyCount(int docId, uint32_t layerId,
+            ImmImporter::Layer::AnimProperty property, uint32_t & count);
+        int32_t GetAnimationKey(int docId, uint32_t layerId,
+            ImmImporter::Layer::AnimProperty property, uint32_t index, ImmImporter::Layer::AnimKey & key);
         int32_t QueueAnimationKey(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time,
             const ImmImporter::Layer::AnimValue & value,

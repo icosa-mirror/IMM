@@ -476,7 +476,13 @@ namespace ImmPlayer
 
     void MngrPlayer::GetTime(const piTick now, piTick * timeSinceStart, piTick * timeSinceStop)
     {
+        if (timeSinceStart != nullptr) *timeSinceStart = piTick(0);
+        if (timeSinceStop != nullptr) *timeSinceStop = piTick(0);
+        if (timeSinceStart == nullptr || timeSinceStop == nullptr || mDocument == nullptr)
+            return;
         Layer* root = mDocument->GetRoot();
+        if (root == nullptr)
+            return;
 
         const bool isStopped = !root->GetPlaying();
         *timeSinceStart = isStopped ? (root->GetStopTime() - root->GetStartTime() + 1) : (now - root->GetStartTime());				   // playing

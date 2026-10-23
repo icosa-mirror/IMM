@@ -784,6 +784,76 @@ namespace ImmPlayer
         return 0;
     }
 
+    int32_t Player::GetLayerWorldTransform(int docId, uint32_t layerId, trans3d & transform)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded) return -4;
+        Layer * layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (layer == nullptr) return -1;
+        if (IsLoadingAsync(doc->GetSequence())) return -7;
+        transform = layer->GetTransformToWorld();
+        return 0;
+    }
+
+    int32_t Player::GetLayerTimeline(int docId, uint32_t layerId, LayerTimeline & timing)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded) return -4;
+        Layer * layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (layer == nullptr) return -1;
+        if (IsLoadingAsync(doc->GetSequence())) return -7;
+        LayerTimeline value;
+        value.isTimeline = layer->GetIsTimeline();
+        value.durationSeconds = piTick::ToSeconds(layer->GetDuration());
+        value.startOffsetSeconds = piTick::ToSeconds(layer->GetStartOffset());
+        value.maxRepeatCount = layer->GetMaxRepeatCount();
+        if (layer->GetType() == Layer::Type::Paint)
+        {
+            auto * paint = (LayerPaint *)layer->GetImplementation();
+            if (paint == nullptr) return -4;
+            value.paintFrameRate = paint->GetFrameRate();
+            value.paintNumFrames = paint->GetNumFrames();
+            value.maxRepeatCount = paint->GetMaxRepeatCount();
+        }
+        timing = value;
+        return 0;
+    }
+
+    int32_t Player::GetAnimationKeyCount(int docId, uint32_t layerId,
+        Layer::AnimProperty property, uint32_t & count)
+    {
+        if (property >= Layer::AnimProperty::MAX) return -3;
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded) return -4;
+        Layer * layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (layer == nullptr) return -1;
+        if (IsLoadingAsync(doc->GetSequence())) return -7;
+        count = layer->GetNumAnimKeys(property);
+        return 0;
+    }
+
+    int32_t Player::GetAnimationKey(int docId, uint32_t layerId,
+        Layer::AnimProperty property, uint32_t index, Layer::AnimKey & key)
+    {
+        if (property >= Layer::AnimProperty::MAX) return -3;
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded) return -4;
+        Layer * layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (layer == nullptr) return -1;
+        if (IsLoadingAsync(doc->GetSequence())) return -7;
+        if (index >= layer->GetNumAnimKeys(property)) return -1;
+        key = *layer->GetAnimKey(property, index);
+        return 0;
+    }
+
     int32_t Player::QueuePaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t count)
     {
         std::lock_guard<std::mutex> guard(mMutex);
@@ -2454,12 +2524,16 @@ namespace ImmPlayer
 
     void Player::GetTime(int id, piTick * timeSinceStart, piTick * timeSinceStop)
     {
-        Document *doc = (Document *)mDocuments.GetAddress(id);
-        if (!doc)
-        {
-            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetTime null doc id=%d", kNullDocLogPrefix, id);
+        if (timeSinceStart != nullptr) *timeSinceStart = piTick(0);
+        if (timeSinceStop != nullptr) *timeSinceStop = piTick(0);
+        if (timeSinceStart == nullptr || timeSinceStop == nullptr)
             return;
-        }
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (id < 0 || static_cast<uint64_t>(id) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(id))
+            return;
+        Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (doc == nullptr || doc->GetLoadingState() != Document::LoadingState::Loaded)
+            return;
         doc->GetTime(mTime, timeSinceStart, timeSinceStop);
     }
 

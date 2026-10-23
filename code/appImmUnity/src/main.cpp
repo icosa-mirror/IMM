@@ -2628,6 +2628,123 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Paint
     return iPlayer().GetPaintMaxRepeatCount(docId, static_cast<uint32_t>(layerId), countOut);
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetTimeline(
+    int32_t docId, int32_t layerId, int32_t * isTimelineOut, double * durationSecondsOut,
+    double * startOffsetSecondsOut, uint32_t * paintFrameRateOut,
+    uint32_t * paintNumFramesOut, uint32_t * maxRepeatCountOut)
+{
+    if (layerId < 0 || isTimelineOut == nullptr || durationSecondsOut == nullptr ||
+        startOffsetSecondsOut == nullptr || paintFrameRateOut == nullptr ||
+        paintNumFramesOut == nullptr || maxRepeatCountOut == nullptr)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    *isTimelineOut = 0; *durationSecondsOut = 0; *startOffsetSecondsOut = 0;
+    *paintFrameRateOut = 0; *paintNumFramesOut = 0; *maxRepeatCountOut = 0;
+    Player::LayerTimeline value;
+    const int32_t result = iPlayer().GetLayerTimeline(docId, static_cast<uint32_t>(layerId), value);
+    if (result != IMM_AUTHORING_OK) return result;
+    *isTimelineOut = value.isTimeline ? 1 : 0;
+    *durationSecondsOut = value.durationSeconds;
+    *startOffsetSecondsOut = value.startOffsetSeconds;
+    *paintFrameRateOut = value.paintFrameRate;
+    *paintNumFramesOut = value.paintNumFrames;
+    *maxRepeatCountOut = value.maxRepeatCount;
+    return IMM_AUTHORING_OK;
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetWorldTransform(
+    int32_t docId, int32_t layerId, ImmAuthoringLayerPivot * transformOut)
+{
+    if (layerId < 0 || transformOut == nullptr || transformOut->structSize < sizeof(ImmAuthoringLayerPivot))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (transformOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1) return IMM_AUTHORING_UNSUPPORTED;
+    ImmCore::trans3d transform;
+    const int32_t result = iPlayer().GetLayerWorldTransform(docId, static_cast<uint32_t>(layerId), transform);
+    if (result != IMM_AUTHORING_OK) return result;
+    ImmAuthoringLayerPivot value{};
+    value.structSize = sizeof(value); value.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    value.tx = static_cast<float>(transform.mTranslation.x);
+    value.ty = static_cast<float>(transform.mTranslation.y);
+    value.tz = static_cast<float>(transform.mTranslation.z);
+    value.qx = static_cast<float>(transform.mRotation.x);
+    value.qy = static_cast<float>(transform.mRotation.y);
+    value.qz = static_cast<float>(transform.mRotation.z);
+    value.qw = static_cast<float>(transform.mRotation.w);
+    value.scale = static_cast<float>(transform.mScale);
+    value.flip = static_cast<int32_t>(transform.mFlip);
+    *transformOut = value;
+    return IMM_AUTHORING_OK;
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyGetCount(
+    int32_t docId, int32_t layerId, int32_t property, uint32_t * countOut)
+{
+    if (layerId < 0 || countOut == nullptr) return IMM_AUTHORING_INVALID_ARGUMENT;
+    *countOut = 0;
+    if (property < 0 || property >= static_cast<int32_t>(ImmImporter::Layer::AnimProperty::MAX))
+        return IMM_AUTHORING_UNSUPPORTED;
+    return iPlayer().GetAnimationKeyCount(docId, static_cast<uint32_t>(layerId),
+        static_cast<ImmImporter::Layer::AnimProperty>(property), *countOut);
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyGet(
+    int32_t docId, int32_t layerId, int32_t property, uint32_t index, ImmAuthoringKey * keyOut)
+{
+    if (layerId < 0 || keyOut == nullptr || keyOut->structSize < sizeof(ImmAuthoringKey))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (keyOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1) return IMM_AUTHORING_UNSUPPORTED;
+    if (property < 0 || property >= static_cast<int32_t>(ImmImporter::Layer::AnimProperty::MAX))
+        return IMM_AUTHORING_UNSUPPORTED;
+    const auto channel = static_cast<ImmImporter::Layer::AnimProperty>(property);
+    ImmImporter::Layer::AnimKey key;
+    const int32_t result = iPlayer().GetAnimationKey(docId, static_cast<uint32_t>(layerId), channel, index, key);
+    if (result != IMM_AUTHORING_OK) return result;
+    ImmAuthoringKey value{};
+    value.structSize = sizeof(value); value.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    value.property = property;
+    value.interpolation = static_cast<int32_t>(key.mInterpolation);
+    value.timeSeconds = ImmCore::piTick::ToSeconds(key.mTime);
+    value.qw = 1.0f;
+    value.scale = 1.0f;
+    switch (channel)
+    {
+    case ImmImporter::Layer::AnimProperty::Visibility:
+    case ImmImporter::Layer::AnimProperty::Loop:
+        value.boolValue = key.mValue.mBool ? 1 : 0;
+        break;
+    case ImmImporter::Layer::AnimProperty::Action:
+    case ImmImporter::Layer::AnimProperty::Offset:
+        value.uintValue = key.mValue.mInt;
+        break;
+    case ImmImporter::Layer::AnimProperty::Opacity:
+        value.floatValue = key.mValue.mFloat;
+        break;
+    case ImmImporter::Layer::AnimProperty::DrawInTime:
+        value.floatValue = static_cast<float>(key.mValue.mDouble);
+        break;
+    default:
+        if (channel == ImmImporter::Layer::AnimProperty::Position || channel == ImmImporter::Layer::AnimProperty::Transform)
+        {
+            value.tx = static_cast<float>(key.mValue.mTransform.mTranslation.x);
+            value.ty = static_cast<float>(key.mValue.mTransform.mTranslation.y);
+            value.tz = static_cast<float>(key.mValue.mTransform.mTranslation.z);
+        }
+        if (channel == ImmImporter::Layer::AnimProperty::Rotation || channel == ImmImporter::Layer::AnimProperty::Transform)
+        {
+            value.qx = static_cast<float>(key.mValue.mTransform.mRotation.x);
+            value.qy = static_cast<float>(key.mValue.mTransform.mRotation.y);
+            value.qz = static_cast<float>(key.mValue.mTransform.mRotation.z);
+            value.qw = static_cast<float>(key.mValue.mTransform.mRotation.w);
+        }
+        if (channel == ImmImporter::Layer::AnimProperty::Scale || channel == ImmImporter::Layer::AnimProperty::Transform)
+            value.scale = static_cast<float>(key.mValue.mTransform.mScale);
+        if (channel == ImmImporter::Layer::AnimProperty::Transform)
+            value.transformFlip = static_cast<int32_t>(key.mValue.mTransform.mFlip);
+        break;
+    }
+    *keyOut = value;
+    return IMM_AUTHORING_OK;
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySet(
     int32_t docId, int32_t layerId, const ImmAuthoringKey *key)
 {
@@ -3229,8 +3346,8 @@ extern "C" void UNITY_INTERFACE_EXPORT GetTime(int id, int64_t * timeSinceStart,
 
 extern "C" int64_t UNITY_INTERFACE_EXPORT GetPlayTime(int id)
 {
-    piTick startTime;
-    piTick stopTime;
+    piTick startTime(0);
+    piTick stopTime(0);
 
     iPlayer().GetTime(id, &startTime, &stopTime);
 

@@ -295,6 +295,24 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_PaintSetMaxRepeatCo
     int32_t layerId, uint32_t count);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_PaintGetMaxRepeatCount(int32_t docId,
     int32_t layerId, uint32_t * countOut);
+// Read-only evaluated timing. Offset is the currently evaluated Offset key in
+// parent-timeline seconds; repeat counts remain canonical (zero means infinite).
+// Non-paint layers return zero paint frame rate/frame count.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetTimeline(int32_t docId,
+    int32_t layerId, int32_t * isTimelineOut, double * durationSecondsOut,
+    double * startOffsetSecondsOut, uint32_t * paintFrameRateOut,
+    uint32_t * paintNumFramesOut, uint32_t * maxRepeatCountOut);
+// Accumulated evaluated layer/ancestor transform in document coordinates;
+// excludes document placement and viewer/camera transforms. Reuses the 48-byte
+// pivot layout as a transform value; initialize its size/version before calling.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetWorldTransform(int32_t docId,
+    int32_t layerId, ImmAuthoringLayerPivot * transformOut);
+// Stored key times use the parent timeline's coordinates, before content Offset.
+// Keys are indexed in time order. The key output uses the existing 80-byte layout.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeyGetCount(int32_t docId,
+    int32_t layerId, int32_t property, uint32_t * countOut);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeyGet(int32_t docId,
+    int32_t layerId, int32_t property, uint32_t index, ImmAuthoringKey * keyOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeyRemove(int32_t docId, int32_t layerId,
     int32_t property, double timeSeconds);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_SetInitialSpawnArea(int32_t docId,
