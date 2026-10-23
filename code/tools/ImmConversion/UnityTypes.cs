@@ -1,5 +1,6 @@
-// Data-only stand-ins for the .NET native-export harness. Production graph,
-// converter, compiler and P/Invoke declarations are compiled unchanged.
+// Compatibility definitions for the standalone .NET host. Shared graph,
+// converter, compiler and P/Invoke sources compile unchanged; Unity uses its
+// actual engine types instead of this file. This is not a Unity Engine emulator.
 namespace UnityEngine
 {
     // Real Unity exposes this name alongside SharpQuill.Animation.

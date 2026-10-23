@@ -42,6 +42,12 @@ only in the evidence collector. Local real-codec checks pass; full hosted
 validation of the new correction remains pending. Full validation of the live-key
 milestone remains unresolved.
 
+FFmpeg correction 97142c9a is pushed with [CI VALIDATION]; full run 39935868460
+is in progress at the latest check. C5's standalone-library extraction now passes
+local native regressions and an independent public-consumer/baseline comparison
+(6.75), but is outside that running CI revision. No distribution or clean-machine
+acceptance is claimed.
+
 ## 1. Objective and document ownership
 
 Provide reusable content reading, representation and writing so applications can
@@ -139,7 +145,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop and root stop/seek corrections locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D and structural equirectangular mono/stereo conversion, and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Panorama orientation/eye order and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| C5: user-facing converter packaging | Agreed 2026-10-22; planned, not implemented. Shared supported converter library, portable Windows application/CLI, and Unity editor entry point; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
+| C5: user-facing converter packaging | Standalone library extracted from the harness; local native regressions and independent consumer/baseline comparison pass (6.75). Production CLI, portable Windows application and Unity editor entry point remain planned; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys and native sound decoding/mapping implemented; codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
@@ -191,6 +197,10 @@ dependency. Native C++ exporter libraries remain part of the shipped runtime.
    construction and native export shared with Unity; do not fork conversion rules.
    Separate Unity-specific integration from the reusable conversion API. Retain
    existing regression coverage and explicit supported/omitted-content reporting.
+   The standalone library prerequisite now exists at code/tools/ImmConversion
+   with the shared source list and standalone compatibility definitions; the
+   regression harness consumes it through a project reference (6.75). Production
+   CLI extraction and distributable/public API acceptance remain outstanding.
 2. First user-facing packaging milestone: a portable Windows download. Provide
    project-folder selection and output selection, conversion progress, readable
    warnings/errors and a clear report of omitted content. Bundle the .NET runtime,
@@ -2744,9 +2754,47 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Evidence: artifacts/video-ffmpeg-wheel-verification.json,
    video-ffmpeg-local-provision.json, video-ffmpeg-real-tests/report.json and
    video-ffmpeg contracts/matrix/actionlint/validator-contract logs.
-6. Commit and push this correction with [CI VALIDATION] for a fresh full hosted
-   run. Do not treat local codec tests as device rendering evidence or call the
-   full validation passing before the required final artifact is accepted.
+6. Committed/pushed as 97142c9a with [CI VALIDATION]; fresh full hosted run
+   39935868460 is in progress. Windows passed and both Android Firebase jobs
+   have started at the latest check. Do not treat local codec tests as device
+   rendering evidence or call full validation passing before the required final
+   artifact is accepted.
+
+### 6.75. Standalone converter library extraction (2026-10-23)
+
+1. Add code/tools/ImmConversion as the .NET 8 Windows-host library. Move the
+   existing shared source list and UnityTypes.cs compatibility definitions out
+   of the QuillToImm test executable. The graph, reader, converter, compiler and
+   native declarations are linked directly from the original Unity packages;
+   their conversion source and Unity compilation are unchanged. Simulated editor
+   menu code stays in the test executable, outside the library.
+2. QuillToImm.csproj now references the library, so the required existing CI
+   converter regression command exercises the actual extracted assembly. Only
+   that regression assembly receives internal access for existing native/codec
+   checks; standalone callers use the public conversion entry points.
+3. Independent read-only review confirms the shared source list, compatibility
+   definitions and Unity/test boundaries are preserved. Build succeeds with zero
+   warnings/errors. The complete real-native converter
+   self-test passes through the project reference. A separate executable with no
+   internal-access grant converts an animated source through the public library.
+   Rebuilding the original committed harness source list in ignored artifacts
+   provides an independent pre-extraction output: decoded animated paint comparison
+   passes against the new public consumer's output. The self-test's animated.imm
+   file is intentionally overwritten by its rejection/output-preservation check;
+   it is not a valid reference output for this comparison.
+4. Evidence: artifacts/conversion-library-build.log,
+   conversion-library-regressions.log, conversion-library-consumer.log,
+   conversion-library-original-baseline.log and conversion-library-consumer-compare.log.
+   Temporary baseline/consumer projects and dependency references are ignored
+   local evidence, not distributed or committed project setup.
+5. This is a packaging prerequisite, not a finished application or complete
+   Unity-compatible SDK. The standalone assembly uses compatibility types and
+   must not be imported alongside the Unity package; Unity builds the shared
+   package source against real engine types. Production CLI/desktop entry points,
+   bundled native dependencies, portable publish, clean-machine validation and
+   real Unity consumer integration remain open under C5. Full run 39935868460
+   validates 97142c9a, not this later library extraction. Keep it running while
+   progressing independent work; do not supersede it just for this local milestone.
 
 ## 7. Consolidated documents
 
