@@ -3669,6 +3669,22 @@ the historical sizes/check counts below describe this earlier source only.
    held-key-properties-green/report.json and held-key-properties-cpu-check.log.
    This source is newer than current full runs and has no hosted acceptance yet.
 
+### 6.105. Hosted iOS runner acquisition failure (retry outstanding)
+
+1. Corrected full run 39984582643 has an infrastructure cancellation in Unity iOS
+   Metal Simulator Validation, job 120520333904: runner_id=0, zero executed steps.
+   GitHub's check annotation states `The job was not acquired by Runner of type
+   hosted even after multiple attempts`. It did not run the application and was
+   not cancelled by an agent or superseding-run concurrency.
+2. This required gate remains unverified. Preserve independent successes and retry
+   only this job and its dependents once after the parent run becomes terminal;
+   the hosted API rejects job reruns while the parent is active. No retry has been
+   attempted. A repeated failure remains unresolved. Other current full work and
+   M2 implementation continue; no full acceptance is claimed.
+3. Evidence: artifacts/converter-checkpoint-ci-agent-ios-cancel-job.json,
+   converter-checkpoint-ci-agent-ios-cancel-annotations.json and
+   held-key-properties-ci-39984582643.json.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
