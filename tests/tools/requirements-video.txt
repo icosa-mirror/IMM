@@ -1,0 +1,5 @@
+# Bundled FFmpeg executable: Linux x86_64 CI and Windows x86_64 local verification.
+# Official PyPI imageio-ffmpeg 0.6.0 wheels; no source builds or dependencies.
+imageio-ffmpeg==0.6.0 \
+    --hash=sha256:c7e46fcec401dd990405049d2e2f475e2b397779df2519b544b8aab515195282 \
+    --hash=sha256:02fa47c83703c37df6bfe4896aab339013f62bf02c5ebf2dce6da56af04ffc0a

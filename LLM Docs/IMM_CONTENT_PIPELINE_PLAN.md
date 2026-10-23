@@ -35,9 +35,12 @@ The Windows job, including the new live-key and authoring regression steps,
 passed. The single failed-job/dependent retry also completed with failure: URP
 again timed out installing FFmpeg, while non-XR passed. A premature fresh run
 was requested before diagnosing that retry; cancellation has been requested.
-Both dependency-install sites are now corrected and locally checked (6.73);
-a corrected [CI VALIDATION] commit will start a new full run. Full validation
-of the milestone remains unresolved.
+The first dependency fix (6.73) also failed: run 39798342624 at bb97268a timed
+out after 600 seconds downloading FFmpeg for URP. The new correction (6.74)
+removes that unused producer dependency and provisions a pinned bundled executable
+only in the evidence collector. Local real-codec checks pass; full hosted
+validation of the new correction remains pending. Full validation of the live-key
+milestone remains unresolved.
 
 ## 1. Objective and document ownership
 
@@ -2704,6 +2707,46 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    ffmpeg-install-fix-matrix.log, ffmpeg-install-fix-actionlint.log and
    artifacts/ffmpeg-install-fix-shell/report.json. Full hosted validation of this
    corrected source remains pending; start it with [CI VALIDATION] after commit.
+
+### 6.74. Put FFmpeg only at its consumer; replace apt provisioning (2026-10-23)
+
+1. Full run 39798342624 on bb97268a failed: 21 successful jobs, three failed and
+   nine skipped. URP requested 62.8 MB for FFmpeg and timed out after 600 seconds
+   during Ubuntu mirror downloads, before device execution. Non-XR device testing
+   and Windows (including live Loop/Offset checks) passed. Android aggregate and
+   final evidence failures are downstream; this is not full milestone acceptance.
+   Actual CIValidationEvidence artifact 12435797546 was inspected. Evidence:
+   artifacts/ffmpeg-fix-full-run-results.json, ffmpeg-fix-full-run-urp.log,
+   ffmpeg-fix-full-run-evidence.log and artifacts/ffmpeg-fix-full-evidence/.
+2. Trace confirmed the Firebase producer script does not use FFmpeg. Remove its
+   unnecessary install step, allowing both URP/non-XR tests to run independently
+   of video-analysis provisioning. Restore the producer job's 40-minute budget.
+   The consumer is the later collector's validate_render_video.py invocation.
+3. Replace collector apt-get with imageio-ffmpeg 0.6.0's bundled binary wheel.
+   Pin official Linux x86_64 and Windows x86_64 wheel SHA256 values in
+   tests/tools/requirements-video.txt; require binary-only, hash-verified,
+   dependency-free pip installation. Setup Python 3.12 with pip caching.
+   prepare_video_ffmpeg.py rejects unpinned/system fallbacks, checks the bundled
+   executable, exposes it as ffmpeg through GITHUB_PATH and records its hash/version.
+   Setup is bounded at five minutes; restore the collector's 15-minute job budget.
+   [Upstream bundled-wheel documentation](https://github.com/imageio/imageio-ffmpeg).
+4. A required real-codec smoke precedes unchanged device-video validation:
+   synthesize H.264 clips and require the existing CLI to accept matching frames
+   and reject blank/corrupt videos. Reports, captures and logs remain under the
+   existing always-uploaded Android evidence directory. Device-test step limits,
+   visual contracts, producer acceptance and final evidence gates are unchanged.
+5. Both official wheels downloaded and their hashes/binary architectures were
+   verified. Actual Windows wheel install/provision and all three real-codec
+   cases pass locally; Linux binary execution still requires hosted CI. Workflow
+   lint, 53-job matrix, composition and stable-video contracts pass. A regression
+   guard forbids FFmpeg in producer jobs and apt-get in this Android workflow.
+   Independent review confirms consumer placement and unchanged acceptance gates.
+   Evidence: artifacts/video-ffmpeg-wheel-verification.json,
+   video-ffmpeg-local-provision.json, video-ffmpeg-real-tests/report.json and
+   video-ffmpeg contracts/matrix/actionlint/validator-contract logs.
+6. Commit and push this correction with [CI VALIDATION] for a fresh full hosted
+   run. Do not treat local codec tests as device rendering evidence or call the
+   full validation passing before the required final artifact is accepted.
 
 ## 7. Consolidated documents
 

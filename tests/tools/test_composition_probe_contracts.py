@@ -193,7 +193,9 @@ def main() -> int:
             "Record Unity Android Vulkan visual metrics",
             "--external-screen-capture-name unity-android-vulkan-robo-final.png",
             "validate_render_video.py",
-            "sudo timeout 600 apt-get install --yes --no-install-recommends ffmpeg",
+            "prepare_video_ffmpeg.py",
+            "test_video_ffmpeg_binary.py",
+            "--require-hashes",
             "unity-android-vulkan-external-render-sample1.json",
             "unity-android-vulkan-external-render-video-validation.json",
             "unity-android-vulkan-external-render-metrics.json",
@@ -666,6 +668,14 @@ def main() -> int:
         errors.append(
             "Unity-owned Metal command buffers must retire replaced buffers on completion"
         )
+
+    android_workflow = (ROOT / '.github/workflows/ci-engine-android.yml').read_text(encoding='utf-8')
+    producer = android_workflow.split('  unity-android-device-validation:', 1)[1].split(
+        '  unity-android-vulkan:', 1)[0]
+    if 'ffmpeg' in producer.lower():
+        errors.append('Device producers must not install the collector-only FFmpeg dependency')
+    if 'apt-get' in android_workflow:
+        errors.append('Android video evidence must use the pinned binary wheel, not Ubuntu mirror installation')
 
     if errors:
         for error in errors:

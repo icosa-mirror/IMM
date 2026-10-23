@@ -361,8 +361,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'device-ci'))
     needs: unity-android-player-build
     runs-on: ubuntu-latest
-    # Allow bounded dependency setup in addition to the unchanged 30-minute device step.
-    timeout-minutes: 55
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -416,18 +415,6 @@ jobs:
           model_id="${FTL_UNITY_DEVICE#model=}"
           model_id="${model_id%%,*}"
           gcloud firebase test android models describe "$model_id"
-
-      - name: Install physical-device video validator dependency
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo timeout 120 apt-get update
-            # Hosted mirror downloads exceeded two minutes on both run attempts.
-            sudo timeout 600 apt-get install --yes --no-install-recommends ffmpeg
-          fi
-          ffmpeg -version
 
       - name: Run Unity Android Vulkan smoke in Firebase Test Lab
         if: matrix.variant == 'nonxr'
@@ -550,8 +537,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'device-ci'))
     needs: [unity-android-player-build, unity-android-device-validation]
     runs-on: ubuntu-latest
-    # Leave evidence collection/upload time after bounded dependency installation.
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -573,16 +559,21 @@ jobs:
           test "$BUILD_RESULT" = success
           test "$DEVICE_RESULT" = success
 
+      - name: Set up physical-device video validator Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tests/tools/requirements-video.txt
+
       - name: Install physical-device video validator dependency
-        timeout-minutes: 15
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo timeout 120 apt-get update
-            sudo timeout 600 apt-get install --yes --no-install-recommends ffmpeg
-          fi
-          ffmpeg -version
+          python -m pip install --disable-pip-version-check --only-binary=:all: --no-deps --require-hashes --retries 2 --timeout 30 -r tests/tools/requirements-video.txt
+          python tests/tools/prepare_video_ffmpeg.py --bin-dir "$RUNNER_TEMP/imm-video-tools" --github-path "$GITHUB_PATH" --report artifacts/unity-android-vulkan/video-ffmpeg-provision.json
+          python tests/tools/test_video_ffmpeg_binary.py --bin-dir "$RUNNER_TEMP/imm-video-tools" --output-dir artifacts/unity-android-vulkan/video-ffmpeg-smoke
 
       - name: Record Unity Android Vulkan visual metrics
         if: always()
