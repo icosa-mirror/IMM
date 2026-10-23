@@ -783,7 +783,12 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             SetStateAtImpl(now, log, true);
     }
 
-    void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint)
+    void Layer::ReevaluateTransformAt(piTick now, piLog * log)
+    {
+        SetStateAtImpl(now, log, false, true);
+    }
+
+    void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint, bool transformOnly)
     {
         Layer* root = mSequence->GetRoot();
         const bool isRoot = this == root;
@@ -798,7 +803,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         Layer* timeline = GetTimeline();
         const piTick timelineDuration = timeline->GetDuration();
 
-        if (!reevaluatePaint && mParent && !mParent->GetWorldVisible())
+        if (!reevaluatePaint && !transformOnly && mParent && !mParent->GetWorldVisible())
         {
             if (isSoundLayer) ls->SetPlaying(false);
             return;
@@ -821,7 +826,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         };
         // The root's Loop control uses its unwrapped clock, avoiding a lookup
         // whose own wrap/clamp decision changes which Loop key is selected.
-        if (isRoot)
+        if (isRoot && !transformOnly)
             resolveTimelineRepeat(timeFromStart);
 
         const piTick timelineWrapped = (timelineDuration != 0) ? timeFromStart % timelineDuration : timeFromStart;
@@ -833,17 +838,18 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
         // Other timeline controls belong to their parent's effective clock.
         // Resolve before descendants read this timeline's repeat behavior.
-        if (!isRoot && !isPaintLayer)
+        if (!isRoot && !isPaintLayer && !transformOnly)
             resolveTimelineRepeat(timelineTime);
 
         // Resolve step playback keys before Visibility computes the clip's local
         // time. Missing keys (including a seek before the first key) restore the
         // canonical repeat and zero tick offset on every evaluation.
-        mStartOffset = piTick(0);
-        if (isPaintLayer)
+        if (!transformOnly) mStartOffset = piTick(0);
+        if (isPaintLayer && !transformOnly)
             lp->SetEvaluatedMaxRepeatCount(lp->GetMaxRepeatCount());
         for (const AnimProperty prop : { AnimProperty::Loop, AnimProperty::Offset })
         {
+            if (transformOnly) break;
             if (prop == AnimProperty::Loop && !isPaintLayer)
                 continue;
             const AnimKey * activeKey = nullptr;
@@ -869,6 +875,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         for (int i = 0; i < maxProps; i++)
         {
             const AnimProperty prop = static_cast<AnimProperty>(i);
+            if (transformOnly && prop != AnimProperty::Transform) continue;
             if (prop == AnimProperty::Offset || prop == AnimProperty::Loop)
                 continue;
             if (reevaluatePaint && prop != AnimProperty::Visibility)
@@ -1123,6 +1130,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         // A published paint key must also refresh latent selection while hidden,
         // so later unhide does not expose the previous key's frame. Visibility
         // spans still define local time; inactive/keyless spans retain local0.
+        if (transformOnly) return;
         if (reevaluatePaint)
         {
             static_cast<LayerPaintStatic *>(lp)->SelectFrameAtTime(timeSinceStart);

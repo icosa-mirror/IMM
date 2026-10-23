@@ -179,6 +179,18 @@ typedef struct ImmAuthoringLayerProperties
     uint32_t reserved1[2];
 } ImmAuthoringLayerProperties;
 
+// Pivot is independent of canonical and animated transforms. Flip: 0=None, 1=X, 2=Y, 3=Z.
+typedef struct ImmAuthoringLayerPivot
+{
+    uint32_t structSize;
+    uint32_t structVersion;
+    float tx, ty, tz;
+    float qx, qy, qz, qw;
+    float scale;
+    int32_t flip;
+    uint32_t reserved;
+} ImmAuthoringLayerPivot;
+
 typedef struct ImmAuthoringKey
 {
     uint32_t structSize;
@@ -237,6 +249,7 @@ static_assert(sizeof(ImmAuthoringRevisions) == 32, "ImmAuthoringRevisions ABI ch
 static_assert(sizeof(ImmAuthoringCommitStatus) == 40, "ImmAuthoringCommitStatus ABI changed");
 static_assert(sizeof(ImmAuthoringLayerProperties) == 64,
     "ImmAuthoringLayerProperties ABI changed");
+static_assert(sizeof(ImmAuthoringLayerPivot) == 48, "ImmAuthoringLayerPivot ABI changed");
 static_assert(sizeof(ImmAuthoringKey) == 80, "ImmAuthoringKey ABI changed");
 static_assert(offsetof(ImmAuthoringKeyV2, base) == 0, "ImmAuthoringKeyV2 prefix changed");
 static_assert(offsetof(ImmAuthoringKeyV2, uintValue) == 80, "ImmAuthoringKeyV2 value offset changed");
@@ -245,6 +258,11 @@ static_assert(sizeof(ImmAuthoringSpawnArea) == 112, "ImmAuthoringSpawnArea ABI c
 #endif
 
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Attach(int32_t docId);
+// Nonroot group/paint/spawn only. Readback reports the presented pivot.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetPivot(int32_t docId,
+    int32_t layerId, const ImmAuthoringLayerPivot * pivot);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetPivot(int32_t docId,
+    int32_t layerId, ImmAuthoringLayerPivot * pivotOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Detach(int32_t docId);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_IsAttached(int32_t docId, int32_t * attachedOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DiscardPending(int32_t docId);

@@ -199,6 +199,7 @@ namespace ImmImporter
 
         void SetStateAt(ImmCore::piTick time, ImmCore::piLog* log);
         void ReevaluatePaintPlaybackAt(ImmCore::piTick time, ImmCore::piLog * log);
+        void ReevaluateTransformAt(ImmCore::piTick time, ImmCore::piLog * log);
 
         // sets default pass through visiblity of groups without animation keys, hides all layers that have keys
         void SetDefaultPlaybackVisibility();
@@ -246,7 +247,7 @@ namespace ImmImporter
 
 		double mDrawInTime;
 		double mAnimParams[4];
-        void SetStateAtImpl(ImmCore::piTick time, ImmCore::piLog * log, bool reevaluatePaint);
+        void SetStateAtImpl(ImmCore::piTick time, ImmCore::piLog * log, bool reevaluatePaint, bool transformOnly = false);
         ImmCore::piTick mLastActiveSpanStart; // keep track of gapless retriggering
         ImmCore::piTick mLastActiveSpanClockOrigin;
         bool mHasActiveSpanClockOrigin;

@@ -1079,7 +1079,7 @@ namespace ImmPlayer
                 const bool rename = !mPendingPresentation.mPreparedLayerFullNames.empty();
                 if (rename && std::getenv("IMM_LIVE_EDIT_HOLD_LAYER_RENAME") != nullptr)
                     return mState.mPlaybackState != PlaybackState::PausedAndHidden;
-                if (rename && IsLoadingAsync(&mSequence))
+                if ((rename || mPendingPresentation.mSetLayerPivot) && IsLoadingAsync(&mSequence))
                 {
                     iRejectCommit(revision, -7, 0, layerId);
                     mPendingPresentation = PendingPresentation{};
@@ -1088,7 +1088,7 @@ namespace ImmPlayer
                 if (mPendingPresentation.mSetPaintRepeat &&
                     std::getenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS") != nullptr)
                     return mState.mPlaybackState != PlaybackState::PausedAndHidden;
-                if ((mPendingPresentation.mSetPaintRepeat || rename) &&
+                if ((mPendingPresentation.mSetPaintRepeat || rename || mPendingPresentation.mSetLayerPivot) &&
                     std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
                 {
                     iRejectCommit(revision, -10, 0, layerId);
@@ -1108,6 +1108,13 @@ namespace ImmPlayer
                         layer->SetCanonicalOpacity(mPendingPresentation.mLayerOpacity);
                     if (mPendingPresentation.mSetLayerTransform)
                         layer->SetCanonicalTransform(mPendingPresentation.mLayerTransform);
+                    if (mPendingPresentation.mSetLayerPivot)
+                    {
+                        layer->SetPivot(mPendingPresentation.mLayerPivot);
+                        layer->ReevaluateTransformAt(mLastCPUTime, log);
+                        if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+                        ++mEvaluationRevision;
+                    }
                     if (rename)
                     {
                         for (const auto & name : mPendingPresentation.mPreparedLayerFullNames) name->Publish();
@@ -1763,7 +1770,7 @@ namespace ImmPlayer
     int32_t Document::QueueLayerProperties(uint32_t layerId,
         bool setVisibility, bool visible, bool setOpacity, float opacity,
         bool setTransform, const trans3d & transform, bool setPaintRepeat, uint32_t paintRepeat,
-        const wchar_t * newName)
+        const wchar_t * newName, const trans3d * newPivot)
     {
         if (!mEditing)
             return -4;
@@ -1777,8 +1784,22 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
-        if (!setVisibility && !setOpacity && !setTransform && !setPaintRepeat && newName == nullptr)
+        if (!setVisibility && !setOpacity && !setTransform && !setPaintRepeat && newName == nullptr && newPivot == nullptr)
             return -2;
+        if (newPivot != nullptr)
+        {
+            if (layer->GetParent() == nullptr || (layer->GetType() != Layer::Type::Group &&
+                layer->GetType() != Layer::Type::Paint && layer->GetType() != Layer::Type::SpawnArea)) return -3;
+            if (IsLoadingAsync(&mSequence)) return -7;
+            const trans3d & p = *newPivot;
+            const double q2 = p.mRotation.x * p.mRotation.x + p.mRotation.y * p.mRotation.y +
+                p.mRotation.z * p.mRotation.z + p.mRotation.w * p.mRotation.w;
+            if (!std::isfinite(p.mTranslation.x) || !std::isfinite(p.mTranslation.y) ||
+                !std::isfinite(p.mTranslation.z) || !std::isfinite(p.mRotation.x) ||
+                !std::isfinite(p.mRotation.y) || !std::isfinite(p.mRotation.z) ||
+                !std::isfinite(p.mRotation.w) || !std::isfinite(p.mScale) || p.mScale <= 0.0 ||
+                std::fabs(q2 - 1.0) > 0.001 || p.mFlip < flip3::N || p.mFlip > flip3::Z) return -2;
+        }
         if (newName != nullptr)
         {
             if (*newName == 0) return -2;
@@ -1812,7 +1833,8 @@ namespace ImmPlayer
         }
         mOpenLayerPropertyEdits.push_back(LayerPropertyEdit{
             layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform,
-            setPaintRepeat, paintRepeat, newName != nullptr ? newName : L"" });
+            setPaintRepeat, paintRepeat, newName != nullptr ? newName : L"",
+            newPivot != nullptr, newPivot != nullptr ? *newPivot : trans3d::identity() });
         return 0;
     }
 
@@ -2908,6 +2930,14 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
                 return;
             }
+            if (edit.mSetPivot)
+            {
+                if (layer->GetParent() == nullptr || (layer->GetType() != Layer::Type::Group &&
+                    layer->GetType() != Layer::Type::Paint && layer->GetType() != Layer::Type::SpawnArea))
+                { iRejectCommit(batch.mRevision, -3, 0, edit.mLayerId); return; }
+                if (IsLoadingAsync(&mSequence))
+                { iRejectCommit(batch.mRevision, -7, 0, edit.mLayerId); return; }
+            }
             std::vector<std::unique_ptr<PreparedLayerFullName>> preparedNames;
             if (!edit.mName.empty())
             {
@@ -2930,7 +2960,7 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -3, 0, edit.mLayerId);
                 return;
             }
-            if ((edit.mSetPaintRepeat || !edit.mName.empty()) && std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
+            if ((edit.mSetPaintRepeat || !edit.mName.empty() || edit.mSetPivot) && std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
             {
                 iRejectCommit(batch.mRevision, -10, 0, edit.mLayerId);
                 return;
@@ -2951,6 +2981,8 @@ namespace ImmPlayer
             mPendingPresentation.mLayerOpacity = edit.mOpacity;
             mPendingPresentation.mSetLayerTransform = edit.mSetTransform;
             mPendingPresentation.mLayerTransform = edit.mTransform;
+            mPendingPresentation.mSetLayerPivot = edit.mSetPivot;
+            mPendingPresentation.mLayerPivot = edit.mPivot;
             mPendingPresentation.mSetPaintRepeat = edit.mSetPaintRepeat;
             mPendingPresentation.mPaintRepeat = edit.mPaintRepeat;
             mPendingPresentation.mLayer = layer;

@@ -760,6 +760,30 @@ namespace ImmPlayer
         return 0;
     }
 
+    int32_t Player::QueueLayerPivot(int docId, uint32_t layerId, const ImmCore::trans3d & pivot)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        return doc->QueueLayerProperties(layerId, false, false, false, 1.0f,
+            false, ImmCore::trans3d::identity(), false, 0, nullptr, &pivot);
+    }
+
+    int32_t Player::GetLayerPivot(int docId, uint32_t layerId, ImmCore::trans3d & pivot)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded) return -4;
+        Layer * layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (layer == nullptr) return -1;
+        if (layer->GetParent() == nullptr || (layer->GetType() != Layer::Type::Group &&
+            layer->GetType() != Layer::Type::Paint && layer->GetType() != Layer::Type::SpawnArea)) return -3;
+        if (IsLoadingAsync(doc->GetSequence())) return -7;
+        pivot = layer->GetPivot();
+        return 0;
+    }
+
     int32_t Player::QueuePaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t count)
     {
         std::lock_guard<std::mutex> guard(mMutex);

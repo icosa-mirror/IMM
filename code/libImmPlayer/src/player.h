@@ -170,6 +170,8 @@ namespace ImmPlayer {
         int32_t GetPaintMaxRepeatCount(int docId, uint32_t layerId, uint32_t * count);
         int32_t QueueLayerName(int docId, uint32_t layerId, std::wstring name);
         int32_t GetLayerName(int docId, uint32_t layerId, std::wstring & name);
+        int32_t QueueLayerPivot(int docId, uint32_t layerId, const ImmCore::trans3d & pivot);
+        int32_t GetLayerPivot(int docId, uint32_t layerId, ImmCore::trans3d & pivot);
         int32_t QueueAnimationKey(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time,
             const ImmImporter::Layer::AnimValue & value,

@@ -491,7 +491,7 @@ not the supported deletion path.
 
 `LayerSetProperties` supports canonical visibility, opacity, and uniform-scale rigid transform,
 individually or together. Version 1 carries translation, unit quaternion, and positive uniform
-scale. Names use the dedicated API below; pivot, timing and other property masks
+scale. Names and pivots use dedicated APIs below; timing and other property masks
 are not implemented. Readback excludes
 animation-evaluated values and transient overrides.
 
@@ -505,6 +505,17 @@ size and preserves the buffer instead of truncating. Names remain unchanged unti
 publication and after discard or rejection. Windows native-export, ownership and
 six rendered rejection/unload/recovery cases pass locally (roadmap 6.94); managed
 live rename UI and full hosted/backend acceptance are not established.
+
+`LayerSetPivot` / `LayerGetPivot` use a separate 48-byte versioned structure:
+translation, unit quaternion, positive uniform scale and None/X/Y/Z reflection.
+Only nonroot group, paint and spawn layers are supported. Queue copies input;
+publication changes the pivot and resamples only that layer's transform at held
+time, including hidden parents. Canonical transforms, keys, clocks and action
+states remain intact. Importer ownership and CPU/presentation failures reject
+without changing the presented pivot. Readback takes an owned value under the
+Player lock and preserves output on failure. Windows builds, production C-export
+checks and held-root/hidden-parent sampling pass locally (roadmap 6.97).
+Pivot-specific rendered/backend acceptance and managed integration remain open.
 
 Live keys support visibility, opacity, and transform. `KeySet` inserts/replaces at the converted
 tick; preparation copies the affected sorted timeline and publication swaps that vector.

@@ -253,7 +253,8 @@ namespace ImmPlayer {
         int32_t QueueLayerProperties(uint32_t layerId, bool setVisibility, bool visible,
             bool setOpacity, float opacity, bool setTransform,
             const ImmCore::trans3d & transform, bool setPaintRepeat = false,
-            uint32_t paintRepeat = 0, const wchar_t * newName = nullptr);
+            uint32_t paintRepeat = 0, const wchar_t * newName = nullptr,
+            const ImmCore::trans3d * newPivot = nullptr);
         int32_t QueueAnimationKey(uint32_t layerId, ImmImporter::Layer::AnimProperty property,
             ImmCore::piTick time, const ImmImporter::Layer::AnimValue & value,
             ImmImporter::Layer::InterpolationType interpolation);
@@ -349,6 +350,8 @@ namespace ImmPlayer {
             bool mSetPaintRepeat = false;
             uint32_t mPaintRepeat = 0;
             std::wstring mName;
+            bool mSetPivot = false;
+            ImmCore::trans3d mPivot = ImmCore::trans3d::identity();
         };
 
         struct AnimationKeyEdit
@@ -488,6 +491,8 @@ namespace ImmPlayer {
             float mLayerOpacity = 1.0f;
             bool mSetLayerTransform = false;
             ImmCore::trans3d mLayerTransform = ImmCore::trans3d::identity();
+            bool mSetLayerPivot = false;
+            ImmCore::trans3d mLayerPivot = ImmCore::trans3d::identity();
             bool mSetPaintRepeat = false;
             uint32_t mPaintRepeat = 0;
             ImmImporter::Layer * mLayer = nullptr;

@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <new>
 #include <thread>
 #include <type_traits>
@@ -183,12 +184,45 @@ static void checkSpawnCacheLifecycle(piLog * log)
     empty.Deinit(log);
 }
 
+static void checkHeldPivotTransform(piLog * log)
+{
+    Sequence sequence;
+    require(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "pivot sequence");
+    Layer * root = sequence.GetRoot();
+    require(root->Init(Layer::Type::Group, L"Root", false, trans3d::identity(), trans3d::identity(),
+        1.0f, true, piTick(1000), 0, UINT32_MAX, log), "hidden pivot root");
+    root->SetStartTime(piTick(0)); root->SetStopTime(piTick(50));
+    Layer * layer = sequence.CreateLayer(root);
+    require(layer != nullptr && layer->Init(Layer::Type::Group, L"Pivot", true,
+        trans3d::identity(), trans3d::identity(), 0.75f, false, piTick(0), 1, UINT32_MAX, log), "pivot child");
+    Layer::AnimValue a{}, b{};
+    a.mTransform = trans3d::identity();
+    b.mTransform = trans3d(quatd(0.0, 0.0, 1.0, 0.0), 1.0, flip3::N, vec3d(0.0));
+    require(layer->AddKey(piTick(0), Layer::AnimProperty::Transform, a, Layer::InterpolationType::Linear) &&
+        layer->AddKey(piTick(100), Layer::AnimProperty::Transform, b, Layer::InterpolationType::Linear), "pivot transform keys");
+    const trans3d pivot(quatd(0.0, 0.0, 0.0, 1.0), 1.0, flip3::X, vec3d(2.0, 0.0, 0.0));
+    layer->SetPivot(pivot);
+    layer->ReevaluateTransformAt(piTick(999), log);
+    const trans3d expected = mix(a.mTransform * pivot, b.mTransform * pivot, 0.5) * invert(pivot);
+    const trans3d actual = layer->GetTransform();
+    require(std::fabs(actual.mTranslation.x - expected.mTranslation.x) < 1e-8 &&
+        std::fabs(actual.mTranslation.y - expected.mTranslation.y) < 1e-8 &&
+        std::fabs(actual.mRotation.z - expected.mRotation.z) < 1e-8 &&
+        layer->GetCanonicalTransform().mTranslation.x == 0.0 &&
+        layer->GetNumAnimKeys(Layer::AnimProperty::Transform) == 2 &&
+        layer->GetOpacity() == 0.75f && layer->GetVisible() && !root->GetVisible() &&
+        root->GetStopTime() == piTick(50), "held hidden pivot resamples only transform without changing clocks or keys");
+    sequence.Deinit(log);
+    std::puts("[IMM_LAYER_PIVOT_TEST] heldRoot=1 hiddenParent=1 transformOnly=1 keysPreserved=1");
+}
+
 int wmain(int argc, wchar_t** argv)
 {
     require(argc == 2, "fixture argument");
     piLog log;
     require(log.Init(L"artifacts/authoring-failure-runtime.log", PILOG_TXT), "log init");
     checkLayerInitialization(&log);
+    checkHeldPivotTransform(&log);
     checkSpawnCacheLifecycle(&log);
     checkEmptySpawnCleanup();
     checkRenderPerformanceSnapshots();

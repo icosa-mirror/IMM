@@ -3474,6 +3474,30 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    validation-collector.log. Next source work follows the current execution order
    above while preserving all remaining roadmap requirements.
 
+### 6.97. Live pivot editing (local Windows milestone)
+
+1. Dedicated 48-byte versioned LayerSetPivot/LayerGetPivot C exports support
+   nonroot group, paint and spawn layers, including None/X/Y/Z reflection.
+   Existing property and key ABIs remain unchanged. Validate finite translation,
+   unit quaternion, positive uniform scale and the reflection enum. Readback is
+   synchronized and preserves caller output on failure.
+2. Queue copies the pivot; existing preparation/publication applies it atomically,
+   with importer ownership guards and CPU/presentation rejection checks. Resample
+   only the target transform at the held timeline time, including hidden parents;
+   do not refire actions, restart playback or alter canonical transforms/keys.
+   Invalidate affected spawn pose snapshots without changing ordinal selection.
+3. Windows Unity/viewer/Godot builds, loaded production C-export group/paint/spawn
+   checks with all four flips, discard/rejection and stable handles/selection pass.
+   One focused CPU check proves hidden-parent/held-root transform resampling.
+   Existing CPU authoring, 28 ABI guard and twelve rendered repeat/Loop/Offset
+   regression cases pass. Independent source review found no blocker.
+4. Evidence: artifacts/layer-pivot-native-build.log, layer-pivot-cabi/report.json,
+   authoring-failure/run.log, layer-pivot-repeat-regressions/report.json,
+   layer-pivot-key-regressions/report.json and layer-pivot-workflow-check.log.
+   Pivot-specific rendered/backend acceptance and managed integration remain open.
+   Full run 39976407088 targets the earlier rename source, so it cannot accept
+   this operation. This does not complete M2 or expand the rename test scope.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

@@ -2487,6 +2487,57 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerSetPivot(
+    int32_t docId, int32_t layerId, const ImmAuthoringLayerPivot * pivot)
+{
+    if (layerId < 0 || pivot == nullptr || pivot->structSize < sizeof(*pivot) ||
+        pivot->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 || pivot->reserved != 0 ||
+        pivot->flip < 0 || pivot->flip > 3 || !std::isfinite(pivot->tx) ||
+        !std::isfinite(pivot->ty) || !std::isfinite(pivot->tz) ||
+        !std::isfinite(pivot->qx) || !std::isfinite(pivot->qy) ||
+        !std::isfinite(pivot->qz) || !std::isfinite(pivot->qw) ||
+        !std::isfinite(pivot->scale) || pivot->scale <= 0.0f)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const double q2 = static_cast<double>(pivot->qx) * pivot->qx +
+        static_cast<double>(pivot->qy) * pivot->qy + static_cast<double>(pivot->qz) * pivot->qz +
+        static_cast<double>(pivot->qw) * pivot->qw;
+    if (std::fabs(q2 - 1.0) > 0.001) return IMM_AUTHORING_INVALID_ARGUMENT;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK) return stateResult;
+    try
+    {
+        return iPlayer().QueueLayerPivot(docId, static_cast<uint32_t>(layerId), ImmCore::trans3d(
+            ImmCore::quatd(pivot->qx, pivot->qy, pivot->qz, pivot->qw), pivot->scale,
+            static_cast<ImmCore::flip3>(pivot->flip), ImmCore::vec3d(pivot->tx, pivot->ty, pivot->tz)));
+    }
+    catch (const std::bad_alloc &) { return IMM_AUTHORING_OUT_OF_MEMORY; }
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetPivot(
+    int32_t docId, int32_t layerId, ImmAuthoringLayerPivot * pivotOut)
+{
+    if (layerId < 0 || pivotOut == nullptr || pivotOut->structSize < sizeof(*pivotOut) ||
+        pivotOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1) return IMM_AUTHORING_INVALID_ARGUMENT;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK) return stateResult;
+    ImmCore::trans3d pivot;
+    const int32_t result = iPlayer().GetLayerPivot(docId, static_cast<uint32_t>(layerId), pivot);
+    if (result != IMM_AUTHORING_OK) return result;
+    ImmAuthoringLayerPivot value{};
+    value.structSize = sizeof(value); value.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    value.tx = static_cast<float>(pivot.mTranslation.x);
+    value.ty = static_cast<float>(pivot.mTranslation.y);
+    value.tz = static_cast<float>(pivot.mTranslation.z);
+    value.qx = static_cast<float>(pivot.mRotation.x);
+    value.qy = static_cast<float>(pivot.mRotation.y);
+    value.qz = static_cast<float>(pivot.mRotation.z);
+    value.qw = static_cast<float>(pivot.mRotation.w);
+    value.scale = static_cast<float>(pivot.mScale);
+    value.flip = static_cast<int32_t>(pivot.mFlip);
+    *pivotOut = value;
+    return IMM_AUTHORING_OK;
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerSetName(
     int32_t docId, int32_t layerId, const char * nameUtf8, uint32_t nameLength)
 {

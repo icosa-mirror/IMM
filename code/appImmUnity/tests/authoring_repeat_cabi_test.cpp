@@ -269,6 +269,62 @@ int wmain(int argc, wchar_t ** argv)
             readName(group) == renamedGroup && std::wstring(layerInfo(target).fullName) == paintInfo.fullName,
             "rename failure preserves canonical name and descendant paths");
     }
+    ImmAuthoringLayerPivot pivot{};
+    pivot.structSize = sizeof(pivot); pivot.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    pivot.qw = 1.0f; pivot.scale = 1.0f;
+    ImmAuthoringLayerPivot readPivot = pivot;
+    requireRepeat(ImmAuthoring_LayerSetPivot(doc, root, &pivot) == IMM_AUTHORING_UNSUPPORTED,
+        "root pivot rejected");
+    pivot.flip = 4;
+    requireRepeat(ImmAuthoring_LayerSetPivot(doc, target, &pivot) == IMM_AUTHORING_INVALID_ARGUMENT,
+        "invalid pivot reflection rejected");
+    pivot.flip = 0;
+    for (int layer : {target, group, spawn})
+    {
+        for (int flip = 0; flip <= 3; ++flip)
+        {
+            requireRepeat(ImmAuthoring_LayerGetPivot(doc, layer, &readPivot) == IMM_AUTHORING_OK,
+                "read initial presented pivot");
+            const auto oldPivot = readPivot;
+            pivot.tx = static_cast<float>(flip + 1); pivot.flip = flip; pivot.scale = 1.5f;
+            requireRepeat(ImmAuthoring_LayerSetPivot(doc, layer, &pivot) == IMM_AUTHORING_OK &&
+                ImmAuthoring_LayerGetPivot(doc, layer, &readPivot) == IMM_AUTHORING_OK &&
+                readPivot.tx == oldPivot.tx && readPivot.flip == oldPivot.flip,
+                "queued pivot preserves presented state");
+            presentHierarchyEdit();
+            requireRepeat(ImmAuthoring_LayerGetPivot(doc, layer, &readPivot) == IMM_AUTHORING_OK &&
+                readPivot.tx == pivot.tx && readPivot.scale == pivot.scale && readPivot.flip == flip,
+                "pivot publishes through production C exports");
+        }
+    }
+    pivot.tx = 99.0f;
+    requireRepeat(ImmAuthoring_LayerSetPivot(doc, target, &pivot) == IMM_AUTHORING_OK &&
+        ImmAuthoring_DiscardPending(doc) == IMM_AUTHORING_OK &&
+        ImmAuthoring_LayerGetPivot(doc, target, &readPivot) == IMM_AUTHORING_OK && readPivot.tx == 4.0f,
+        "discard preserves pivot");
+    for (const char * failure : {"IMM_LIVE_EDIT_FAIL_PREPARE_CPU", "IMM_LIVE_EDIT_FAIL_PRESENT"})
+    {
+        requireRepeat(ImmAuthoring_LayerSetPivot(doc, target, &pivot) == IMM_AUTHORING_OK,
+            "queue rejected pivot");
+        uint64_t revision = 0;
+        requireRepeat(ImmAuthoring_Commit(doc, &revision) == IMM_AUTHORING_OK, "commit rejected pivot");
+        _putenv_s(failure, "1");
+        ImmAuthoringCommitStatus status{};
+        requireRepeat(wait([&]() {
+            status.structSize = sizeof(status); status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(doc, revision, &status) == IMM_AUTHORING_OK, "pivot status");
+            return status.state == IMM_AUTHORING_COMMIT_REJECTED || status.state == IMM_AUTHORING_COMMIT_PRESENTED;
+        }), "pivot reaches terminal state");
+        _putenv_s(failure, "");
+        requireRepeat(status.state == IMM_AUTHORING_COMMIT_REJECTED && status.result == -10 &&
+            ImmAuthoring_LayerGetPivot(doc, target, &readPivot) == IMM_AUTHORING_OK && readPivot.tx == 4.0f,
+            "pivot rejection preserves presented state");
+    }
+    uint64_t pivotDrawing = 0;
+    requireRepeat(player.GetDrawingHandle(doc, target, 0, pivotDrawing) && pivotDrawing == drawingBefore &&
+        player.GetSpawnArea(doc) == oldActive && player.GetInitialSpawnArea(doc) == oldDefault,
+        "pivot preserves drawing handles and spawn selection");
+    std::puts("[IMM_LAYER_PIVOT_CABI_TEST] pass=1 groupPaintSpawn=1 allFlips=1 queuedState=1 discardAndRejection=1");
     requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
     presentHierarchyEdit();
     requireRepeat(std::wstring(savedSpawn.mName) == L"Spawn before" && player.GetSpawnAreaCount(doc) == 0,
