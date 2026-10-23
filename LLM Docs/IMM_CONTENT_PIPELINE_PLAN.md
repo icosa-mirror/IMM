@@ -3881,7 +3881,8 @@ the historical sizes/check counts below describe this earlier source only.
    not yet loaded its root. Crash stack is retained in the current Editor log;
    the owned Editor exited. UI now reads playhead state only after attachment.
    Native time queries now zero outputs and guard invalid/loading/rootless
-   documents under the Player mutex. Actual fresh-Editor confirmation is pending.
+   documents under the Player mutex. Fresh-Editor load confirmation subsequently
+   passed as recorded below.
 3. Added read-only layer timing, evaluated layer-to-document transform and stored
    key enumeration exports. They reuse the existing 48-byte transform and 80-byte
    key layouts; no API versions were added. Transform queries also support fixing
@@ -3965,6 +3966,34 @@ the historical sizes/check counts below describe this earlier source only.
    49 passing jobs. The later failed run also had an independent hosted iOS runner
    acquisition failure. Neither that infrastructure issue nor the Android source
    failures are described as passing; the next source push requires full validation.
+
+### 6.113. Timeline history and stable key times (active)
+
+1. Timeline undo/redo is being implemented for key channels, drawing frame tables
+   and canonical paint repeat counts. History will move only after Presented,
+   retain stacks after rejected edits, clear after incompatible document edits,
+   and check observed revisions/track contents before replay. These checks do not
+   constitute atomic protection against an independent concurrent writer.
+2. Review found that requested > presented is not sufficient evidence of an active
+   edit: rejected commits leave the requested revision ahead permanently. History
+   readiness now checks the requested commit's terminal status instead. Actual
+   rejection/undo/redo Editor verification is still pending.
+3. Preparing lossless replay exposed a key-time conversion bug: 24 fps frame 13
+   is 6825 ticks, but converting its queried seconds back through truncation yielded
+   6824. KeySet and KeyRemove now quantize to nearest native tick with finite,
+   nonnegative and overflow checks. Playback/global piTick conversion is unchanged;
+   no API layout or version was added. This fixes normal animation-range round
+   trips, not arbitrary int64 precision beyond what the existing double ABI holds.
+4. Native Windows Release build and the existing loaded WARP C ABI suite pass,
+   including exact frame-13 get/set/remove and invalid-time rejection. Evidence:
+   artifacts/live-timeline-history-native-build.log and
+   artifacts/live-timeline-history-keytime-cabi/report.json / run.log. Source and
+   matching sample Windows DLL are committed together for this correction.
+5. Nested timeline mapping remains unfinished. Read-only design review confirmed
+   that visibility starts, repeat cycles/clamps, mid-span Offset history and exact
+   Stop boundaries prevent a general managed root-time delta. A native context
+   clock/resolver with an explicit seek policy is needed; no guessed mapping has
+   been implemented or accepted.
 
 ## 7. Consolidated documents
 

@@ -2745,6 +2745,22 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyGe
     return IMM_AUTHORING_OK;
 }
 
+static bool iAuthoringKeyTime(double seconds, ImmCore::piTick & time)
+{
+    if (!std::isfinite(seconds) || seconds < 0.0)
+        return false;
+    // KeyGet divides integer ticks by 12600. Multiplying its double result
+    // back can fall just below the original tick (24 fps frame 13 is one case).
+    // Round at this authoring boundary; playback's global truncation is unchanged.
+    const double ticks = std::round(seconds * static_cast<double>(ImmCore::piTick::FromOneSecond()));
+    // double(INT64_MAX) is 2^63, so the exclusive bound also prevents an
+    // undefined out-of-range integer conversion at the representable limit.
+    if (!std::isfinite(ticks) || ticks >= static_cast<double>(INT64_MAX))
+        return false;
+    time = ImmCore::piTick(static_cast<int64_t>(ticks));
+    return true;
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySet(
     int32_t docId, int32_t layerId, const ImmAuthoringKey *key)
 {
@@ -2752,10 +2768,8 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
         return IMM_AUTHORING_INVALID_ARGUMENT;
     if (key->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
         return IMM_AUTHORING_UNSUPPORTED;
-    const double maximumTimeSeconds = static_cast<double>(INT64_MAX) /
-        static_cast<double>(ImmCore::piTick::FromOneSecond());
-    if (key->structSize < sizeof(ImmAuthoringKey) || !std::isfinite(key->timeSeconds) ||
-        key->timeSeconds < 0.0 || key->timeSeconds >= maximumTimeSeconds ||
+    ImmCore::piTick keyTime(0);
+    if (key->structSize < sizeof(ImmAuthoringKey) || !iAuthoringKeyTime(key->timeSeconds, keyTime) ||
         key->reserved[0] != 0 || key->reserved[1] != 0 ||
         key->transformFlip < 0 || key->transformFlip > 3)
         return IMM_AUTHORING_INVALID_ARGUMENT;
@@ -2823,7 +2837,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
     {
         return iPlayer().QueueAnimationKey(
             docId, static_cast<uint32_t>(layerId), property,
-            ImmCore::piTick::FromSeconds(key->timeSeconds), value,
+            keyTime, value,
             static_cast<ImmImporter::Layer::InterpolationType>(key->interpolation));
     }
     catch (const std::bad_alloc &)
@@ -2835,11 +2849,10 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyRemove(
     int32_t docId, int32_t layerId, int32_t propertyValue, double timeSeconds)
 {
-    if (layerId < 0 || !std::isfinite(timeSeconds))
+    if (layerId < 0)
         return IMM_AUTHORING_INVALID_ARGUMENT;
-    const double maximumTimeSeconds = static_cast<double>(INT64_MAX) /
-        static_cast<double>(ImmCore::piTick::FromOneSecond());
-    if (timeSeconds < 0.0 || timeSeconds >= maximumTimeSeconds)
+    ImmCore::piTick keyTime(0);
+    if (!iAuthoringKeyTime(timeSeconds, keyTime))
         return IMM_AUTHORING_INVALID_ARGUMENT;
 
     ImmImporter::Layer::AnimProperty property;
@@ -2868,7 +2881,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyRe
     {
         return iPlayer().QueueAnimationKeyRemoval(
             docId, static_cast<uint32_t>(layerId), property,
-            ImmCore::piTick::FromSeconds(timeSeconds));
+            keyTime);
     }
     catch (const std::bad_alloc &)
     {

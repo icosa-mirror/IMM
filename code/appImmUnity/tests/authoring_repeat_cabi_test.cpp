@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <atomic>
+#include <limits>
 
 static void requireRepeat(bool condition, const char * message)
 {
@@ -586,6 +587,40 @@ int wmain(int argc, wchar_t ** argv)
         IMM_AUTHORING_OK && visibilityCount == 0, "mixed channel batch preserves Offset track");
     requireRepeat(ImmAuthoring_KeyRemove(doc, target, movedKey.property, 0.25) == IMM_AUTHORING_OK, "remove moved key");
     presentHierarchyEdit();
+    // 24 fps frame 13 is exactly 6825 native ticks, but its seconds double
+    // multiplies back to 6824.999999999999. Exercise the exported round trip.
+    Layer::AnimValue exactTickValue;
+    exactTickValue.init(); exactTickValue.mFloat = 0.7f;
+    requireRepeat(player.QueueAnimationKey(doc, target, Layer::AnimProperty::Opacity,
+        piTick(6825), exactTickValue, Layer::InterpolationType::None) == IMM_AUTHORING_OK,
+        "seed exact native 24 fps key tick");
+    presentHierarchyEdit();
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, movedKey.property, 0, &readKey) == IMM_AUTHORING_OK &&
+        readKey.timeSeconds == 6825.0 / 12600.0, "read non-binary-exact native key time");
+    requireRepeat(ImmAuthoring_KeySet(doc, target, &readKey) == IMM_AUTHORING_OK,
+        "write queried native key without moving its tick");
+    presentHierarchyEdit();
+    Layer::AnimKey exactRead{};
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, target, movedKey.property, &visibilityCount) == IMM_AUTHORING_OK &&
+        visibilityCount == 1 && player.GetAnimationKey(doc, target, Layer::AnimProperty::Opacity, 0, exactRead) ==
+        IMM_AUTHORING_OK && exactRead.mTime == piTick(6825), "get/set round trip preserves exact tick and key count");
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, movedKey.property, readKey.timeSeconds) == IMM_AUTHORING_OK,
+        "remove exact native key through queried seconds");
+    presentHierarchyEdit();
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, target, movedKey.property, &visibilityCount) == IMM_AUTHORING_OK &&
+        visibilityCount == 0, "get/remove round trip removes the original native tick");
+    for (double invalidTime : { -1.0, std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::max(),
+        static_cast<double>(INT64_MAX) / static_cast<double>(piTick::FromOneSecond()) })
+    {
+        movedKey.timeSeconds = invalidTime;
+        requireRepeat(ImmAuthoring_KeySet(doc, target, &movedKey) == IMM_AUTHORING_INVALID_ARGUMENT &&
+            ImmAuthoring_KeyRemove(doc, target, movedKey.property, invalidTime) == IMM_AUTHORING_INVALID_ARGUMENT,
+            "authoring key time rejects negative/nonfinite/overflow values before integer conversion");
+    }
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, target, movedKey.property, &visibilityCount) == IMM_AUTHORING_OK &&
+        visibilityCount == 0, "invalid time requests leave canonical key track unchanged");
+    std::puts("[IMM_KEY_TIME_QUANTIZATION_TEST] pass=1 exact24fpsTick=6825 getSetRemove=1 invalidTimesRejected=1");
     std::puts("[IMM_TIMELINE_QUERY_RETIME_TEST] pass=1 safeUnreadyTime=1 keyQueries=1 exactOffset=1 reflectedWorldTransform=1 atomicMove=1 invalidRemovalRollback=1 mixedTracksRollback=1");
     requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
     presentHierarchyEdit();
