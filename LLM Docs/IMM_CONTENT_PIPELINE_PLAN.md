@@ -3684,6 +3684,13 @@ the historical sizes/check counts below describe this earlier source only.
 3. Evidence: artifacts/converter-checkpoint-ci-agent-ios-cancel-job.json,
    converter-checkpoint-ci-agent-ios-cancel-annotations.json and
    held-key-properties-ci-39984582643.json.
+4. The same run subsequently has a second unstarted hosted-runner cancellation:
+   Godot iOS Simulator Validation job 120520334284 on macos-26. Its runner_id is
+   zero, it executed zero steps, and the check annotation gives the same acquisition
+   failure. Both iOS visual gates await their one isolated retry after the active
+   parent run becomes terminal; no application failure or retry outcome is inferred.
+   Evidence: artifacts/converter-checkpoint-ci-agent-godot-ios-cancel-*.json and
+   group-visibility-ci-39984582643.json.
 
 ### 6.106. Held static subtree visibility correction (local Windows milestone)
 
