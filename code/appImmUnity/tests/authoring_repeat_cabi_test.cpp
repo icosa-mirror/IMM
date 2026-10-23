@@ -325,6 +325,39 @@ int wmain(int argc, wchar_t ** argv)
         player.GetSpawnArea(doc) == oldActive && player.GetInitialSpawnArea(doc) == oldDefault,
         "pivot preserves drawing handles and spawn selection");
     std::puts("[IMM_LAYER_PIVOT_CABI_TEST] pass=1 groupPaintSpawn=1 allFlips=1 queuedState=1 discardAndRejection=1");
+    const std::string batchOldName = readName(target);
+    ImmAuthoringLayerProperties batchProperties{};
+    batchProperties.structSize = sizeof(batchProperties); batchProperties.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    batchProperties.updateMask = IMM_AUTHORING_LAYER_PROPERTY_OPACITY;
+    batchProperties.opacity = 0.25f;
+    requireRepeat(ImmAuthoring_LayerSetName(doc, target, "First", 5) == IMM_AUTHORING_OK &&
+        ImmAuthoring_LayerSetProperties(doc, target, &batchProperties) == IMM_AUTHORING_OK &&
+        ImmAuthoring_LayerSetPivot(doc, target, &pivot) == IMM_AUTHORING_OK &&
+        ImmAuthoring_PaintSetMaxRepeatCount(doc, target, 7) == IMM_AUTHORING_OK &&
+        ImmAuthoring_LayerSetName(doc, target, "Combined", 8) == IMM_AUTHORING_OK &&
+        ImmAuthoring_PaintSetMaxRepeatCount(doc, target, 2) == IMM_AUTHORING_OK,
+        "same-layer metadata setters accumulate with last value per field");
+    requireRepeat(ImmAuthoring_LayerSetName(doc, sibling, "Other", 5) == IMM_AUTHORING_QUEUE_FULL &&
+        ImmAuthoring_LayerSetName(doc, target, badUtf8, sizeof(badUtf8)) == IMM_AUTHORING_INVALID_ARGUMENT,
+        "cross-layer and invalid subsequent commands preserve accepted metadata");
+    requireRepeat(readName(target) == batchOldName &&
+        ImmAuthoring_LayerGetPivot(doc, target, &readPivot) == IMM_AUTHORING_OK && readPivot.tx == 4.0f &&
+        ImmAuthoring_PaintGetMaxRepeatCount(doc, target, &count) == IMM_AUTHORING_OK && count == UINT32_MAX,
+        "combined metadata remains unpublished while queued");
+    presentHierarchyEdit();
+    ImmAuthoringLayerProperties batchRead{};
+    batchRead.structSize = sizeof(batchRead); batchRead.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    requireRepeat(readName(target) == "Combined" &&
+        ImmAuthoring_LayerGetProperties(doc, target, &batchRead) == IMM_AUTHORING_OK && batchRead.opacity == 0.25f &&
+        ImmAuthoring_LayerGetPivot(doc, target, &readPivot) == IMM_AUTHORING_OK && readPivot.tx == 99.0f &&
+        ImmAuthoring_PaintGetMaxRepeatCount(doc, target, &count) == IMM_AUTHORING_OK && count == 2,
+        "one revision publishes name, opacity, pivot and final repeat count");
+    requireRepeat(ImmAuthoring_LayerSetName(doc, target, "Discard", 7) == IMM_AUTHORING_OK &&
+        ImmAuthoring_PaintSetMaxRepeatCount(doc, target, 9) == IMM_AUTHORING_OK &&
+        ImmAuthoring_DiscardPending(doc) == IMM_AUTHORING_OK && readName(target) == "Combined" &&
+        ImmAuthoring_PaintGetMaxRepeatCount(doc, target, &count) == IMM_AUTHORING_OK && count == 2,
+        "discard drops all accumulated fields");
+    std::puts("[IMM_METADATA_BATCH_CABI_TEST] pass=1 combinedPublication=1 lastValueWins=1 invalidPreservesQueue=1 discard=1");
     requireRepeat(ImmAuthoring_LayerDestroy(doc, group) == IMM_AUTHORING_OK, "remove renamed subtree");
     presentHierarchyEdit();
     requireRepeat(std::wstring(savedSpawn.mName) == L"Spawn before" && player.GetSpawnAreaCount(doc) == 0,

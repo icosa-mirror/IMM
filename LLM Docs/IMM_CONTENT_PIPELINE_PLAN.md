@@ -3498,6 +3498,25 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Full run 39976407088 targets the earlier rename source, so it cannot accept
    this operation. This does not complete M2 or expand the rename test scope.
 
+### 6.98. Same-layer metadata batches (local Windows milestone)
+
+1. Successive property, name, pivot and canonical paint-repeat setters for
+   the same layer share one atomic publication. Last supplied value wins per
+   field. Invalid subsequent commands preserve earlier accepted commands. Build
+   the replacement edit privately before moving it into the queue, so an allocation
+   failure cannot partially overwrite previously accepted fields.
+2. Retain the existing prepared name/pivot/repeat validation and publication path;
+   cross-layer and geometry/key/hierarchy combinations remain unsupported.
+3. Windows Unity/viewer/Godot builds, CPU authoring and loaded production C-export
+   checks pass. The existing host proves combined name/opacity/pivot/repeat
+   publication, last-value semantics, rejection of cross-layer/invalid commands,
+   queued-state isolation and whole-edit discard. This changes the old same-layer
+   second-repeat-setter rejection contract deliberately; its CPU check now requires
+   successful accumulation. No new test framework or rename test expansion.
+4. Evidence: artifacts/metadata-batch-native-build.log, metadata-batch-cabi/report.json,
+   metadata-batch-cabi/run.log and metadata-batch-cpu-check.log. Broader mixed
+   batches, managed transaction mapping and hosted/backend acceptance remain open.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

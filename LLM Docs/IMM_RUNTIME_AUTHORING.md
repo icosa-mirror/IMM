@@ -331,6 +331,8 @@ Current supported batch shapes are:
 | Frame remap + drawing deletion | Remap first; no other remaining frame may reference the deleted drawing |
 | Canonical layer properties | One layer; visibility/opacity/transform masks may be combined |
 | Layer name | One nonroot group/paint/spawn; copied UTF-8 input, prepared descendant paths, importer-busy guards and atomic publication (roadmap 6.94) |
+| Layer pivot | One nonroot group/paint/spawn; explicit reflections and target-only held-time transform resampling (roadmap 6.97) |
+| Combined layer metadata | Successive properties/name/pivot/canonical-repeat setters for one layer; last supplied value wins per field, one prepared/presented revision (roadmap 6.98) |
 | Canonical paint repeat | One static-paint layer; dedicated setter/getter; zero is indefinite. Local CPU checks and six rendered Windows DirectX cases pass; hosted and broader backend acceptance pending (roadmap 6.84, 6.86) |
 | Animation key insertion/replacement/removal | One key edit |
 | Default spawn selection | One existing spawn layer |
@@ -340,6 +342,12 @@ Current supported batch shapes are:
 The `DependencyFailed` result is reserved in the ABI. Its presence does not imply an implemented
 multi-commit dependency queue. Managed expected-revision transactions likewise must not be
 assumed to exist in the native ABI before M4 maps their semantics explicitly.
+
+Successive metadata setters accumulate only for the same layer. Validation and
+private candidate construction finish before replacing the queued edit, so a
+rejected command or allocation failure preserves previously accepted fields.
+Discard removes the entire accumulated edit. Cross-layer and geometry/key/hierarchy
+mixing remain unsupported; this is not a general multi-operation transaction.
 
 `ImmAuthoring_PaintSetMaxRepeatCount(docId, layerId, uint32 count)` queues one
 static-paint metadata edit; use the existing commit/status/presentation lifecycle.

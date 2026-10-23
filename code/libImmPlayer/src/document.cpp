@@ -1776,7 +1776,8 @@ namespace ImmPlayer
             return -4;
         if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
             (!mOpenFrameMappings.empty() || !mOpenFrameSequences.empty()) || !mOpenDrawingDeletions.empty() ||
-            !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
+            (!mOpenLayerPropertyEdits.empty() && mOpenLayerPropertyEdits[0].mLayerId != layerId) ||
+            !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
             !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
             !mOpenLayerReparents.empty())
@@ -1831,10 +1832,18 @@ namespace ImmPlayer
                 transform.mFlip != flip3::N)
                 return -2;
         }
-        mOpenLayerPropertyEdits.push_back(LayerPropertyEdit{
-            layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform,
-            setPaintRepeat, paintRepeat, newName != nullptr ? newName : L"",
-            newPivot != nullptr, newPivot != nullptr ? *newPivot : trans3d::identity() });
+        // Build privately so a failed name allocation cannot partially change
+        // an earlier accepted command. Repeated fields use the last value.
+        LayerPropertyEdit edit = mOpenLayerPropertyEdits.empty() ? LayerPropertyEdit{} : mOpenLayerPropertyEdits[0];
+        edit.mLayerId = layerId;
+        if (setVisibility) { edit.mSetVisibility = true; edit.mVisible = visible; }
+        if (setOpacity) { edit.mSetOpacity = true; edit.mOpacity = opacity; }
+        if (setTransform) { edit.mSetTransform = true; edit.mTransform = transform; }
+        if (setPaintRepeat) { edit.mSetPaintRepeat = true; edit.mPaintRepeat = paintRepeat; }
+        if (newName != nullptr) edit.mName = newName;
+        if (newPivot != nullptr) { edit.mSetPivot = true; edit.mPivot = *newPivot; }
+        if (mOpenLayerPropertyEdits.empty()) mOpenLayerPropertyEdits.push_back(std::move(edit));
+        else mOpenLayerPropertyEdits[0] = std::move(edit);
         return 0;
     }
 

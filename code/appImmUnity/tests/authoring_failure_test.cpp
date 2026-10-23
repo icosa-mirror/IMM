@@ -546,7 +546,7 @@ int wmain(int argc, wchar_t** argv)
     for (uint32_t count : { 0u, 2u, UINT32_MAX })
     {
         const uint32_t previous = guardPaint->GetMaxRepeatCount();
-        require(queueRepeat(count) == 0 && queueRepeat(count) == -7, "single repeat edit queued, second edit rejected");
+        require(queueRepeat(count) == 0 && queueRepeat(count) == 0, "same-layer repeat setters share one metadata edit");
         int32_t result = -99;
         const uint64_t revision = doc.CommitEdits(&result);
         require(revision != 0 && result == 0, "repeat edit committed");
