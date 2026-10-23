@@ -44,8 +44,9 @@ open because the Computer Use Windows native pipe is unavailable.
 
 Later local native repeat milestones (6.84, 6.86) add canonical static-paint
 setter/getter publication, CPU guards and six rendered Windows DirectX cases.
-They are outside full CI source e19db96e. Positive C-export delivery, managed
-mapping, broader backend and full M2 acceptance remain open.
+They are outside full CI source e19db96e. Linked production C-export delivery
+also passes locally in a loaded-document WARP host (6.87). Unity/PInvoke live
+delivery, managed mapping, broader backend and full M2 acceptance remain open.
 
 ## 1. Objective and document ownership
 
@@ -3176,6 +3177,34 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Earlier cross-host evidence retains its original b0055332 native payload and
    hashes; the rendered tests retain separate runtime copies of this later build.
    Full hosted acceptance of these later native milestones remains pending.
+
+### 6.87. Positive native C-export repeat delivery (local Windows milestone)
+
+1. Add an owned native integration host that compiles the production main.cpp
+   export definitions and retains the production shared bridge source. Initialize
+   that bridge with a borrowed Direct3D 11 WARP device and load a real IMM fixture;
+   no Unity interfaces, cameras, private-member access or production test hooks
+   are introduced. The initial host link failed because its generated project
+   omitted the shared bridge implementation; fix the project source selection.
+2. Positive attach/get/set/commit/status/discard/detach calls through the C export
+   definitions pass on the loaded document. Count 0, finite 2 and UINT32_MAX reach
+   presented revisions, while queued values remain unpublished and the sibling
+   count remains unchanged. Unsupported root and unknown-layer calls reject;
+   rejected and detached getters preserve the caller's output, and detached
+   mutation rejects. These checks complement dynamic-DLL symbol/early-validation
+   checks and the independent rendered viewer cases; they do not establish
+   Unity/PInvoke marshalling, hardware rendering or another platform.
+3. Wire the host into the required Windows playback step and always-upload its
+   failed-or-passed report, build/run/native logs. The runner hashes the actual
+   executable, fixture and fixture exporter. All final local cases, workflow
+   matrix verification and actionlint of the changed build workflow pass.
+   Evidence: artifacts/paint-repeat-cabi-final/report.json, build.log, run.log and
+   native-runtime.log; paint-repeat-cabi-workflow-matrix.log and actionlint log.
+4. This milestone remains outside active full run 39954000025/e19db96e. Latest
+   snapshot: 34 successful jobs, six active, ten skipped, one cancelled Firefox
+   infrastructure job. Both Unity Firebase producers and Windows converter/form/
+   archive validation pass. Linux package import/new Editor tests remain active,
+   so no full acceptance or successful Firefox retry is claimed.
 
 ## 7. Consolidated documents
 

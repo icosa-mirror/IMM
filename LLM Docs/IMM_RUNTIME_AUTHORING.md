@@ -363,8 +363,11 @@ dedicated native setter/getter and local CPU publication/rejection checks (roadm
 time and active Loop keys retain precedence over the edited canonical count.
 Six repeat-specific rendered Windows DirectX publication, rejection and unload/
 recovery cases now pass (roadmap 6.86), including native Player getter/setter
-delivery on a loaded document. Positive C ABI delivery, broader backend and
-managed transaction mapping remain open. Full hosted regression run 39935868460 accepts
+delivery on a loaded document. A separate native WARP host now passes positive
+delivery through the linked production C exports (roadmap 6.87), including
+publication/discard, sibling preservation, unsupported-layer and detached access.
+Unity/PInvoke live delivery, broader backend and managed transaction mapping
+remain open. Full hosted regression run 39935868460 accepts
 source 97142c9a, including this live-key milestone (roadmap 6.77); operation-specific
 and broader platform acceptance remain scoped to 6.70. Roadmap 6.67 separates stored
 paint repeat metadata from Loop-evaluated frame selection for both implementations,
