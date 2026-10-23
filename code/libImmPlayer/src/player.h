@@ -51,7 +51,10 @@ namespace ImmPlayer {
         // call this ones per frame and per camera
         void GlobalRender(const ImmCore::trans3d & vr_to_head, const ImmCore::trans3d & world_to_head, const ImmCore::mat4x4 & projection, const StereoMode & stereoMode);
 
-        //=== this are the only functions that can be called form the render thread. Everything else should always be called from the main thread ===
+        // Render entry points below run on the render thread. Other operations
+        // run on the main thread, except GetLayerCount/GetLayerInfoByIndex which
+        // copy individual snapshots under the scene-publication lock. Stop all
+        // readers before synchronous shutdown/Deinit.
         // call this ones per frame and per camera, if in mono or two pass stereo
         void RenderMono(const ImmCore::ivec2 & pixelResolutionIncludingSupersampling, int eyeID);
         // call this ones per frame and per camera, if in single pass stereo
@@ -453,7 +456,7 @@ namespace ImmPlayer {
         LayerRendererModel mLayerRenderModel;
 
         bool mEnabled;
-        std::mutex   mMutex; // to synch the main thread and the render thread. TODO: remove it - use double buffered rendering
+        mutable std::mutex mMutex; // Synchronizes scene publication with owned query snapshots.
         ImmCore::piTick     mTime;
 
         #if defined(RENDER_BUDGET) || defined(MEASURE_GPU_TIME)

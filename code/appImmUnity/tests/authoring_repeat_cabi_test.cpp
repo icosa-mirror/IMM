@@ -7,6 +7,7 @@
 #include <thread>
 #include <cstdio>
 #include <cstdlib>
+#include <atomic>
 
 static void requireRepeat(bool condition, const char * message)
 {
@@ -108,6 +109,60 @@ int wmain(int argc, wchar_t ** argv)
         ImmAuthoring_DiscardPending(doc) == IMM_AUTHORING_OK, "discard through C export");
     requireRepeat(ImmAuthoring_PaintGetMaxRepeatCount(doc, target, &count) == IMM_AUTHORING_OK && count == UINT32_MAX,
         "discard preserves count");
+    Player::LayerInfo invalid{};
+    requireRepeat(player.GetLayerCount(-1) == 0 && player.GetLayerCount(INT32_MAX) == 0 &&
+        !player.GetLayerInfoByIndex(-1, 0, invalid) && !player.GetLayerInfoByIndex(INT32_MAX, 0, invalid),
+        "invalid enumeration document IDs reject safely");
+    std::atomic<bool> querying{true};
+    std::atomic<bool> validSnapshots{true};
+    std::atomic<uint64_t> snapshots{0};
+    std::thread reader([&]() {
+        while (querying.load())
+        {
+            const int layers = player.GetLayerCount(doc);
+            for (int index = 0; index < layers; ++index)
+            {
+                Player::LayerInfo info{};
+                // Count and info are separate snapshots: a removed index may
+                // disappear between calls, but a returned record must be owned.
+                if (player.GetLayerInfoByIndex(doc, index, info))
+                {
+                    if (info.id < 0 || info.parentId < -1 || info.name[0] == 0 || info.fullName[0] == 0)
+                        validSnapshots.store(false);
+                    snapshots.fetch_add(1);
+                }
+            }
+            std::this_thread::yield();
+        }
+    });
+    const auto presentHierarchyEdit = [&]() {
+        uint64_t revision = 0;
+        requireRepeat(ImmAuthoring_Commit(doc, &revision) == IMM_AUTHORING_OK && revision != 0,
+            "commit concurrent hierarchy edit");
+        requireRepeat(wait([&]() {
+            ImmAuthoringCommitStatus status{};
+            status.structSize = sizeof(status);
+            status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(doc, revision, &status) == IMM_AUTHORING_OK &&
+                status.state != IMM_AUTHORING_COMMIT_REJECTED, "concurrent hierarchy status");
+            return status.state == IMM_AUTHORING_COMMIT_PRESENTED;
+        }), "concurrent hierarchy edit presented");
+    };
+    for (int iteration = 0; iteration < 100; ++iteration)
+    {
+        int32_t created = -1;
+        const char name[] = "Snapshot fixture";
+        requireRepeat(ImmAuthoring_LayerCreate(doc, root, IMM_AUTHORING_LAYER_GROUP,
+            name, sizeof(name) - 1, &created) == IMM_AUTHORING_OK, "queue concurrent group creation");
+        presentHierarchyEdit();
+        requireRepeat(ImmAuthoring_LayerDestroy(doc, created) == IMM_AUTHORING_OK, "queue concurrent group deletion");
+        presentHierarchyEdit();
+    }
+    querying.store(false);
+    reader.join();
+    requireRepeat(validSnapshots.load() && snapshots.load() > 0, "owned layer snapshots survive concurrent publication");
+    std::printf("[IMM_LAYER_QUERY_SNAPSHOT_TEST] pass=1 publications=200 snapshots=%llu perCallSnapshot=1\n",
+        static_cast<unsigned long long>(snapshots.load()));
     requireRepeat(ImmAuthoring_Detach(doc) == IMM_AUTHORING_OK, "detach through C export");
     count = 123;
     requireRepeat(ImmAuthoring_PaintGetMaxRepeatCount(doc, target, &count) == IMM_AUTHORING_INVALID_STATE && count == 123,

@@ -518,6 +518,14 @@ return empty defaults; invalid ordinals cannot change a valid selection. Native 
 viewpoint policy and DirectX paint regressions pass locally (roadmap 6.56). Returned
 names remain borrowed; this does not establish concurrent query/teardown safety.
 
+Layer enumeration is a separate owned-copy path: GetLayerCount/GetLayerInfoByIndex
+now validate document-table bounds/usage and synchronize with CPU/GPU publication.
+Each returned record owns its short/full-name buffers; count and record calls do
+not form an atomic whole-document enumeration. Local Windows WARP checks passed
+33,478 records during 200 group publications, and twelve rendered playback cases
+pass (roadmap 6.93). Stop readers before synchronous shutdown/Deinit. Other legacy
+borrowed queries and concurrent decoding are outside this acceptance.
+
 External Unity/Godot performance queries return a synchronized numeric snapshot of
 the latest completed display counters, rather than partially reset working counters.
 No-document rendering clears it; disabling also rejects late publication. This is

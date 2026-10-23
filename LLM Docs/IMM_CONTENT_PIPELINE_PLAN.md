@@ -3327,6 +3327,54 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    lifecycle correction with `[CI VALIDATION]` and audit its real results before
    declaring any new full hosted acceptance.
 
+### 6.92. Reviewed licence correction in full validation
+
+1. Commit 2b7d3671 owns the native Editor test licence lifecycle and stages the
+   matching reader. Final review approved it before pushing; pull was already
+   up to date. Full `[CI VALIDATION]` run 39966625591 targets
+   2b7d3671a76f58171a668f52114c19012ce9ade5. Latest observed snapshot is in progress:
+   thirteen jobs successful, five active, no failed/cancelled jobs. Native macOS
+   activation/conversion and full hosted acceptance are not yet proved.
+2. Superseded cab50dfa run 39963637687 is terminal cancelled: eleven successful,
+   twelve cancelled, five skipped and one failed Validation Evidence collector.
+   The complete collector log reports missing/cancelled producer evidence, not
+   an additional failed producer. Preserve those limits; no full pass is claimed.
+3. Evidence: artifacts/editor-native-license-full-runs.json,
+   editor-native-license-full-progress.json, editor-native-license-push.log,
+   editor-native-license-superseded-run.json and
+   editor-native-license-superseded-validation.log. Continue source work while
+   the full run proceeds; the accepted baseline remains 47a0240d.
+
+### 6.93. Safe layer enumeration before live rename (local Windows milestone)
+
+1. Source/lifetime audit found GetLayerCount/GetLayerInfoByIndex unprotected
+   during CPU/GPU hierarchy publication. Add the existing Player mutex to these
+   const getters and validate document-table bounds/usage before dereferencing.
+   Each returned LayerInfo owns its name/full-path buffers. Counts and records
+   remain separate snapshots, not a revision-consistent complete enumeration.
+   Readers must stop before synchronous shutdown/Deinit.
+2. No internal Player call path or locked callback recursively calls these two
+   getters. Windows Unity/viewer/Godot build and positive linked-export WARP host
+   pass. An additional reader collected 33,478 valid owned records during 200
+   group creation/deletion publications. Invalid IDs reject safely. The first
+   test compile used the wrong destroy-function name; correct it to the existing
+   LayerDestroy export before acceptance. All six rendered canonical-repeat
+   cases and all six existing rendered Loop/Offset cases pass against the rebuilt
+   native code; no deadlock or rendered regression was observed.
+3. Live rename is not implemented by this prerequisite. Its next slice must
+   prepare the short name and all descendant full paths, reject active importer
+   ownership at queue/preparation/publication, and copy spawn labels into owned
+   storage under the Player lock before wrappers encode them. Notify spawn label
+   consumers without rebuilding stable ordinal caches. Nonroot scope is consistent
+   with the existing normalized root-label contract; never infer worker completion
+   merely from Loaded state or StopLoadingAsync.
+4. Evidence: artifacts/layer-query-snapshot-build.log and
+   layer-query-snapshot-cabi-corrected/report.json and run.log, plus
+   layer-query-snapshot-repeat-rendered/report.json and
+   layer-query-snapshot-key-rendered/report.json. This later local source
+   is outside active full run 39966625591/2b7d3671. Threaded decoding, synchronous
+   teardown concurrency and other backend/per-operation acceptance remain open.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
