@@ -3558,6 +3558,10 @@ the historical sizes/check counts below describe this earlier source only.
    39979516973 do not cover this source. Their latest snapshots have 36 and 14
    successful jobs respectively, no failed jobs and unresolved work; the fully
    accepted hosted baseline remains 47a0240d.
+5. Commit a8c23f2e is pushed after an up-to-date pull, with `[CI VALIDATION]`
+   at the start of its message. Full run 39981424089 targets
+   a8c23f2e692b0a33863e3a657a39b36aef728fcd and is queued; no hosted acceptance
+   is claimed. Receipt: artifacts/direct-live-layout-full-runs.json.
 
 ## 7. Consolidated documents
 
