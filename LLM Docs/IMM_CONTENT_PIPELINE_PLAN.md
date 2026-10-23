@@ -38,14 +38,15 @@ was requested before diagnosing that retry; cancellation has been requested.
 The first dependency fix (6.73) also failed: run 39798342624 at bb97268a timed
 out after 600 seconds downloading FFmpeg for URP. The new correction (6.74)
 removes that unused producer dependency and provisions a pinned bundled executable
-only in the evidence collector. Local real-codec checks pass; full hosted
-validation of the new correction remains pending. Full validation of the live-key
+only in the evidence collector. Local real-codec checks and hosted Linux/Android
+producer/collector evidence now pass; the full hosted verdict remains pending.
+Full validation of the live-key
 milestone remains unresolved.
 
 FFmpeg correction 97142c9a is pushed with [CI VALIDATION]; full run 39935868460
-is in progress at the latest check. C5's standalone-library extraction now passes
-local native regressions and an independent public-consumer/baseline comparison
-(6.75), but is outside that running CI revision. No distribution or clean-machine
+is in progress at the latest check. C5's standalone-library extraction and production
+CLI now pass local native regressions and public-consumer/command-line checks
+(6.75-6.76), but are outside that running CI revision. No distribution or clean-machine
 acceptance is claimed.
 
 ## 1. Objective and document ownership
@@ -145,7 +146,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop and root stop/seek corrections locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D and structural equirectangular mono/stereo conversion, and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Panorama orientation/eye order and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| C5: user-facing converter packaging | Standalone library extracted from the harness; local native regressions and independent consumer/baseline comparison pass (6.75). Production CLI, portable Windows application and Unity editor entry point remain planned; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
+| C5: user-facing converter packaging | Standalone library and production CLI implemented with local native/public-consumer/CLI checks (6.75-6.76). Portable Windows application, native bundling/publish and Unity editor entry point remain planned; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys and native sound decoding/mapping implemented; codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
@@ -200,7 +201,9 @@ dependency. Native C++ exporter libraries remain part of the shipped runtime.
    The standalone library prerequisite now exists at code/tools/ImmConversion
    with the shared source list and standalone compatibility definitions; the
    regression harness consumes it through a project reference (6.75). Production
-   CLI extraction and distributable/public API acceptance remain outstanding.
+   CLI entry point now exists at code/tools/ImmConvert with explicit omission/
+   overwrite handling and JSON reports (6.76). Distributable/public API acceptance
+   remains outstanding.
 2. First user-facing packaging milestone: a portable Windows download. Provide
    project-folder selection and output selection, conversion progress, readable
    warnings/errors and a clear report of omitted content. Bundle the .NET runtime,
@@ -2759,6 +2762,18 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    have started at the latest check. Do not treat local codec tests as device
    rendering evidence or call full validation passing before the required final
    artifact is accepted.
+7. Completed Android evidence is now independently verified in primary JSON/logs.
+   Artifact 12495240655 has successful pinned Linux wheel provisioning, actual
+   FFmpeg 7.0.2-static and matching/blank/corrupt codec cases. Both physical-device
+   producer results pass with empty errors and gcloud exit 0; real device-video
+   validation found consecutive matching frames and strict classification passes.
+   Both APK native payloads match the same-run native binary SHA256
+   684e67b4f09a5eaaf19be89902dccd80444a89637f8739cb62a5bf66976f2e95.
+   Manifest identifies source 97142c9a and attempt 1. Evidence:
+   artifacts/ffmpeg-linux-proof-39935868460-summary.json,
+   ffmpeg-linux-proof-39935868460-provenance.json and the preserved collector
+   artifact/logs. This closes the FFmpeg setup/device-path failure for that source;
+   remaining full-run jobs/final required rows still need acceptance.
 
 ### 6.75. Standalone converter library extraction (2026-10-23)
 
@@ -2795,6 +2810,53 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    real Unity consumer integration remain open under C5. Full run 39935868460
    validates 97142c9a, not this later library extraction. Keep it running while
    progressing independent work; do not supersede it just for this local milestone.
+
+### 6.76. Production converter CLI and atomic output publication (2026-10-23)
+
+1. Add code/tools/ImmConvert, a .NET 8 Windows x64 command-line executable using
+   only the extracted library's public full-project conversion entry point. It
+   accepts project/output paths, explicit --allow-omissions and --overwrite,
+   optional JSON report, input-size limit and development native-directory option.
+   Native lookup defaults to the application directory, independent of working
+   directory; Unity and Python are not conversion runtime dependencies.
+2. The first real staged conversion exposed six missing compression/media DLLs
+   that the repository's sibling-package preload had supplied. Stage/check the
+   complete 11-DLL native set before conversion, producing an actionable missing-
+   dependency error rather than a later native serialization exception.
+3. Reports use imm-quill-conversion-report-v1 with tool version, timestamps,
+   paths, exit code, published/partial flags, published byte count and issues.
+   Invalid arguments return 2; rejected conversion 1; environment/publication/
+   report failures 3; cooperative cancellation 130. Complete or explicitly
+   allowed partial publication returns 0. Console diagnostics/progress go to
+   stderr. Partial output is labelled explicitly in both human and JSON results.
+4. Review found that an initial existence check alone could overwrite a file
+   created by another process during conversion. Convert into a unique private
+   file in the destination directory, then publish with File.Move's overwrite
+   argument. No-overwrite is enforced by the final filesystem operation. Cleanup
+   removes abandoned staging files. Report/source/output collisions are rejected;
+   reports are written through a separate atomic temporary file. Report writing
+   and IMM publication are not one multi-file transaction; a late report failure
+   can return 3 while preserving the successfully published IMM.
+5. Release build and 15 real CLI cases pass, including application-directory
+   native lookup, explicit native directory, unrelated working directory, Unicode/
+   spaced paths, missing dependencies, existing-output refusal/overwrite, argument
+   errors, source/report collision rejection, malformed-input preservation and
+   explicit unsupported-model omissions. Three real-filesystem publication checks
+   exercise late-created destination preservation, explicit overwrite and fresh
+   publication using the production helper. Independent review confirms the race
+   correction, reporting/cleanup and CI failure propagation.
+6. CLI native output matches the harness's decoded full-project paint/animation
+   metadata in the synthetic case; no new visual/audio fidelity is claimed.
+   Add required Windows CI build/publication/CLI checks and always-uploaded
+   WindowsImmConvertCLI evidence. Workflow matrix and changed-workflow lint pass.
+   Evidence: artifacts/imm-convert-build-release.log,
+   imm-convert-cli-tests-final/report.json, imm-convert-publication/publication-report.json,
+   imm-convert-cli-compare.log and imm-convert workflow-matrix/actionlint logs.
+7. C5 remains incomplete: portable self-contained publish, native/codec and runtime
+   dependency bundling, licensing/clean-machine acceptance, desktop UI and real
+   Unity editor consumer integration are outstanding. These changes remain outside
+   running CI source 97142c9a; keep its full validation alive while working and
+   include these packaging milestones in the next full validation push.
 
 ## 7. Consolidated documents
 

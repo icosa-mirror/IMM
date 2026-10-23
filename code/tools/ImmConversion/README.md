@@ -12,7 +12,8 @@ the package: Unity consumes the shared package sources instead.
 
 The native exporter and reader DLLs and their codec dependencies remain required
 for native operations. This project does not yet bundle those dependencies or
-provide the planned desktop interface, production CLI or self-contained download.
+provide the planned desktop interface or self-contained download. The production
+CLI entry point now lives in `code/tools/ImmConvert` and references this library.
 Its extraction is a packaging prerequisite, not a completed distribution or a
 complete Unity-compatible SDK. The current standalone target is Windows.
 

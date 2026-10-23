@@ -219,6 +219,28 @@ jobs:
         code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll
         artifacts/quill-converter-regressions
 
+    - name: Verify standalone converter command-line contract
+      shell: pwsh
+      run: |
+        dotnet build code/tools/ImmConvert/ImmConvert.csproj --configuration Release
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        dotnet run --project code/tools/ImmConvert.Tests/ImmConvertTests.csproj --configuration Release -- artifacts/imm-convert-publication-ci
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python tests/tools/test_imm_convert_cli.py --cli code/tools/ImmConvert/bin/Release/net8.0/imm-convert.dll --source artifacts/quill-converter-regressions/animated-source --output-dir artifacts/imm-convert-cli-ci
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Upload standalone converter command-line evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: WindowsImmConvertCLI
+        if-no-files-found: ignore
+        path: |
+          artifacts/imm-convert-cli-ci/report.json
+          artifacts/imm-convert-cli-ci/*.log
+          artifacts/imm-convert-cli-ci/*.json
+          artifacts/imm-convert-publication-ci/publication-report.json
+
     - name: Compare native evaluated animation states
       shell: pwsh
       run: |
