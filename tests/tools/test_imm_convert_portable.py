@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument('--archive', type=Path, required=True)
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--desktop-probe', type=Path)
     args = parser.parse_args()
     archive = args.archive.resolve()
     source = args.source.resolve()
@@ -29,7 +30,7 @@ def main() -> None:
     report_path = out / 'report.json'
     report = {'passed': False, 'schema': 'imm-convert-portable-test-v1',
               'archiveSha256': digest(archive),
-              'scope': 'extracted archive with isolated .NET discovery and actual local CLR/CRT/native module paths; not a clean VM or desktop/Unity acceptance'}
+              'scope': 'extracted archive with isolated .NET discovery, actual local CLR/CRT/native paths and optional real form probe; not a clean VM, live input or Unity acceptance'}
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     extracted = out / 'extracted Å with spaces'
     extracted.mkdir()
@@ -87,10 +88,34 @@ def main() -> None:
     trace = (out / 'host-trace.log').read_text(encoding='mbcs')
     assert str(application).casefold() in trace.casefold()
     assert not list(out.rglob('.imm-convert-*.imm'))
+    desktop_evidence = None
+    if args.desktop_probe:
+        probe = args.desktop_probe.resolve()
+        gui_config = json.loads((application / 'QuillToImm.runtimeconfig.json').read_text(encoding='utf-8'))['runtimeOptions']
+        probe_config = json.loads((probe / 'ImmConvertDesktopTests.runtimeconfig.json').read_text(encoding='utf-8'))['runtimeOptions']
+        assert gui_config['includedFrameworks'] == probe_config['includedFrameworks']
+        # Only the probe's own files are added to this extracted test copy.
+        # All production UI/host/CLR/Forms/native files remain from the real ZIP.
+        for suffix in ('.exe', '.dll', '.deps.json', '.runtimeconfig.json'):
+            shutil.copy2(probe / f'ImmConvertDesktopTests{suffix}', application)
+        gui_output = out / 'desktop-probe-output'
+        with (out / 'desktop-probe.log').open('w', encoding='utf-8') as log:
+            result = subprocess.run([str(application / 'ImmConvertDesktopTests.exe'), str(gui_output),
+                                     str(project), str(application)], cwd=working, env=env,
+                                    stdout=log, stderr=subprocess.STDOUT, timeout=90)
+        if result.returncode != 0: raise RuntimeError(f'Extracted desktop probe failed: {result.returncode}')
+        desktop_evidence = json.loads((gui_output / 'report.json').read_text(encoding='utf-8'))
+        assert desktop_evidence['passed'] and desktop_evidence['cases'] == 8
+        for key in ('frontendAssembly', 'hostAssembly', 'windowsFormsAssembly'):
+            assert Path(desktop_evidence[key]).resolve().parent == application.resolve(), key
+        assert Path(desktop_evidence['runtimeDirectory']).resolve() == application.resolve()
+        # The probes may not alter the original production payload.
+        for row in manifest['files']:
+            assert digest(application / row['path']) == row['sha256'], row['path']
     report.update({'passed': True, 'sourceRevision': manifest['sourceRevision'],
                    'workingTreeDirty': manifest['workingTreeDirty'], 'runtime': runtime,
                    'verifiedFiles': len(expected_files), 'nativeFiles': manifest['nativeFiles'],
-                   'outputSha256': digest(output)})
+                   'outputSha256': digest(output), 'desktopProbe': desktop_evidence})
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(f'[IMM_CONVERT_PORTABLE_TEST] {len(expected_files)} files verified; extracted apphost and local CLR/CRT/native conversion passed')
 

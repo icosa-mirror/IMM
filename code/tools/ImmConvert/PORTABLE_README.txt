@@ -1,7 +1,10 @@
-Quill to IMM command line - Windows x64
+Quill to IMM - Windows x64
 
 1. Extract the complete folder. Keep its files together.
-2. Open a terminal in that folder and run:
+2. Double-click QuillToImm.exe to open the conversion window.
+3. Choose your Quill project folder and an IMM output file, then click Convert.
+
+You can also use the command line from a terminal in the extracted folder:
 
    .\imm-convert.exe "C:\Art\My Quill Project" "C:\Exports\My Scene.imm"
 
@@ -20,7 +23,8 @@ Unsupported content is rejected by default. Partial conversion is labelled
 "Converted with omissions" and lists the omitted content. An IMM file does not
 by itself prove that all Quill animation, media or navigation behavior matches.
 
-This download currently provides a command line. A desktop conversion window
-and Unity editor integration are separate planned interfaces.
+The window and command line share the same conversion, cancellation and output
+protection. The window can save a report beside the IMM and displays omissions
+and errors. Unity editor integration is a separate planned interface.
 
 See licenses/ and THIRD_PARTY.md for dependency notices.

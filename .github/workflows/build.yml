@@ -224,9 +224,9 @@ jobs:
       run: |
         dotnet build code/tools/ImmConvert/ImmConvert.csproj --configuration Release
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        dotnet run --project code/tools/ImmConvert.Tests/ImmConvertTests.csproj --configuration Release -- artifacts/imm-convert-publication-ci
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python tests/tools/test_imm_convert_cli.py --cli code/tools/ImmConvert/bin/Release/net8.0/imm-convert.dll --source artifacts/quill-converter-regressions/animated-source --output-dir artifacts/imm-convert-cli-ci
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        dotnet run --project code/tools/ImmConvert.Tests/ImmConvertTests.csproj --configuration Release -- artifacts/imm-convert-publication-ci artifacts/quill-converter-regressions/animated-source "artifacts/imm-convert-cli-ci/native files"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     - name: Upload standalone converter command-line evidence
@@ -240,13 +240,32 @@ jobs:
           artifacts/imm-convert-cli-ci/*.log
           artifacts/imm-convert-cli-ci/*.json
           artifacts/imm-convert-publication-ci/publication-report.json
+          artifacts/imm-convert-publication-ci/host-report.json
+
+    - name: Verify desktop converter form contract
+      shell: pwsh
+      run: |
+        dotnet run --project code/tools/ImmConvert.Desktop.Tests/ImmConvertDesktopTests.csproj --configuration Release -- artifacts/imm-convert-desktop-ci artifacts/quill-converter-regressions/animated-source "artifacts/imm-convert-cli-ci/native files"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Upload desktop converter form evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: WindowsImmConvertDesktop
+        if-no-files-found: ignore
+        path: |
+          artifacts/imm-convert-desktop-ci/*.json
+          artifacts/imm-convert-desktop-ci/*.png
 
     - name: Package and validate portable converter archive
       shell: pwsh
       run: |
         & code/tools/ImmConvert/package-windows.ps1 -OutputDirectory artifacts/imm-convert-portable-ci
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        python -X utf8 tests/tools/test_imm_convert_portable.py --archive artifacts/imm-convert-portable-ci/imm-convert-win-x64.zip --source artifacts/quill-converter-regressions/animated-source --output-dir artifacts/imm-convert-portable-ci-tests
+        dotnet publish code/tools/ImmConvert.Desktop.Tests/ImmConvertDesktopTests.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false --output artifacts/imm-convert-desktop-probe-ci
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python -X utf8 tests/tools/test_imm_convert_portable.py --archive artifacts/imm-convert-portable-ci/imm-convert-win-x64.zip --source artifacts/quill-converter-regressions/animated-source --output-dir artifacts/imm-convert-portable-ci-tests --desktop-probe artifacts/imm-convert-desktop-probe-ci
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     - name: Upload portable converter archive and validation evidence
@@ -259,9 +278,12 @@ jobs:
           artifacts/imm-convert-portable-ci/imm-convert-win-x64.zip
           artifacts/imm-convert-portable-ci/package-report.json
           artifacts/imm-convert-portable-ci/publish.log
+          artifacts/imm-convert-portable-ci/desktop-publish.log
           artifacts/imm-convert-portable-ci-tests/report.json
           artifacts/imm-convert-portable-ci-tests/conversion.json
           artifacts/imm-convert-portable-ci-tests/*.log
+          artifacts/imm-convert-portable-ci-tests/desktop-probe-output/*.json
+          artifacts/imm-convert-portable-ci-tests/desktop-probe-output/*.png
 
     - name: Compare native evaluated animation states
       shell: pwsh

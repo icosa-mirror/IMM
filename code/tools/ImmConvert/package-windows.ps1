@@ -35,6 +35,10 @@ $project = Join-Path $PSScriptRoot 'ImmConvert.csproj'
 & dotnet publish $project --configuration Release --runtime win-x64 --self-contained true `
     -p:PublishSingleFile=false -p:PublishTrimmed=false --output $packageDirectory *> (Join-Path $outputRoot 'publish.log')
 if ($LASTEXITCODE -ne 0) { throw "Self-contained publish failed; see $outputRoot/publish.log" }
+$desktopProject = Join-Path $PSScriptRoot '../ImmConvert.Desktop/ImmConvertDesktop.csproj'
+& dotnet publish $desktopProject --configuration Release --runtime win-x64 --self-contained true `
+    -p:PublishSingleFile=false -p:PublishTrimmed=false --output $packageDirectory *> (Join-Path $outputRoot 'desktop-publish.log')
+if ($LASTEXITCODE -ne 0) { throw "Desktop publish failed; see $outputRoot/desktop-publish.log" }
 $nativeFiles = @()
 foreach ($package in @('com.immersive-foundation.imm-unity', 'com.immersive-foundation.imm-stroke-reader')) {
     $source = Join-Path $repositoryRoot "code/ImmUnitySampleProject/Packages/$package/Plugins/x86_64"
@@ -79,6 +83,12 @@ if (-not $runtimeVersion -or $runtimeConfig.runtimeOptions.framework) { throw 'P
 $runtimePackage = Join-Path $packageRoot "microsoft.netcore.app.runtime.win-x64/$runtimeVersion"
 Copy-Item -LiteralPath (Join-Path $runtimePackage 'LICENSE.TXT') -Destination (Join-Path $licenses 'dotnet-LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $runtimePackage 'THIRD-PARTY-NOTICES.TXT') -Destination (Join-Path $licenses 'dotnet-THIRD-PARTY-NOTICES.txt')
+$desktopConfig = Get-Content -LiteralPath (Join-Path $packageDirectory 'QuillToImm.runtimeconfig.json') -Raw | ConvertFrom-Json
+$desktopVersion = ($desktopConfig.runtimeOptions.includedFrameworks | Where-Object name -eq 'Microsoft.WindowsDesktop.App').version
+$desktopCoreVersion = ($desktopConfig.runtimeOptions.includedFrameworks | Where-Object name -eq 'Microsoft.NETCore.App').version
+if (-not $desktopVersion -or $desktopCoreVersion -ne $runtimeVersion) { throw 'Desktop and CLI must use the same bundled .NET core runtime.' }
+Copy-Item -LiteralPath (Join-Path $packageRoot "microsoft.windowsdesktop.app.runtime.win-x64/$desktopVersion/LICENSE") `
+    -Destination (Join-Path $licenses 'dotnet-WindowsDesktop-LICENSE.txt')
 $deps = Get-Content -LiteralPath (Join-Path $packageDirectory 'imm-convert.deps.json') -Raw | ConvertFrom-Json
 $jsonLibrary = $deps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Newtonsoft.Json/*' }
 if (@($jsonLibrary).Count -ne 1) { throw 'Cannot identify Newtonsoft.Json package license.' }
@@ -97,7 +107,9 @@ $files = @(Get-ChildItem -LiteralPath $packageDirectory -Recurse -File | Sort-Ob
 })
 $manifest = @{ schema = 'imm-convert-portable-package-v1'; sourceRevision = $sourceRevision;
     workingTreeDirty = $dirty; runtime = "Microsoft.NETCore.App/$runtimeVersion"; rid = 'win-x64';
-    publicReleaseLicensingReviewComplete = $false; nativeFiles = $nativeFiles; files = $files }
+    dependencyLicenceDocumentationVerified = $false; desktopRuntime = $desktopVersion;
+    entryPoints = @('imm-convert.exe', 'QuillToImm.exe');
+    nativeFiles = $nativeFiles; files = $files }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageDirectory 'portable-manifest.json') -Encoding utf8
 $archive = Join-Path $outputRoot 'imm-convert-win-x64.zip'
 Compress-Archive -LiteralPath $packageDirectory -DestinationPath $archive -CompressionLevel Optimal

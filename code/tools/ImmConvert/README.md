@@ -41,10 +41,12 @@ the successful output summary goes to stdout.
 
 This is the production CLI entry point. Development builds require Windows x64,
 .NET 8 and the native runtime files. `package-windows.ps1` now creates a prototype
-self-contained ZIP with the native and app-local Microsoft CRT files and notices.
+self-contained ZIP with the desktop window (`QuillToImm.exe`), CLI, native and
+app-local Microsoft CRT files and notices.
 The extracted app is tested with global .NET discovery disabled and its actual
-local CLR/CRT/native module locations checked. This is not a clean Windows VM
-test. A desktop interface, clean-machine and public-release licensing acceptance
+local CLR/CRT/native module locations checked. The desktop form probe loads its
+production UI/host/WinForms/runtime payload from that same archive. This is not a
+clean Windows VM or live mouse/keyboard test. Clean-machine, live input and dependency licence documentation
 remain C5 work in `LLM Docs/IMM_CONTENT_PIPELINE_PLAN.md`.
 
 Build from the repository root:
@@ -63,7 +65,7 @@ The packager uses Visual Studio's redistributable CRT directory (or an explicit
 `-CrtDirectory`), not Windows system DLLs. It preserves .NET/NuGet and native
 dependency notices and records source revision, dirty-tree state and file hashes.
 An existing output directory is rejected to preserve previous artifacts. The
-prototype's public-release licensing review is explicitly incomplete; see
+prototype's dependency licence documentation check is explicitly incomplete; see
 `THIRD_PARTY.md`. No GitHub release is created by this script.
 
 Place the complete native runtime alongside the application, or use

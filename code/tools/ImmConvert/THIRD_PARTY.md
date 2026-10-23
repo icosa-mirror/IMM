@@ -20,5 +20,5 @@ https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
 Audio360's supplied `ThirdPartyNotices.txt` covers its dependencies, not the
 SDK's own acquisition agreement. Recovery/review of the original Audio360 1.7.12
 and Oculus 32 SDK acquisition terms remains a public-release acceptance item;
-this prototype bundle is not a licensing eligibility determination. Do not
+this prototype's dependency licence documentation check is unfinished. Do not
 substitute terms from a different/current Meta Audio SDK release.

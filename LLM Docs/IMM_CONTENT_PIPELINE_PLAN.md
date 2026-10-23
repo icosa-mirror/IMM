@@ -136,7 +136,7 @@ The preferred first candidate is:
 | C2: animation and navigation | Drawings/holds, keys, nested timing, root properties/actions in the graph, viewpoint/default mapping and stored previews implemented. Local metadata, headless evaluated paint/group/root comparisons and default-camera capture pass within recorded scope. Finite ancestor-loop and root stop/seek corrections locally verified. Source chapter/startup mapping, generated previews, precision differences and broader playback/navigation acceptance remain open | Matched timing/hold/navigation behavior on representative Quill reference exports and native playback |
 | C3: media and coverage | Offline picture construction/import, source 2D and structural equirectangular mono/stereo conversion, and PCM16 sound construction implemented. Encoded sound queries/import and Quill PCM16 source mapping implemented. Panorama orientation/eye order and playback acceptance remain open | Panorama/picture appearance and audio playback/timing compared with Quill output; unsupported data reported |
 | C4: unrepresented source cases | Investigate models, depth/cubemap and other cases only when suitable evidence exists | Explicit supported/rejected mappings; no inferred completeness from enums |
-| C5: user-facing converter packaging | Standalone library and production CLI implemented with local native/public-consumer/CLI checks (6.75-6.76). Prototype self-contained CLI bundle passes local extraction/runtime checks (6.78); desktop UI, clean-machine/public-release acceptance and Unity editor entry point remain open; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
+| C5: user-facing converter packaging | Standalone library and production CLI implemented with local native/public-consumer/CLI checks (6.75-6.76). Prototype self-contained CLI bundle passes local extraction/runtime checks (6.78); desktop window and extracted form probe pass locally (6.80-6.81); live input, clean-machine/dependency-documentation acceptance and Unity editor integration remain open; see 4.1 | Conversion works from a clean download without Unity or an installed .NET runtime, and from Unity, using the same conversion implementation |
 | R1: reader and consumer contract | Zero-width tip import loss fixed; local and Windows CI export/import/export checks pass. Opt-in loss reporting and hierarchy/supported-key reconstruction implemented; remaining consumer coverage and fidelity acceptance stay open | Reader extraction and selected adapter output preserve intended content or report loss |
 | R2: reverse conversion | Picture and PCM16 sound project serialization/read-back implemented; unsupported media rejected before writing. Opt-in hierarchy/supported keys and native sound decoding/mapping implemented; codec drift, model coverage and application acceptance remain open | Quill-project read-back and application checks for the declared subset; no silent media omission |
 | A1: live slice acceptance | Existing authoring M0/M1; independent of C1 | Matched commit-to-presentation latency, failure and revision consistency evidence |
@@ -2947,7 +2947,7 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    [CI VALIDATION]. Desktop shared-host WIP remains uncommitted and is excluded
    from this validation source; no stash or source discard is required.
 
-### 6.80. Shared standalone application host (local milestone)
+### 6.80. Shared standalone application host (local milestone; e7f5c100)
 
 1. Move standalone native configuration, cancellation, atomic IMM publication,
    reports and runtime diagnostics from the CLI into StandaloneConversion in the
@@ -2966,7 +2966,7 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Native/operation/UI scope remains bounded by those checks. This is not managed
    live scene-graph cutover or Unity consumer integration.
 
-### 6.81. Windows desktop converter (locally tested; CI acceptance pending)
+### 6.81. Windows desktop converter (local milestone; CI acceptance pending)
 
 1. Add QuillToImm.exe with project/output pickers, drag/drop project selection,
    strict-by-default omission/overwrite options, input limit, report option,
@@ -3000,7 +3000,7 @@ the new required Windows cancellation test. No hosted pass is claimed yet.
    Windows form/shared-host checks and an extracted desktop probe are wired into
    CI with always-uploaded reports/renders. Full CI source 47a0240d excludes this
    later work; keep that run alive while progressing and validate these milestones
-   in the next full push. C5 remains open until its remaining acceptance is proved.
+   in the next full push. C5 remains open until its remaining acceptance is proved. No new product licence or fee is proposed; dependency documentation is simply unverified where noted.
 
 ## 7. Consolidated documents
 
