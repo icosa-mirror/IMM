@@ -3752,6 +3752,10 @@ the historical sizes/check counts below describe this earlier source only.
    Windows has an explicit D3D12 restart menu. Manual interaction, additional real
    scenes and broader backend acceptance remain open. No save/undo/general mixed
    transaction support is implied. Source IMM files are not written by the lab.
+7. Commit the matching tracked Windows plugin with this lab delivery so a fresh
+   checkout has the required APIs and the 44-byte diagnostics fix immediately.
+   The real-file report records the SHA-256 of the exact locally built DLL used.
+   CI may replace it with its independently built binary as usual.
 
 ### 6.108. Managed diagnostics buffer boundary correction (local Windows milestone)
 
