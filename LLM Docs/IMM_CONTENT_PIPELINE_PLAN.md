@@ -3866,7 +3866,9 @@ the historical sizes/check counts below describe this earlier source only.
    justified by this diagnostic. Further work must first explain the local D3D12
    cost and establish equivalent source/baked content. Restored the original
    Snoopy IMM, authoring panel, and previous vsync/frame-rate settings after sampling.
-   No production behavior or validation gate changed.
+   No production behavior or validation gate changed. Follow-up investigation and
+   runtime optimization candidates are planned in the root-level
+   [runtime rendering optimization plan](../IMM_RUNTIME_RENDER_OPTIMIZATION_PLAN.md).
 
 ## 7. Consolidated documents
 
