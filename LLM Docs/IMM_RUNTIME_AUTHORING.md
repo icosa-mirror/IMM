@@ -13,6 +13,22 @@ This review was static; it did not rerun builds, benchmarks, devices, or CI.
 
 ## 1. Current position
 
+2026-10-24 test-editor checkpoint: the D3D12 Unity sample now exposes a timeline
+for evaluating existing native live editing on realistic Snoopy content. The local
+pass covers layer rename, visibility/opacity/transforms, key creation/retiming/
+removal with Undo/Redo, drawing replacement/holds, temporary hierarchy editing,
+and nested preview playback/scrubbing with return to the retained main clock.
+Action controls and independent audio preview also have local runtime evidence.
+See content pipeline sections 6.136-6.149 for operation-specific receipts and limits.
+This prototype does not complete the production managed SDK, revision-selected
+save/publish or broader runtime-authoring roadmap below.
+
+Empty/trivial-default channel rows are hidden unless Show all tracks is enabled;
+layer nodes stay visible. Scope/local timing and navigation remain provisional
+production-editor design work (content pipeline6.150). Latest source06a288aa is
+under replacement FULL40091556175; local evidence is not full CI acceptance.
+The content pipeline checkpoint owns the changing run status and final verdict.
+
 2026-10-21 incremental update: the offline graph/compiler supports immutable
 `ImmAuthoringImage` viewpoint previews, with raw RGB/RGBA encoding and unchanged
 JPEG/PNG payload export and import. Stored Quill preview payloads are mapped;
