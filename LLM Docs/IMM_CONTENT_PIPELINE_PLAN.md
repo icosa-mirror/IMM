@@ -3742,10 +3742,12 @@ the historical sizes/check counts below describe this earlier source only.
    Reload restores nine layers, opacity 1 and no added transform key, with playback
    running. This uses real files/rendering and the panel's paths, not a synthetic
    managed graph; it is automated Editor callback exercise, not physical click QA.
-5. Rename returned Busy (-7) twice on the imported Fishgym paint. This is unresolved;
+5. Rename returned Busy (-7) twice on the imported Fishgym paint at this milestone;
    the code permits that result for incompatible queued work or active importer
    ownership, and neither cause is proven by the available observations. Do not
-   dismiss it as expected background activity or claim real-file rename success.
+   dismiss it as expected background activity. The later same-document recheck in
+   6.115 passes through the playback-command coordinator and supersedes this open
+   real-file rename result.
 6. Evidence: artifacts/live-panel-real-file-report.json, live-panel-marker-visible.png,
    live-panel-after-edits.json, live-panel-reloaded-status.json and
    live-panel-reloaded-diagnostics.json. The sample opens a maximized Game view;
@@ -4047,6 +4049,30 @@ the historical sizes/check counts below describe this earlier source only.
 5. Both clean Android Unity builds passed in full runs 40038310055 and
    40040654620. At the latest monitoring snapshot, neither run has failures, but
    both are still active; neither validates the new clock/scope source yet.
+6. Clock commit 6d29a51d and workspace commit 3b39562b are pushed after an
+   up-to-date pull. FULL [run 40043337869](https://github.com/icosa-mirror/IMM/actions/runs/40043337869)
+   targets 3b39562b9b40bf60bb03041a14d863c61b5a5cd1 and is queued. Receipt:
+   artifacts/live-timeline-scope-ci-runs.json. Original Snoopy is restored in the
+   open Editor; the active goal remains unfinished.
+
+### 6.115. Inspector key-time precision and real-file rename recheck
+
+1. Root seeking previously copied a three-decimal display string into the key
+   inspector. At frame 13 this gave 0.542 seconds rather than 6825 ticks, so a key
+   added through the inspector could miss the playhead by four ticks. The key-time
+   field now uses round-trip seconds from the quantized native tick. Fresh live
+   Unity compilation/load and a frame-13 seek confirm the inspector converts
+   back to exactly 6825 ticks, matching its evaluated playhead. Evidence:
+   artifacts/live-timeline-keytime-inspect.json.
+2. Repeated the original immediate Pause-then-rename sequence on Fishgym layer 5
+   through the current panel coordinator. It retained the batch while the playback
+   command was pending, then published rename revision 1 with matching name and
+   fullname. Restoring the original name in the same document published revision
+   2 with matching names. No reload or source-file write separated those edits.
+   Evidence: artifacts/live-timeline-fishgym-rename-result.json. This closes the
+   lab's earlier Busy failure; it does not establish which owner caused the old
+   insufficiently instrumented attempts or fix arbitrary hosts bypassing the
+   coordinator.
 
 ## 7. Consolidated documents
 

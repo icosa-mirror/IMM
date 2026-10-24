@@ -284,7 +284,7 @@ namespace ImmPlayer
             queuedTimelineSeekTicks = RootOccurrenceTick(timelineClock, ticks);
             timelineSeekDeadline = Time.unscaledTime + 5;
             seek = seconds.ToString("0.###", CultureInfo.InvariantCulture);
-            keyTime = seek;
+            keyTime = (ticks / 12600.0).ToString("R", CultureInfo.InvariantCulture);
         }
     }
 }
