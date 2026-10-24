@@ -4028,15 +4028,25 @@ the historical sizes/check counts below describe this earlier source only.
    artifacts/live-timeline-clock-native-build.log and
    artifacts/live-timeline-clock-cabi/report.json / run.log. This is local native
    evidence; live managed/UI and hosted validation remain separate.
-3. The workspace integration is in progress: root/Up/open-selected navigation,
+3. The workspace now provides root/Up/open-selected navigation,
    scope breadcrumbs, local key domains and evaluated playheads. Nested playback
    and scrubbing remain disabled until their playback policy is implemented.
-   Root seeks now retain integer ticks after one rounding step; runtime checks
-   are pending. No general local-to-root inverse is claimed.
+   Root seeks now retain integer ticks after one rounding step. Live Unity
+   P/Invoke checks passed: frame 13 evaluates to 6825 ticks, an injected
+   Game-view next-frame click reaches 7350 ticks, and opening Snoopymove via its
+   toolbar button shows local 6300 ticks/cycle 2 at root 25200 ticks. Its visible
+   children and 1.5-second domain were inspected in the running UI. Evidence:
+   artifacts/live-timeline-clock-frame13.json, live-timeline-clock-frame14.json,
+   live-timeline-clock-nested.json and live-timeline-scope-nested.png. Camera
+   framing remains available in nested scopes. The source-only compile without
+   Input System also passes. No general local-to-root inverse is claimed.
 4. The user preference between independent composition playback and playback
    tied to the current main-scene occurrence remains unanswered. Neither mode
    has been implemented by assumption. Other outstanding timeline features in
    earlier sections remain open.
+5. Both clean Android Unity builds passed in full runs 40038310055 and
+   40040654620. At the latest monitoring snapshot, neither run has failures, but
+   both are still active; neither validates the new clock/scope source yet.
 
 ## 7. Consolidated documents
 

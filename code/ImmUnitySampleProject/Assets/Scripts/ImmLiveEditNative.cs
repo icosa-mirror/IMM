@@ -61,6 +61,15 @@ namespace ImmPlayer
             public ulong requested, prepared, presented;
         }
         [StructLayout(LayoutKind.Sequential)]
+        internal struct TimelineClock
+        {
+            public int timeline, parentTimeline;
+            public long rootReported, rootEvaluated, elapsed, local, duration;
+            public ulong cycle;
+            public uint canonicalRepeat, effectiveRepeat, flags, reserved;
+            public ulong evaluationRevision, presentedRevision, requestedRevision;
+        }
+        [StructLayout(LayoutKind.Sequential)]
         private struct Point
         {
             public Vector3 position, normal, direction, color;
@@ -102,6 +111,7 @@ namespace ImmPlayer
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerGetTimeline(int doc, int layer, out int isTimeline,
             out double duration, out double offset, out uint frameRate, out uint frames, out uint maxRepeat);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerGetWorldTransform(int doc, int layer, ref Pivot transform);
+        [DllImport(Library)] internal static extern int ImmAuthoring_TimelineGetClock(int doc, int layer, ref TimelineClock clock, uint capacity);
         [DllImport(Library)] internal static extern int ImmAuthoring_KeyRemove(int doc, int layer, int property, double seconds);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerCreate(int doc, int parent, int type, byte[] name, uint count, out int layer);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerDestroy(int doc, int layer);
@@ -172,7 +182,10 @@ namespace ImmPlayer
         {
             if (Marshal.SizeOf<Properties>() != 64 || Marshal.SizeOf<Pivot>() != 48 ||
                 Marshal.SizeOf<Key>() != 80 || Marshal.SizeOf<Status>() != 40 || Marshal.SizeOf<Point>() != 64 ||
-                Marshal.SizeOf<LayerDiagnosticsNative>() != 44)
+                Marshal.SizeOf<LayerDiagnosticsNative>() != 44 || Marshal.SizeOf<TimelineClock>() != 96 ||
+                Marshal.OffsetOf<TimelineClock>(nameof(TimelineClock.local)).ToInt32() != 32 ||
+                Marshal.OffsetOf<TimelineClock>(nameof(TimelineClock.flags)).ToInt32() != 64 ||
+                Marshal.OffsetOf<TimelineClock>(nameof(TimelineClock.evaluationRevision)).ToInt32() != 72)
                 throw new InvalidOperationException("Live-edit sample native layouts do not match imm_authoring.h");
         }
     }

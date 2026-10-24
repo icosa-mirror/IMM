@@ -89,7 +89,7 @@ namespace ImmPlayer
         {
             if (awaitingCommit) Run(TryPublishQueuedCommit);
             UpdateTimelinePlayback();
-            timelinePlayTime = attached && !loading && document != null ? document.GetPlayTime() / 12600.0 : 0;
+            UpdateTimelineClock();
             if (attached && selected >= 0 && Time.unscaledTime >= nextDiagnostics)
             {
                 nextDiagnostics = Time.unscaledTime + 0.2f;
@@ -187,6 +187,8 @@ namespace ImmPlayer
             { RecordTimelineBefore(selected, -2); return N.ImmAuthoring_PaintSetMaxRepeatCount(Doc, selected, Unsigned(repeat)); });
             GUILayout.EndHorizontal();
             GUILayout.Space(8);
+            bool inspectorEditable = GUI.enabled;
+            GUI.enabled &= treeNodes.TryGetValue(selected, out LayerNode keyNode) && InTimelineScope(keyNode);
             GUILayout.Label("Keys — uses current inspector values at the entered time", wrapped, GUILayout.Width(window.width - 50));
             keyChannel = GUILayout.SelectionGrid(keyChannel, channels, 3);
             keyInterpolation = GUILayout.SelectionGrid(keyInterpolation, new[] { "Step", "Linear", "Smooth", "Ease in", "Ease out", "Spline", "Auto" }, 3);
@@ -202,6 +204,7 @@ namespace ImmPlayer
             if (GUILayout.Button("Move selected key to entered time")) Run(() => MoveTimelineKey(Number(keyTime)));
             GUI.enabled = canEditKey;
             GUILayout.Label("Loop key uses repeat=0 as true; Offset uses repeat field as exact ticks.", wrapped, GUILayout.Width(window.width - 50));
+            GUI.enabled = inspectorEditable;
             GUILayout.Space(8);
             GUILayout.Label("Drawing replacement — changes the selected frame's drawing", wrapped, GUILayout.Width(window.width - 50));
             GUILayout.BeginHorizontal();
@@ -322,6 +325,7 @@ namespace ImmPlayer
             layers = document.GetLayersManaged();
             BuildTree();
             ReadTimeline();
+            EnsureTimelineScope();
             ReadViewpoints();
             bool found = false;
             foreach (var layer in layers) if (layer.Id == selected) found = true;
@@ -485,7 +489,8 @@ namespace ImmPlayer
         {
             ReleaseTimelineCapture();
             ClearTimelineHistory();
-            timelinePlayTime = 0; queuedTimelineSeek = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
+            timelineScope = -1; timelineClockValid = false; timelineClockMissing = false; timelineClockError = "";
+            timelinePlayTime = 0; queuedTimelineSeekTicks = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
             if (load != null) { StopCoroutine(load); load = null; }
             loading = false; attached = false; pending = 0; awaitingCommit = false;
             if (document != null)

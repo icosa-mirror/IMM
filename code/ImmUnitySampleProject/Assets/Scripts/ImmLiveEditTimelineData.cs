@@ -184,8 +184,8 @@ namespace ImmPlayer
 
         private bool CanProjectSequence(LayerNode node, TimelineData data)
         {
-            if (HasNestedTimelineParent(node)) return false;
-            for (var ancestor = node; ancestor != null; ancestor = ancestor.Parent)
+            if (!InTimelineScope(node)) return false;
+            for (var ancestor = node; ancestor != null && ancestor.Info.Id != timelineScope; ancestor = ancestor.Parent)
                 if (timelineData.TryGetValue(ancestor.Info.Id, out TimelineData state))
                 {
                     if (state.Keys.TryGetValue(7, out N.Key[] loops) && loops.Length > 0) return false;

@@ -12,7 +12,7 @@ namespace ImmPlayer
         private Vector2 toolbarScroll, timelineToolbarScroll;
         private double timelineStart, timelineRange = 5, timelinePlayTime;
         private int scrubControl;
-        private double? queuedTimelineSeek;
+        private long? queuedTimelineSeekTicks;
         private bool pauseBeforeTimelineSeek, timelinePauseRequested;
         private float timelineSeekDeadline;
         private const float RowHeight = 24;
@@ -25,7 +25,7 @@ namespace ImmPlayer
             if (wrapped == null) wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
             if (treeButton == null) treeButton = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleLeft };
             float timelineHeight = Mathf.Min(Mathf.Clamp(Screen.height * 0.4f, 190, 400), Mathf.Max(90, Screen.height - 210));
-            toolbarWindow = new Rect(12, 12, Screen.width - 24, Screen.width < 1050 ? 94 : 76);
+            toolbarWindow = new Rect(12, 12, Screen.width - 24, Screen.width < 1050 ? 118 : 100);
             timelineWindow = new Rect(12, Screen.height - timelineHeight - 12, Screen.width - 24, timelineHeight);
             float inspectorTop = toolbarWindow.yMax + 8;
             window = new Rect(12, inspectorTop, Mathf.Min(440, Screen.width - 24), Mathf.Max(60, timelineWindow.y - inspectorTop - 8));
@@ -64,6 +64,7 @@ namespace ImmPlayer
             if (GUILayout.Button("Frame selected", GUILayout.Width(105))) FrameSelected();
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal();
+            GUI.enabled &= IsRootScope && timelineClockValid;
             if (GUILayout.Button("Play", GUILayout.Width(55))) document.Resume();
             if (GUILayout.Button("Pause", GUILayout.Width(55))) document.Pause();
             if (GUILayout.Button("Restart", GUILayout.Width(65))) document.Restart();
@@ -80,17 +81,19 @@ namespace ImmPlayer
             GUI.enabled = true;
             GUILayout.Label(status, GUILayout.MinWidth(100));
             GUILayout.EndHorizontal();
+            DrawTimelineScopeToolbar();
         }
 
         private void CollectTimelineRows(LayerNode node, int depth)
         {
             if (!string.IsNullOrEmpty(filter) && !filteredNodes.Contains(node.Info.Id)) return;
             timelineRows.Add((node, depth, -1));
-            if (!HasNestedTimelineParent(node) && expandedKeyLayers.Contains(node.Info.Id) && timelineData.TryGetValue(node.Info.Id, out TimelineData data))
+            if (InTimelineScope(node) && expandedKeyLayers.Contains(node.Info.Id) && timelineData.TryGetValue(node.Info.Id, out TimelineData data))
                 for (int i = 0; i < channelIds.Length; i++)
                     if ((data.Keys.TryGetValue(channelIds[i], out N.Key[] keys) && keys.Length > 0) || (selected == node.Info.Id && keyChannel == i))
                         timelineRows.Add((node, depth + 1, channelIds[i]));
-            if (!string.IsNullOrEmpty(filter) || !collapsedNodes.Contains(node.Info.Id))
+            if ((!node.Info.IsTimeline || node.Info.Id == timelineScope) &&
+                (!string.IsNullOrEmpty(filter) || !collapsedNodes.Contains(node.Info.Id)))
                 foreach (var child in node.Children) CollectTimelineRows(child, depth + 1);
         }
 
@@ -119,15 +122,15 @@ namespace ImmPlayer
             if (GUI.Button(new Rect(namesWidth + 364, 4, 50, 22), "Home")) timelineStart = 0;
             GUI.enabled = true;
             double playTime = timelinePlayTime;
-            if (followPlayhead && document != null && attached && document.IsPlaying() &&
+            if (followPlayhead && timelineClockValid && (timelineClock.flags & ClockActive) != 0 && document != null && attached && document.IsPlaying() &&
                 (playTime < timelineStart || playTime > timelineStart + timelineRange))
                 timelineStart = Math.Floor(playTime / timelineRange) * timelineRange;
             if (GUI.Button(new Rect(namesWidth + 420, 4, 52, 22), "Fit")) FitTimeline();
             followPlayhead = GUI.Toggle(new Rect(namesWidth + 480, 4, 75, 22), followPlayhead, "Follow");
             snapKeys = GUI.Toggle(new Rect(namesWidth + 560, 4, 70, 22), snapKeys, "Snap");
-            GUI.Label(new Rect(namesWidth + 630, 4, 175, 22), $"{playTime:F3} s / {timelineFrameRate} fps");
-            GUI.enabled = attached && pending == 0 && !awaitingCommit &&
-                treeNodes.TryGetValue(selected, out LayerNode selectedNode) && !HasNestedTimelineParent(selectedNode);
+            GUI.Label(new Rect(namesWidth + 630, 4, 175, 22), timelineClockValid ? $"{playTime:F3} s / {timelineFrameRate} fps" : "Clock unavailable");
+            GUI.enabled = attached && timelineClockValid && (timelineClock.flags & ClockActive) != 0 && pending == 0 && !awaitingCommit &&
+                treeNodes.TryGetValue(selected, out LayerNode selectedNode) && InTimelineScope(selectedNode);
             if (GUI.Button(new Rect(namesWidth + 810, 4, 70, 22), "Set key"))
             { keyTime = SnapTime(playTime).ToString("0.######", CultureInfo.InvariantCulture); Submit("Set key", SetKey); }
             GUI.enabled &= selectedTimelineKey.HasValue;
@@ -147,7 +150,10 @@ namespace ImmPlayer
                 GUI.Label(new Rect(x + 3, 30, 82, 22), $"{time:0.###} s");
             }
             timelineRows.Clear();
-            foreach (var root in treeRoots) CollectTimelineRows(root, 0);
+            LayerNode scope = ScopeNode;
+            if (scope != null && scope.Parent != null)
+                foreach (var child in scope.Children) CollectTimelineRows(child, 0);
+            else foreach (var root in treeRoots) CollectTimelineRows(root, 0);
             var body = new Rect(0, 54, timelineWindow.width - 4, Math.Max(1, timelineWindow.height - headerExtra - 78));
             var content = new Rect(0, 0, timelineWindow.width - 22, Math.Max(body.height - 1, timelineRows.Count * RowHeight));
             timelineBodyHasMouse = body.Contains(Event.current.mousePosition);
@@ -199,7 +205,7 @@ namespace ImmPlayer
                 }
             }
             GUI.EndScrollView();
-            if (playTime >= timelineStart && playTime <= timelineStart + timelineRange)
+            if (timelineClockValid && (timelineClock.flags & ClockActive) != 0 && playTime >= timelineStart && playTime <= timelineStart + timelineRange)
             {
                 float x = namesWidth + (float)((playTime - timelineStart) / timelineRange) * tracksWidth;
                 Fill(new Rect(x, 30, 2, timelineWindow.height - headerExtra - 54), new Color(1, 0.36f, 0.25f));
@@ -209,7 +215,7 @@ namespace ImmPlayer
             var scrubArea = new Rect(namesWidth, 30, tracksWidth, timelineWindow.height - headerExtra - 54);
             int control = GUIUtility.GetControlID(FocusType.Passive);
             Event input = Event.current;
-            if (document != null && !loading && input.type == EventType.MouseDown && input.button == 0 && scrubArea.Contains(input.mousePosition))
+            if (document != null && !loading && IsRootScope && input.type == EventType.MouseDown && input.button == 0 && scrubArea.Contains(input.mousePosition))
             { GUI.FocusControl(null); scrubControl = control; GUIUtility.hotControl = control; ScrubAt(input.mousePosition.x, namesWidth, tracksWidth); input.Use(); }
             else if (scrubControl != 0 && GUIUtility.hotControl == scrubControl)
             {
@@ -252,10 +258,10 @@ namespace ImmPlayer
 
         private void UpdateTimelinePlayback()
         {
-            if (!queuedTimelineSeek.HasValue || !attached || loading || document == null || pending != 0 || awaitingCommit) return;
+            if (!queuedTimelineSeekTicks.HasValue || !attached || loading || document == null || pending != 0 || awaitingCommit) return;
             if (Time.unscaledTime > timelineSeekDeadline)
             {
-                queuedTimelineSeek = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
+                queuedTimelineSeekTicks = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
                 Log("Seek could not be accepted while playback was busy. Retry when ready.");
                 return;
             }
@@ -264,16 +270,18 @@ namespace ImmPlayer
                 if (!timelinePauseRequested) { document.Pause(); timelinePauseRequested = true; }
                 return;
             }
-            if (document.RequestSetTime(checked((long)(queuedTimelineSeek.Value * 12600)), 0) == 0) return;
-            queuedTimelineSeek = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
+            if (document.RequestSetTime(queuedTimelineSeekTicks.Value, 0) == 0) return;
+            queuedTimelineSeekTicks = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
         }
 
         private void SeekTimeline(double seconds)
         {
             if (document == null || double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0)
                 throw new ArgumentException("Seek time must be finite and nonnegative.");
-            long ticks = checked((long)(seconds * 12600));
-            queuedTimelineSeek = ticks / 12600.0;
+            if (!IsRootScope) throw new InvalidOperationException("Local playback preview is not available yet. Use the main timeline for scene playback.");
+            long ticks = checked((long)Math.Round(seconds * 12600, MidpointRounding.AwayFromZero));
+            if (!timelineClockValid) throw new InvalidOperationException("Wait for the timeline clock to become ready.");
+            queuedTimelineSeekTicks = RootOccurrenceTick(timelineClock, ticks);
             timelineSeekDeadline = Time.unscaledTime + 5;
             seek = seconds.ToString("0.###", CultureInfo.InvariantCulture);
             keyTime = seek;

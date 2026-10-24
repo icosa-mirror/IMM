@@ -176,6 +176,7 @@ namespace ImmPlayer
             { ClearTimelineHistory("History cleared because this track changed elsewhere."); Run(Refresh); return; }
             TimelineState target = undo ? entry.Before : entry.After;
             historyReplay = entry; replayIsUndo = undo;
+            RevealTimelineLayer(entry.Layer);
             selected = entry.Layer;
             Submit($"{(undo ? "Undo" : "Redo")} {entry.Label}", () =>
             {
