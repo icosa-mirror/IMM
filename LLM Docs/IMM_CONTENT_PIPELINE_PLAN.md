@@ -10,7 +10,8 @@ broader playback/navigation, media, reverse conversion and live-authoring accept
 remain open; none of these initial slices closes the full roadmap.
 
 Active goal (2026-10-24, revised by the user): use the test UI on realistic scenes
-such as Snoopy to evaluate existing runtime editing, expose obvious gaps/bugs, and
+such as Snoopy to evaluate existing runtime editing and prototype a future
+production editor, expose obvious gaps/bugs, and
 add only controls required for that evaluation. The chosen evaluation setup is the
 D3D12 Unity sample. Cross-renderer parity and new Android test infrastructure are
 parked; they are not prerequisites for this test UI goal. Full CI validation of
@@ -5098,6 +5099,31 @@ the historical sizes/check counts below describe this earlier source only.
    audit receipts. Hosted proof after the correction is still required in the next
    FULL source run. The realistic-scene pass has separately found an empty-bounds
    camera/unload blocker, being fixed in the lab.
+
+### 6.145. Scene-switch blocker from framing an audio-only document
+
+1. First refocused scene pass found Load/Reload stuck after the audio-only scene.
+   Native document0 remained Unloading, while managed render transport was Faulted
+   with E_INVALIDARG. Native bounds were empty sentinels (min1e30/max-1e30), but
+   lab FrameScene attempted to fit them. Camera near/far became approximately
+   1.7e27/1.6e31 and projection contained infinity. Native correctly rejected that
+   camera packet; subsequent retirement could not proceed through the faulted
+   session. Red evidence: artifacts/snoopy-unload-{blocker-state,transport-state,
+   camera-state,empty-bounds}.json.
+2. FrameBounds now rejects invalid bounds and unsafe candidate camera/clip values
+   before changing the camera. Empty scenes retain a valid camera, with a short
+   lab status message. No native renderer/backend behavior or API was changed.
+3. Managed compile passes. After a clean owned-Editor restart, six live checks pass:
+   audio-only attachment keeps a valid ready renderer; Frame scene preserves that
+   camera; switching directly to real Snoopy retires the old document and attaches
+   all79layers; paused seek, selected-layer framing and visible scene capture work.
+   Evidence: artifacts/empty-framing-switch-probe.json,
+   empty-framing-managed-build.log and snoopy-evaluation-ready.png. The realistic
+   editing pass can now continue on selected Snoopy layer30.
+4. All seven source-affected FULL runs were verified to share the broken macOS
+   smoke log contract and cancellation was requested under the source-failure
+   policy. Their evidence is retained. The next FULL tip includes the CI-owned log
+   fix and this lab fix; old partial results are not replacement acceptance.
 
 ## 7. Consolidated documents
 

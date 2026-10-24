@@ -591,6 +591,9 @@ namespace ImmPlayer
         private void FrameBounds(Bounds bounds, bool clipForeground = false)
         {
             if (view == null) return;
+            for (int axis = 0; axis < 3; axis++)
+                if (!float.IsFinite(bounds.center[axis]) || !float.IsFinite(bounds.extents[axis]) || bounds.extents[axis] < 0)
+                { Log("No drawable bounds to frame."); return; }
             float radius = Mathf.Max(0.1f, bounds.extents.magnitude);
             Rect area = visible ? new Rect(window.xMax + 8, toolbarWindow.yMax + 8,
                 Mathf.Max(1, Screen.width - window.xMax - 20), Mathf.Max(1, timelineWindow.y - toolbarWindow.yMax - 16)) :
@@ -600,15 +603,20 @@ namespace ImmPlayer
             float distance = radius / (Mathf.Sin(halfFov) * fraction) * 1.15f;
             float x = (area.center.x / Screen.width * 2 - 1) * view.aspect;
             float y = 1 - area.center.y / Screen.height * 2;
-            view.transform.position = bounds.center - view.transform.forward * distance -
+            Vector3 position = bounds.center - view.transform.forward * distance -
                 (view.transform.right * x + view.transform.up * y) * distance * Mathf.Tan(halfFov);
+            float near = Mathf.Max(0.01f, clipForeground ? distance - radius * 1.05f : radius / 1000);
+            float far = Mathf.Max(1000, distance + radius * 4);
+            if (!float.IsFinite(position.x) || !float.IsFinite(position.y) || !float.IsFinite(position.z) ||
+                !float.IsFinite(2 * near * far))
+            { Log("Scene bounds cannot be framed safely."); return; }
+            view.transform.position = position;
             // Fitting a selection can move the camera behind other artwork.
             // Keep every selected-bound corner beyond the near plane while
             // clipping foreground geometry that would otherwise hide it.
             cameraFocusBounds = clipForeground ? bounds : (Bounds?)null;
-            view.nearClipPlane = Mathf.Max(0.01f, radius / 1000);
-            UpdateFocusClipping();
-            view.farClipPlane = Mathf.Max(1000, distance + radius * 4);
+            view.nearClipPlane = near;
+            view.farClipPlane = far;
         }
 
         private void UpdateFocusClipping()
