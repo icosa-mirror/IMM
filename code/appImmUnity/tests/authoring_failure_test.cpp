@@ -82,6 +82,60 @@ static void checkActionPlaybackReconciliation(piLog * log)
     std::puts("[IMM_ACTION_PLAYBACK_RECONCILE_TEST] pass=1 liveConsumption=1 kindIdentity=1 retimePast=1 exactFutureArmed=1 authoredValuesPreserved=1 holdPreserved=1");
 }
 
+static void checkHeldRootStopUndo(piLog * log)
+{
+    bool allPassed = true;
+    for (int stopTick : { 0, 1, 12600 })
+    {
+        Sequence sequence;
+        require(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "held undo sequence");
+        Layer * root = sequence.GetRoot();
+        require(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+            1.0f, true, piTick(0), 1, UINT32_MAX, log), "held undo root");
+        Layer::AnimValue action{}; action.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+        require(root->AddKey(piTick(stopTick), Layer::AnimProperty::Action, action, Layer::InterpolationType::None), "held undo Stop");
+        MngrPlayer player;
+        require(player.Init(log), "held undo player");
+        const piTick epoch(1000000);
+        player.Enter(&sequence, epoch); player.Update(epoch + piTick(stopTick));
+        require(root->IsStoppedByAction() && player.GetIsWaiting(), "authored Stop owns current root hold");
+        const piTick heldTime = root->GetTimelineElapsed(epoch + piTick(stopTick));
+        std::vector<Layer::AnimKey> replacement;
+        require(root->CopyAnimKeys(Layer::AnimProperty::Action, replacement), "copy held root Action");
+        replacement[0].mValue.mInt = static_cast<uint32_t>(Layer::AnimAction::Loop);
+        root->ReconcileActionPlayback(replacement, heldTime);
+        root->ReplaceAnimKeys(Layer::AnimProperty::Action, std::move(replacement));
+        player.RefreshRootActionMetadata(epoch + piTick(stopTick));
+        std::vector<Layer::AnimKey> restored;
+        require(root->CopyAnimKeys(Layer::AnimProperty::Action, restored), "copy loop replacement for Undo");
+        restored[0].mValue.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+        restored[0].mValue.mBool = false; // Authoring snapshots never supply runtime consumption.
+        const piTick stopTime = root->GetStopTime();
+        root->SetStopTime(stopTime, true, false);
+        auto manualPause = restored;
+        root->ReconcileActionPlayback(manualPause, heldTime);
+        const bool userPauseArmed = !manualPause[0].mValue.mBool;
+        root->SetStopTime(stopTime, true, true);
+        auto future = restored;
+        require(Layer::SetAnimKey(future, piTick(stopTick + 1), action, Layer::InterpolationType::None), "future Stop control");
+        root->ReconcileActionPlayback(future, heldTime);
+        const bool futureArmed = !future[1].mValue.mBool;
+        root->ReconcileActionPlayback(restored, heldTime);
+        const bool restoredConsumed = restored[0].mValue.mBool;
+        root->ReplaceAnimKeys(Layer::AnimProperty::Action, std::move(restored));
+        player.RefreshRootActionMetadata(epoch + piTick(stopTick));
+        const piTick continueAt = epoch + piTick(stopTick + 100);
+        player.Continue(continueAt); player.Update(continueAt + piTick(1));
+        const bool continued = !player.GetIsWaiting() && !root->HasStopTime() && root->GetPlaying() &&
+            root->GetTimelineElapsed(continueAt + piTick(1)) == heldTime + piTick(1);
+        std::printf("[IMM_ROOT_STOP_UNDO] tick=%d restoredConsumed=%d oneContinue=%d userPauseArmed=%d futureArmed=%d\n",
+            stopTick, restoredConsumed ? 1 : 0, continued ? 1 : 0, userPauseArmed ? 1 : 0, futureArmed ? 1 : 0);
+        allPassed &= restoredConsumed && continued && userPauseArmed && futureArmed;
+        player.Exit(); player.Deinit(); sequence.Deinit(log);
+    }
+    require(allPassed, "Undo of held root Stop must preserve its consumption so one Continue advances");
+}
+
 static void checkEmptySpawnCleanup()
 {
     // Heap contents must not determine whether an absent preview is freed.
@@ -278,6 +332,7 @@ int wmain(int argc, wchar_t** argv)
     piLog log;
     require(log.Init(L"artifacts/authoring-failure-runtime.log", PILOG_TXT), "log init");
     checkActionPlaybackReconciliation(&log);
+    checkHeldRootStopUndo(&log);
     checkLayerInitialization(&log);
     checkHeldPivotTransform(&log);
     checkSpawnCacheLifecycle(&log);

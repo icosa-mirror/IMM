@@ -877,7 +877,13 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                 [](const AnimKey & candidate, piTick time) { return candidate.mTime < time; });
             const bool unchanged = current != live.end() && current->mTime == key.mTime &&
                 current->mValue.mInt == key.mValue.mInt;
-            key.mValue.mBool = unchanged ? current->mValue.mBool : key.mTime < localTime;
+            // A root Stop holds one tick before its key. Restoring that key
+            // while its existing action hold survives must not arm it again;
+            // otherwise the first Continue immediately re-enters the same Stop.
+            const bool ownsRootHold = this == mSequence->GetRoot() && mHasStopTime && mStoppedByAction &&
+                key.mValue.mInt == static_cast<uint32_t>(AnimAction::Stop) &&
+                key.mTime == mStopTime - mStartTime + piTick(1);
+            key.mValue.mBool = ownsRootHold || (unchanged ? current->mValue.mBool : key.mTime < localTime);
         }
     }
 	void Layer::ReplaceAnimKeys(AnimProperty property, std::vector<AnimKey> && keys)

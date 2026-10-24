@@ -27,8 +27,11 @@ Frame selected occlusion follow-up and audible Unity/device confirmation remain.
 The timeline goal stays active, including the required missing runtime features.
 Later native Action publication (`29d72074`) and late finite-occurrence correction
 (`0f81d964`) pass local native/CPU/C-ABI checks; their FULL run 40066922009 is
-pending. MakeDefault provenance and Action UI integration remain open (6.132-6.133).
-Latest tip `a702bd6a` also closes the finite-ancestor cascade and fixes main
+pending. MakeDefault execution provenance is implemented in local commit `8fb3de4c`
+with native/CPU/C-ABI checks (6.136). Action controls compile and pass 21 live
+button/command checks, but a reproduced held-root Stop Undo regression must be
+confirmed in the rebuilt Editor before UI acceptance (6.137).
+Latest pushed feature source `a702bd6a` also closes the finite-ancestor cascade and fixes main
 Play/Continue sound handling, with native/CPU/C-ABI checks and six actual Unity
 button steps. Its FULL run40068611847 is pending (6.134-6.135).
 
@@ -4851,6 +4854,36 @@ the historical sizes/check counts below describe this earlier source only.
    compilation/review, but their live UI acceptance and commit are still pending.
    The native milestone is being committed separately with its matching Windows
    DLL. No new API/layout version was introduced. The timeline goal remains active.
+
+### 6.137. Action UI live acceptance in progress
+
+1. Action controls provide root Stop/Play/Loop, nested timeline Stop and viewpoint
+   MakeDefault. Values remain Step-only; imported unsupported combinations stay
+   readable and copyable but cannot be modified or pasted onto invalid targets.
+2. Nine actual mouse-button steps pass executed MakeDefault deletion, Undo/Redo,
+   fallback and incompatible root paste protection. Twelve further command/mouse
+   history steps pass retiming with default provenance, Undo/Redo on a nested Stop
+   track containing an unchanged unsupported imported Play, and disabled deletion
+   of that Play. Evidence: artifacts/action-ui-default-probe.json and
+   artifacts/action-ui-retime-probe.json. The latter invokes the same UI retime
+   command directly; it is not a pointer-drag claim.
+3. Actual UI testing found a root Stop restoration regression: replace an already
+   executed held Stop with Loop, Undo to restore Stop, then press Play once. The
+   restored key executes again and holds at the same time. Red evidence:
+   artifacts/action-ui-root-stop-probe.json. The focused native correction marks
+   only the Stop owning the current authored root hold as consumed when restored.
+   CPU red/green checks at ticks 0, 1 and 12600 pass after the fix; future keys and
+   ordinary user-pause controls remain armed. Native Release and loaded WARP C ABI
+   checks pass. Evidence: artifacts/root-stop-undo-before.log,
+   root-stop-undo-cpu-green.log, root-stop-undo-cpu-report.json and
+   root-stop-undo-cabi/report.json. The owned Editor was closed cleanly before
+   rebuilding; rebuilt-Editor acceptance is pending. This is not yet a completed
+   Action UI milestone.
+4. Action editing and independent audio are explicitly included in this timeline
+   test UI goal. Independent voices are implemented, but audible confirmation,
+   GL/Android draw-in rendering and main-scene selected-layer framing remain open.
+   Later healthy FULL CI runs still await serialized licensed engine jobs; the
+   accepted exact-source baseline remains the receipt in the top checkpoint.
 
 ## 7. Consolidated documents
 
