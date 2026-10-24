@@ -5236,6 +5236,30 @@ the historical sizes/check counts below describe this earlier source only.
    yet. The goal remains active solely for required CI results and any actual
    failures they expose; do not invent further UI/backend tasks while waiting.
 
+### 6.150. Scope/timing and navigation remain provisional
+
+1. User accepted scoped editing for now, explicitly requiring it to remain open
+   design work rather than final production-editor behavior. Record how scene time
+   maps to a nested timeline's local cycle; distinguish the group's own keys in its
+   parent timeline from keys inside its contents. Any production root-time view of
+   repeated occurrences must make shared-key editing semantics clear. No new timing
+   behavior or occurrence-override capability was approved or implemented.
+2. User exploration exposed discoverability issues: clicking a name selects/reveals
+   channels, while the nested-timeline arrow changes scope; ordinary group/paint
+   icons instead expand rows. A scoped view can be mistaken for the full layer
+   tree. Baked bird layers were outside the then-current scope; Socks_baked was
+   below the viewport. Channel filtering did not remove any layers.
+3. At the user's direct request, selected Snoopymove in Root, revealed its Transform
+   lane and showed all four keys (0.25,0.875,1.5,2.125s). The Editor is left in that
+   view for inspection. Evidence: artifacts/snoopy-transform-keys-shown.json/png.
+   Scope/time labeling, navigation affordances and repeated-occurrence presentation
+   remain production-editor design questions; the current prototype is not final.
+4. Fresh CI inspection of FULL40080086930/source5e34 found Windows Standalone OpenGL
+   failed (job120861471686), causing GPU Evidence Report failure. Thirty-five jobs
+   passed and five owners remain pending; this is not full acceptance. Actual gate
+   failure diagnosis is the next task. Local Snoopy results remain distinct from
+   hosted validation, and the goal stays active.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
