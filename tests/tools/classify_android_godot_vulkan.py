@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 
@@ -14,13 +15,46 @@ CRASH_FILE_PATTERNS = (
 )
 RUNTIME_MARKERS = (
     "fatal signal",
-    "fatal exception",
     "device lost",
     "device was lost",
     "vk_error_device_lost",
     "immviewernode setup failed",
     "immviewercompositoreffect setup failed",
 )
+APP_PACKAGE = "org.linuxfoundation.imm.godot.sample"
+APP_PROCESS = re.compile(rf"\bStart proc\s+(\d+):{re.escape(APP_PACKAGE)}(?=[:/\s]|$)")
+JAVA_LOG_LINE = re.compile(
+    r"^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)\s+(\d+)\s+\d+\s+E\s+AndroidRuntime\s*:\s*(.*)$"
+)
+JAVA_PROCESS = re.compile(r"Process:\s*(\S+),\s*PID:\s*(\d+)\s*$")
+
+
+def java_crash_evidence(log_text: str) -> tuple[list[str], list[str]]:
+    """Exclude only the positively identified foreign system crash observed in CI.
+
+    An unknown/restarted app PID or an unassociated Process line cannot turn a
+    fatal exception into a passing result. Keep each device log independent.
+    """
+    app_pids = {int(match.group(1)) for match in APP_PROCESS.finditer(log_text)}
+    lines = log_text.splitlines()
+    failures: list[str] = []
+    warnings: list[str] = []
+    for index, line in enumerate(lines):
+        if "fatal exception" not in line.lower():
+            continue
+        fatal = JAVA_LOG_LINE.match(line)
+        following = JAVA_LOG_LINE.match(lines[index + 1]) if index + 1 < len(lines) else None
+        if fatal and following and fatal.groups()[:2] == following.groups()[:2]:
+            identity = JAVA_PROCESS.fullmatch(following.group(3))
+            if identity:
+                process, pid_text = identity.groups()
+                pid = int(pid_text)
+                if (app_pids and pid == int(fatal.group(2)) and pid not in app_pids
+                        and process == "com.google.android.permissioncontroller"):
+                    warnings.append(f"Other Android process crash: pid={pid} process={process}")
+                    continue
+        failures.append("Android runtime failure marker: fatal exception")
+    return failures, warnings
 REQUIRED_CAPTURES = (
     "vulkan_render_candidate.png",
     "vulkan_visual_smoke.png",
@@ -84,12 +118,17 @@ def classify(root: Path) -> dict:
         if path.is_file()
     ]
     log_paths = find_files(root, "logcat") + find_files(root, "logcat_after.txt")
-    log_text = "\n".join(
-        path.read_text(encoding="utf-8", errors="ignore") for path in log_paths
-    )
+    logs = [path.read_text(encoding="utf-8", errors="ignore") for path in log_paths]
+    log_text = "\n".join(logs)
     lowered_log = log_text.lower()
     runtime_markers = [marker for marker in RUNTIME_MARKERS if marker in lowered_log]
-    if crash_files or runtime_markers:
+    java_failures: list[str] = []
+    other_process_crashes: list[str] = []
+    for log in logs:
+        fatal, other = java_crash_evidence(log)
+        java_failures.extend(fatal)
+        other_process_crashes.extend(other)
+    if crash_files or runtime_markers or java_failures:
         failures = [
             f"Android app crash evidence: {path.relative_to(root)}"
             for path in crash_files
@@ -97,6 +136,7 @@ def classify(root: Path) -> dict:
         failures.extend(
             f"Android runtime failure marker: {marker}" for marker in runtime_markers
         )
+        failures.extend(java_failures)
         return result("runtime_failed", "runtime", failures)
 
     firebase_path = root / "firebase-test-lab-result.json"
@@ -124,6 +164,7 @@ def classify(root: Path) -> dict:
         )
     if missing:
         return result("evidence_incomplete", "evidence", missing)
+    warnings.extend(other_process_crashes)
 
     render = read_json(root / RENDER_EVIDENCE)
     composition = read_json(root / COMPOSITION_EVIDENCE)

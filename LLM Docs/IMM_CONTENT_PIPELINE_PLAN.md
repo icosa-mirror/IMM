@@ -4561,6 +4561,30 @@ the historical sizes/check counts below describe this earlier source only.
    device evidence, remaining engines/macOS and final acceptance are still being
    checked independently. No final success is inferred from these partial results.
 
+### 6.129. Godot Android crash attribution correction
+
+1. FULL run 40057279837 failed its Godot classifier because raw device logcat
+   included a fatal Java exception from `com.google.android.permissioncontroller`
+   (PID 32454), before the IMM Godot app launched as PID 15901. This is a
+   classifier source defect, not an accepted run or an app crash. The actual
+   Firebase verdict, three captures and render/composition reports passed.
+2. The classifier now excludes that foreign system crash only when the same
+   device log proves the app process identity and adjacent fatal/Process records
+   agree on timestamp and writer PID. App, ambiguous and native crashes still
+   fail; strict marker, capture and visual gates remain required. The existing
+   classifier test suite passes, including app/unknown/mismatched/cross-device
+   identities and failed rendering. Reclassifying the downloaded evidence passes
+   with an explicit foreign-process warning:
+   artifacts/timeline-ci-agent-723-godot-reclassified.json.
+3. The three active FULL runs 40057279837, 40058475651 and 40062003931 contain
+   the old classifier. Their remaining jobs are being cancelled for a corrected
+   full run; none is accepted. Preserve successful independent evidence, including
+   the strict Unity Android audit in
+   artifacts/timeline-ci-agent-40057279837-android-audit.json.
+4. Independent audio is in progress: separate renderer-owned preview voices and
+   full Sound runtime capture are the next contained foundation. Document routing,
+   clock gating, UI controls and end-to-end preview acceptance remain outstanding.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

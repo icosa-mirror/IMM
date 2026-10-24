@@ -96,6 +96,53 @@ def main() -> int:
         logcat.write_text("Fatal signal 11", encoding="utf-8")
         assert_result(crash, "runtime_failed", "runtime")
 
+        foreign_fatal = (
+            "10-23 21:27:54.414 32454 9625 E AndroidRuntime: FATAL EXCEPTION: pool-3-thread-4\n"
+            "10-23 21:27:54.414 32454 9625 E AndroidRuntime: "
+            "Process: com.google.android.permissioncontroller, PID: 32454\n"
+            "10-23 21:27:54.414 32454 9625 E AndroidRuntime: java.lang.NullPointerException\n"
+        )
+        app_start = f"10-23 21:28:15.031 1402 1640 I ActivityManager: Start proc 15901:{classifier.APP_PACKAGE}/u0a282\n"
+        cases = (
+            ("foreign_before_app", foreign_fatal + app_start, "passed"),
+            ("app_java_crash", app_start + foreign_fatal.replace(
+                "com.google.android.permissioncontroller", classifier.APP_PACKAGE), "runtime_failed"),
+            ("known_app_pid", app_start + foreign_fatal.replace("32454", "15901"), "runtime_failed"),
+            ("unobserved_generic_process", app_start + foreign_fatal.replace(
+                "com.google.android.permissioncontroller", "Godot"), "runtime_failed"),
+            ("missing_app_identity", foreign_fatal, "runtime_failed"),
+            ("unmatched_crash_pid", app_start + foreign_fatal.replace(
+                "PID: 32454", "PID: 99999"), "runtime_failed"),
+            ("different_event", app_start + foreign_fatal.replace(
+                "54.414 32454 9625 E AndroidRuntime: Process:",
+                "54.415 32454 9625 E AndroidRuntime: Process:"), "runtime_failed"),
+            ("unattributed_fatal", app_start + "FATAL EXCEPTION", "runtime_failed"),
+        )
+        for name, log, expected in cases:
+            case = base / name
+            passing_fixture(case)
+            (case / "ftl-results" / "device" / "logcat").write_text(log, encoding="utf-8")
+            assert_result(case, expected, "" if expected == "passed" else "runtime")
+        classified = classifier.classify(base / "foreign_before_app")
+        assert any("permissioncontroller" in warning for warning in classified["warnings"]), classified
+
+        foreign_with_bad_render = base / "foreign_with_bad_render"
+        passing_fixture(foreign_with_bad_render)
+        (foreign_with_bad_render / "ftl-results" / "device" / "logcat").write_text(
+            foreign_fatal + app_start, encoding="utf-8"
+        )
+        write_json(foreign_with_bad_render / classifier.RENDER_EVIDENCE,
+            {"passed": False, "errors": ["missing IMM content"]})
+        assert_result(foreign_with_bad_render, "render_failed", "rendering")
+
+        separate_logs = base / "separate_logs"
+        passing_fixture(separate_logs)
+        (separate_logs / "ftl-results" / "device" / "logcat").write_text(foreign_fatal, encoding="utf-8")
+        other_device = separate_logs / "ftl-results" / "other-device"
+        other_device.mkdir()
+        (other_device / "logcat").write_text(app_start, encoding="utf-8")
+        assert_result(separate_logs, "runtime_failed", "runtime")
+
     print("Android Godot Vulkan classifier tests passed")
     return 0
 
