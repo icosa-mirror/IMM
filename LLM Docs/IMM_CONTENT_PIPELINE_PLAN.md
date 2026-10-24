@@ -4551,6 +4551,15 @@ the historical sizes/check counts below describe this earlier source only.
    session-owned duplicate voices, full Sound runtime capture, routing that keeps
    original voice cursors paused, and teardown before borrowed sound data unload.
    Action publication/cache reconciliation and the other items in 6.127 remain.
+6. Audio transport commit `b9d872c5` is pushed in integration tip `cf0b45e6`, after
+   merging CI binary refresh `709b5779`. The sole Windows DLL conflict retained
+   the tested build matching the new audio source (hash checked against the CPU
+   report); other generated binaries merged normally. FULL
+   [40062003931](https://github.com/icosa-mirror/IMM/actions/runs/40062003931) is queued.
+   Runs 40057279837/40058475651 remain active and unaccepted. Both delayed Android
+   builds and Firebase producers passed on the lifetime-fix run; strict uploaded
+   device evidence, remaining engines/macOS and final acceptance are still being
+   checked independently. No final success is inferred from these partial results.
 
 ## 7. Consolidated documents
 
