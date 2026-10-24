@@ -5287,6 +5287,10 @@ the historical sizes/check counts below describe this earlier source only.
    pull before pushing, then inspect the replacement FULL. Required outstanding
    acceptance includes Mesa zero diagnostics, corrected macOS smoke exit/audio
    markers and the complete full-run gates. Goal remains active.
+5. Pushed correction06a288aa with the literal [CI VALIDATION] marker after pulling
+   main. Replacement FULL[40091556175](https://github.com/icosa-mirror/IMM/actions/runs/40091556175)
+   is queued on exact source06a288aa51417c66cb347bcb8ebd68d944de26e4. A queued run
+   is not passing evidence; monitor the actual required jobs before acceptance.
 
 ## 7. Consolidated documents
 
