@@ -5008,7 +5008,11 @@ the historical sizes/check counts below describe this earlier source only.
    provenance under its existing artifact manifest. Workflow matrix and managed
    compilation pass. The inspector no longer incorrectly labels GL previews as
    incapable of showing draw-in. No validation gate was weakened.
-6. This source milestone is ready for its new FULL CI run. The timeline goal stays
+6. Source milestone `66e5232e` is pushed with `[CI VALIDATION]`. FULL
+   [40075591630](https://github.com/icosa-mirror/IMM/actions/runs/40075591630) targets
+   exact source66e5232e5072202bc67069e69c8e1e673aa1b779 and is queued/pending.
+   The separate framing/navigation and resolve fixes were committed atomically.
+   The timeline goal stays
    active pending hosted acceptance, Android draw-in rendering evidence and actual
    Unity audio-output confirmation. The latest accepted hosted baseline remains
    the top checkpoint; queued/running later runs are not accepted results.
