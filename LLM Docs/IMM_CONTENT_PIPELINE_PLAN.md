@@ -4130,6 +4130,11 @@ the historical sizes/check counts below describe this earlier source only.
    cleared at that baseline. Hardware-only Windows Vulkan is outside that hosted
    scope. Evidence: artifacts/timeline-ci-agent-40038310055-acceptance-audit.json.
    This does not accept the later history/clock/inspector/clipboard changes.
+5. Inspector commit 9e145da6 and clipboard commit 0babd47a are pushed after an
+   up-to-date pull. FULL [run 40044825617](https://github.com/icosa-mirror/IMM/actions/runs/40044825617)
+   targets 0babd47acd7944b6939343e68c229ecc5196ae4c and is queued. Receipt:
+   artifacts/live-timeline-clipboard-ci-runs.json. The original Snoopy track is
+   restored in the running lab after the checks; the goal remains active.
 
 ## 7. Consolidated documents
 
