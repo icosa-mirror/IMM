@@ -4626,6 +4626,11 @@ the historical sizes/check counts below describe this earlier source only.
    evaluation/reset, original-pause clock gating, nested Stop/finite-repeat clock
    handling and UI controls. Audible Unity/device acceptance is still pending.
    Action editing and the other outstanding items in 6.127 remain in this goal.
+7. Foundation commit `3897e013` is pushed. FULL
+   [40063894055](https://github.com/icosa-mirror/IMM/actions/runs/40063894055)
+   is pending. The corrected-classifier full run 40063347058 remains active
+   (13 jobs passed at the latest check, no reported failure). Neither is accepted;
+   final acceptance must name the exact source head whose evidence was checked.
 
 ## 7. Consolidated documents
 
