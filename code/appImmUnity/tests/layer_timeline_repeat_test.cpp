@@ -27,6 +27,72 @@ namespace
         RequireTimeline(layer->AddKey(piTick(tick), property, value, Layer::InterpolationType::None), "add boolean key");
     }
 
+    bool CheckNestedStopDomain(piLog * log, bool independent, bool laterCycle = false)
+    {
+        Sequence sequence;
+        RequireTimeline(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "nested Stop sequence");
+        sequence.SetInitialSpawnArea(nullptr);
+        Layer * root = sequence.GetRoot();
+        RequireTimeline(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+            1.0f, true, piTick(laterCycle ? 100 : 0), 0, UINT32_MAX, log), "nested Stop root");
+        Layer * boundary = root;
+        if (independent)
+        {
+            root->SetStartTime(piTick(0)); root->SetStopTime(piTick(2), true, true); root->SetPlaying(false);
+            boundary = sequence.CreateLayer(root);
+            RequireTimeline(boundary && boundary->Init(Layer::Type::Group, L"Boundary", true,
+                trans3d::identity(), trans3d::identity(), 1.0f, true, piTick(laterCycle ? 100 : 0), 0, UINT32_MAX, log),
+                "nested Stop independent boundary");
+        }
+        Layer * child = sequence.CreateLayer(boundary);
+        RequireTimeline(child && child->Init(Layer::Type::Group, L"Nested", true, trans3d::identity(),
+            trans3d::identity(), 1.0f, true, piTick(100), 0, UINT32_MAX, log), "nested Stop timeline");
+        AddBool(child, Layer::AnimProperty::Visibility, 20, true);
+        Layer::AnimValue value;
+        value.init(); value.mInt = 10;
+        RequireTimeline(child->AddKey(piTick(0), Layer::AnimProperty::Offset, value,
+            Layer::InterpolationType::None), "nested Stop offset");
+        value.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+        RequireTimeline(child->AddKey(piTick(50), Layer::AnimProperty::Action, value,
+            Layer::InterpolationType::None), "nested Stop parent-domain action");
+        const piTick epoch(1000000);
+        ImmPlayer::MngrPlayer player;
+        Layer::EvaluationContext context;
+        context.mBoundary = boundary; context.mBoundaryStartTime = epoch;
+        context.mBoundaryDuration = piTick(laterCycle ? 100 : 0); context.mBoundaryRepeatCount = 0;
+        if (!independent)
+        {
+            RequireTimeline(player.Init(log), "nested Stop manager");
+            player.Enter(&sequence, epoch);
+        }
+        const auto update = [&](int64_t tick) {
+            if (independent)
+            {
+                context.mBoundaryElapsed = piTick(tick);
+                child->SetStateAt(epoch + piTick(tick), log, &context);
+            }
+            else player.Update(epoch + piTick(tick));
+        };
+        const int64_t phase = laterCycle ? 200 : 0;
+        update(phase + 20); update(phase + 49);
+        const piTick before = child->GetTimelineElapsed(epoch + piTick(phase + 50), independent ? &context : nullptr);
+        update(phase + 50);
+        const piTick held = child->GetTimelineElapsed(epoch + piTick(phase + 50), independent ? &context : nullptr);
+        const piTick absoluteStop = child->GetStopTime();
+        update(phase + 80);
+        const piTick later = child->GetTimelineElapsed(epoch + piTick(phase + 80), independent ? &context : nullptr);
+        const bool consumed = child->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool;
+        const bool correct = before == piTick(40) && held == piTick(39) && later == piTick(39) &&
+            absoluteStop == epoch + piTick(phase + 49) && child->IsStoppedByAction() &&
+            (independent ? !consumed && context.mConsumedActions.size() == 1 : consumed);
+        std::printf("[IMM_NESTED_STOP_DOMAIN_TEST] independent=%d laterCycle=%d before=%lld held=%lld later=%lld stopRelative=%lld expectedHeld=39 expectedStop=%lld sourceConsumed=%d sessionConsumed=%zu\n",
+            independent ? 1 : 0, laterCycle ? 1 : 0, piTick::CastInt(before), piTick::CastInt(held), piTick::CastInt(later),
+            piTick::CastInt(absoluteStop - epoch), static_cast<long long>(phase + 49), consumed ? 1 : 0, context.mConsumedActions.size());
+        if (!independent) { player.Exit(); player.Deinit(); }
+        sequence.Deinit(log);
+        return correct;
+    }
+
     void ObserveRootControls(piLog * log, bool sequential, bool zeroDuration = false)
     {
         Sequence sequence;
@@ -258,7 +324,13 @@ void CheckTimelineRepeatKeys()
     }
     CheckFiniteBoundaries(&log, 2, true, true);
     CheckHeldRootControl(&log);
+    const bool nestedStopMain = CheckNestedStopDomain(&log, false);
+    const bool nestedStopIndependent = CheckNestedStopDomain(&log, true);
+    const bool laterStopMain = CheckNestedStopDomain(&log, false, true);
+    const bool laterStopIndependent = CheckNestedStopDomain(&log, true, true);
     log.End();
+    RequireTimeline(nestedStopMain && nestedStopIndependent && laterStopMain && laterStopIndependent,
+        "nested Stop key must hold one parent tick before the action, accounting for visibility start/Offset");
     RequireTimeline(root && nested, "Loop evaluation must preserve authored root/group repeat counts before keys and after removal");
     std::puts("[IMM_TIMELINE_REPEAT_TEST] canonical root/group repeat metadata preserved");
 }

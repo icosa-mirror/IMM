@@ -1110,7 +1110,13 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
                     if (action == AnimAction::Stop)
                     {
-                        SetStopTime(GetStartTime() + lastKey->mTime + piTick(-1), true, true);
+                        // Descendant action keys use the parent timeline clock,
+                        // while this layer's start already includes its visibility
+                        // start and content offset. Resolve the action in that
+                        // parent occurrence before storing an absolute hold.
+                        const piTick actionTime = isRoot ? GetStartTime() + lastKey->mTime :
+                            startFor(timeline) + timeFromStart - timelineTime + lastKey->mTime;
+                        SetStopTime(actionTime + piTick(-1), true, true);
 #ifdef _DEBUG
                         log->Printf(LT_DEBUG, L"[LayerSetState] Stop action %s", mName.GetS());
 #endif

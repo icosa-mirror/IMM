@@ -4429,6 +4429,34 @@ the historical sizes/check counts below describe this earlier source only.
    artifacts/timeline-projection-ci-binary-scope-edits.json. This confirms local
    integration with the replacement binary; hosted acceptance remains pending.
 
+### 6.125. Remaining channel review and nested Stop correction
+
+1. Remaining native animation channels are DrawInTime and Action; legacy separate
+   Position/Rotation/Scale keys are obsolete in the current IMM timeline format
+   and use Transform. Draw-in live editing needs double-preserving values,
+   held-time reevaluation, last-key fallback and preview/history reconciliation.
+2. Draw-in's Windows HLSL path already applies per-vertex alpha and selects its
+   variant dynamically. Desktop GLSL currently comments out the effect; Android
+   skips/ignores the variant. These are existing rendering gaps, not validated
+   support. Adding a timeline control alone does not resolve them.
+3. Action review found a nested Stop clock-domain defect: a child with Visibility
+   start 20 and Offset 10 reaches local 40 at parent tick 50, but its Stop key at
+   parent 50 held local 49 rather than 39. The focused native test reproduced that
+   failure in both main and independent evaluation against the preceding build.
+   Evidence: artifacts/nested-stop-domain-red-run.log.
+4. Stop now resolves a descendant key through its parent occurrence clock before
+   storing the absolute hold. The root retains its own-start behavior. The native
+   Release build, CPU suite and loaded WARP C ABI suite pass; four focused cases
+   cover first/later parent cycles in main/independent evaluation, yielding local
+   39 and absolute holds 49/249. Source review confirms held/wrapped-parent math.
+   Evidence: artifacts/nested-stop-domain-final-cpu-run.log,
+   nested-stop-domain-native-build.log and nested-stop-domain-cabi/report.json.
+5. The source failure supersedes feature full runs 40054027952 and 40055763748;
+   their successful artifacts are preserved and cancellation was requested before
+   a replacement full push. Licensing baseline 40053560065 continues. It passed
+   the iOS job and actual iOS visual classifier; macOS and final hosted acceptance
+   remain pending. No cancelled run counts as accepted validation.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
