@@ -4180,6 +4180,11 @@ the historical sizes/check counts below describe this earlier source only.
    rebuilt DLL (evaluated 6825 ticks); evidence:
    artifacts/live-timeline-preview-context-live-clock.json. This verifies the
    ordinary path, not a functioning independent preview.
+6. Navigation commit 7a0ad499 and native context commit d1bda2ca are pushed after
+   pulling main. FULL [run 40046251340](https://github.com/icosa-mirror/IMM/actions/runs/40046251340)
+   targets d1bda2cacacb719c14f0bfd63cb5f7d58f98f3bb and is queued. Receipt:
+   artifacts/live-timeline-preview-context-ci-runs.json. The original Snoopy file
+   is restored in the open sample Editor; preview transport remains disabled.
 
 ## 7. Consolidated documents
 
