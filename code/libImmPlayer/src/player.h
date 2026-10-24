@@ -193,7 +193,9 @@ namespace ImmPlayer {
             TimelineClockClamped = 1u << 5,
             TimelineClockActiveSpan = 1u << 6,
             TimelineClockInactive = 1u << 7,
-            TimelineClockPreview = 1u << 8
+            TimelineClockPreview = 1u << 8,
+            TimelineClockPreviewAudio = 1u << 9,
+            TimelineClockPreviewAudioPending = 1u << 10
         };
         struct TimelineClock
         {

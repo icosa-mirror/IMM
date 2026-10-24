@@ -821,6 +821,13 @@ int wmain(int argc, wchar_t ** argv)
         ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 1, 150) == IMM_AUTHORING_OK,
         "begin and seek independent preview");
     const auto previewClock = readClock(finiteId);
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 5, 0) == IMM_AUTHORING_INVALID_STATE &&
+        !(readClock(finiteId).flags & (IMM_AUTHORING_TIMELINE_PREVIEW_AUDIO | IMM_AUTHORING_TIMELINE_PREVIEW_AUDIO_PENDING)) &&
+        readClock(finiteId).elapsedTicks == previewClock.elapsedTicks,
+        "audio-disabled bridge rejects preview audio without changing the held clock");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 6, 0) == IMM_AUTHORING_OK &&
+        ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 7, 0) == IMM_AUTHORING_INVALID_ARGUMENT,
+        "mute is idempotent and unknown preview controls are rejected");
     SpawnAreaSnapshot unavailableMainPose{};
     requireRepeat(player.GetSpawnAreaSnapshot(clockDoc, unavailableMainPose, 0, nullptr) == -4,
         "main viewpoint snapshot cannot mix preview evaluated state");

@@ -219,7 +219,9 @@ enum
     IMM_AUTHORING_TIMELINE_CLAMPED = 1u << 5, // Native finite-repeat end branch is selected.
     IMM_AUTHORING_TIMELINE_ACTIVE_SPAN = 1u << 6,
     IMM_AUTHORING_TIMELINE_INACTIVE = 1u << 7,
-    IMM_AUTHORING_TIMELINE_PREVIEW = 1u << 8 // Independent session clock, not main-scene occurrence.
+    IMM_AUTHORING_TIMELINE_PREVIEW = 1u << 8, // Independent session clock, not main-scene occurrence.
+    IMM_AUTHORING_TIMELINE_PREVIEW_AUDIO = 1u << 9,
+    IMM_AUTHORING_TIMELINE_PREVIEW_AUDIO_PENDING = 1u << 10
 };
 
 // Unversioned, read-only 96-byte snapshot at the completed CPU timestamp.
@@ -361,7 +363,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetTimeline(in
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_TimelineGetClock(int32_t docId,
     int32_t timelineLayerId, ImmAuthoringTimelineClock * clockOut, uint32_t capacityBytes);
 // Independent, initially muted preview of a nested timeline. Actions: 0 begin
-// paused, 1 seek (unwrapped ticks, paused), 2 play, 3 pause, 4 exit. Calls publish
+// paused, 1 seek (unwrapped ticks, paused), 2 play, 3 pause, 4 exit,
+// 5 enable independent audio, 6 mute/release preview voices. Calls publish
 // under the scene mutex. Main runtime state is restored on exit; committed
 // descendant keys/properties/frame tables remain and resample at the main clock.
 // Boundary, sound, structure and drawing-geometry edits are unsupported in preview.

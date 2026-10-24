@@ -150,15 +150,22 @@ namespace ImmPlayer
             string iteration = !timelineClockValid || (timelineClock.flags & ClockInactive) != 0 ? clockState :
                 (timelineClock.flags & ClockClamped) != 0 ? $"End ({timelineClock.effectiveRepeat} cycles)" : $"Cycle {timelineClock.cycle + 1} · {clockState}";
             GUILayout.Label(iteration, GUILayout.Width(180));
+            GUILayout.EndHorizontal();
             if (!IsRootScope)
             {
+                GUILayout.BeginHorizontal();
                 GUI.enabled = attached && pending == 0 && !awaitingCommit && !queuedTimelineSeekTicks.HasValue && timelineSeekRequest == 0;
                 if (GUILayout.Button(TimelinePreviewActive ? "Return to scene" : "Preview local", GUILayout.Width(120)))
                     Run(() => ControlTimelinePreview(TimelinePreviewActive ? 4 : 0));
+                GUI.enabled &= TimelinePreviewActive;
+                if (GUILayout.Button(TimelinePreviewAudioEnabled ? "Mute preview audio" : "Enable preview audio", GUILayout.Width(150)))
+                    Run(() => ControlTimelinePreview(TimelinePreviewAudioEnabled ? 6 : 5));
                 GUI.enabled = true;
-                GUILayout.Label(TimelinePreviewActive ? "Independent preview · audio muted · edit child tracks" : "Scene occurrence · open preview to play locally", GUILayout.Width(330));
+                GUILayout.Label(TimelinePreviewActive
+                    ? $"Independent preview · {TimelinePreviewAudioStatus} · edit child tracks"
+                    : "Scene occurrence · open preview to play locally", GUILayout.ExpandWidth(true));
+                GUILayout.EndHorizontal();
             }
-            GUILayout.EndHorizontal();
         }
     }
 }

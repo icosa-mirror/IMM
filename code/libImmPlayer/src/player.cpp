@@ -864,7 +864,9 @@ namespace ImmPlayer
             (((!boundary && layer->HasStopTime()) || held) ? TimelineClockHeld : 0u) |
             (((!boundary && layer->IsStoppedByAction()) || actionHeld) ? TimelineClockActionHeld : 0u) |
             (active ? TimelineClockActiveSpan : TimelineClockInactive) |
-            (preview ? TimelineClockPreview : 0u);
+            (preview ? TimelineClockPreview : 0u) |
+            ((preview && doc->GetTimelinePreviewAudioEnabled()) ? TimelineClockPreviewAudio : 0u) |
+            ((preview && doc->GetTimelinePreviewAudioPending()) ? TimelineClockPreviewAudioPending : 0u);
         if (active)
         {
             value.elapsedTicks = piTick::CastInt(layer->GetTimelineElapsed(now, context));
@@ -897,7 +899,7 @@ namespace ImmPlayer
         if (command < 0 || command >= mCommandList.GetLength()) return -4;
         if (mCommandList[command].mCommand.mType != Document::Command::Type::None) return -7;
         Layer * boundary = timelineLayerId >= 0 ? iFindLayerById(doc->GetSequence(), static_cast<uint32_t>(timelineLayerId)) : nullptr;
-        try { return doc->ControlTimelinePreview(boundary, action, piTick(ticks), mTime, mLog); }
+        try { return doc->ControlTimelinePreview(boundary, action, piTick(ticks), mTime, mLog, &mLayerRenderSound, mSoundEngine); }
         catch (const std::bad_alloc &) { return -5; }
         catch (const std::length_error &) { return -5; }
     }
@@ -1657,7 +1659,7 @@ namespace ImmPlayer
                     if (docReady)
                     {
                         const bool preview = doc->GetTimelinePreviewBoundary() != nullptr;
-                        if (preview) doc->PauseTimelinePreviewSounds(&mLayerRenderSound, mSoundEngine);
+                        if (preview) doc->GlobalWorkTimelinePreviewAudio(&mLayerRenderSound, mSoundEngine, mLog, doc->GetVolume(), mTime);
                         iGlobalWorkLayer(doc->GetSequence()->GetRoot(), doc->GetVolume(), preview);
                     }
                     anyDocReady |= docReady;

@@ -195,13 +195,18 @@ namespace ImmPlayer {
         // objects; canonical child-track/property edits survive returning to main.
         // Structural, drawing-geometry and sound edits require leaving preview.
         int32_t ControlTimelinePreview(ImmImporter::Layer * boundary, int32_t action,
-            ImmCore::piTick ticks, ImmCore::piTick now, ImmCore::piLog * log);
+            ImmCore::piTick ticks, ImmCore::piTick now, ImmCore::piLog * log,
+            LayerRendererSound * renderer = nullptr, ImmCore::piSoundEngine * sound = nullptr);
         const ImmImporter::Layer::EvaluationContext * GetTimelinePreviewContext() const;
         ImmImporter::Layer * GetTimelinePreviewBoundary() const;
         ImmCore::piTick GetTimelineMainCPUTime() const;
         // Pause original voices without playing, stopping or seeking them. Preview
         // dispatch must bypass their ordinary GlobalWork until the session exits.
         bool PauseTimelinePreviewSounds(LayerRendererSound * renderer, ImmCore::piSoundEngine * sound);
+        void GlobalWorkTimelinePreviewAudio(LayerRendererSound * renderer, ImmCore::piSoundEngine * sound,
+            ImmCore::piLog * log, float volume, ImmCore::piTick now);
+        bool GetTimelinePreviewAudioEnabled() const;
+        bool GetTimelinePreviewAudioPending() const;
 
         //----------------------------------------------------------------------
         // Live editing. Additive: nothing changes for a document that is only
@@ -307,6 +312,7 @@ namespace ImmPlayer {
         struct TimelinePreviewSession;
         std::unique_ptr<TimelinePreviewSession> mTimelinePreview;
         void iEvaluateTimelinePreview(ImmCore::piTick now, ImmCore::piLog * log);
+        void iReanchorTimelinePreviewClock(ImmCore::piTick now);
         void iEndTimelinePreview(ImmCore::piTick now);
         bool iCanEditTimelinePreview(uint32_t layerId) const;
         void iMarkTimelinePreviewEdit(ImmImporter::Layer * layer, uint32_t fields);

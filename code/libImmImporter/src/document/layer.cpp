@@ -1153,7 +1153,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                 // Visibility controls if some layers are alive or dead for playback
 
                  // span change since last evaluation retriggers sounds
-                const bool isNewSpan = lastKey->mTime != mLastActiveSpanStart;
+                const bool isNewSpan = (context != nullptr && !mHasActiveSpanClockOrigin) || lastKey->mTime != mLastActiveSpanStart;
                 if (isNewSpan) mLastActiveSpanStart = lastKey->mTime;
 
                 if (lastKey->mValue.mBool)
@@ -1230,6 +1230,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     {
                         mStartTime = startTime;
                         ls->SetPlaying(true, piTick::ToMicroSeconds(timeSinceStart));
+                        if (context != nullptr) ls->SetForceRestart(true);
 #ifdef _DEBUG
                         log->Printf(LT_DEBUG, L"[LayerSetState] Starting sound %s", mName.GetS());
 #endif

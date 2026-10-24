@@ -5,12 +5,16 @@ namespace ImmPlayer
 {
     public sealed partial class ImmLiveEditPanel
     {
-        private const uint ClockPreview = 256;
+        private const uint ClockPreview = 256, ClockPreviewAudioEnabled = 512, ClockPreviewAudioPending = 1024;
         private bool previewCameraSaved;
         private Vector3 mainCameraPosition;
         private Quaternion mainCameraRotation;
         private float mainCameraNear, mainCameraFar;
         private bool TimelinePreviewActive => timelineClockValid && (timelineClock.flags & ClockPreview) != 0;
+        private bool TimelinePreviewAudioEnabled => TimelinePreviewActive && (timelineClock.flags & ClockPreviewAudioEnabled) != 0;
+        private string TimelinePreviewAudioStatus => (timelineClock.flags & ClockPreviewAudioPending) != 0
+            ? "Waiting for main audio pause"
+            : TimelinePreviewAudioEnabled ? "Preview audio enabled" : "Preview audio muted";
 
         private bool PreviewCanEditLayer(int layer)
         {

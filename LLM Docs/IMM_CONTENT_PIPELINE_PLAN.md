@@ -4632,6 +4632,47 @@ the historical sizes/check counts below describe this earlier source only.
    (13 jobs passed at the latest check, no reported failure). Neither is accepted;
    final acceptance must name the exact source head whose evidence was checked.
 
+### 6.131. Independent audio preview sessions and test UI controls
+
+1. Preview now owns a transactionally created set of duplicate voices. Enable
+   stages every voice before changing runtime evaluation; partial failure destroys
+   staged resources and leaves preview muted. Mute, exit and unload release voices
+   before borrowed importer audio bytes can disappear. Original document voices
+   remain paused and retain their cursors; sounds in other documents are untouched.
+2. The existing preview control adds actions 5 (enable audio) and 6 (mute). Clock
+   flags add enabled/pending bits without changing the 96-byte descriptor or API
+   versions. The sample exposes Enable/Mute and main-pause waiting status on a
+   separate row. It remains a development test UI.
+3. Audio-enabled playback waits for actual original-voice pause acknowledgement
+   without consuming preview time. Recovery, pause/resume and muting reanchor child
+   clocks with the boundary. Voice dispatch respects nested Stop, finite repeats,
+   visibility and context-relative transforms. Sound runtime resets restore authored
+   initial Play intent; keyless sounds sample seek offsets once. A first Visibility
+   key at zero now starts a freshly reset scoped Sound; the next tick does not
+   retrigger it. Same-offset repeated spans explicitly request a duplicate restart.
+4. Native Release, the CPU authoring suite and loaded WARP C ABI suite pass. The
+   Document fixture covers partial acquisition rollback, first-span offsets,
+   original-pause time retention, paused seeking, mute/re-enable, finite end,
+   nested Stop, main restoration and exactly-once unload cleanup. The C ABI check
+   rejects enabling audio when the bridge has no sound engine without altering
+   the held clock, and checks mute/invalid controls. Managed compilation passes.
+5. Nine live Unity test steps pass actual button/ruler events with a generated
+   two-tone IMM: begin paused, enable, play, pause, seek to frame48, play after seek,
+   mute, re-enable and return to scene. Main time stays held during preview and
+   advances afterward. The enabled UI screenshot was inspected. The first probe
+   used an incorrect ruler rectangle and clicked frame49; correcting the probe to
+   use the UI's track rectangle gives exact frame48. No production seek fix was
+   needed. Current Editor log has no preview-audio/compile/exception errors.
+6. Evidence: artifacts/audio-preview-session-{native-build,cpu-final,cpu-run}.log,
+   audio-preview-session-cpu-report.json, audio-preview-session-cabi/report.json,
+   live-panel-compile/preview-audio-button-build.log, audio-preview-ui-probe.json
+   and audio-preview-ui-enabled.png. The ignored fixture generator and original
+   wrong-coordinate probe receipt remain available. Offline mixer proof is in
+   6.130; this live check proves UI/native state and lifecycle, not audible output.
+7. Goal remains active. Audible Unity/device confirmation, Action editing and the
+   remaining requirements in 6.127 are not complete. Session code is being finalized
+   into a source/DLL milestone before its own full hosted validation run.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

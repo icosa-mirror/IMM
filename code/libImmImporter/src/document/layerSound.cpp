@@ -23,7 +23,7 @@ namespace ImmImporter
 
     void LayerSound::ResetRuntimePlaybackState()
     {
-        RestoreRuntimePlaybackState({ false, false, 0, false, 0.0f });
+        RestoreRuntimePlaybackState({ mSourcePlaying, false, 0, false, 0.0f });
     }
 
 	LayerSound::LayerSound()

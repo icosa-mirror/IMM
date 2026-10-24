@@ -32,6 +32,19 @@ namespace ImmPlayer
     };
     struct Document::TimelinePreviewSession
     {
+        struct DeleteVoice
+        {
+            LayerRendererSound * renderer;
+            piSoundEngine * sound;
+            void operator()(LayerRendererSound::PreviewVoice * voice) const
+            { renderer->DestroyPreviewVoice(sound, voice); }
+        };
+        struct Voice
+        {
+            Layer * layer;
+            std::unique_ptr<LayerRendererSound::PreviewVoice, DeleteVoice> handle;
+            bool restart = true;
+        };
         struct SavedLayer
         {
             Layer * layer;
@@ -44,10 +57,12 @@ namespace ImmPlayer
         };
         Layer::EvaluationContext context;
         std::vector<SavedLayer> saved;
+        std::vector<Voice> voices;
         piTick mainCPUTime = piTick(0);
         PlaybackState mainPlayback = PlaybackState::Paused;
         bool playing = false;
         bool exitRequested = false;
+        bool mainAudioReady = false;
         piLog * log = nullptr;
     };
 
@@ -60,6 +75,12 @@ namespace ImmPlayer
     piTick Document::GetTimelineMainCPUTime() const
     { return mTimelinePreview ? mTimelinePreview->mainCPUTime : mLastCPUTime; }
 
+    bool Document::GetTimelinePreviewAudioEnabled() const
+    { return mTimelinePreview && mTimelinePreview->context.mAudioEnabled; }
+
+    bool Document::GetTimelinePreviewAudioPending() const
+    { return GetTimelinePreviewAudioEnabled() && !mTimelinePreview->mainAudioReady; }
+
     bool Document::PauseTimelinePreviewSounds(LayerRendererSound * renderer, piSoundEngine * sound)
     {
         if (!mTimelinePreview || !sound) return true;
@@ -69,9 +90,69 @@ namespace ImmPlayer
         return ready;
     }
 
+    void Document::GlobalWorkTimelinePreviewAudio(LayerRendererSound * renderer, piSoundEngine * sound,
+        piLog * log, float volume, piTick now)
+    {
+        if (!mTimelinePreview) return;
+        auto & preview = *mTimelinePreview;
+        const bool ready = PauseTimelinePreviewSounds(renderer, sound);
+        if (!preview.context.mAudioEnabled) return;
+        auto & context = preview.context;
+        if (ready && !preview.mainAudioReady)
+        {
+            // Waiting for the original voices must not consume preview time.
+            iReanchorTimelinePreviewClock(now);
+            preview.mainAudioReady = true;
+            context.mHeld = !preview.playing;
+            iEvaluateTimelinePreview(now, log);
+        }
+        else if (!ready)
+        {
+            preview.mainAudioReady = false;
+            context.mHeld = true;
+        }
+        for (auto & voice : preview.voices)
+        {
+            bool advancing = preview.playing && ready && !context.mHeld && !context.mActionHeld &&
+                voice.layer->GetWorldVisible(&context);
+            for (Layer * timeline = voice.layer->GetTimeline(&context); advancing; timeline = timeline->GetTimeline(&context))
+            {
+                const bool boundary = timeline == context.mBoundary;
+                const piTick duration = boundary ? context.mBoundaryDuration : timeline->GetDuration();
+                const uint32_t repeat = boundary ? context.mBoundaryRepeatCount : timeline->GetEvaluatedMaxRepeatCount();
+                const piTick elapsed = timeline->GetTimelineElapsed(now, &context);
+                if ((!boundary && (!timeline->GetPlaying() || timeline->HasStopTime())) ||
+                    (duration > piTick(0) && repeat && piTick::CastInt(elapsed) / piTick::CastInt(duration) >= repeat))
+                    advancing = false;
+                if (boundary) break;
+            }
+            auto * source = static_cast<LayerSound *>(voice.layer->GetImplementation());
+            const trans3d transform = voice.layer->GetTransformToWorld(&context);
+            if (renderer->UpdatePreviewVoice(sound, log, voice.layer, voice.handle.get(), volume,
+                advancing, voice.restart || source->GetForceRestart(), &transform))
+            {
+                voice.restart = false;
+                source->SetForceRestart(false);
+            }
+        }
+    }
+
+    void Document::iReanchorTimelinePreviewClock(piTick now)
+    {
+        auto & preview = *mTimelinePreview;
+        auto & context = preview.context;
+        const piTick shift = now - (context.mBoundaryStartTime + context.mBoundaryElapsed);
+        for (auto & saved : preview.saved)
+            if (saved.layer != context.mBoundary && context.Contains(saved.layer))
+                saved.layer->RestorePlaybackState(saved.layer->CapturePlaybackState(), shift);
+        context.mBoundaryStartTime = now - context.mBoundaryElapsed;
+    }
+
     void Document::iEndTimelinePreview(piTick now)
     {
         if (!mTimelinePreview) return;
+        // Duplicate decoders borrow the importer payload; release them first.
+        mTimelinePreview->voices.clear();
         const piTick shift = now - mTimelinePreview->mainCPUTime;
         for (const auto & saved : mTimelinePreview->saved)
         {
@@ -96,9 +177,31 @@ namespace ImmPlayer
     void Document::iEvaluateTimelinePreview(piTick now, piLog * log)
     {
         auto & preview = *mTimelinePreview;
-        if (preview.playing) preview.context.mBoundaryElapsed = now - preview.context.mBoundaryStartTime;
+        if (preview.playing && !preview.context.mActionHeld &&
+            (!preview.context.mAudioEnabled || preview.mainAudioReady))
+            preview.context.mBoundaryElapsed = now - preview.context.mBoundaryStartTime;
         auto evaluate = [&](Layer * layer, int, int, bool) -> bool
-        { layer->SetStateAt(now, log, &preview.context); return true; };
+        {
+            // Keyless sounds retain their authored initial Play intent. On a
+            // seek/enable, sample their parent clock once, not on every frame.
+            if (preview.context.mAudioEnabled && layer->GetType() == Layer::Type::Sound &&
+                layer->GetNumAnimKeys(Layer::AnimProperty::Visibility) == 0)
+            {
+                auto * source = static_cast<LayerSound *>(layer->GetImplementation());
+                if (source->GetForceRestart())
+                {
+                    Layer * timeline = layer->GetTimeline(&preview.context);
+                    const bool boundary = timeline == preview.context.mBoundary;
+                    const piTick duration = boundary ? preview.context.mBoundaryDuration : timeline->GetDuration();
+                    const uint32_t repeat = boundary ? preview.context.mBoundaryRepeatCount : timeline->GetEvaluatedMaxRepeatCount();
+                    const piTick elapsed = timeline->GetTimelineElapsed(now, &preview.context);
+                    const piTick local = duration > piTick(0) ?
+                        (repeat && piTick::CastInt(elapsed) / piTick::CastInt(duration) >= repeat ? duration : elapsed % duration) : elapsed;
+                    source->SetPlaying(source->GetSourcePlaying(), piTick::ToMicroSeconds(local));
+                }
+            }
+            layer->SetStateAt(now, log, &preview.context); return true;
+        };
         preview.context.mBoundary->Recurse(evaluate, 0, 0, false, false, false, false, false);
         if (!preview.playing)
             for (auto & saved : preview.saved)
@@ -106,9 +209,10 @@ namespace ImmPlayer
         ++mEvaluationRevision;
     }
 
-    int32_t Document::ControlTimelinePreview(Layer * boundary, int32_t action, piTick ticks, piTick now, piLog * log)
+    int32_t Document::ControlTimelinePreview(Layer * boundary, int32_t action, piTick ticks, piTick now, piLog * log,
+        LayerRendererSound * renderer, piSoundEngine * sound)
     {
-        if (action < 0 || action > 4 || ticks < piTick(0)) return -2;
+        if (action < 0 || action > 6 || ticks < piTick(0)) return -2;
         if (mState.mLoadingState != LoadingState::Loaded || !mEditing) return -4;
         if (action == 4)
         {
@@ -161,7 +265,44 @@ namespace ImmPlayer
         }
         auto & preview = *mTimelinePreview;
         auto & context = preview.context;
-        if (action == 0 || action == 1)
+        if (action == 5)
+        {
+            if (context.mAudioEnabled) return 0;
+            if (!renderer || !sound) return -4;
+            // Stage all resources before changing evaluation or runtime intent.
+            std::vector<TimelinePreviewSession::Voice> staged;
+            for (auto & saved : preview.saved)
+                if (saved.sound && context.Contains(saved.layer))
+                {
+                    std::unique_ptr<LayerRendererSound::PreviewVoice, TimelinePreviewSession::DeleteVoice> handle(
+                        renderer->CreatePreviewVoice(sound, log, saved.layer), { renderer, sound });
+                    if (!handle) return -5;
+                    staged.push_back({ saved.layer, std::move(handle), true });
+                }
+            if (preview.playing) iEvaluateTimelinePreview(now, log);
+            preview.voices.swap(staged);
+            preview.mainAudioReady = false;
+            context.mAudioEnabled = true;
+            context.mHeld = true;
+            for (auto & saved : preview.saved)
+                if (saved.sound && context.Contains(saved.layer))
+                {
+                    saved.layer->ResetPlaybackStateForEvaluation();
+                    saved.sound->ResetRuntimePlaybackState();
+                    saved.sound->SetForceRestart(true);
+                }
+            iEvaluateTimelinePreview(now, log);
+        }
+        else if (action == 6)
+        {
+            if (preview.playing) iEvaluateTimelinePreview(now, log);
+            preview.voices.clear();
+            iReanchorTimelinePreviewClock(now);
+            context.mAudioEnabled = false;
+            context.mHeld = !preview.playing;
+            preview.mainAudioReady = false;
+        }
+        else if (action == 0 || action == 1)
         {
             preview.playing = false;
             context.mBoundaryStartTime = now - ticks; context.mBoundaryElapsed = ticks;
@@ -171,9 +312,12 @@ namespace ImmPlayer
                 if (saved.layer != boundary && context.Contains(saved.layer))
                 {
                     saved.layer->ResetPlaybackStateForEvaluation();
+                    if (saved.sound && context.mAudioEnabled)
+                    { saved.sound->ResetRuntimePlaybackState(); saved.sound->SetForceRestart(true); }
                     if (saved.paint)
                     { saved.paint->SetPlaying(false); saved.paint->SetEvaluatedMaxRepeatCount(saved.paint->GetMaxRepeatCount()); saved.paint->SelectFrameAtTime(piTick(0)); }
                 }
+            for (auto & voice : preview.voices) voice.restart = true;
             iEvaluateTimelinePreview(now, log);
             // Seeking marks earlier actions consumed only in this session. An
             // action at the exact target remains available when playback resumes.
@@ -197,13 +341,9 @@ namespace ImmPlayer
         {
             if (!preview.playing)
             {
-                const piTick shift = now - (context.mBoundaryStartTime + context.mBoundaryElapsed);
-                for (auto & saved : preview.saved)
-                    if (saved.layer != boundary && context.Contains(saved.layer))
-                        saved.layer->RestorePlaybackState(saved.layer->CapturePlaybackState(), shift);
-                context.mBoundaryStartTime = now - context.mBoundaryElapsed;
+                iReanchorTimelinePreviewClock(now);
             }
-            preview.playing = true; context.mHeld = false;
+            preview.playing = true; context.mHeld = context.mAudioEnabled && !preview.mainAudioReady;
         }
         else if (action == 3)
         {

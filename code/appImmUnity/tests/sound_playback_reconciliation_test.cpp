@@ -2,10 +2,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <chrono>
+#include <thread>
 #include "libImmCore/src/libSound/piSoundEngine.h"
 #include "libImmImporter/src/document/layerSound.h"
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmPlayer/src/layerRenderers/layerRendererSound/layerRendererSound.h"
+#include "libImmPlayer/src/document.h"
+#include "libImmImporter/src/fromImmersive/fromImmersive.h"
 
 namespace
 {
@@ -40,9 +44,15 @@ namespace
         };
         std::map<int, Voice> voices;
         int nextVoice = 17;
+        int failAddAfter = -1;
 
         PlaybackState & StateFor(int id) { return id == 17 ? state : voices[id].state; }
-        int AddVoice() { const int id = nextVoice++; voices[id] = Voice{}; return id; }
+        int AddVoice()
+        {
+            if (failAddAfter == 0) return -1;
+            if (failAddAfter > 0) --failAddAfter;
+            const int id = nextVoice++; voices[id] = Voice{}; return id;
+        }
 
         bool Play(int id, uint64_t offset) override
         {
@@ -332,4 +342,167 @@ void CheckSoundPlaybackReconciliation()
     RequireSound(starting && pendingPause && pauseRetry && resumeRetry && pendingResume && unownedPause && independentPreview,
         "real renderer must reconcile desired pause/resume against acknowledged engine state");
     std::puts("[IMM_SOUND_RECONCILE_TEST] pass=1 startingPause=1 pendingPauseResume=1 pauseRetry=1 resumeRetry=1 pendingResumePause=1 unownedPausePreserved=1 noAudibleClaim=1");
+}
+
+void CheckDocumentPreviewAudio(const wchar_t * fixturePath)
+{
+    piLog log;
+    RequireSound(log.Init(L"artifacts/document-preview-audio.log", PILOG_TXT), "document audio log");
+    Document doc;
+    ControlledSoundEngine engine;
+    LayerRendererSound renderer;
+    RequireSound(doc.Init(L"preview-audio", 0) && renderer.Init(nullptr, &log, Drawing::ColorSpace::Linear, false),
+        "document audio fixture initialization");
+    piTick now(1000000);
+    const auto cpu = [&](const Document::Command * command = nullptr) {
+        doc.UpdateStateCPU(&renderer, nullptr, nullptr, nullptr, Drawing::ColorSpace::Linear,
+            Drawing::PaintRenderingTechnique::Static, &engine, &log, now, command);
+        doc.UpdateStateGPU(nullptr, nullptr, nullptr, nullptr, &log, Drawing::ColorSpace::Linear);
+    };
+    Document::Command load{};
+    load.mType = Document::Command::Type::Load; load.mFileType = Document::ImportType::IMM_disk;
+    RequireSound(load.mStrArg.Init(1024) && load.mStrArg.CopyW(fixturePath), "document audio fixture path");
+    cpu(&load);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while ((doc.GetLoadingState() != Document::LoadingState::Loaded || IsLoadingAsync(doc.GetSequence())) &&
+        std::chrono::steady_clock::now() < deadline)
+    { std::this_thread::sleep_for(std::chrono::milliseconds(1)); cpu(); }
+    RequireSound(doc.GetLoadingState() == Document::LoadingState::Loaded && !IsLoadingAsync(doc.GetSequence()),
+        "document audio fixture loaded");
+    Sequence * sequence = doc.GetSequence();
+    Layer * root = sequence->GetRoot();
+    Layer * boundary = sequence->CreateLayer(root);
+    RequireSound(boundary && boundary->Init(Layer::Type::Group, L"AudioPreview", true, trans3d::identity(),
+        trans3d::identity(), 1.0f, true, piTick(1000), 0, UINT32_MAX, &log), "document audio boundary");
+    const auto addTimeline = [&](const wchar_t * name, int duration, int stop) {
+        Layer * timeline = sequence->CreateLayer(boundary);
+        RequireSound(timeline && timeline->Init(Layer::Type::Group, name, true, trans3d::identity(),
+            trans3d::identity(), 1.0f, true, piTick(duration), 1, UINT32_MAX, &log), "nested audio timeline");
+        Layer::AnimValue key{}; key.mBool = true;
+        RequireSound(timeline->AddKey(piTick(0), Layer::AnimProperty::Visibility, key, Layer::InterpolationType::None),
+            "nested audio timeline visibility");
+        if (stop > 0)
+        {
+            key = Layer::AnimValue{}; key.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+            RequireSound(timeline->AddKey(piTick(stop), Layer::AnimProperty::Action, key, Layer::InterpolationType::None),
+                "nested audio Stop");
+        }
+        return timeline;
+    };
+    Layer * finite = addTimeline(L"FiniteAudio", 80, 0);
+    Layer * stopped = addTimeline(L"StoppedAudio", 0, 60);
+    const auto addSound = [&](Layer * parent, const wchar_t * name, int offset) {
+        Layer * layer = sequence->CreateLayer(parent);
+        RequireSound(layer && layer->Init(Layer::Type::Sound, name, true, trans3d::identity(), trans3d::identity(),
+            1.0f, false, piTick(0), 1, UINT32_MAX, &log), "document PCM layer");
+        auto * sound = new LayerSound();
+        LayerSound::AttenuationParameters attenuation{}; LayerSound::ModifierParameters modifier{};
+        RequireSound(sound->Init(false, false, 1.0f, attenuation, modifier, LayerSound::Type::Flat, 1.0f, &log) &&
+            sound->GetSound()->Init(48000, 1, 16, 48), "document tiny PCM payload");
+        layer->SetImplementation(sound); layer->SetLoaded(true); sound->SetVolume(1.0f);
+        if (offset >= 0)
+        {
+            Layer::AnimValue key{}; key.mBool = true;
+            RequireSound(layer->AddKey(piTick(0), Layer::AnimProperty::Visibility, key, Layer::InterpolationType::None), "PCM visibility0");
+            key.mInt = offset;
+            RequireSound(layer->AddKey(piTick(0), Layer::AnimProperty::Offset, key, Layer::InterpolationType::None), "PCM offset0");
+        }
+        RequireSound(renderer.LoadInCPU(&log, layer) && renderer.LoadInSPU(&engine, &log, layer), "document PCM original voice");
+        return layer;
+    };
+    Layer * mainLayer = addSound(root, L"MainAudio", -1);
+    Layer * first = addSound(finite, L"LocalAudioA", 100);
+    Layer * second = addSound(stopped, L"LocalAudioB", 200);
+    auto * mainSound = static_cast<LayerSound *>(mainLayer->GetImplementation());
+    auto * firstSound = static_cast<LayerSound *>(first->GetImplementation());
+    const int originalGpu = firstSound->GetGpuId();
+    mainSound->SetPlaying(true);
+    renderer.GlobalWork(nullptr, &engine, &log, mainLayer, 1.0f);
+    engine.state = piSoundEngine::PlaybackState::Playing;
+    const auto originalMain = mainSound->CaptureRuntimePlaybackState();
+    const auto originalFirst = firstSound->CaptureRuntimePlaybackState();
+    RequireSound(doc.AttachEditing(), "attach document audio fixture");
+    const auto control = [&](int action, int tick = 0) {
+        return doc.ControlTimelinePreview(boundary, action, piTick(tick), now, &log, &renderer, &engine);
+    };
+    const auto audio = [&]() { doc.GlobalWorkTimelinePreviewAudio(&renderer, &engine, &log, 1.0f, now); };
+    RequireSound(control(0, 20) == 0, "begin paused document audio preview");
+    engine.failAddAfter = 1;
+    const int rollbackId = engine.nextVoice;
+    RequireSound(control(5) == -5 && !doc.GetTimelinePreviewAudioEnabled() && !doc.GetTimelinePreviewAudioPending() &&
+        engine.voices[rollbackId].deletions == 1 && engine.voices[17].deletions == 0,
+        "partial audio enable failure rolls back duplicate only");
+    engine.failAddAfter = -1;
+    const int cloneA = engine.nextVoice, cloneB = cloneA + 1;
+    RequireSound(control(5) == 0 && doc.GetTimelinePreviewAudioEnabled(), "enable paused document preview audio");
+    RequireSound(firstSound->GetPlaying() && firstSound->GetOffset() == piTick::ToMicroSeconds(piTick(120)),
+        "canonical-visible sound visibility0 starts first scoped span with active offset");
+    audio();
+    RequireSound(engine.voices[cloneA].plays == 0 && engine.voices[cloneB].plays == 0 && doc.GetTimelinePreviewAudioPending(),
+        "paused enable cannot Play and main pause remains pending");
+    RequireSound(control(2) == 0, "play pending audio preview");
+    audio();
+    now = now + piTick(100); cpu(); audio();
+    RequireSound(doc.GetTimelinePreviewContext()->mBoundaryElapsed == piTick(20),
+        "pending original pause cannot consume preview clock time");
+    RequireSound(engine.voices[cloneA].plays == 0 && engine.voices[17].plays == 1 && engine.voices[17].stops == 0,
+        "duplicate playback waits for actual original pause");
+    engine.state = piSoundEngine::PlaybackState::StoppingStarted; audio();
+    RequireSound(doc.GetTimelinePreviewAudioPending() && engine.voices[cloneA].plays == 0, "logical stopping is not pause acknowledgment");
+    engine.state = piSoundEngine::PlaybackState::Paused; audio();
+    RequireSound(!doc.GetTimelinePreviewAudioPending() && engine.voices[cloneA].plays == 1 && engine.voices[cloneB].plays == 1 &&
+        engine.voices[cloneA].offset == piTick::ToMicroSeconds(piTick(120)) &&
+        doc.GetTimelinePreviewContext()->mBoundaryElapsed == piTick(20), "acknowledged pause reanchors without a preview time jump");
+    engine.StateFor(cloneA) = engine.StateFor(cloneB) = piSoundEngine::PlaybackState::Playing;
+    now = now + piTick(1); cpu(); audio();
+    RequireSound(firstSound->GetOffset() == piTick::ToMicroSeconds(piTick(120)) && engine.voices[cloneA].plays == 1,
+        "next scoped tick does not restart first visibility span");
+    RequireSound(control(3) == 0, "pause document preview audio"); audio();
+    engine.StateFor(cloneA) = engine.StateFor(cloneB) = piSoundEngine::PlaybackState::Paused;
+    RequireSound(control(1, 50) == 0, "seek paused audio preview"); audio();
+    RequireSound(engine.voices[cloneA].plays == 1 && firstSound->GetOffset() == piTick::ToMicroSeconds(piTick(150)),
+        "paused audio seek updates intent without Play");
+    RequireSound(control(2) == 0, "resume sought preview audio"); audio();
+    RequireSound(engine.voices[cloneA].plays == 2 && engine.voices[cloneA].offset == piTick::ToMicroSeconds(piTick(150)),
+        "sought preview starts duplicate at new offset");
+    RequireSound(control(6) == 0 && !doc.GetTimelinePreviewAudioEnabled() &&
+        engine.voices[cloneA].deletions == 1 && engine.voices[cloneB].deletions == 1, "mute deletes all duplicate voices");
+    const int reenabledA = engine.nextVoice;
+    RequireSound(control(5) == 0, "reenable document audio"); audio();
+    RequireSound(engine.voices[reenabledA].plays == 1 && firstSound->GetGpuId() == originalGpu,
+        "reenable creates new voices without replacing source handles");
+    engine.StateFor(reenabledA) = engine.StateFor(reenabledA + 1) = piSoundEngine::PlaybackState::Playing;
+    now = now + piTick(40); cpu(); audio(); // Natural local50 -> local90 crosses Stop60 and finite end80.
+    const auto * context = doc.GetTimelinePreviewContext();
+    RequireSound(context->mBoundaryElapsed == piTick(90) && finite->GetTimelineElapsed(now, context) == piTick(90) &&
+        stopped->IsStoppedByAction() && stopped->GetTimelineElapsed(now, context) == piTick(59),
+        "natural advance retains independent finite and authored Stop clocks");
+    RequireSound(engine.voices[reenabledA].plays == 1 && engine.voices[reenabledA + 1].plays == 1 &&
+        engine.StateFor(reenabledA) == piSoundEngine::PlaybackState::PausingStarted &&
+        engine.StateFor(reenabledA + 1) == piSoundEngine::PlaybackState::PausingStarted,
+        "finite end and nested Stop pause duplicate voices without replay");
+    RequireSound(control(4) == 0 && !doc.GetTimelinePreviewBoundary() &&
+        engine.voices[reenabledA].deletions == 1 && engine.voices[reenabledA + 1].deletions == 1,
+        "preview exit destroys duplicates");
+    const auto restoredMain = mainSound->CaptureRuntimePlaybackState();
+    const auto restoredFirst = firstSound->CaptureRuntimePlaybackState();
+    RequireSound(restoredMain.playing == originalMain.playing && restoredMain.paused == originalMain.paused &&
+        restoredMain.offset == originalMain.offset && restoredMain.forceRestart == originalMain.forceRestart && restoredMain.volume == originalMain.volume &&
+        restoredFirst.playing == originalFirst.playing && restoredFirst.paused == originalFirst.paused &&
+        restoredFirst.offset == originalFirst.offset && restoredFirst.forceRestart == originalFirst.forceRestart && restoredFirst.volume == originalFirst.volume,
+        "document exit restores complete main sound runtime");
+    renderer.GlobalWork(nullptr, &engine, &log, mainLayer, 1.0f);
+    RequireSound(engine.voices[17].plays == 1 && engine.voices[17].stops == 0 && engine.voices[17].resumes == 1,
+        "document exit resumes original cursor without replay or stop");
+    engine.state = piSoundEngine::PlaybackState::Playing;
+    RequireSound(control(0) == 0 && control(5) == 0, "begin audio session before unload");
+    const int unloadClone = engine.nextVoice - 2;
+    doc.UnloadSync(&renderer, nullptr, nullptr, nullptr, Drawing::ColorSpace::Linear,
+        Drawing::PaintRenderingTechnique::Static, &engine, nullptr, &log, now);
+    RequireSound(doc.GetLoadingState() == Document::LoadingState::UnloadingCompleted &&
+        engine.voices[unloadClone].deletions == 1 && engine.voices[unloadClone + 1].deletions == 1 &&
+        engine.voices[17].deletions == 1 && engine.voices[18].deletions == 1 && engine.voices[19].deletions == 1,
+        "document unload releases duplicates and source voices exactly once");
+    doc.End(); renderer.Deinit(nullptr, &log); load.mStrArg.End(); log.End();
+    std::puts("[IMM_DOCUMENT_PREVIEW_AUDIO_TEST] pass=1 firstSpan0=1 pauseBarrier=1 pendingClockRetention=1 pausedSeek=1 finiteEnd=1 nestedStop=1 enableRollback=1 muteReenable=1 exitRestoration=1 unloadCleanup=1 noAudibleClaim=1");
 }
