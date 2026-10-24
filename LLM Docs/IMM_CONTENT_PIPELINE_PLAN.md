@@ -4457,6 +4457,25 @@ the historical sizes/check counts below describe this earlier source only.
    the iOS job and actual iOS visual classifier; macOS and final hosted acceptance
    remain pending. No cancelled run counts as accepted validation.
 
+### 6.126. Android native-input lifetime after licence serialization
+
+1. Baseline full 40053560065 failed both Android player builds before licence
+   activation: `Download same-commit Android Unity native plugin` could no longer
+   find `Internal-ImmViewerPlugin-Android`. Packaging had deleted it at 02:35 UTC;
+   the serialized consumers requested it at 03:01/03:02 UTC. Evidence:
+   artifacts/timeline-ci-agent-586-android-artifact-lifetime-audit.json.
+2. Retained that same-run native input through packaging cleanup and extended its
+   automatic retention to seven days. Consumer selection and strict native APK
+   provenance remain unchanged. Other intermediate cleanup remains in place.
+3. The existing workflow matrix verifier now rejects premature Android-input
+   deletion or retention under seven days. It fails twice against old source and
+   passes all 53 jobs after this fix; Python compilation and whitespace checks
+   pass. Evidence: artifacts/android-native-artifact-lifetime-{red,green}.log.
+4. Source-affected Stop full 40056793691 also requires replacement, rather than
+   retrying a deleted input. Its evidence is preserved before cancellation. New
+   full validation will follow actual Unity-owner cleanup. Draw-in code/test work
+   is currently uncommitted and paused while this CI regression is corrected.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

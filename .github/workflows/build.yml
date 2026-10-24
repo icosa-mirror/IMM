@@ -771,7 +771,8 @@ jobs:
         name: Internal-ImmViewerPlugin-Android
         path: artifacts/Internal-ImmViewerPlugin-Android/libImmUnityPlugin.so
         if-no-files-found: error
-        retention-days: 1
+        # Serialized Android player builds can start after native packaging ends.
+        retention-days: 7
 
     - name: Upload Stroke Reader
       shell: bash
@@ -1344,7 +1345,6 @@ jobs:
             'Internal-ImmStrokeReaderPlugin-macOS',
             'Internal-ImmStrokeReaderPlugin-iOS',
             'Internal-ImmViewerPlugin-Windows',
-            'Internal-ImmViewerPlugin-Android',
             'Internal-ImmViewerPlugin-macOS',
             'Internal-ImmViewerPlugin-iOS',
           ]);

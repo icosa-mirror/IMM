@@ -1083,6 +1083,22 @@ def verify_godot_vulkan_smoke_contract(root: Path, errors: list[str]) -> None:
             errors.append(f"{script_rel} missing composition smoke contract token: {token}")
 
 
+def verify_android_native_artifact_lifetime(root: Path, errors: list[str]) -> None:
+    """Early Android consumers may wait behind serialized Unity jobs."""
+    text = (root / ".github/workflows/build.yml").read_text(encoding="utf-8")
+    artifact = "Internal-ImmViewerPlugin-Android"
+    uploads = re.finditer(r"(?ms)^    - name: .*?\n.*?(?=^    - |^  [\w-]+:|\Z)", text)
+    producer = next((step.group() for step in uploads
+                     if "uses: actions/upload-artifact@" in step.group()
+                     and f"name: {artifact}\n" in step.group()), "")
+    retention = re.search(r"retention-days:\s*(\d+)", producer)
+    if not retention or int(retention.group(1)) < 7:
+        errors.append("Same-run Android Unity native input must retain at least seven days for queued consumers")
+    cleanup = re.search(r"(?ms)^    - name: Delete intermediate plugin artifacts\n.*?(?=^    - |^  [\w-]+:|\Z)", text)
+    if cleanup and artifact in cleanup.group():
+        errors.append("Native packaging must not delete the Android Unity input before queued player builds consume it")
+
+
 def verify_unity_license_ownership(root: Path, errors: list[str]) -> None:
     """Serialize actual shared-license owners without locking reusable parents."""
     group = "imm-shared-unity-license"
@@ -1219,6 +1235,7 @@ def main() -> int:
     verify_early_android_orchestration_contract(root / ".github/workflows/ci-validation.yml", ".github/workflows/ci-validation.yml", errors)
     verify_render_contract_references(root, errors)
     verify_unity_license_ownership(root, errors)
+    verify_android_native_artifact_lifetime(root, errors)
 
     if errors:
         for error in errors:
