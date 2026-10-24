@@ -4423,6 +4423,11 @@ the historical sizes/check counts below describe this earlier source only.
    [40055763748](https://github.com/icosa-mirror/IMM/actions/runs/40055763748) is pending.
    Earlier coordinated full runs remain active and unaccepted; no result is
    inferred from local checks or a queued workflow.
+7. Fresh sample startup with the merged CI Windows binary (SHA-256
+   01bb5f9e23e027fb5d1317ffa62c2eb5a2960eaa19593eaff784977e242101ae) passes
+   the nine scoped key/frame/history/return steps again. Evidence:
+   artifacts/timeline-projection-ci-binary-scope-edits.json. This confirms local
+   integration with the replacement binary; hosted acceptance remains pending.
 
 ## 7. Consolidated documents
 
