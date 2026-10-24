@@ -35,6 +35,24 @@ namespace ImmImporter
 		return true;
 	}
 
+    bool Layer::EvaluationContext::Contains(const Layer * layer) const
+    {
+        if (mBoundary == nullptr || mBoundary->GetType() != Type::Group || !mBoundary->GetIsTimeline())
+            return false;
+        for (const Layer * current = layer; current != nullptr; current = current->GetParent())
+            if (current == mBoundary) return true;
+        return false;
+    }
+
+    bool Layer::EvaluationContext::ConsumeAction(const Layer * layer, piTick time)
+    {
+        if (!mActionsEnabled || !Contains(layer) || layer == mBoundary) return false;
+        for (const auto & consumed : mConsumedActions)
+            if (consumed.layerId == layer->GetID() && consumed.time == time) return false;
+        mConsumedActions.push_back(ConsumedAction{layer->GetID(), time});
+        return true;
+    }
+
 	Layer::Layer(Sequence* sq, Layer* parent, uint32_t id)
 	{
 		mSequence = sq;
@@ -189,17 +207,18 @@ namespace ImmImporter
 		}		
 	}
 
-trans3d Layer::GetTransformToWorld(void) const
+trans3d Layer::GetTransformToWorld(const EvaluationContext * context) const
 {
-	trans3d mat = GetTransform();
-
-	Layer* la = mParent;
-	while (la != nullptr)
-	{
-		mat = la->GetTransform() * mat;
-		la = la->mParent;
-	}
-	return mat;
+    if (context != nullptr && (!context->Contains(this) || this == context->mBoundary))
+        return trans3d::identity();
+    trans3d mat = GetTransform();
+    Layer * ancestor = mParent;
+    while (ancestor != nullptr && (context == nullptr || ancestor != context->mBoundary))
+    {
+        mat = ancestor->GetTransform() * mat;
+        ancestor = ancestor->mParent;
+    }
+    return mat;
 }
 
     bool Layer::iCalcFullName(void)
@@ -258,19 +277,15 @@ trans3d Layer::GetTransformToWorld(void) const
 	bool Layer::GetVisible(void) const { return mVisibilityOverrideEnabled ? mVisibilityOverrideValue : mVisible; }
 	bool Layer::GetCanonicalVisible(void) const { return mCanonicalVisible; }
 	bool Layer::GetPotentiallyVisible(void) const { return mPotentiallyVisible; }
-    bool Layer::GetWorldVisible(void) const
+    bool Layer::GetWorldVisible(const EvaluationContext * context) const
     {
-        bool visible = GetVisible();
-        if (visible)
+        if (context != nullptr && !context->Contains(this)) return false;
+        for (const Layer * layer = this; layer != nullptr; layer = layer->mParent)
         {
-            Layer* tmpLa = mParent;
-            while (tmpLa)
-            {
-                if (!tmpLa->GetVisible()) { visible = false; break; }
-                tmpLa = tmpLa->mParent;
-            }
+            if (context != nullptr && layer == context->mBoundary) break;
+            if (!layer->GetVisible()) return false;
         }
-        return visible;
+        return true;
     }
 bool Layer::GetVisibilityOverrideEnabled(void) const { return mVisibilityOverrideEnabled; }
 bool Layer::GetVisibilityOverrideValue(void) const { return mVisibilityOverrideValue; }
@@ -305,17 +320,15 @@ const trans3d &Layer::GetTransformOverrideValue(void) const { return mTransformO
 	float Layer::GetCanonicalOpacity(void) const { return mCanonicalOpacity; }
 	bool Layer::GetOpacityOverrideEnabled(void) const { return mOpacityOverrideEnabled; }
 	float Layer::GetOpacityOverrideValue(void) const { return mOpacityOverrideValue; }
-    float Layer::GetWorldOpacity(void) const
+    float Layer::GetWorldOpacity(const EvaluationContext * context) const
     {
-        float opacity = GetOpacity();
-
-        Layer* tmpLa = mParent;
-        while (tmpLa)
+        if (context != nullptr && !context->Contains(this)) return 0.0f;
+        float opacity = 1.0f;
+        for (const Layer * layer = this; layer != nullptr; layer = layer->mParent)
         {
-            opacity = opacity * tmpLa->GetOpacity();
-            tmpLa = tmpLa->mParent;
+            if (context != nullptr && layer == context->mBoundary) break;
+            opacity *= layer->GetOpacity();
         }
-
         return opacity;
     }
 
@@ -571,17 +584,21 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		return mIsTimeline;
 	}
 
-	Layer * Layer::GetTimeline() const
-	{
-		Layer* layer = mParent;
-		while (layer != nullptr && layer->GetIsTimeline() == false)
-			layer = layer->GetParent();
-
-		if (layer == nullptr)
-			return mSequence->GetRoot();
-		else
-			return layer;
-	}
+    Layer * Layer::GetTimeline(const EvaluationContext * context) const
+    {
+        if (context != nullptr)
+        {
+            if (!context->Contains(this)) return nullptr;
+            if (this == context->mBoundary) return context->mBoundary;
+        }
+        Layer * layer = mParent;
+        while (layer != nullptr && !layer->GetIsTimeline())
+        {
+            if (context != nullptr && layer == context->mBoundary) return layer;
+            layer = layer->GetParent();
+        }
+        return layer != nullptr ? layer : mSequence->GetRoot();
+    }
 
 	uint32_t Layer::GetMaxRepeatCount() const
 	{
@@ -626,24 +643,28 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         return mStoppedByAction;
     }
 
-    piTick Layer::GetTimelineElapsed(piTick now) const
+    piTick Layer::GetTimelineElapsed(piTick now, const EvaluationContext * context) const
     {
-        const Layer* root = mSequence->GetRoot();
-        if (!mHasStopTime && !root->HasStopTime()) return now - mStartTime;
-        piTick clock = mHasStopTime ? mStopTime : now;
-        if (this != root && root->HasStopTime())
+        if (context != nullptr)
         {
-            // Nested clocks must not advance beyond a held root. Ordinary playing
-            // roots take the direct path, without walking timeline ancestors.
-            Layer* timeline = GetTimeline();
-            const piTick parentClock = timeline->GetStartTime() + timeline->GetTimelineElapsed(now);
+            if (!context->Contains(this)) return piTick(0);
+            if (this == context->mBoundary) return context->mBoundaryElapsed;
+        }
+        const Layer * root = context != nullptr ? context->mBoundary : mSequence->GetRoot();
+        const bool rootHeld = context != nullptr ? (context->mHeld || context->mActionHeld) : root->HasStopTime();
+        if (!mHasStopTime && !rootHeld) return now - mStartTime;
+        piTick clock = mHasStopTime ? mStopTime : now;
+        if (this != root && rootHeld)
+        {
+            Layer * timeline = GetTimeline(context);
+            const piTick timelineStart = context != nullptr && timeline == root ?
+                context->mBoundaryStartTime : timeline->GetStartTime();
+            const piTick parentClock = timelineStart + timeline->GetTimelineElapsed(now, context);
             if (clock > parentClock) clock = parentClock;
         }
-        // An authored Stop at tick zero is stored one tick before the start.
         const piTick elapsed = clock - mStartTime;
         return elapsed < piTick(0) ? piTick(0) : elapsed;
     }
-
 
 	piTick Layer::GetDuration() const
 	{
@@ -772,45 +793,57 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		mAnimKeys[static_cast<int>(property)].swap(keys);
 	}
 
-    void Layer::SetStateAt(piTick now, piLog* log)
+    bool Layer::CanEvaluateInContext(const EvaluationContext * context) const
     {
-        SetStateAtImpl(now, log, false);
+        return context == nullptr || (context->Contains(this) && this != context->mBoundary &&
+            (mType != Type::Sound || context->mAudioEnabled));
     }
 
-    void Layer::ReevaluatePaintPlaybackAt(piTick now, piLog * log)
+    void Layer::SetStateAt(piTick now, piLog * log, EvaluationContext * context)
     {
-        if (mType == Type::Paint && dynamic_cast<LayerPaintStatic *>((LayerPaint *)GetImplementation()) != nullptr)
-            SetStateAtImpl(now, log, true);
+        SetStateAtImpl(now, log, false, AnimProperty::MAX, context);
     }
 
-    void Layer::ReevaluateTransformAt(piTick now, piLog * log)
+    void Layer::ReevaluatePaintPlaybackAt(piTick now, piLog * log, EvaluationContext * context)
     {
+        if (CanEvaluateInContext(context) && mType == Type::Paint &&
+            dynamic_cast<LayerPaintStatic *>((LayerPaint *)GetImplementation()) != nullptr)
+            SetStateAtImpl(now, log, true, AnimProperty::MAX, context);
+    }
+
+    void Layer::ReevaluateTransformAt(piTick now, piLog * log, EvaluationContext * context)
+    {
+        if (!CanEvaluateInContext(context)) return;
         if (GetNumAnimKeys(AnimProperty::Transform) == 0)
         {
             mTransform = mCanonicalTransform;
             return;
         }
-        SetStateAtImpl(now, log, false, AnimProperty::Transform);
+        SetStateAtImpl(now, log, false, AnimProperty::Transform, context);
     }
 
-    void Layer::ReevaluateVisibilityAt(piTick now, piLog * log)
+    void Layer::ReevaluateVisibilityAt(piTick now, piLog * log, EvaluationContext * context)
     {
+        if (!CanEvaluateInContext(context)) return;
         if (GetNumAnimKeys(AnimProperty::Visibility) == 0) mVisible = mCanonicalVisible;
-        else SetStateAtImpl(now, log, false, AnimProperty::Visibility);
+        else SetStateAtImpl(now, log, false, AnimProperty::Visibility, context);
     }
 
-    void Layer::ReevaluateOpacityAt(piTick now, piLog * log)
+    void Layer::ReevaluateOpacityAt(piTick now, piLog * log, EvaluationContext * context)
     {
+        if (!CanEvaluateInContext(context)) return;
         if (GetNumAnimKeys(AnimProperty::Opacity) == 0) mOpacity = mCanonicalOpacity;
-        else SetStateAtImpl(now, log, false, AnimProperty::Opacity);
+        else SetStateAtImpl(now, log, false, AnimProperty::Opacity, context);
         if (mType == Type::Sound)
-            static_cast<LayerSound *>(GetImplementation())->SetVolume(GetWorldOpacity());
+            static_cast<LayerSound *>(GetImplementation())->SetVolume(GetWorldOpacity(context));
     }
 
-    void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint, AnimProperty onlyProperty)
+    void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint,
+        AnimProperty onlyProperty, EvaluationContext * context)
     {
+        if (!CanEvaluateInContext(context)) return;
         const bool propertyOnly = onlyProperty != AnimProperty::MAX;
-        Layer* root = mSequence->GetRoot();
+        Layer* root = context != nullptr ? context->mBoundary : mSequence->GetRoot();
         const bool isRoot = this == root;
         const bool isGroup = mType == Type::Group;
         const bool isTimeline = isGroup && mIsTimeline;
@@ -820,10 +853,22 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         const bool isSoundLayer = mType == Type::Sound;
         LayerSound * ls = isSoundLayer ? (LayerSound*)GetImplementation() : nullptr;
 
-        Layer* timeline = GetTimeline();
-        const piTick timelineDuration = timeline->GetDuration();
+        Layer* timeline = GetTimeline(context);
+        const auto durationFor = [&](const Layer * layer) {
+            return context != nullptr && layer == root ? context->mBoundaryDuration : layer->GetDuration();
+        };
+        const auto repeatFor = [&](const Layer * layer) {
+            return context != nullptr && layer == root ? context->mBoundaryRepeatCount : layer->GetEvaluatedMaxRepeatCount();
+        };
+        const auto startFor = [&](const Layer * layer) {
+            return context != nullptr && layer == root ? context->mBoundaryStartTime : layer->GetStartTime();
+        };
+        const auto playingFor = [&](const Layer * layer) {
+            return context != nullptr && layer == root ? context->mPlaying : layer->GetPlaying();
+        };
+        const piTick timelineDuration = durationFor(timeline);
 
-        if (!reevaluatePaint && !propertyOnly && mParent && !mParent->GetWorldVisible())
+        if (!reevaluatePaint && !propertyOnly && mParent && !mParent->GetWorldVisible(context))
         {
             if (isSoundLayer) ls->SetPlaying(false);
             return;
@@ -831,7 +876,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             
 
         // handle stop frames to correct for stop time
-        piTick timeFromStart = timeline->GetTimelineElapsed(now);
+        piTick timeFromStart = timeline->GetTimelineElapsed(now, context);
 
         const auto resolveTimelineRepeat = [&](piTick keyTime) {
             mEvaluatedMaxRepeatCount = mMaxRepeatCount;
@@ -853,7 +898,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
         // handle looping clips
         const int64_t numPlays = (timelineDuration != 0) ? piTick::CastInt(timeFromStart) / piTick::CastInt(timelineDuration) : 0;
-        const piTick timelineTime = (timeline->GetEvaluatedMaxRepeatCount() == 0 || numPlays < timeline->GetEvaluatedMaxRepeatCount()) ?
+        const piTick timelineTime = (repeatFor(timeline) == 0 || numPlays < repeatFor(timeline)) ?
             timelineWrapped : timelineDuration;
 
         // Other timeline controls belong to their parent's effective clock.
@@ -929,7 +974,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                 }
                 else if (prop == AnimProperty::Action)
                 {
-                    if (isSpawnArea) ResetActionStatesAt(piTick(0));
+                    if (isSpawnArea && context == nullptr) ResetActionStatesAt(piTick(0));
                     continue;
                 }
                 lastKey = (AnimKey*)GetAnimKey(prop, 0);
@@ -970,9 +1015,9 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             case AnimProperty::Action:
             {
                 AnimAction action = static_cast<AnimAction>(lastKey->mValue.mInt);
-                if (lastKey->mValue.mBool == false)
+                if (context != nullptr ? context->ConsumeAction(this, lastKey->mTime) : !lastKey->mValue.mBool)
                 {
-                    lastKey->mValue.mBool = true; // flag to only run actions once
+                    if (context == nullptr) lastKey->mValue.mBool = true; // flag to only run actions once
 
                     if (action == AnimAction::Stop)
                     {
@@ -983,8 +1028,13 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     }
                     if (action == AnimAction::MakeDefault && isSpawnArea)
                     {
-                        mSequence->SetInitialSpawnArea(this);
-                        mSequence->SetSpawnAreaNeedsUpdate(true);
+                        if (context != nullptr)
+                            context->mDefaultSpawnAreaLayerId = GetID();
+                        else
+                        {
+                            mSequence->SetInitialSpawnArea(this);
+                            mSequence->SetSpawnAreaNeedsUpdate(true);
+                        }
                         log->Printf(LT_DEBUG, L"[LayerSetState] SpawnArea action %s", mName.GetS());
                     }
                 }
@@ -1006,7 +1056,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                 if (lastKey->mValue.mBool)
                 {
                     timeSinceStart = (timelineTime - lastKey->mTime) + mStartOffset;
-                    const piTick startTime = timeline->GetStartTime() + timeFromStart - timeSinceStart;
+                    const piTick startTime = startFor(timeline) + timeFromStart - timeSinceStart;
 
                     if (reevaluatePaint)
                     {
@@ -1016,7 +1066,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         break;
                     }
 
-                    if (!timeline->GetPlaying())
+                    if (!playingFor(timeline))
                         break;
                     
                     // A finite repeated timeline also starts a new child span at
@@ -1025,14 +1075,14 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     Layer* ti = timeline;
                     // Once this timeline is clamped at its finite end, an
                     // advancing wall clock is not another wrap.
-                    const bool timelineCanWrap = timeline->GetEvaluatedMaxRepeatCount() == 0 || numPlays < timeline->GetEvaluatedMaxRepeatCount();
+                    const bool timelineCanWrap = repeatFor(timeline) == 0 || numPlays < repeatFor(timeline);
                     while (timelineCanWrap && ti != nullptr)
                     {
-                        if ((ti == root || ti->GetIsTimeline()) && ti->GetEvaluatedMaxRepeatCount() != 1 && ti->GetDuration() != 0)
+                        if ((ti == root || ti->GetIsTimeline()) && repeatFor(ti) != 1 && durationFor(ti) != 0)
                         {
-                            const piTick elapsed = ti->GetTimelineElapsed(now);
-                            const int64_t plays = piTick::CastInt(elapsed) / piTick::CastInt(ti->GetDuration());
-                            if (ti->GetEvaluatedMaxRepeatCount() == 0 || plays < ti->GetEvaluatedMaxRepeatCount())
+                            const piTick elapsed = ti->GetTimelineElapsed(now, context);
+                            const int64_t plays = piTick::CastInt(elapsed) / piTick::CastInt(durationFor(ti));
+                            if (repeatFor(ti) == 0 || plays < repeatFor(ti))
                             {
                                 isParentSequenceLooping = true;
                                 break;
@@ -1046,7 +1096,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     // content offset. Decreasing Offset retimes content without
                     // creating another parent-loop iteration. Clock advances
                     // from a real loop or resume retain the existing behavior.
-                    const piTick spanClockOrigin = timeline->GetStartTime() + timeFromStart -
+                    const piTick spanClockOrigin = startFor(timeline) + timeFromStart -
                         (timelineTime - lastKey->mTime);
                     const bool hasRestarted = mHasActiveSpanClockOrigin ?
                         spanClockOrigin > mLastActiveSpanClockOrigin : startTime > mStartTime;
@@ -1090,7 +1140,8 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         break;
                     }
                     const piTick timeSinceStop = (timelineTime - lastKey->mTime) + mStartOffset;
-                    const piTick stopTime = now - timeSinceStop;
+                    const piTick stopTime = context != nullptr ?
+                        startFor(timeline) + timeFromStart - timeSinceStop : now - timeSinceStop;
 
                     if (isTimeline && mIsPlaying)
                     {
@@ -1162,7 +1213,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             return;
         }
         // Handle layerpaint animations
-        if (GetWorldVisible())
+        if (GetWorldVisible(context))
         {
             if (isPaintLayer && lp->GetPlaying())
             {
@@ -1170,7 +1221,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             }
             if (isSoundLayer && ls->GetPlaying())
             {
-                ls->SetVolume(GetWorldOpacity());
+                ls->SetVolume(GetWorldOpacity(context));
             }
         }
     }

@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -9,6 +10,7 @@
 #include "libImmImporter/src/document/layer.h"
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/document/layerSound.h"
+#include "libImmImporter/src/document/layerSpawnArea.h"
 #include "libImmPlayer/src/mngrPlayer.h"
 
 namespace
@@ -184,6 +186,124 @@ static void CheckLayerDrivenSoundOffsets()
         "decreasing midspan Offset alone must not masquerade as an ancestor wrap");
 }
 
+static void CheckIndependentEvaluationContext()
+{
+    using namespace ImmCore;
+    using namespace ImmImporter;
+    piLog log;
+    requireFrames(log.Init(L"artifacts/paint-evaluation-context.log", PILOG_TXT), "context log");
+    Sequence sequence;
+    requireFrames(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "context sequence");
+    sequence.SetInitialSpawnArea(nullptr);
+    sequence.SetSpawnAreaNeedsUpdate(false);
+    Layer * root = sequence.GetRoot();
+    trans3d outside = trans3d::identity(); outside.mTranslation.x = 100;
+    requireFrames(root->Init(Layer::Type::Group, L"Root", false, outside, trans3d::identity(),
+        0.2f, true, piTick(100), 1, UINT32_MAX, &log), "context root");
+    root->SetStartTime(piTick(0)); root->SetStopTime(piTick(2), true, true); root->SetPlaying(false);
+    const auto make = [&](Layer::Type type, Layer * parent, const wchar_t * name, bool visible,
+        float opacity, bool timeline) {
+        Layer * layer = sequence.CreateLayer(parent);
+        requireFrames(layer && layer->Init(type, name, visible, trans3d::identity(), trans3d::identity(),
+            opacity, timeline, piTick::FromFrames(3, 30), 0, UINT32_MAX, &log), "context layer");
+        return layer;
+    };
+    const auto add = [&](Layer * layer, Layer::AnimProperty property, piTick time, const Layer::AnimValue & value) {
+        requireFrames(layer->AddKey(time, property, value, Layer::InterpolationType::None), "context key");
+    };
+    Layer * boundary = make(Layer::Type::Group, root, L"Boundary", false, 0.1f, true);
+    trans3d placement = trans3d::identity(); placement.mTranslation.x = 50;
+    boundary->SetCanonicalTransform(placement);
+    Layer::AnimValue value; value.init(); value.mBool = false;
+    add(boundary, Layer::AnimProperty::Visibility, piTick(0), value);
+    value.mTransform.mTranslation.x = 777;
+    add(boundary, Layer::AnimProperty::Transform, piTick(0), value);
+    add(boundary, Layer::AnimProperty::Loop, piTick(0), value);
+    value.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+    add(boundary, Layer::AnimProperty::Action, piTick(0), value);
+    Layer * paintLayer = make(Layer::Type::Paint, boundary, L"Paint", true, 0.5f, false);
+    auto * paint = new LayerPaintStatic();
+    requireFrames(paint->Init(3, 3, 0, 30, 1), "context paint");
+    for (uint32_t index = 0; index < 3; ++index)
+    {
+        requireFrames(paint->GetDrawing(index)->Init(0), "context drawing");
+        paint->GetFrameBuffer()[index] = index;
+    }
+    paintLayer->SetImplementation(paint);
+    value.init(); value.mBool = true;
+    add(paintLayer, Layer::AnimProperty::Visibility, piTick(0), value);
+    value.mFloat = 0.6f;
+    add(paintLayer, Layer::AnimProperty::Opacity, piTick::FromFrames(1, 30), value);
+    value.mTransform.mTranslation.x = 2;
+    add(paintLayer, Layer::AnimProperty::Transform, piTick::FromFrames(1, 30), value);
+    Layer::EvaluationContext context;
+    context.mBoundary = boundary; context.mBoundaryStartTime = piTick(1000000);
+    context.mBoundaryElapsed = piTick::FromFrames(4, 30);
+    context.mBoundaryDuration = boundary->GetDuration(); context.mBoundaryRepeatCount = boundary->GetMaxRepeatCount();
+    context.mHeld = true;
+    const piTick wallTime = context.mBoundaryStartTime + piTick(99999);
+    boundary->SetStateAt(wallTime, &log, &context);
+    boundary->ReevaluateTransformAt(wallTime, &log, &context);
+    requireFrames(!boundary->GetVisible() && boundary->GetTransform().mTranslation.x == 50 &&
+        !boundary->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool && context.mConsumedActions.empty(),
+        "boundary parent-domain keys are excluded");
+    paintLayer->SetStateAt(wallTime, &log, &context);
+    requireFrames(paint->GetCurrentDrawing() == paint->GetDrawing(1) && paintLayer->GetTimeline(&context) == boundary &&
+        boundary->GetTimelineElapsed(wallTime, &context) == piTick::FromFrames(4, 30),
+        "virtual held clock wraps independently of the original root hold");
+    paintLayer->ReevaluateTransformAt(wallTime, &log, &context);
+    paintLayer->ReevaluateOpacityAt(wallTime, &log, &context);
+    requireFrames(!paintLayer->GetWorldVisible() && paintLayer->GetWorldVisible(&context) &&
+        std::fabs(paintLayer->GetWorldOpacity(&context) - 0.6f) < 0.000001f &&
+        paintLayer->GetTransformToWorld(&context).mTranslation.x == 2 &&
+        paintLayer->GetTransformToWorld().mTranslation.x == 152,
+        "scope excludes outside and boundary visibility, opacity and placement");
+    Layer * inner = make(Layer::Type::Group, boundary, L"Inner", true, 1.0f, true);
+    value.init(); value.mBool = true;
+    add(inner, Layer::AnimProperty::Visibility, piTick(0), value);
+    // Main playback has already consumed this action; preview must still fire
+    // its own action and retain the source's original consumed flag.
+    value.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+    add(inner, Layer::AnimProperty::Action, piTick::FromFrames(1, 30), value);
+    const bool sourceStopConsumed = inner->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool;
+    inner->ReevaluateOpacityAt(wallTime, &log, &context);
+    requireFrames(context.mConsumedActions.empty(), "property-only evaluation never consumes actions");
+    inner->SetStateAt(wallTime, &log, &context);
+    inner->SetStateAt(wallTime + piTick(100), &log, &context);
+    requireFrames(inner->IsStoppedByAction() && context.mConsumedActions.size() == 1 &&
+        inner->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool == sourceStopConsumed &&
+        inner->GetTimelineElapsed(wallTime, &context) == piTick::FromFrames(1, 30) - piTick(1),
+        "descendant Stop holds use session-local action consumption");
+    Layer * spawn = make(Layer::Type::SpawnArea, boundary, L"Spawn", true, 1.0f, false);
+    auto * spawnImpl = new LayerSpawnArea();
+    LayerSpawnArea::Volume volume{}; volume.mType = LayerSpawnArea::Volume::Type::Sphere;
+    volume.mShape.mSphere = vec4(0, 0, 0, 1);
+    requireFrames(spawnImpl->Init(volume, LayerSpawnArea::TrackingLevel::Floor), "context spawn");
+    spawn->SetImplementation(spawnImpl);
+    value.init(); value.mInt = static_cast<uint32_t>(Layer::AnimAction::MakeDefault);
+    add(spawn, Layer::AnimProperty::Action, piTick(0), value);
+    spawn->SetStateAt(wallTime, &log, &context);
+    requireFrames(context.mDefaultSpawnAreaLayerId == spawn->GetID() && sequence.GetInitialSpawnArea() == nullptr &&
+        !sequence.GetSpawnAreaNeedsUpdate() && !spawn->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool,
+        "preview default-spawn action never changes source navigation or flags");
+    Layer * soundLayer = make(Layer::Type::Sound, boundary, L"Sound", true, 1.0f, false);
+    auto * sound = new LayerSound();
+    LayerSound::AttenuationParameters attenuation{}; LayerSound::ModifierParameters modifier{};
+    requireFrames(sound->Init(false, false, 1.0f, attenuation, modifier, LayerSound::Type::Flat, 10.0f, &log), "context sound");
+    soundLayer->SetImplementation(sound); sound->SetPlaying(false); sound->SetPaused(true); sound->SetVolume(0.25f);
+    value.init(); value.mBool = true;
+    add(soundLayer, Layer::AnimProperty::Visibility, piTick(0), value);
+    soundLayer->SetStateAt(wallTime, &log, &context);
+    soundLayer->ReevaluateOpacityAt(wallTime, &log, &context);
+    requireFrames(!sound->GetPlaying() && sound->GetPaused() && sound->GetVolume() == 0.25f,
+        "context defaults cannot start, resume or change shared sound voices");
+    root->ReevaluateVisibilityAt(wallTime, &log, &context);
+    requireFrames(!root->GetVisible() && root->GetStopTime() == piTick(2) && root->IsStoppedByAction() &&
+        !root->GetWorldVisible(&context), "outside state and main root hold stay unchanged");
+    sequence.Deinit(&log); log.End();
+    std::puts("[IMM_LAYER_EVALUATION_CONTEXT_TEST] boundaryClock=1 scopedProperties=1 localActions=1 sharedAudioUntouched=1 foundationOnly=1");
+}
+
 static void CheckLayerDrivenPaintFrameGrowth()
 {
     using namespace ImmCore;
@@ -324,5 +444,6 @@ void CheckPaintFrameTables()
     CheckLayerDrivenPlaybackKeys<LayerPaintStatic>();
     CheckLayerDrivenPlaybackKeys<LayerPaintPretessellated>();
     CheckLayerDrivenSoundOffsets();
+    CheckIndependentEvaluationContext();
     std::puts("[IMM_PAINT_FRAME_TABLE_TEST] detached publication, held selection, zero frames, repeat/offset, append and compaction passed");
 }

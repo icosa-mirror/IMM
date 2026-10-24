@@ -4153,8 +4153,8 @@ the historical sizes/check counts below describe this earlier source only.
    drawing resources remain owned by the original document. The preview boundary
    supplies a virtual clock; its own placement/control keys belong to its parent
    composition and must not be reinterpreted as local content keys.
-3. Native context implementation is in progress. It must exclude outside ancestor
-   visibility/opacity and main-root holds, and use session-local action consumption.
+3. The native Layer context foundation is implemented. It excludes outside ancestor
+   visibility/opacity and main-root holds, and uses session-local action consumption.
    Document transport, renderer scope, context-aware live-edit refresh/framing,
    unload/structural-edit handling and exact main-state restoration are still
    required before enabling nested playback. Restoring an old canonical key/frame
@@ -4164,6 +4164,22 @@ the historical sizes/check counts below describe this earlier source only.
    can be muted, but audible independent preview needs separate voice ownership
    and remains an explicit unfinished requirement. A context foundation alone
    does not satisfy the nested transport feature or complete this goal.
+5. Windows Release build, existing CPU authoring suite and loaded WARP C ABI suite
+   pass with this foundation. The added CPU fixture checks a held independent
+   clock behind hidden/transformed/action-held main ancestors, boundary-key
+   exclusion, scoped properties, session-local Stop/MakeDefault actions,
+   property-only action isolation and unchanged shared sound state. Read-only
+   source review found no blocker. The first CPU assertion mistakenly expected
+   an already-consumed source Stop flag to be false; it now verifies that the
+   preview independently fires the action while preserving that original flag.
+   No production change was needed for that fixture correction. Evidence:
+   artifacts/live-timeline-preview-context-native-build.log,
+   live-timeline-preview-context-cpu/report.json / run.log and
+   live-timeline-preview-context-cabi/report.json / run.log. Fresh live Unity
+   loading/rendering of original Snoopy and frame-13 seeking also pass with the
+   rebuilt DLL (evaluated 6825 ticks); evidence:
+   artifacts/live-timeline-preview-context-live-clock.json. This verifies the
+   ordinary path, not a functioning independent preview.
 
 ## 7. Consolidated documents
 

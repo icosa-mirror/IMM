@@ -105,6 +105,37 @@ namespace ImmImporter
 			InterpolationType mInterpolation;
 		} AnimKey;
 
+        // Explicit evaluation boundary for an independent container clock.
+        // The owner supplies a live timeline Group, nonnegative clock values,
+        // and its canonical duration/repeat. It also owns runtime save/restore;
+        // this context does not clone the graph or restore evaluated state.
+        // While advancing, start+elapsed must equal the evaluation timestamp;
+        // a held clock retains that sum at its hold. Boundary world properties
+        // are identity/visible/opacity1. Audio is disabled unless explicitly owned.
+        struct EvaluationContext
+        {
+            Layer * mBoundary = nullptr;
+            ImmCore::piTick mBoundaryStartTime = ImmCore::piTick(0);
+            ImmCore::piTick mBoundaryElapsed = ImmCore::piTick(0);
+            ImmCore::piTick mBoundaryDuration = ImmCore::piTick(0);
+            uint32_t mBoundaryRepeatCount = 1;
+            bool mPlaying = true; // Logical evaluation intent; may also be held.
+            bool mHeld = false;
+            bool mActionHeld = false;
+            bool mActionsEnabled = true;
+            bool mAudioEnabled = false; // Enabling requires independently owned/restorable voices.
+            struct ConsumedAction
+            {
+                uint32_t layerId;
+                ImmCore::piTick time;
+            };
+            std::vector<ConsumedAction> mConsumedActions;
+            uint32_t mDefaultSpawnAreaLayerId = UINT32_MAX;
+
+            bool Contains(const Layer * layer) const;
+            bool ConsumeAction(const Layer * layer, ImmCore::piTick time);
+        };
+
 
 
 		bool Init(Type type, const wchar_t* name, bool visible, const ImmCore::trans3d & transform, const ImmCore::trans3d& pivot, float opacity, bool isTimeLine, ImmCore::piTick duration, uint32_t maxRepeatCount, uint32_t assetID, ImmCore::piLog *log, bool publishToParent = true);
@@ -121,7 +152,7 @@ namespace ImmImporter
 		bool    GetVisible(void) const;
 		bool    GetCanonicalVisible(void) const;
 		bool    GetPotentiallyVisible(void) const;
-        bool    GetWorldVisible(void) const; // recurses parents
+        bool    GetWorldVisible(const EvaluationContext * context = nullptr) const;
         bool    GetVisibilityOverrideEnabled(void) const;
         bool    GetVisibilityOverrideValue(void) const;
         bool    GetTransformOverrideEnabled(void) const;
@@ -130,7 +161,7 @@ namespace ImmImporter
 		float   GetCanonicalOpacity(void) const;
 		bool    GetOpacityOverrideEnabled(void) const;
 		float   GetOpacityOverrideValue(void) const;
-        float   GetWorldOpacity(void) const;
+        float   GetWorldOpacity(const EvaluationContext * context = nullptr) const;
 
 		ImmCore::trans3d GetTransform(void) const;
 		ImmCore::trans3d GetCanonicalTransform(void) const;
@@ -144,16 +175,16 @@ namespace ImmImporter
 		bool GetLayerUsesDrawin(void) const;
 		bool GetPlaying(void) const;
 		bool GetIsTimeline(void) const;
-		Layer* GetTimeline() const;
+		Layer* GetTimeline(const EvaluationContext * context = nullptr) const;
 		Layer* GetParent() const;                          // a group!
-		ImmCore::trans3d GetTransformToWorld(void) const;
+		ImmCore::trans3d GetTransformToWorld(const EvaluationContext * context = nullptr) const;
 		KeepAlive * GetKeepAlive(void);
 		uint32_t GetMaxRepeatCount(void) const;
         uint32_t GetEvaluatedMaxRepeatCount(void) const;
 		ImmCore::piTick GetStopTime() const;
         bool HasStopTime() const;
         bool IsStoppedByAction() const;
-        ImmCore::piTick GetTimelineElapsed(ImmCore::piTick now) const;
+        ImmCore::piTick GetTimelineElapsed(ImmCore::piTick now, const EvaluationContext * context = nullptr) const;
 		ImmCore::piTick GetDuration() const;
         // Evaluated Offset key value, in the parent timeline's tick domain.
         ImmCore::piTick GetStartOffset() const { return mStartOffset; }
@@ -200,11 +231,11 @@ namespace ImmImporter
 
         void GetLocalTimeOffsetAndVisiblity(ImmCore::piTick rootTime, ImmCore::piTick * offset, bool * visible);
 
-        void SetStateAt(ImmCore::piTick time, ImmCore::piLog* log);
-        void ReevaluatePaintPlaybackAt(ImmCore::piTick time, ImmCore::piLog * log);
-        void ReevaluateTransformAt(ImmCore::piTick time, ImmCore::piLog * log);
-        void ReevaluateOpacityAt(ImmCore::piTick time, ImmCore::piLog * log);
-        void ReevaluateVisibilityAt(ImmCore::piTick time, ImmCore::piLog * log);
+        void SetStateAt(ImmCore::piTick time, ImmCore::piLog* log, EvaluationContext * context = nullptr);
+        void ReevaluatePaintPlaybackAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
+        void ReevaluateTransformAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
+        void ReevaluateOpacityAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
+        void ReevaluateVisibilityAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
 
         // sets default pass through visiblity of groups without animation keys, hides all layers that have keys
         void SetDefaultPlaybackVisibility();
@@ -226,6 +257,7 @@ namespace ImmImporter
 
 	private:
 		bool iCalcFullName(void);
+        bool CanEvaluateInContext(const EvaluationContext * context) const;
 
 
 	private:
@@ -253,7 +285,7 @@ namespace ImmImporter
 		double mDrawInTime;
 		double mAnimParams[4];
         void SetStateAtImpl(ImmCore::piTick time, ImmCore::piLog * log, bool reevaluatePaint,
-            AnimProperty onlyProperty = AnimProperty::MAX);
+            AnimProperty onlyProperty = AnimProperty::MAX, EvaluationContext * context = nullptr);
         ImmCore::piTick mLastActiveSpanStart; // keep track of gapless retriggering
         ImmCore::piTick mLastActiveSpanClockOrigin;
         bool mHasActiveSpanClockOrigin;
