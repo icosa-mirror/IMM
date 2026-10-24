@@ -4773,6 +4773,39 @@ the historical sizes/check counts below describe this earlier source only.
    finite-cascade-clock-cabi/report.json. The separate Continue/media and Play
    button correction is still in progress; MakeDefault and Action UI remain open.
 
+### 6.135. Main Play continues authored Stops and releases media pause
+
+1. The main Play button now uses the existing Continue command when the root
+   clock reports ActionHeld, including the final Stop reported as Finished. Normal
+   user-pause playback still uses Resume; independent preview retains its own
+   transport and does not call main Continue to release a nested Stop.
+2. An authored root Stop now pauses currently playing Sound intent; its held
+   layer clock alone cannot pause autonomous backend voices. Continue releases
+   that policy without Play/Stop/seek. If the user paused while waiting, Continue
+   first applies the existing Resume media policy while its waiting branch keeps
+   group clocks intact, then performs the normal hold reanchor. Renderer pause
+   ownership still decides whether an actually paused engine voice may resume.
+3. Native Release, CPU authoring suite, loaded WARP C ABI and managed compilation
+   pass. The focused sound case covers Stop→Continue and Stop→user Pause→Continue,
+   unchanged offsets/restart intent and held poses. Separate source backups used
+   to build the clock-only milestone were restored and hash-verified; their old
+   timestamps initially fooled MSBuild. Forcing those source timestamps and
+   rebuilding produced the final tested library/DLL; the stale-library failure is
+   not treated as accepted evidence.
+4. Six live Unity button steps pass on a generated IMM with two authored Stops:
+   first Waiting, Play continues, final Finished+ActionHeld, Pause preserves its
+   clock, Play continues after Pause, then ordinary Pause. The final hold screenshot
+   was inspected; the current Editor log contains no compile/exception/preview-audio
+   errors. Source fixture sounds have explicit visibility keys. This verifies UI
+   transport/native state, not audible hardware output.
+5. Evidence: artifacts/play-at-stop-native-build-final.log,
+   play-at-stop-cpu-{run.log,report.json}, play-at-stop-cabi/report.json,
+   play-at-stop-managed-build.log, story-stop-ui-probe.json and
+   story-stop-ui-final-hold.png. Clock milestone is `41c8719c`; this separate
+   transport milestone is ready to commit with its matching Windows DLL. Goal
+   remains active: MakeDefault provenance/undo, Action controls and the other
+   outstanding timeline requirements remain.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

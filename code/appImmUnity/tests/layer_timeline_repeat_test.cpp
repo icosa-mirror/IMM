@@ -4,6 +4,7 @@
 
 #include "libImmImporter/src/document/layer.h"
 #include "libImmImporter/src/document/sequence.h"
+#include "libImmImporter/src/document/layerSound.h"
 #include "libImmPlayer/src/mngrPlayer.h"
 
 namespace
@@ -272,6 +273,17 @@ namespace
         addAction(40, Layer::AnimAction::Play);
         addAction(60, Layer::AnimAction::Stop);
         addAction(90, Layer::AnimAction::Loop);
+        Layer* soundLayer = sequence.CreateLayer(root);
+        RequireTimeline(soundLayer && soundLayer->Init(Layer::Type::Sound, L"StorySound", true,
+            trans3d::identity(), trans3d::identity(), 1.0f, false, piTick(0), 1, UINT32_MAX, log), "story sound layer");
+        auto* sound = new LayerSound();
+        LayerSound::AttenuationParameters attenuation{};
+        LayerSound::ModifierParameters modifier{};
+        RequireTimeline(sound->Init(false, false, 1.0f, attenuation, modifier, LayerSound::Type::Flat, 10.0f, log),
+            "story sound implementation");
+        soundLayer->SetImplementation(sound);
+        soundLayer->SetLoaded(true);
+        AddBool(soundLayer, Layer::AnimProperty::Visibility, 0, true);
         ImmPlayer::MngrPlayer player;
         RequireTimeline(player.Init(log), "metadata player");
         const piTick epoch(1000000);
@@ -323,6 +335,7 @@ namespace
         player.Update(epoch + piTick(1160));
         RequireTimeline(player.GetIsWaiting() && root->IsStoppedByAction() &&
             root->GetTimelineElapsed(epoch + piTick(1160)) == piTick(199), "metadata authored Stop hold");
+        RequireTimeline(sound->GetPlaying() && sound->GetPaused(), "authored root Stop pauses autonomous sound intent");
         refreshUnchanged(epoch + piTick(2000));
         RequireTimeline(player.GetCurrentChapter() == 0, "held Stop pose stays in prior Stop chapter");
         root->ReplaceAnimKeys(Layer::AnimProperty::Action, {});
@@ -331,6 +344,25 @@ namespace
         refreshUnchanged(epoch + piTick(2000));
         RequireTimeline(player.GetHasPlays() && player.GetChapterCount() == 3 && player.GetCurrentChapter() == 1,
             "action-held exact Play boundary refresh preserves waiting intent");
+        const uint64_t heldOffset = sound->GetOffset();
+        const bool heldRestart = sound->GetForceRestart();
+        player.Continue(epoch + piTick(2000));
+        RequireTimeline(!player.GetIsWaiting() && !player.GetIsPaused() && !sound->GetPaused() &&
+            sound->GetPlaying() && sound->GetOffset() == heldOffset && sound->GetForceRestart() == heldRestart &&
+            root->GetTimelineElapsed(epoch + piTick(2000)) == piTick(199),
+            "Continue releases story sound pause without seek or changing held pose");
+        addAction(250, Layer::AnimAction::Stop);
+        player.RefreshRootActionMetadata(epoch + piTick(2000));
+        player.Update(epoch + piTick(2051));
+        RequireTimeline(player.GetIsWaiting() && sound->GetPaused() &&
+            root->GetTimelineElapsed(epoch + piTick(2051)) == piTick(249), "second story hold pauses sound");
+        player.Pause(epoch + piTick(2100));
+        RequireTimeline(player.GetIsPaused() && sound->GetPaused(), "user pause retains story sound pause");
+        player.Continue(epoch + piTick(3000));
+        RequireTimeline(!player.GetIsPaused() && !player.GetIsWaiting() && !sound->GetPaused() && sound->GetPlaying() &&
+            root->GetTimelineElapsed(epoch + piTick(3000)) == piTick(249),
+            "Continue after user pause clears media pause while reanchoring authored hold");
+        std::puts("[IMM_STORY_SOUND_PAUSE_TEST] stopPaused=1 continued=1 continuedAfterUserPause=1 stableOffset=1");
         player.Exit();
         player.Deinit();
         sequence.Deinit(log);

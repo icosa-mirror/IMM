@@ -340,6 +340,20 @@ namespace ImmPlayer
         mCurrentSpawnAreaId = activeLayer != nullptr ? FindSpawnAreaIdByLayer(activeLayer) : -1;
     }
 
+    void MngrPlayer::iSetSoundsPaused(bool paused)
+    {
+        if (mDocument == nullptr) return;
+        mDocument->Recurse([paused](Layer* layer, int, int, bool) -> bool
+        {
+            if (layer->GetType() == Layer::Type::Sound)
+            {
+                LayerSound* sound = static_cast<LayerSound*>(layer->GetImplementation());
+                if (!paused || sound->GetPlaying()) sound->SetPaused(paused);
+            }
+            return true;
+        }, false, false, false, false);
+    }
+
     void MngrPlayer::Continue(const ImmCore::piTick now)
     {
         if (mIsWaitingForInput)
@@ -347,8 +361,10 @@ namespace ImmPlayer
 #ifdef _DEBUG
             mLog->Printf(LT_DEBUG, L"Continue");
 #endif
-            if (mIsPaused)
-                mIsPaused = false;
+            // Resume releases the ordinary user-pause media policy. While waiting,
+            // its group branch deliberately leaves the authored hold clock alone.
+            if (mIsPaused) Resume(now);
+            else iSetSoundsPaused(false);
             Layer* root = mDocument->GetRoot();
             const piTick rootTime = root->GetTimelineElapsed(now);
             const piTick shift = now - rootTime - root->GetStartTime();
@@ -612,6 +628,10 @@ namespace ImmPlayer
     #endif
                     root->SetPlaying(false);
                     mIsWaitingForInput = root->IsStoppedByAction();
+                    // Sound voices advance autonomously; a held layer clock alone
+                    // cannot pause their cursor. Renderer ownership reconciles this
+                    // intent without a Play, Stop, or seek of an existing voice.
+                    if (mIsWaitingForInput) iSetSoundsPaused(true);
                 }
             }
 

@@ -108,7 +108,11 @@ namespace ImmPlayer
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal();
             GUI.enabled &= (IsRootScope || TimelinePreviewActive) && timelineClockValid;
-            if (GUILayout.Button("Play", GUILayout.Width(55))) Run(() => { if (TimelinePreviewActive) ControlTimelinePreview(2); else document.Resume(); });
+            if (GUILayout.Button("Play", GUILayout.Width(55))) Run(() => {
+                if (TimelinePreviewActive) ControlTimelinePreview(2);
+                else if ((timelineClock.flags & ClockActionHeld) != 0) document.Continue();
+                else document.Resume();
+            });
             if (GUILayout.Button("Pause", GUILayout.Width(55))) Run(() => { if (TimelinePreviewActive) ControlTimelinePreview(3); else document.Pause(); });
             if (GUILayout.Button("Restart", GUILayout.Width(65))) Run(() => { if (TimelinePreviewActive) { ControlTimelinePreview(1, 0); ControlTimelinePreview(2); } else document.Restart(); });
             if (GUILayout.Button("< frame", GUILayout.Width(65))) { Run(() => PauseAndSeekTimeline(Math.Max(0, timelinePlayTime - 1.0 / timelineFrameRate))); }

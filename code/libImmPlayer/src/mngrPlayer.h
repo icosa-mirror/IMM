@@ -64,6 +64,7 @@ namespace ImmPlayer
     private:
         void iRefreshRootActionCounts();
         void iUpdateCurrentChapter(ImmCore::piTick now);
+        void iSetSoundsPaused(bool paused);
         bool iGetChapterStartTime(size_t chapterIndex, ImmCore::piTick* rootTime) const;
         void iJumpAndReset(const ImmCore::piTick now, const ImmCore::piTick rootTime);
         int FindSpawnAreaIdByLayer(const Layer* spawnAreaLayer) const ;
