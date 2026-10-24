@@ -1007,8 +1007,16 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
         // handle looping clips
         const int64_t numPlays = (timelineDuration != 0) ? piTick::CastInt(timeFromStart) / piTick::CastInt(timelineDuration) : 0;
-        const piTick timelineTime = (repeatFor(timeline) == 0 || numPlays < repeatFor(timeline)) ?
+        const uint32_t timelineRepeat = repeatFor(timeline);
+        const piTick timelineTime = (timelineRepeat == 0 || numPlays < timelineRepeat) ?
             timelineWrapped : timelineDuration;
+        const bool timelineClamped = timelineDuration > piTick(0) && timelineRepeat != 0 && numPlays >= timelineRepeat;
+        // Once clamped, the final occurrence belongs to the last legal cycle,
+        // regardless of how late the next CPU sample arrives. The quotient test
+        // guarantees duration * repeat <= positive elapsed, so it cannot overflow.
+        const piTick effectiveElapsed = timelineClamped ?
+            piTick(piTick::CastInt(timelineDuration) * static_cast<int64_t>(timelineRepeat)) : timeFromStart;
+        const piTick timelineOccurrenceStart = startFor(timeline) + effectiveElapsed - timelineTime;
 
         // Other timeline controls belong to their parent's effective clock.
         // Resolve before descendants read this timeline's repeat behavior.
@@ -1135,7 +1143,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         // start and content offset. Resolve the action in that
                         // parent occurrence before storing an absolute hold.
                         const piTick actionTime = isRoot ? GetStartTime() + lastKey->mTime :
-                            startFor(timeline) + timeFromStart - timelineTime + lastKey->mTime;
+                            timelineOccurrenceStart + lastKey->mTime;
                         SetStopTime(actionTime + piTick(-1), true, true);
 #ifdef _DEBUG
                         log->Printf(LT_DEBUG, L"[LayerSetState] Stop action %s", mName.GetS());
@@ -1171,7 +1179,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                 if (lastKey->mValue.mBool)
                 {
                     timeSinceStart = (timelineTime - lastKey->mTime) + mStartOffset;
-                    const piTick startTime = startFor(timeline) + timeFromStart - timeSinceStart;
+                    const piTick startTime = timelineOccurrenceStart + lastKey->mTime - mStartOffset;
 
                     if (reevaluatePaint)
                     {
@@ -1211,8 +1219,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     // content offset. Decreasing Offset retimes content without
                     // creating another parent-loop iteration. Clock advances
                     // from a real loop or resume retain the existing behavior.
-                    const piTick spanClockOrigin = startFor(timeline) + timeFromStart -
-                        (timelineTime - lastKey->mTime);
+                    const piTick spanClockOrigin = timelineOccurrenceStart + lastKey->mTime;
                     const bool hasRestarted = mHasActiveSpanClockOrigin ?
                         spanClockOrigin > mLastActiveSpanClockOrigin : startTime > mStartTime;
                     mLastActiveSpanClockOrigin = spanClockOrigin;
@@ -1220,8 +1227,13 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     // The root wraps its own clock without retiming its start;
                     // resetting that start would make a finite root loop forever.
                     const bool clipRestartedAndParentLooping = !isRoot && isParentSequenceLooping && hasRestarted;
+                    // A sample can skip the entire final cycle. Align a child
+                    // timeline once to that stable occurrence; do not relax the
+                    // expired repeat window for sound restart decisions.
+                    const bool finalTimelineAlignment = !isRoot && isTimeline && timelineClamped &&
+                        timelineRepeat > 1 && hasRestarted;
                    
-                    if (isTimeline && ( (!mIsPlaying && !isRoot) || clipRestartedAndParentLooping))
+                    if (isTimeline && ( (!mIsPlaying && !isRoot) || clipRestartedAndParentLooping || finalTimelineAlignment))
                     {
                         SetPlaying(true);
                         SetStartTime(startTime);
@@ -1256,8 +1268,8 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         break;
                     }
                     const piTick timeSinceStop = (timelineTime - lastKey->mTime) + mStartOffset;
-                    const piTick stopTime = context != nullptr ?
-                        startFor(timeline) + timeFromStart - timeSinceStop : now - timeSinceStop;
+                    const piTick stopTime = context != nullptr || timelineClamped ?
+                        timelineOccurrenceStart + lastKey->mTime - mStartOffset : now - timeSinceStop;
 
                     if (isTimeline && mIsPlaying)
                     {

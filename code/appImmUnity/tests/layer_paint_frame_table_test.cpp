@@ -473,6 +473,65 @@ static void CheckLayerDrivenPaintFrameGrowth()
     log.End();
 }
 
+static void CheckFiniteFinalActionOccurrence()
+{
+    using namespace ImmCore;
+    using namespace ImmImporter;
+    piLog log;
+    requireFrames(log.Init(L"artifacts/finite-final-action-occurrence.log", PILOG_TXT), "finite final occurrence log");
+    bool allPassed = true;
+    for (bool independent : { false, true })
+    for (int sample : { 180, 250, 350 })
+    {
+        Sequence sequence;
+        requireFrames(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "finite final occurrence sequence");
+        Layer * root = sequence.GetRoot();
+        requireFrames(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+            1.0f, true, piTick(independent ? 0 : 100), independent ? 1 : 2, UINT32_MAX, &log), "finite final root");
+        const piTick epoch(1000000);
+        root->SetStartTime(epoch); root->SetPlaying(true);
+        Layer * boundary = root;
+        if (independent)
+        {
+            boundary = sequence.CreateLayer(root);
+            requireFrames(boundary && boundary->Init(Layer::Type::Group, L"Independent", true,
+                trans3d::identity(), trans3d::identity(), 1.0f, true, piTick(100), 2, UINT32_MAX, &log), "finite independent boundary");
+        }
+        Layer * child = sequence.CreateLayer(boundary);
+        requireFrames(child && child->Init(Layer::Type::Group, L"ActionChild", true, trans3d::identity(),
+            trans3d::identity(), 1.0f, true, piTick(0), 1, UINT32_MAX, &log), "finite action child");
+        Layer::AnimValue key{}; key.mBool = true;
+        requireFrames(child->AddKey(piTick(0), Layer::AnimProperty::Visibility, key, Layer::InterpolationType::None), "finite child visibility");
+        key = Layer::AnimValue{}; key.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+        requireFrames(child->AddKey(piTick(80), Layer::AnimProperty::Action, key, Layer::InterpolationType::None), "finite child Stop80");
+        Layer::EvaluationContext context;
+        context.mBoundary = boundary; context.mBoundaryStartTime = epoch;
+        context.mBoundaryDuration = piTick(100); context.mBoundaryRepeatCount = 2;
+        const auto evaluate = [&](int tick) {
+            context.mBoundaryElapsed = piTick(tick);
+            auto * scope = independent ? &context : nullptr;
+            root->SetStateAt(epoch + piTick(tick), &log, scope);
+            child->SetStateAt(epoch + piTick(tick), &log, scope);
+        };
+        evaluate(20); // Stop80 remains armed when the next CPU sample skips a wrap.
+        evaluate(sample);
+        const piTick start = child->GetStartTime(), stop = child->GetStopTime();
+        const piTick held = child->GetTimelineElapsed(epoch + piTick(sample), independent ? &context : nullptr);
+        const bool correct = start == epoch + piTick(100) && stop == epoch + piTick(179) &&
+            held == piTick(79) && child->IsStoppedByAction();
+        evaluate(sample + 100);
+        const bool stable = child->GetStartTime() == start && child->GetStopTime() == stop && child->HasStopTime() &&
+            child->GetTimelineElapsed(epoch + piTick(sample + 100), independent ? &context : nullptr) == held;
+        std::printf("[IMM_FINITE_FINAL_OCCURRENCE] independent=%d sample=%d start=%lld stop=%lld held=%lld correct=%d stable=%d\n",
+            independent ? 1 : 0, sample, static_cast<long long>(piTick::CastInt(start - epoch)),
+            static_cast<long long>(piTick::CastInt(stop - epoch)), static_cast<long long>(piTick::CastInt(held)), correct ? 1 : 0, stable ? 1 : 0);
+        allPassed &= correct && stable;
+        sequence.Deinit(&log);
+    }
+    log.End();
+    requireFrames(allPassed, "finite final occurrence must not drift or skip final child alignment");
+}
+
 void CheckPaintFrameTables()
 {
     using namespace ImmCore;
@@ -557,5 +616,6 @@ void CheckPaintFrameTables()
     CheckLayerDrivenSoundOffsets();
     CheckIndependentEvaluationContext();
     CheckHiddenLayerRenderEligibility();
+    CheckFiniteFinalActionOccurrence();
     std::puts("[IMM_PAINT_FRAME_TABLE_TEST] detached publication, held selection, zero frames, repeat/offset, append and compaction passed");
 }

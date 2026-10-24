@@ -4702,6 +4702,33 @@ the historical sizes/check counts below describe this earlier source only.
    and one-time child alignment are the next priority fix. Full source/goal
    acceptance is not claimed; MakeDefault provenance and UI work remain required.
 
+### 6.133. Stable final occurrence for late-sampled descendant Stop
+
+1. The preceding Action foundation is committed locally as `29d72074`. Its new
+   publication test exposed an existing finite-clock edge case independently of
+   Action editing. Red CPU evidence samples parent duration100/repeat2 at180,
+   250 and350 in both main and independent evaluation. The late samples stored
+   drifting child Stop holds229/329 instead of79 and missed final-span alignment.
+   Evidence: artifacts/finite-final-occurrence-before.log.
+2. Finite occurrence elapsed now saturates at the legal repeat-window end using
+   an overflow-safe quotient guard. Descendant Action, Visibility and span-origin
+   calculations share the stable occurrence origin. A skipped final child timeline
+   aligns once. Root Action timing and expired-window sound restart guards retain
+   their existing behavior.
+3. Native Release, the full CPU authoring suite and loaded WARP C ABI suite pass.
+   All six deterministic cases now report start100, absoluteStop179 and held79;
+   later clamped sampling does not retrigger. Action publication still passes
+   root chapter refresh, past-key/retime sidecar behavior and explicit hold release.
+   Evidence: artifacts/finite-final-occurrence-native-build.log,
+   finite-final-occurrence-after.log, finite-final-occurrence-cpu-report.json and
+   finite-final-occurrence-cabi/report.json. Source and tested Windows DLL are
+   finalized together; no audible, visual or full hosted acceptance is implied.
+4. A broader finite-ancestor cascade remains open: GetTimelineElapsed currently
+   clamps ancestors for explicit root holds, but an unheld duration-zero grandchild
+   can continue past a finite ancestor. This targeted occurrence fix does not
+   claim that behavior is solved. MakeDefault effect provenance/undo and Action
+   UI controls also remain required before closing the timeline goal.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
