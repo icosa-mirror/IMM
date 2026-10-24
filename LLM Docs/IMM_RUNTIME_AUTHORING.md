@@ -30,8 +30,10 @@ correction1b9ed34c passed full hosted validation in FULL40098186026: 49 jobs
 successful, 22 skipped, with preserved evidence reviewed (pipeline6.154). The
 new UI capability and live-editing coverage tasks are tracked in pipeline6.153.
 The user resumed implementation: native-driven UI capability gating now passes
-local acceptance (pipeline6.155); broader live channel coverage and fresh hosted
-acceptance remain open.
+local acceptance (pipeline6.155). Nested-timeline Loop/Offset and Root Loop now
+pass native CPU and D3D12 test-UI checks (pipeline6.156), including held clocks,
+Undo and retained edits after independent preview. Root Offset and nested-timeline/
+media Visibility remain open, along with fresh hosted acceptance.
 The content pipeline checkpoint owns the changing run status and final verdict.
 
 2026-10-21 incremental update: the offline graph/compiler supports immutable
@@ -145,8 +147,10 @@ areas; transforms/pivots/visibility/opacity; drawing/frame operations; supported
 sections and visibility modes; and supported layer animation keys. Legacy component
 position/rotation/scale keys are not a substitute for supported transform-key authoring.
 Managed/exporter key breadth is greater than the live ABI's visibility/opacity/transform
-and static-paint stepped Loop/Offset subset. Other live layer implementations reject
-the new Loop/Offset channels.
+and stepped Loop/Offset subset. Live Loop/Offset supports static paint and nested
+timeline groups; Root supports Loop only. Ordinary groups and other live layer
+implementations reject these controls. Visibility still uses the static-safe
+subtree restriction pending the lifecycle work in pipeline6.153.3.
 
 The offline graph/exporter now has explicit `ImmAuthoringFlip` values for layer,
 pivot and transform-key reflections. Import and structural comparison retain them.

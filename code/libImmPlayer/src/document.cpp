@@ -28,7 +28,8 @@ namespace ImmPlayer
     enum PreviewEditFields : uint32_t
     {
         PreviewTransform = 1, PreviewOpacity = 2, PreviewVisibility = 4,
-        PreviewPaintPlayback = 8, PreviewNavigation = 16, PreviewDrawInTime = 32
+        PreviewPaintPlayback = 8, PreviewNavigation = 16, PreviewDrawInTime = 32,
+        PreviewTimelinePlayback = 64
     };
     static piTick iActionLocalClock(Layer * layer, piTick now, const Layer::EvaluationContext * context = nullptr)
     {
@@ -460,6 +461,11 @@ namespace ImmPlayer
             return iValidateTimelineAction(layer, sequence->GetRoot(), nullptr);
         if (property == Layer::AnimProperty::Visibility)
             return iValidateStaticVisibility(sequence, layer);
+        if ((property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset) &&
+            layer->GetType() == Layer::Type::Group &&
+            (layer->GetParent() == nullptr || layer->GetIsTimeline()) &&
+            (property == Layer::AnimProperty::Loop || layer->GetParent() != nullptr))
+            return IsLoadingAsync(sequence) ? -7 : 0;
         if (property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset ||
             property == Layer::AnimProperty::DrawInTime)
             return layer->GetType() == Layer::Type::Paint &&
@@ -535,6 +541,15 @@ namespace ImmPlayer
             }
     }
 
+    static void iRefreshPlaybackSubtree(Layer * layer, piTick now, piLog * log, bool transportPaused,
+        Layer::EvaluationContext * context)
+    {
+        layer->ReevaluatePlaybackAt(now, log, transportPaused, context);
+        if (layer->GetType() == Layer::Type::Group)
+            for (uint32_t index = 0; index < layer->GetNumChildren(); ++index)
+                iRefreshPlaybackSubtree(layer->GetChild(index), now, log, transportPaused, context);
+    }
+
     void Document::iRefreshTimelineEdit(Layer * layer, uint32_t fields, piTick now, piLog * log)
     {
         auto * context = mTimelinePreview ? &mTimelinePreview->context : nullptr;
@@ -545,8 +560,11 @@ namespace ImmPlayer
             if (fields & PreviewOpacity) layer->ReevaluateOpacityAt(now, log, context);
         }
         if (fields & PreviewPaintPlayback) layer->ReevaluatePaintPlaybackAt(now, log, context);
+        if (fields & PreviewTimelinePlayback)
+            iRefreshPlaybackSubtree(layer, now, log, context == nullptr &&
+                (mPlayerManager.GetIsPaused() || !mPlayerManager.GetIsPlaying()), context);
         if (fields & PreviewDrawInTime) layer->ReevaluateDrawInTimeAt(now, log, context);
-        if (context == nullptr && (fields & (PreviewTransform | PreviewVisibility | PreviewNavigation)) &&
+        if (context == nullptr && (fields & (PreviewTransform | PreviewVisibility | PreviewNavigation | PreviewTimelinePlayback)) &&
             iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
         iMarkTimelinePreviewEdit(layer, fields);
     }
@@ -1564,20 +1582,17 @@ namespace ImmPlayer
                 Layer * layer = mPendingPresentation.mLayer;
                 const uint64_t layerId = mPendingPresentation.mObject;
                 const Layer::AnimProperty property = mPendingPresentation.mAnimationProperty;
-                if (property == Layer::AnimProperty::Visibility)
+                const int32_t targetResult = iValidateAnimationKeyTarget(&mSequence, layer, property);
+                if (targetResult != 0)
                 {
-                    const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
-                    if (visibilityResult != 0)
-                    {
-                        iRejectCommit(revision, visibilityResult, 0, layerId);
-                        mPendingPresentation = PendingPresentation{};
-                        return mState.mPlaybackState != PlaybackState::PausedAndHidden;
-                    }
-                }
-                const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
-                if (paintPlaybackKey && std::getenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS") != nullptr)
+                    iRejectCommit(revision, targetResult, 0, layerId);
+                    mPendingPresentation = PendingPresentation{};
                     return mState.mPlaybackState != PlaybackState::PausedAndHidden;
-                if (paintPlaybackKey && std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
+                }
+                const bool playbackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
+                if (playbackKey && std::getenv("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS") != nullptr)
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                if (playbackKey && std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
                 {
                     iRejectCommit(revision, -10, 0, layerId);
                     mPendingPresentation = PendingPresentation{};
@@ -1620,9 +1635,10 @@ namespace ImmPlayer
                         iRefreshTimelineEdit(layer, PreviewVisibility, mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
-                    if (paintPlaybackKey)
+                    if (playbackKey)
                     {
-                        iRefreshTimelineEdit(layer, PreviewPaintPlayback, mLastCPUTime, log);
+                        iRefreshTimelineEdit(layer, layer->GetType() == Layer::Type::Paint ?
+                            PreviewPaintPlayback : PreviewTimelinePlayback, mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
                     mPendingPresentation = PendingPresentation{};
@@ -2468,13 +2484,13 @@ namespace ImmPlayer
             const int32_t result = iValidateTimelineAction(layer, mSequence.GetRoot(), &value);
             if (result != 0) return result;
         }
-        const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
+        const bool playbackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
         if (time < piTick(0))
             return -2;
         if (interpolation < Layer::InterpolationType::None ||
             interpolation >= Layer::InterpolationType::MAX)
             return -2;
-        if ((paintPlaybackKey || actionKey) && interpolation != Layer::InterpolationType::None)
+        if ((playbackKey || actionKey) && interpolation != Layer::InterpolationType::None)
             return -2;
         if (property == Layer::AnimProperty::Opacity &&
             (!std::isfinite(value.mFloat) || value.mFloat < 0.0f || value.mFloat > 1.0f))
@@ -3490,13 +3506,13 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, targetResult, 0, edit.mLayerId);
                 return;
             }
-            const bool paintPlaybackKey = edit.mProperty == Layer::AnimProperty::Loop || edit.mProperty == Layer::AnimProperty::Offset;
-            if (paintPlaybackKey && edit.mInterpolation != Layer::InterpolationType::None)
+            const bool playbackKey = edit.mProperty == Layer::AnimProperty::Loop || edit.mProperty == Layer::AnimProperty::Offset;
+            if (playbackKey && edit.mInterpolation != Layer::InterpolationType::None)
             {
                 iRejectCommit(batch.mRevision, -2, 0, edit.mLayerId);
                 return;
             }
-            if (paintPlaybackKey && std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
+            if (playbackKey && std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
             {
                 iRejectCommit(batch.mRevision, -10, 0, edit.mLayerId);
                 return;
@@ -3508,7 +3524,7 @@ namespace ImmPlayer
             }
             for (const AnimationKeyEdit & candidate : batch.mAnimationKeyEdits)
             {
-                if (paintPlaybackKey && candidate.mInterpolation != Layer::InterpolationType::None)
+                if (playbackKey && candidate.mInterpolation != Layer::InterpolationType::None)
                 {
                     iRejectCommit(batch.mRevision, -2, 0, candidate.mLayerId);
                     return;

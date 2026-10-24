@@ -431,12 +431,97 @@ namespace
         player.Deinit();
         sequence.Deinit(log);
     }
+    void CheckHeldPlaybackControlRefresh(piLog * log, bool independent, bool actionHold)
+    {
+        Sequence sequence;
+        RequireTimeline(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "refresh sequence");
+        sequence.SetInitialSpawnArea(nullptr);
+        Layer * root = sequence.GetRoot();
+        RequireTimeline(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+            1.0f, true, piTick(1000), 0, UINT32_MAX, log), "refresh root");
+        Layer * timeline = sequence.CreateLayer(root);
+        RequireTimeline(timeline && timeline->Init(Layer::Type::Group, L"Timeline", true,
+            trans3d::identity(), trans3d::identity(), 1.0f, true, piTick(100), 0, UINT32_MAX, log), "refresh timeline");
+        Layer * leaf = sequence.CreateLayer(timeline);
+        RequireTimeline(leaf && leaf->Init(Layer::Type::Group, L"Pose", true, trans3d::identity(),
+            trans3d::identity(), 1.0f, false, piTick(0), 1, UINT32_MAX, log), "refresh pose");
+        for (Layer * layer : { root, timeline, leaf }) AddBool(layer, Layer::AnimProperty::Visibility, 0, true);
+        Layer::AnimValue value; value.init();
+        RequireTimeline(leaf->AddKey(piTick(0), Layer::AnimProperty::Transform, value,
+            Layer::InterpolationType::Linear), "refresh first pose");
+        value.mTransform.mTranslation.x = 5.0;
+        RequireTimeline(leaf->AddKey(piTick(50), Layer::AnimProperty::Transform, value,
+            Layer::InterpolationType::Linear), "refresh last pose");
+        if (actionHold)
+        {
+            value.init(); value.mInt = static_cast<uint32_t>(Layer::AnimAction::Stop);
+            RequireTimeline(timeline->AddKey(piTick(20), Layer::AnimProperty::Action, value,
+                Layer::InterpolationType::None), "refresh Stop");
+        }
+        const piTick epoch(1000000), initial = epoch + piTick(1135), now = epoch + piTick(1200);
+        root->SetStartTime(epoch); root->SetPlaying(true);
+        Layer::EvaluationContext context;
+        context.mBoundary = root; context.mBoundaryStartTime = epoch; context.mBoundaryElapsed = piTick(1135);
+        context.mBoundaryDuration = piTick(1000); context.mBoundaryRepeatCount = 0; context.mHeld = true;
+        Layer::EvaluationContext * scope = independent ? &context : nullptr;
+        if (independent) { root->SetStopTime(epoch + piTick(2), true, true); root->SetPlaying(false); }
+        else root->SetStateAt(initial, log);
+        timeline->SetStateAt(initial, log, scope); leaf->SetStateAt(initial, log, scope);
+        const double expected = actionHold ? 1.9 : 3.5;
+        RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - expected) < 1e-9, "initial held pose");
+        if (!independent)
+        {
+            root->SetStopTime(initial); root->SetPlaying(false);
+            timeline->SetStopTime(timeline->GetStartTime() + timeline->GetTimelineElapsed(initial), true, timeline->IsStoppedByAction());
+            timeline->SetPlaying(false);
+        }
+        const piTick mainElapsed = root->GetTimelineElapsed(now);
+        const size_t consumed = context.mConsumedActions.size();
+        const auto refresh = [&]() {
+            timeline->ReevaluatePlaybackAt(now, log, !independent, scope);
+            leaf->ReevaluatePlaybackAt(now, log, !independent, scope);
+            RequireTimeline(root->GetTimelineElapsed(now) == mainElapsed, "refresh preserves held main clock");
+            RequireTimeline(context.mConsumedActions.size() == consumed, "refresh does not consume Actions");
+        };
+        value.init(); value.mInt = 20;
+        RequireTimeline(timeline->AddKey(piTick(0), Layer::AnimProperty::Offset, value,
+            Layer::InterpolationType::None), "refresh Offset");
+        refresh();
+        RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - (actionHold ? 3.9 : 5.0)) < 1e-9, "Offset refresh retimes held children");
+        timeline->ReplaceAnimKeys(Layer::AnimProperty::Offset, {}); refresh();
+        RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - expected) < 1e-9, "Offset removal restores child pose");
+        AddBool(timeline, Layer::AnimProperty::Loop, 0, false); refresh();
+        RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - (actionHold ? 1.9 : 5.0)) < 1e-9, "Loop refresh clamps held children");
+        timeline->ReplaceAnimKeys(Layer::AnimProperty::Loop, {}); refresh();
+        RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - expected) < 1e-9, "Loop removal restores authored repeat");
+        if (actionHold)
+        {
+            timeline->ReplaceAnimKeys(Layer::AnimProperty::Visibility, {});
+            AddBool(timeline, Layer::AnimProperty::Visibility, 10, true); refresh();
+            RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - 0.9) < 1e-9,
+                "visibility resampling preserves Stop in its parent time domain");
+            timeline->ReplaceAnimKeys(Layer::AnimProperty::Visibility, {});
+            AddBool(timeline, Layer::AnimProperty::Visibility, 0, true); refresh();
+        }
+        if (!independent)
+        {
+            AddBool(root, Layer::AnimProperty::Loop, 0, false);
+            root->ReevaluatePlaybackAt(now, log, true); refresh();
+            RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - (actionHold ? 1.9 : 0.0)) < 1e-9, "Root Loop refresh realigns the last legal cycle");
+            root->ReplaceAnimKeys(Layer::AnimProperty::Loop, {});
+            root->ReevaluatePlaybackAt(now, log, true); refresh();
+            RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - expected) < 1e-9, "Root Loop removal restores the held pose");
+        }
+        sequence.Deinit(log);
+    }
 }
 
 void CheckTimelineRepeatKeys()
 {
     ImmCore::piLog log;
     RequireTimeline(log.Init(L"artifacts/timeline-repeat-keys.log", PILOG_TXT), "timeline repeat log");
+    for (bool independent : { false, true })
+        for (bool actionHold : { false, true }) CheckHeldPlaybackControlRefresh(&log, independent, actionHold);
     ObserveRootControls(&log, false);
     ObserveRootControls(&log, true);
     ObserveRootControls(&log, false, true);

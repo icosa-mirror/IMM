@@ -162,6 +162,7 @@ namespace ImmImporter
         mLastActiveSpanStart = piTick(0);
         mLastActiveSpanClockOrigin = piTick(0);
         mHasActiveSpanClockOrigin = false;
+        mPlaybackControlChanged = false;
 
         if (!mName.InitCopyW(name))
         {
@@ -919,6 +920,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         state.mLastActiveSpanClockOrigin = mLastActiveSpanClockOrigin;
         state.mHasActiveSpanClockOrigin = mHasActiveSpanClockOrigin;
         state.mStartOffset = mStartOffset;
+        state.mPlaybackControlChanged = mPlaybackControlChanged;
         return state;
     }
 
@@ -948,6 +950,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             (state.mHasActiveSpanClockOrigin ? wallClockShift : piTick(0));
         mHasActiveSpanClockOrigin = state.mHasActiveSpanClockOrigin;
         mStartOffset = state.mStartOffset;
+        mPlaybackControlChanged = state.mPlaybackControlChanged;
     }
 
     void Layer::ResetPlaybackStateForEvaluation()
@@ -967,6 +970,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         mLastActiveSpanStart = piTick(0);
         mLastActiveSpanClockOrigin = piTick(0);
         mHasActiveSpanClockOrigin = false;
+        mPlaybackControlChanged = false;
         mStartOffset = piTick(0);
     }
 
@@ -990,6 +994,22 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             SetStateAtImpl(now, log, true, AnimProperty::MAX, context);
             if (GetVisible()) mPotentiallyVisible = true;
         }
+    }
+
+    void Layer::ReevaluatePlaybackAt(piTick now, piLog * log, bool transportPaused, EvaluationContext * context)
+    {
+        if (!CanEvaluateInContext(context)) return;
+        if (mType == Type::Paint && dynamic_cast<LayerPaintStatic *>((LayerPaint *)GetImplementation()) != nullptr)
+        {
+            ReevaluatePaintPlaybackAt(now, log, context);
+            ReevaluateTransformAt(now, log, context);
+            ReevaluateOpacityAt(now, log, context);
+            ReevaluateDrawInTimeAt(now, log, context);
+        }
+        else SetStateAtImpl(now, log, false, AnimProperty::MAX, context, true, transportPaused);
+        if (mType == Type::Sound && context == nullptr)
+            static_cast<LayerSound *>(GetImplementation())->SetPaused(
+                transportPaused || mSequence->GetRoot()->IsStoppedByAction());
     }
 
     void Layer::ReevaluateTransformAt(piTick now, piLog * log, EvaluationContext * context)
@@ -1028,10 +1048,18 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
     }
 
     void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint,
-        AnimProperty onlyProperty, EvaluationContext * context)
+        AnimProperty onlyProperty, EvaluationContext * context, bool refreshPlayback, bool transportPaused)
     {
         if (!CanEvaluateInContext(context)) return;
         const bool propertyOnly = onlyProperty != AnimProperty::MAX;
+        const bool oldVisible = mVisible;
+        const uint32_t oldRepeat = mEvaluatedMaxRepeatCount;
+        const piTick oldOffset = mStartOffset;
+        if (!propertyOnly && !reevaluatePaint)
+            mPlaybackControlChanged = mParent != nullptr &&
+                (context == nullptr || mParent != context->mBoundary) && mParent->mPlaybackControlChanged;
+        if (refreshPlayback && GetNumAnimKeys(AnimProperty::Visibility) == 0)
+            mVisible = mCanonicalVisible;
         Layer* root = context != nullptr ? context->mBoundary : mSequence->GetRoot();
         const bool isRoot = this == root;
         const bool isGroup = mType == Type::Group;
@@ -1131,6 +1159,20 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                 mStartOffset = piTick(int64_t(activeKey->mValue.mInt));
         }
 
+        if (!propertyOnly && !reevaluatePaint && (isTimeline || isRoot))
+            mPlaybackControlChanged |= oldRepeat != mEvaluatedMaxRepeatCount || oldOffset != mStartOffset;
+        const auto withinRepeatWindow = [&]() {
+            for (Layer * ancestor = timeline; ancestor != nullptr; ancestor = ancestor->GetParent())
+            {
+                const piTick duration = durationFor(ancestor);
+                const uint32_t repeat = repeatFor(ancestor);
+                if ((ancestor == root || ancestor->GetIsTimeline()) && duration > piTick(0) && repeat &&
+                    piTick::CastInt(ancestor->GetTimelineElapsed(now, context)) / piTick::CastInt(duration) >= repeat)
+                    return false;
+                if (ancestor == root) break;
+            }
+            return true;
+        };
         piTick timeSinceStart = piTick(0);
 
         const int maxProps = static_cast<int>(AnimProperty::MAX);
@@ -1141,6 +1183,8 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             if (prop == AnimProperty::Offset || prop == AnimProperty::Loop)
                 continue;
             if (reevaluatePaint && prop != AnimProperty::Visibility)
+                continue;
+            if (refreshPlayback && prop == AnimProperty::Action)
                 continue;
 
             const int numKeys = GetNumAnimKeys(prop);
@@ -1264,6 +1308,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                 // Visibility controls if some layers are alive or dead for playback
 
                  // span change since last evaluation retriggers sounds
+                const piTick oldSpanKeyTime = mLastActiveSpanStart;
                 const bool isNewSpan = (context != nullptr && !mHasActiveSpanClockOrigin) || lastKey->mTime != mLastActiveSpanStart;
                 if (isNewSpan) mLastActiveSpanStart = lastKey->mTime;
 
@@ -1280,7 +1325,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         break;
                     }
 
-                    if (!playingFor(timeline))
+                    if (!playingFor(timeline) && !refreshPlayback)
                         break;
                     
                     // A finite repeated timeline also starts a new child span at
@@ -1311,6 +1356,8 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     // creating another parent-loop iteration. Clock advances
                     // from a real loop or resume retain the existing behavior.
                     const piTick spanClockOrigin = timelineOccurrenceStart + lastKey->mTime;
+                    const piTick oldSpanClockOrigin = mLastActiveSpanClockOrigin;
+                    const bool hadSpanClockOrigin = mHasActiveSpanClockOrigin;
                     const bool hasRestarted = mHasActiveSpanClockOrigin ?
                         spanClockOrigin > mLastActiveSpanClockOrigin : startTime > mStartTime;
                     mLastActiveSpanClockOrigin = spanClockOrigin;
@@ -1341,7 +1388,21 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         }
                     }
                    
-                    if (isTimeline && ( (!mIsPlaying && !isRoot) || clipRestartedAndParentLooping || finalTimelineAlignment))
+                    if (isTimeline && !isRoot && (refreshPlayback || mPlaybackControlChanged))
+                    {
+                        SetStartTime(startTime);
+                        if (mStoppedByAction)
+                        {
+                            if (hadSpanClockOrigin)
+                                mStopTime = timelineOccurrenceStart + (mStopTime - (oldSpanClockOrigin - oldSpanKeyTime));
+                        }
+                        else
+                        {
+                            SetPlaying(!transportPaused);
+                            SetStopTime(transportPaused ? startFor(timeline) + effectiveElapsed : startTime - piTick(1), transportPaused);
+                        }
+                    }
+                    else if (isTimeline && ( (!mIsPlaying && !isRoot) || clipRestartedAndParentLooping || finalTimelineAlignment))
                     {
                         SetPlaying(true);
                         SetStartTime(startTime);
@@ -1358,7 +1419,10 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         log->Printf(LT_DEBUG, L"[LayerSetState] Starting anim clip %s", mName.GetS());
 #endif
                     }
-                    else if (isSoundLayer && ((!mVisible && !ls->GetPlaying()) || isNewSpan || clipRestartedAndParentLooping))
+                    else if (isSoundLayer && mPlaybackControlChanged && !withinRepeatWindow())
+                        ls->SetPlaying(false);
+                    else if (isSoundLayer && ((!mVisible && !ls->GetPlaying()) || isNewSpan || clipRestartedAndParentLooping ||
+                        (mPlaybackControlChanged && (mStartTime != startTime || !ls->GetPlaying()))))
                     {
                         mStartTime = startTime;
                         ls->SetPlaying(true, piTick::ToMicroSeconds(timeSinceStart));
@@ -1439,6 +1503,22 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         } // props loop
 
 
+        if (!propertyOnly && !reevaluatePaint)
+        {
+            mPlaybackControlChanged |= oldVisible != mVisible;
+            if (isSoundLayer && GetNumAnimKeys(AnimProperty::Visibility) == 0 && mPlaybackControlChanged)
+            {
+                const piTick startTime = timelineOccurrenceStart - mStartOffset;
+                if (!GetWorldVisible(context) || !withinRepeatWindow()) ls->SetPlaying(false);
+                else if (mStartTime != startTime || !ls->GetPlaying())
+                {
+                    mStartTime = startTime;
+                    ls->SetPlaying(ls->GetSourcePlaying(), piTick::ToMicroSeconds(timelineTime + mStartOffset));
+                    if (context != nullptr) ls->SetForceRestart(true);
+                }
+            }
+        }
+
         // A published paint key must also refresh latent selection while hidden,
         // so later unhide does not expose the previous key's frame. Visibility
         // spans still define local time; inactive/keyless spans retain local0.
@@ -1476,6 +1556,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
     {
         mVisible = false;
         mHasActiveSpanClockOrigin = false;
+        mPlaybackControlChanged = false;
     }
 
     void Layer::ResetActionStatesAt(piTick time)

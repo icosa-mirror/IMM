@@ -5467,6 +5467,46 @@ the historical sizes/check counts below describe this earlier source only.
    for this new source. Native timeline Loop/Offset and nested-timeline/media
    Visibility work in6.153.3 remains open and is next. Previous source1b9ed34c's
    hosted acceptance remains historical evidence, not validation of this change.
+8. Committed/pushed aacdf01d after pulling main, starting FULL
+   [40116011672](https://github.com/icosa-mirror/IMM/actions/runs/40116011672) on
+   exact sourceaacdf01d5a2ce69183176cf7b5afe870c6a60507. Hosted verdict is pending;
+   keep regression failures ahead of subsequent channel work. The local hierarchy
+   reference remains uncommitted.
+
+### 6.156. Live timeline Loop/Offset milestone (2026-10-24)
+
+1. Extend native key eligibility/publication to nested-timeline Loop and Offset,
+   plus Root Loop. Ordinary groups remain unsupported. Root Offset remains
+   read-only: it currently has no separate content-phase implementation. This is
+   partial completion of6.153.3; nested-timeline/media Visibility is still next.
+2. Refresh affected playback subtrees at the retained clock after publication and
+   removal. Resample frames, poses and scalar channels without executing Actions
+   again. Preserve existing Stop holds, including their parent-clock position;
+   restore/resample retained edits when independent preview exits. Parent timing
+   changes can reposition sound cursors; a sound's own Offset behavior is preserved.
+3. Windows Release build and existing native CPU authoring regressions pass.
+   One focused helper covers main/local evaluation with and without an Action Stop,
+   Offset/Loop removal, Root Loop and moved visibility-span origins. The existing
+   sound Offset regression caught an initial retiming error; corrected before
+   live evaluation. No audio-listening claim follows from these checks.
+4. Restarted the owned D3D12 sample with the new plugin. Nine timeline-button steps
+   pass on the 79-layer modified-source benchmark: Group26 Loop clamps its local
+   clock from4725 to18900 ticks; Offset1260 changes it to5985; Undo restores4725.
+   Root stays23625 throughout. Scene-only images change1893/1812 pixels for
+   Loop/Offset and restore exactly after Undo. Evidence:
+   artifacts/timeline-control-live-buttons.json and
+   artifacts/timeline-control-scene-comparison.json.
+5. Four independent-preview steps pass using Snoopymove as the boundary and Socks
+   as the edited child timeline. Offset630 moves Socks from1575 to2205 ticks;
+   exiting retains the edit at the unchanged main Root clock23625; toolbar Undo
+   restores1575. Root preview itself is unsupported, so it is not the test boundary.
+   Evidence: artifacts/timeline-control-preview-buttons.json. These are editing
+   checks, not converter-parity checks. The user's official52-layer file/view is
+   restored after evaluation; the hierarchy reference stays uncommitted.
+6. Full40116011672 validates the preceding committed gating sourceaacdf01d only;
+   it remains in progress without reported failures at this checkpoint. This new
+   milestone still needs its own hosted acceptance. Next implementation work is
+   nested-timeline/media Visibility with lifecycle-safe refresh and Undo.
 
 ## 7. Consolidated documents
 

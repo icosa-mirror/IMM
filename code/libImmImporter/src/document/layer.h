@@ -178,6 +178,7 @@ namespace ImmImporter
             ImmCore::piTick mLastActiveSpanStart = ImmCore::piTick(0);
             ImmCore::piTick mLastActiveSpanClockOrigin = ImmCore::piTick(0);
             bool mHasActiveSpanClockOrigin = false;
+            bool mPlaybackControlChanged = false;
             ImmCore::piTick mStartOffset = ImmCore::piTick(0);
         };
         PlaybackState CapturePlaybackState() const;
@@ -284,6 +285,8 @@ namespace ImmImporter
 
         void SetStateAt(ImmCore::piTick time, ImmCore::piLog* log, EvaluationContext * context = nullptr);
         void ReevaluatePaintPlaybackAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
+        void ReevaluatePlaybackAt(ImmCore::piTick time, ImmCore::piLog * log, bool transportPaused,
+            EvaluationContext * context = nullptr);
         void ReevaluateTransformAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
         void ReevaluateOpacityAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
         void ReevaluateDrawInTimeAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
@@ -341,10 +344,12 @@ namespace ImmImporter
         double mCanonicalDrawInTime;
 		double mAnimParams[4];
         void SetStateAtImpl(ImmCore::piTick time, ImmCore::piLog * log, bool reevaluatePaint,
-            AnimProperty onlyProperty = AnimProperty::MAX, EvaluationContext * context = nullptr);
+            AnimProperty onlyProperty = AnimProperty::MAX, EvaluationContext * context = nullptr,
+            bool refreshPlayback = false, bool transportPaused = false);
         ImmCore::piTick mLastActiveSpanStart; // keep track of gapless retriggering
         ImmCore::piTick mLastActiveSpanClockOrigin;
         bool mHasActiveSpanClockOrigin;
+        bool mPlaybackControlChanged;
         ImmCore::piTick mStartOffset;
 		ImmCore::piTick mDuration;
 		ImmCore::piTick mStartTime;
