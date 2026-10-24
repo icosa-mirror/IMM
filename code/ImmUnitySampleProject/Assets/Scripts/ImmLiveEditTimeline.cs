@@ -234,18 +234,18 @@ namespace ImmPlayer
                     selected = node.Info.Id; expandedKeyLayers.Add(selected);
                     if (property >= 0) keyChannel = Array.IndexOf(channelIds, property);
                     Run(ReadSelected);
-                    if (timelineData.TryGetValue(selected, out TimelineData clickedData) && CanProjectSequence(node, clickedData) && clickedData.FrameRate > 0 && clickedData.Drawings.Length > 0)
+                    if (timelineData.TryGetValue(selected, out TimelineData clickedData) && InTimelineScope(node) && clickedData.Drawings.Length > 0)
                     {
-                        timelineFrameRate = (int)clickedData.FrameRate;
+                        if (clickedData.FrameRate > 0) timelineFrameRate = (int)clickedData.FrameRate;
                         double seconds = timelineStart + Mathf.Clamp01((rowInput.mousePosition.x - namesWidth) / tracksWidth) * timelineRange;
-                        frame = ((int)(seconds * clickedData.FrameRate) % clickedData.Drawings.Length).ToString(CultureInfo.InvariantCulture);
+                        if (TrySampleSequence(node, clickedData, SequenceTick(SnapTime(seconds)), out int slot, out _, out _))
+                            frame = slot.ToString(CultureInfo.InvariantCulture);
                     }
                 }
                 if (property >= 0) DrawKeys(node, property, y, namesWidth, tracksWidth);
                 else if (timelineData.TryGetValue(node.Info.Id, out TimelineData data))
                 {
-                    if (CanProjectSequence(node, data)) DrawSequence(data, y, namesWidth, tracksWidth);
-                    else if (data.Frames > 0) GUI.Label(new Rect(namesWidth + 8, y + 2, tracksWidth - 12, 20), "Local sequence — clock mapping pending");
+                    if (InTimelineScope(node)) DrawProjectedSequence(node, data, y, namesWidth, tracksWidth);
                     string detail = data.Frames > 0 ? $"{data.Frames}f @ {data.FrameRate} fps · {(data.Repeat == 0 ? "loop" : $"repeat {data.Repeat}")}" :
                         nestedTimeline ? $"Timeline · {data.Duration:0.###} s · open ↳" : node.Info.Type.ToString();
                     if (data.Frames == 0) GUI.Label(new Rect(namesWidth + 8, y + 2, 270, 20), detail);
@@ -253,13 +253,21 @@ namespace ImmPlayer
                 }
             }
             GUI.EndScrollView();
+            if (timelineData.TryGetValue(timelineScope, out TimelineData scopeData) && scopeData.Duration > 0 &&
+                scopeData.Duration >= timelineStart && scopeData.Duration <= timelineStart + timelineRange)
+            {
+                float endX = namesWidth + (float)((scopeData.Duration - timelineStart) / timelineRange) * tracksWidth;
+                Fill(new Rect(endX, 30, 1, timelineWindow.height - headerExtra - 54), new Color(0.55f, 0.65f, 0.7f));
+                GUI.Label(new Rect(Mathf.Min(endX + 4, timelineWindow.width - 100), 30, 96, 22),
+                    new GUIContent("End", $"Composition duration: {scopeData.Duration:0.######} s"));
+            }
             if (timelineClockValid && (timelineClock.flags & ClockActive) != 0 && playTime >= timelineStart && playTime <= timelineStart + timelineRange)
             {
                 float x = namesWidth + (float)((playTime - timelineStart) / timelineRange) * tracksWidth;
                 Fill(new Rect(x, 30, 2, timelineWindow.height - headerExtra - 54), new Color(1, 0.36f, 0.25f));
             }
             GUI.Label(new Rect(8, timelineWindow.height - headerExtra - 22, timelineWindow.width - 16, 20),
-                $"Ruler: scrub · Squares: select/drag keys · Blue: drawing/hold preview (white marks changes; complex local clocks pending) · Range {timelineStart:0.###}–{timelineStart + timelineRange:0.###} s. {timelineReadError}");
+                $"Ruler: scrub · Squares: select/drag keys · Blue: authored drawing exposure (white: change; grey: dense summary) · Range {timelineStart:0.###}–{timelineStart + timelineRange:0.###} s. {timelineReadError}");
             var scrubArea = new Rect(namesWidth, 30, tracksWidth, timelineWindow.height - headerExtra - 54);
             int control = GUIUtility.GetControlID(FocusType.Passive);
             Event input = Event.current;

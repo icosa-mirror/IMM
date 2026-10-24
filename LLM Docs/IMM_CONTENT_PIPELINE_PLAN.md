@@ -4374,7 +4374,7 @@ the historical sizes/check counts below describe this earlier source only.
    Focused source rereview confirmed the exit/visibility/frame-publication fixes
    and found no further concrete blocker; whitespace checks pass.
 
-### 6.124. Workspace sizing and drawing-clock follow-up (in progress)
+### 6.124. Workspace sizing and authored drawing exposure
 
 1. Added drag splitters for timeline height, inspector width and layer-name width,
    plus capture release on focus loss. Managed compilation and five live checks
@@ -4394,7 +4394,28 @@ the historical sizes/check counts below describe this earlier source only.
 3. Projection must bound work by visible pixels/segments at dense zoom levels,
    preserve distinct editable slots even when drawing handles repeat, and handle
    key/frame boundaries exactly. This is an authored exposure schedule, not a
-   simulation of historical action holds. Implementation is still pending.
+   simulation of historical action holds. Implemented the shared tick sampler,
+   sparse exposure intervals and bounded dense summaries; frame clicks use the
+   same sampler at the snapped seek time. Finite endpoints hold the final slot;
+   scope duration has an End marker, and Fit includes duration/delayed spans.
+4. Managed compilation passes. An independently built CPU host captures 273
+   native samples across seven cases (mixed keys, irrelevant ordinary-group
+   controls, keyless/single-frame paint and repeats zero/one/two). The managed
+   sampler matches all 273 with zero differences in the live Editor. Evidence:
+   artifacts/timeline-projection-reference/{fixture,observed,provenance}.json and
+   artifacts/timeline-projection-managed-reference.json. Source review finds no
+   substantive blocker. Seven live Snoopy steps also pass: hold main at two
+   seconds, open the nested composition, enter preview, fit/reveal its paint row,
+   click an exposure to select nonzero slot one from a sentinel selection, zoom
+   out, and restore the useful range. Main stays at 25,200 ticks. Tracks and the
+   End marker were visually inspected. Evidence:
+   artifacts/timeline-projection-ui-probe.json / .png. Workspace sizing is
+   committed as `604ff262`; this projection milestone is ready for full validation.
+5. Lanes are labelled authored drawing exposure: runtime overrides, historical
+   action holds and hidden retained frames are not an authored schedule. Dense
+   regions explicitly say Aggregate and selection remains exact at seek time.
+   The timeline goal remains active: unsupported channels, audible local preview
+   and their acceptance remain unfinished.
 
 ## 7. Consolidated documents
 

@@ -12,7 +12,7 @@ namespace ImmPlayer
         {
             internal double Duration, Offset;
             internal uint FrameRate, Frames, Repeat;
-            internal bool IsTimeline;
+            internal bool IsTimeline, CanonicalVisible;
             internal readonly Dictionary<int, N.Key[]> Keys = new Dictionary<int, N.Key[]>();
             internal ulong[] Drawings = Array.Empty<ulong>();
         }
@@ -118,6 +118,10 @@ namespace ImmPlayer
                 if (result != 0) { timelineReadError = $"Some tracks unavailable: {N.Result(result)}"; continue; }
                 var data = new TimelineData { IsTimeline = isTimeline != 0, Duration = duration, Offset = offset,
                     FrameRate = fps, Frames = frames, Repeat = repeats };
+                var baseProperties = N.Properties.Empty;
+                result = N.ImmAuthoring_LayerGetProperties(Doc, layer.Id, ref baseProperties);
+                if (result != 0) { timelineReadError = $"Some base values unavailable: {N.Result(result)}"; continue; }
+                data.CanonicalVisible = baseProperties.visible != 0;
                 foreach (int property in channelIds)
                 {
                     result = N.ImmAuthoring_KeyGetCount(Doc, layer.Id, property, out uint count);
@@ -253,65 +257,22 @@ namespace ImmPlayer
 
         private void FitTimeline()
         {
-            double end = 1;
+            bool bounded = timelineData.TryGetValue(timelineScope, out TimelineData scope) && scope.Duration > 0;
+            double end = bounded ? scope.Duration : 1;
             foreach (var row in timelineRows)
                 if (timelineData.TryGetValue(row.node.Info.Id, out TimelineData data))
                 {
-                    if (data.FrameRate > 0) end = Math.Max(end, data.Frames / (double)data.FrameRate);
+                    if (!bounded && data.FrameRate > 0)
+                    {
+                        double lastStart = 0;
+                        if (data.Keys.TryGetValue(0, out N.Key[] visibility))
+                            foreach (N.Key key in visibility) if (key.boolean != 0) lastStart = Math.Max(lastStart, key.seconds);
+                        end = Math.Max(end, lastStart + data.Frames / (double)data.FrameRate * Math.Max(1u, data.Repeat));
+                    }
                     foreach (var keys in data.Keys.Values)
                         foreach (var key in keys) end = Math.Max(end, key.seconds + 1.0 / timelineFrameRate);
                 }
             timelineStart = 0; timelineRange = end * 1.05;
-        }
-
-        private static bool HasNestedTimelineParent(LayerNode node)
-        {
-            for (var parentNode = node.Parent; parentNode != null; parentNode = parentNode.Parent)
-                if (parentNode.Parent != null && parentNode.Info.IsTimeline) return true;
-            return false;
-        }
-
-        private bool CanProjectSequence(LayerNode node, TimelineData data)
-        {
-            if (!InTimelineScope(node)) return false;
-            for (var ancestor = node; ancestor != null && ancestor.Info.Id != timelineScope; ancestor = ancestor.Parent)
-                if (timelineData.TryGetValue(ancestor.Info.Id, out TimelineData state))
-                {
-                    if (state.Keys.TryGetValue(7, out N.Key[] loops) && loops.Length > 0) return false;
-                    if (state.Keys.TryGetValue(8, out N.Key[] offsets)) foreach (var key in offsets) if (key.ticks != 0) return false;
-                    if (state.Keys.TryGetValue(0, out N.Key[] visibility)) foreach (var key in visibility) if (key.seconds != 0 || key.boolean == 0) return false;
-                }
-            return true;
-        }
-
-        private void DrawSequence(TimelineData data, float y, float namesWidth, float tracksWidth)
-        {
-            if (data.FrameRate == 0 || data.Drawings.Length == 0) return;
-            // Frame sequences repeat in their local clock. Property keys remain
-            // in the parent timeline; these lanes do not invent visibility clips.
-            int first = Math.Max(0, (int)Math.Min(int.MaxValue - 1, Math.Floor(timelineStart * data.FrameRate)));
-            int end = (int)Math.Min(int.MaxValue - 1, Math.Ceiling((timelineStart + timelineRange) * data.FrameRate));
-            long available = data.Repeat == 0 ? int.MaxValue : (long)data.Drawings.Length * data.Repeat;
-            int last = (int)Math.Min(end, available);
-            if (tracksWidth / (timelineRange * data.FrameRate) < 3)
-            {
-                double a = Math.Max(timelineStart, first / (double)data.FrameRate);
-                double b = Math.Min(timelineStart + timelineRange, last / (double)data.FrameRate);
-                if (b > a) Fill(new Rect(namesWidth + (float)((a - timelineStart) / timelineRange) * tracksWidth, y + 4,
-                    (float)((b - a) / timelineRange) * tracksWidth, RowHeight - 8), new Color(0.25f, 0.44f, 0.65f));
-                return;
-            }
-            for (int i = first; i < last; i++)
-            {
-                double a = Math.Max(timelineStart, i / (double)data.FrameRate);
-                double b = Math.Min(timelineStart + timelineRange, (i + 1) / (double)data.FrameRate);
-                float x = namesWidth + (float)((a - timelineStart) / timelineRange) * tracksWidth;
-                float width = (float)((b - a) / timelineRange) * tracksWidth;
-                int frameIndex = i % data.Drawings.Length;
-                bool held = i > 0 && data.Drawings[frameIndex] == data.Drawings[(i - 1) % data.Drawings.Length];
-                Fill(new Rect(x, y + 4, width, RowHeight - 8), new Color(0.25f, held ? 0.44f : 0.57f, 0.65f));
-                if (!held && width >= 3) Fill(new Rect(x + 1, y + 8, 3, 6), Color.white);
-            }
         }
 
         private void DrawKeys(LayerNode node, int property, float y, float namesWidth, float tracksWidth)
