@@ -186,6 +186,42 @@ static void CheckLayerDrivenSoundOffsets()
         "decreasing midspan Offset alone must not masquerade as an ancestor wrap");
 }
 
+static void CheckHiddenLayerRenderEligibility()
+{
+    using namespace ImmCore;
+    using namespace ImmImporter;
+    piLog log;
+    requireFrames(log.Init(L"artifacts/hidden-render-eligibility.log", PILOG_TXT), "visibility eligibility log");
+    Sequence sequence;
+    requireFrames(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "visibility eligibility sequence");
+    Layer * root = sequence.GetRoot();
+    requireFrames(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+        1, true, piTick(100), 0, UINT32_MAX, &log), "visibility eligibility root");
+    root->SetPlaying(true); root->SetStartTime(piTick(0));
+    Layer * hidden = sequence.CreateLayer(root);
+    requireFrames(hidden && hidden->Init(Layer::Type::Group, L"InitiallyHidden", false,
+        trans3d::identity(), trans3d::identity(), 1, false, piTick(0), 1, UINT32_MAX, &log), "initial hidden group");
+    const auto saved = hidden->CapturePlaybackState();
+    Layer::AnimValue visible; visible.init(); visible.mBool = true;
+    std::vector<Layer::AnimKey> keys;
+    requireFrames(Layer::SetAnimKey(keys, piTick(0), visible, Layer::InterpolationType::None), "revealing visibility key");
+    hidden->ReplaceAnimKeys(Layer::AnimProperty::Visibility, std::move(keys));
+    hidden->ReevaluateVisibilityAt(piTick(50), &log);
+    requireFrames(hidden->GetWorldVisible() && hidden->GetPotentiallyVisible(),
+        "accepted visibility key must pass both renderer visibility gates");
+    hidden->RestorePlaybackState(saved);
+    hidden->ReevaluateVisibilityAt(piTick(50), &log);
+    requireFrames(hidden->GetWorldVisible() && hidden->GetPotentiallyVisible(),
+        "restored runtime capsule must not suppress a retained revealing key after reevaluation");
+    hidden->ReplaceAnimKeys(Layer::AnimProperty::Visibility, {});
+    hidden->SetPotentiallyVisible(false); hidden->SetCanonicalVisible(true);
+    requireFrames(hidden->GetVisible() && hidden->GetPotentiallyVisible(), "base visibility reveal is render eligible");
+    hidden->SetVisible(false); hidden->SetPotentiallyVisible(false); hidden->SetVisibilityOverride(true, true);
+    requireFrames(hidden->GetVisible() && hidden->GetPotentiallyVisible(), "runtime override reveal is render eligible");
+    sequence.Deinit(&log); log.End();
+    std::puts("[IMM_VISIBILITY_ELIGIBILITY_TEST] initialHiddenReveal=1 retainedKeysAfterRestore=1 baseAndOverride=1");
+}
+
 static void CheckIndependentEvaluationContext()
 {
     using namespace ImmCore;
@@ -491,5 +527,6 @@ void CheckPaintFrameTables()
     CheckLayerDrivenPlaybackKeys<LayerPaintPretessellated>();
     CheckLayerDrivenSoundOffsets();
     CheckIndependentEvaluationContext();
+    CheckHiddenLayerRenderEligibility();
     std::puts("[IMM_PAINT_FRAME_TABLE_TEST] detached publication, held selection, zero frames, repeat/offset, append and compaction passed");
 }

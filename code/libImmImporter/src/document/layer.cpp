@@ -297,10 +297,12 @@ const trans3d &Layer::GetTransformOverrideValue(void) const { return mTransformO
 	{
 		mCanonicalVisible = visible;
 		mVisible = visible;
+        if (visible) mPotentiallyVisible = true;
 	}
 	void Layer::SetCanonicalVisible(bool visible)
 	{
 		mCanonicalVisible = visible;
+        if (visible) mPotentiallyVisible = true;
 		if (GetNumAnimKeys(AnimProperty::Visibility) == 0)
 			mVisible = visible;
 	}
@@ -308,6 +310,7 @@ const trans3d &Layer::GetTransformOverrideValue(void) const { return mTransformO
     {
         mVisibilityOverrideEnabled = enabled;
         mVisibilityOverrideValue = visible;
+        if (enabled && visible) mPotentiallyVisible = true;
     }
 	void Layer::SetPotentiallyVisible(bool visible) { mPotentiallyVisible = visible; }
 
@@ -736,7 +739,9 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
 	bool Layer::AddKey(piTick time, AnimProperty property, const AnimValue& value, InterpolationType interpolation)
 	{
-		return SetAnimKey(mAnimKeys[static_cast<int>(property)], time, value, interpolation);
+        const bool added = SetAnimKey(mAnimKeys[static_cast<int>(property)], time, value, interpolation);
+        if (added && property == AnimProperty::Visibility && value.mBool) mPotentiallyVisible = true;
+        return added;
 	}
 
 	bool Layer::SetAnimKey(std::vector<AnimKey> & keys, piTick time,
@@ -791,6 +796,9 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 	void Layer::ReplaceAnimKeys(AnimProperty property, std::vector<AnimKey> && keys)
 	{
 		mAnimKeys[static_cast<int>(property)].swap(keys);
+        if (property == AnimProperty::Visibility)
+            for (const auto & key : mAnimKeys[static_cast<int>(property)])
+                if (key.mValue.mBool) { mPotentiallyVisible = true; break; }
 	}
 
     Layer::PlaybackState Layer::CapturePlaybackState() const
@@ -878,13 +886,17 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
     void Layer::SetStateAt(piTick now, piLog * log, EvaluationContext * context)
     {
         SetStateAtImpl(now, log, false, AnimProperty::MAX, context);
+        if (CanEvaluateInContext(context) && GetVisible()) mPotentiallyVisible = true;
     }
 
     void Layer::ReevaluatePaintPlaybackAt(piTick now, piLog * log, EvaluationContext * context)
     {
         if (CanEvaluateInContext(context) && mType == Type::Paint &&
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)GetImplementation()) != nullptr)
+        {
             SetStateAtImpl(now, log, true, AnimProperty::MAX, context);
+            if (GetVisible()) mPotentiallyVisible = true;
+        }
     }
 
     void Layer::ReevaluateTransformAt(piTick now, piLog * log, EvaluationContext * context)
@@ -903,6 +915,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         if (!CanEvaluateInContext(context)) return;
         if (GetNumAnimKeys(AnimProperty::Visibility) == 0) mVisible = mCanonicalVisible;
         else SetStateAtImpl(now, log, false, AnimProperty::Visibility, context);
+        if (GetVisible()) mPotentiallyVisible = true;
     }
 
     void Layer::ReevaluateOpacityAt(piTick now, piLog * log, EvaluationContext * context)

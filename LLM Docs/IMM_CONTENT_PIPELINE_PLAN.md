@@ -4284,6 +4284,29 @@ the historical sizes/check counts below describe this earlier source only.
    Evidence: artifacts/timeline-ci-agent-40040654620-acceptance-audit.json. This
    accepts history/nearest-tick behavior, not the later preview changes.
 
+### 6.121. Hidden-layer rendering eligibility correction
+
+1. Source review found that an initially hidden layer retains a false
+   potentially-visible flag after accepted base visibility, visibility-key or
+   runtime override changes. Renderer traversal rejects that flag even when
+   evaluated visibility is true, suppressing the layer and its subtree.
+2. A focused case in the existing CPU suite reproduces the failure against the
+   previously built libraries: accepted visibility keys make world visibility
+   true but fail the renderer's eligibility gate. Evidence:
+   artifacts/hidden-visibility-eligibility-red-run.log.
+3. Revealing setters/key publication and evaluated visibility now conservatively
+   promote eligibility. Hiding does not demote it; ordinary visibility/opacity
+   gates still suppress hidden content. Reevaluation after capsule restoration
+   also promotes retained revealing keys. Windows Release rebuild and the existing
+   CPU suite pass, including initial reveal, retained keys after restoration, and
+   base/runtime override visibility. Evidence:
+   artifacts/hidden-visibility-eligibility-native-build.log and
+   hidden-visibility-eligibility-green-run.log. This is CPU/render-gate evidence,
+   not a new live visual capture or hosted acceptance.
+4. Scoped-preview editing implementation remains active: its new C ABI cases
+   are prepared but not yet supported by the current read-only session. These
+   uncommitted tests are separate from the visibility regression milestone.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
