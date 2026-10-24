@@ -4516,7 +4516,9 @@ the historical sizes/check counts below describe this earlier source only.
    Its packaging completed and the Android raw artifact remains present afterward
    with seven-day retention. Actual delayed Android downloads/builds, device
    verdicts, macOS and final acceptance remain pending. These draw-in edits are
-   not part of that run and require their own validation push.
+   not part of that run. Draw-in commit `8276821f` is now pushed, starting FULL
+   [40058475651](https://github.com/icosa-mirror/IMM/actions/runs/40058475651), initially
+   queued. Neither run is accepted yet.
 
 ## 7. Consolidated documents
 
