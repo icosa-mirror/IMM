@@ -4105,6 +4105,32 @@ the historical sizes/check counts below describe this earlier source only.
    Evidence: artifacts/live-timeline-key-inputs-probe.json and
    live-timeline-key-inputs.png.
 
+### 6.117. Key clipboard and paused playhead navigation
+
+1. Single-key Copy/Cut/Paste now has toolbar buttons and Ctrl/Cmd+C/X/V shortcuts
+   when text inputs do not own keyboard focus. Paste targets the selected layer
+   at the current scope's playhead, preserves the complete key value and
+   interpolation, rejects occupied times, and uses publication-gated history.
+   The clipboard contains value data only and can be reused across document loads.
+2. A retained selected key now repopulates inspector values after refresh instead
+   of silently showing base values. Follow also reveals an explicitly requested
+   paused seek outside the current range. The toolbar scroll region has enough
+   height for its scrollbar at narrower widths.
+3. Source-only compilation passes. Six live injected Game-view keyboard checks
+   pass Copy/Paste, exact value retention, occupied-time rejection without history
+   changes, Cut, undo of Cut and undo of Paste to the complete original track.
+   The same probe starts with a distant range and confirms Follow reveals a
+   paused seek after its tracked native request completes. Evidence:
+   artifacts/live-timeline-clipboard-probe.json and live-timeline-clipboard.png.
+   The running clipboard toolbar was visually inspected. This does not implement
+   nested playback or the remaining channels.
+4. Earlier FULL run 40038310055 completed successfully for 9901c28e: 49 jobs
+   passed, and the final evidence artifact confirms 20/20 required hosted rows
+   with matching source provenance. The Android Input System regression is
+   cleared at that baseline. Hardware-only Windows Vulkan is outside that hosted
+   scope. Evidence: artifacts/timeline-ci-agent-40038310055-acceptance-audit.json.
+   This does not accept the later history/clock/inspector/clipboard changes.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

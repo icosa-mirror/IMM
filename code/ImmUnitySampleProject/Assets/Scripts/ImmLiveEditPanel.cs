@@ -146,6 +146,12 @@ namespace ImmPlayer
                 { Run(() => ReplayTimelineHistory(!Event.current.shift)); Event.current.Use(); }
                 else if (Event.current.keyCode == KeyCode.Y)
                 { Run(() => ReplayTimelineHistory(false)); Event.current.Use(); }
+                else if (Event.current.keyCode == KeyCode.C)
+                { Run(() => CopyTimelineKey(false)); Event.current.Use(); }
+                else if (Event.current.keyCode == KeyCode.X)
+                { Run(() => CopyTimelineKey(true)); Event.current.Use(); }
+                else if (Event.current.keyCode == KeyCode.V)
+                { Run(PasteTimelineKey); Event.current.Use(); }
             }
             DrawWorkspace();
         }
@@ -348,7 +354,8 @@ namespace ImmPlayer
             foreach (var layer in layers) if (layer.Id == selected) found = true;
             if (!found) { selected = layers.Length > 0 ? layers[0].Id : -1; if (selected >= 0) expandedKeyLayers.Add(selected); }
             ReadRevisions();
-            ReadSelected();
+            if (selectedTimelineKey.HasValue && selectedKeyLayer == selected) SelectTimelineKey(selected, selectedTimelineKey.Value);
+            else ReadSelected();
         }
 
         private void BuildTree()
@@ -506,6 +513,7 @@ namespace ImmPlayer
             ClearTimelineHistory();
             timelineScope = -1; timelineClockValid = false; timelineClockMissing = false; timelineClockError = "";
             timelinePlayTime = 0; queuedTimelineSeekTicks = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
+            timelineSeekRequest = 0; revealTimelinePlayhead = false;
             if (load != null) { StopCoroutine(load); load = null; }
             loading = false; attached = false; pending = 0; awaitingCommit = false;
             if (document != null)

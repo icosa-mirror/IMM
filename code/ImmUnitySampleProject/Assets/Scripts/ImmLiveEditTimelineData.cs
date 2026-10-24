@@ -20,6 +20,7 @@ namespace ImmPlayer
         private readonly Dictionary<int, TimelineData> timelineData = new Dictionary<int, TimelineData>();
         private readonly HashSet<int> expandedKeyLayers = new HashSet<int>();
         private N.Key? selectedTimelineKey;
+        private N.Key? clipboardTimelineKey;
         private int selectedKeyLayer = -1;
         private bool draggingKey, snapKeys = true, followPlayhead = true, timelineBodyHasMouse;
         private double draggedKeyTime;
@@ -202,6 +203,51 @@ namespace ImmPlayer
             Submit("Delete key", () =>
             { RecordTimelineBefore(selectedKeyLayer, key.property); return N.ImmAuthoring_KeyRemove(Doc, selectedKeyLayer, key.property, key.seconds); });
             selectedTimelineKey = null;
+        }
+
+        private void CopyTimelineKey(bool cut)
+        {
+            if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit) return;
+            clipboardTimelineKey = selectedTimelineKey.Value;
+            if (cut) DeleteTimelineKey();
+            else Log("Key copied. Select a layer and paste at the playhead.");
+        }
+
+        private bool CanPasteTimelineKey => attached && !loading && pending == 0 && !awaitingCommit &&
+            clipboardTimelineKey.HasValue && timelineClockValid && (timelineClock.flags & ClockActive) != 0 &&
+            treeNodes.TryGetValue(selected, out LayerNode pasteNode) && InTimelineScope(pasteNode);
+
+        private void PasteTimelineKey()
+        {
+            if (!CanPasteTimelineKey) return;
+            N.Key key = clipboardTimelineKey.Value;
+            key.seconds = SnapTime(timelinePlayTime);
+            if (timelineData.TryGetValue(selected, out TimelineData data) && data.Keys.TryGetValue(key.property, out N.Key[] keys))
+                foreach (N.Key existing in keys)
+                    if (Math.Abs(existing.seconds - key.seconds) < 0.5 / 12600)
+                    { Log("A key already exists at the playhead. Move the playhead before pasting."); return; }
+            int layer = selected;
+            Submit("Paste key", () =>
+            {
+                RecordTimelineBefore(layer, key.property);
+                return N.ImmAuthoring_KeySet(Doc, layer, ref key);
+            });
+            if (pending == 0 && !awaitingCommit) return;
+            selectedKeyLayer = layer; selectedTimelineKey = key;
+            keyChannel = Array.IndexOf(channelIds, key.property);
+            keyTime = key.seconds.ToString("R", CultureInfo.InvariantCulture);
+            expandedKeyLayers.Add(layer);
+        }
+
+        private void DrawTimelineClipboard(float x)
+        {
+            bool previous = GUI.enabled;
+            GUI.enabled = attached && pending == 0 && !awaitingCommit && selectedTimelineKey.HasValue;
+            if (GUI.Button(new Rect(x, 4, 60, 22), new GUIContent("Copy", "Copy selected key (Ctrl/Cmd+C)"))) Run(() => CopyTimelineKey(false));
+            if (GUI.Button(new Rect(x + 64, 4, 60, 22), new GUIContent("Cut", "Cut selected key (Ctrl/Cmd+X)"))) Run(() => CopyTimelineKey(true));
+            GUI.enabled = CanPasteTimelineKey;
+            if (GUI.Button(new Rect(x + 128, 4, 60, 22), new GUIContent("Paste", "Paste at the playhead on the selected layer (Ctrl/Cmd+V)"))) Run(PasteTimelineKey);
+            GUI.enabled = previous;
         }
 
         private void FitTimeline()

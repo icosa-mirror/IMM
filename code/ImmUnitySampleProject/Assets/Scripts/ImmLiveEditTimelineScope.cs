@@ -43,6 +43,13 @@ namespace ImmPlayer
                 }
                 timelineClock = value; timelineClockValid = true; timelineClockError = "";
                 timelinePlayTime = value.local / 12600.0;
+                if (revealTimelinePlayhead)
+                {
+                    if (followPlayhead && (value.flags & ClockActive) != 0 &&
+                        (timelinePlayTime < timelineStart || timelinePlayTime > timelineStart + timelineRange))
+                        timelineStart = Math.Floor(timelinePlayTime / timelineRange) * timelineRange;
+                    revealTimelinePlayhead = false;
+                }
             }
             catch (EntryPointNotFoundException)
             {
@@ -79,6 +86,7 @@ namespace ImmPlayer
                 (node.Parent != null && !node.Info.IsTimeline)) return;
             ReleaseTimelineCapture();
             timelineScope = layer; timelineClockValid = false; timelineClock = default; timelinePlayTime = 0; queuedTimelineSeekTicks = null;
+            timelineSeekRequest = 0; revealTimelinePlayhead = false;
             timelineStart = 0; layerScroll = Vector2.zero; selectedTimelineKey = null;
             filter = ""; FilterTree();
             if (timelineData.TryGetValue(layer, out TimelineData data) && data.Duration > 0 && node.Parent != null)

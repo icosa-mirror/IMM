@@ -13,6 +13,8 @@ namespace ImmPlayer
         private double timelineStart, timelineRange = 5, timelinePlayTime;
         private int scrubControl;
         private long? queuedTimelineSeekTicks;
+        private ulong timelineSeekRequest;
+        private bool revealTimelinePlayhead;
         private bool pauseBeforeTimelineSeek, timelinePauseRequested;
         private float timelineSeekDeadline;
         private const float RowHeight = 24;
@@ -104,9 +106,9 @@ namespace ImmPlayer
             GUI.BeginGroup(timelineWindow);
             float namesWidth = Mathf.Min(320, timelineWindow.width * 0.32f);
             float tracksWidth = Mathf.Max(50, timelineWindow.width - namesWidth - 20);
-            float headerExtra = timelineWindow.width < 1320 ? 20 : 0;
+            float headerExtra = timelineWindow.width < 1740 ? 20 : 0;
             timelineToolbarScroll = GUI.BeginScrollView(new Rect(0, 0, timelineWindow.width, 30 + headerExtra), timelineToolbarScroll,
-                new Rect(0, 0, Math.Max(1520, timelineWindow.width - 1), 28), false, false);
+                new Rect(0, 0, Math.Max(1740, timelineWindow.width - 1), 28), false, false);
             GUI.Label(new Rect(8, 4, 76, 22), "Timeline");
             GUI.enabled = attached && !loading;
             string nextFilter = GUI.TextField(new Rect(84, 4, Mathf.Max(80, namesWidth - 92), 22), filter);
@@ -137,6 +139,7 @@ namespace ImmPlayer
             if (GUI.Button(new Rect(namesWidth + 884, 4, 80, 22), "Delete key")) DeleteTimelineKey();
             GUI.enabled = true;
             DrawTimelineHistory(namesWidth + 972);
+            DrawTimelineClipboard(namesWidth + 1144);
             GUI.EndScrollView();
             GUI.BeginGroup(new Rect(0, headerExtra, timelineWindow.width, timelineWindow.height - headerExtra));
             GUI.Label(new Rect(8, 30, namesWidth - 12, 22), $"Layers ({layers.Length}) / drawing frames");
@@ -258,6 +261,14 @@ namespace ImmPlayer
 
         private void UpdateTimelinePlayback()
         {
+            if (timelineSeekRequest != 0 && attached && !loading && document != null &&
+                document.TryGetSpawnAreaSnapshot(null, out SpawnAreaSnapshot snapshot))
+            {
+                if (snapshot.IsComplete(timelineSeekRequest))
+                { timelineSeekRequest = 0; revealTimelinePlayhead = true; }
+                else if (snapshot.requestedCommand != timelineSeekRequest || Time.unscaledTime > timelineSeekDeadline)
+                    timelineSeekRequest = 0;
+            }
             if (!queuedTimelineSeekTicks.HasValue || !attached || loading || document == null || pending != 0 || awaitingCommit) return;
             if (Time.unscaledTime > timelineSeekDeadline)
             {
@@ -270,7 +281,9 @@ namespace ImmPlayer
                 if (!timelinePauseRequested) { document.Pause(); timelinePauseRequested = true; }
                 return;
             }
-            if (document.RequestSetTime(queuedTimelineSeekTicks.Value, 0) == 0) return;
+            ulong request = document.RequestSetTime(queuedTimelineSeekTicks.Value, 0);
+            if (request == 0) return;
+            timelineSeekRequest = request;
             queuedTimelineSeekTicks = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
         }
 
