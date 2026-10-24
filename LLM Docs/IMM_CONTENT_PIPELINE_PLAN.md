@@ -5124,6 +5124,28 @@ the historical sizes/check counts below describe this earlier source only.
    smoke log contract and cancellation was requested under the source-failure
    policy. Their evidence is retained. The next FULL tip includes the CI-owned log
    fix and this lab fix; old partial results are not replacement acceptance.
+   Replacement FULL[40078448726](https://github.com/icosa-mirror/IMM/actions/runs/40078448726)
+   targets source567a71587b9293ac4e419bd1e9a95a7e150e1cb6 with the requested marker;
+   it is running/pending, not accepted. All seven old runs are terminal cancelled,
+   with no active jobs or license owner left behind.
+
+### 6.146. Snoopy basic editing pass
+
+1. Twelve live steps on real Snoopy layer30 pass rename/restore, opacity0/restore,
+   and local X movement by0.1m/restore. Commands use actual inspector buttons;
+   values are entered through the same inspector fields used by a person.
+   Layer metadata, effective world opacity and paused playback are checked after
+   asynchronous publication. No new UI control was needed for these operations.
+2. Visible scene comparisons confirm the edits: opacity0 changes8,338viewport
+   pixels; X movement changes3,794. Restoring either operation reproduces the
+   baseline exactly; renaming changes no scene pixels. Visual inspection confirms
+   the intended Snoopy paint disappears/moves while separate hat/beard layers stay.
+   Evidence: artifacts/snoopy-basic-edit-pass.json,
+   snoopy-basic-edit-images.json and snoopy-basic-*.png.
+3. The selected layer and source values are restored. Next exercise actual key
+   dragging/history, drawing/hold changes, temporary hierarchy edits and local
+   preview through this same realistic scene. These are evaluation/prototyping
+   steps, not a request to expand backend coverage or build a production editor.
 
 ## 7. Consolidated documents
 
