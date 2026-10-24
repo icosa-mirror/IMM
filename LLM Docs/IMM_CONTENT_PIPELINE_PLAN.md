@@ -4186,6 +4186,53 @@ the historical sizes/check counts below describe this earlier source only.
    artifacts/live-timeline-preview-context-ci-runs.json. The original Snoopy file
    is restored in the open sample Editor; preview transport remains disabled.
 
+### 6.119. Independent preview session integration (in progress)
+
+1. Runtime capsules and a Document-owned session are being integrated with
+   synchronous controls under the existing Player scene mutex (shared by CPU
+   evaluation and render publication). Controls cover begin, seek, play, pause
+   and exit. The canonical root and IDs are retained; selected-container children
+   use the independent clock and scoped render traversal.
+2. Main evaluated state, paint time/intent and sound pause flags are saved before
+   entry. Main clocks are frozen, and exit shifts absolute clock anchors while
+   restoring saved intent. Authoring publication is initially blocked during
+   preview; scoped live editing and audible preview remain unfinished.
+3. The draft also handles ordinary host commands, detach and unload by ending
+   preview before main-scene operations. Allocation for saved records and action
+   sidecars precedes runtime mutation. Native integration checks/review are in
+   progress; these changes are not yet validated or committed.
+4. Runtime capsule helpers pass the existing CPU suite, including shifted group
+   clocks/span origins, retained playback intent/overrides, unchanged canonical
+   data/action flags, and paint reselection against an edited current frame table.
+   Evidence: artifacts/live-timeline-preview-session-cpu/report.json / run.log.
+   Session controls also pass the loaded WARP C ABI suite for independent clocks,
+   held main restoration, pause, inactive scopes and detach. A reviewer found that
+   accepted runtime override writes could be overwritten on exit; setters/clearers
+   now exit preview before applying, with a passing C ABI regression. Live managed
+   transport/render/camera checks remain in progress.
+
+### 6.120. Android system-crash attribution correction
+
+1. Full run 40043633784 failed its strict collector because unfiltered device
+   logcat contained Fatal signal 11 from audioserver PID 1674 before the IMM app
+   (PID 27497) logged ready. Both device producers and all nine render/composition/
+   video/synthetic metric files passed. This was a classifier source defect,
+   not evidence of an IMM app crash. It was investigated before any retry.
+2. Classifier fix accf76e9 retains real app-crash rejection and all strict visual
+   gates. Only exact audioserver identity with a distinct PID and same-log app
+   attribution is excluded, with a warning. Unknown/ambiguous/generic process
+   names, conflicting/app PIDs, app names and missing attribution still fail.
+   Focused tests pass; the exact failed artifact reclassifies as passed while
+   retaining its audioserver warning. Evidence:
+   artifacts/android-audioserver-classifier-tests.log and
+   timeline-ci-agent-40043633784-reclassified.json.
+3. Cancellation of the source-affected failed run was requested; other independent
+   successful work is preserved. The fix was committed separately and pushed
+   after pulling main. FULL [run 40047649061](https://github.com/icosa-mirror/IMM/actions/runs/40047649061)
+   targets accf76e9ec23bf92e70d5519b2f3071500abf3dd and is queued. Receipt:
+   artifacts/android-audioserver-full-runs.json. Hosted acceptance of the fix is
+   pending; the uncommitted session draft is not included in this run.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

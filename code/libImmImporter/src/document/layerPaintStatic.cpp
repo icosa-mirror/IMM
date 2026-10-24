@@ -116,6 +116,25 @@ namespace ImmImporter
         }
 	}
 
+    LayerPaintStatic::PlaybackState LayerPaintStatic::CapturePlaybackState() const
+    {
+        PlaybackState state;
+        state.mTime = mTime;
+        state.mIsPlaying = mIsPlaying;
+        state.mEvaluatedMaxRepeatCount = mEvaluatedMaxRepeatCount;
+        state.mOffset = mOffset;
+        return state;
+    }
+
+    void LayerPaintStatic::RestorePlaybackState(const PlaybackState & state)
+    {
+        mTime = state.mTime;
+        mIsPlaying = state.mIsPlaying;
+        mEvaluatedMaxRepeatCount = state.mEvaluatedMaxRepeatCount;
+        mOffset = state.mOffset;
+        iSelectFrame();
+    }
+
     void LayerPaintStatic::SetOffset(uint32_t offsetFrames)
     {
         mOffset = offsetFrames;

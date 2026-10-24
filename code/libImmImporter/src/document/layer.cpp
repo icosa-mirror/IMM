@@ -793,6 +793,82 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		mAnimKeys[static_cast<int>(property)].swap(keys);
 	}
 
+    Layer::PlaybackState Layer::CapturePlaybackState() const
+    {
+        PlaybackState state;
+        state.mVisible = mVisible;
+        state.mPotentiallyVisible = mPotentiallyVisible;
+        state.mOpacity = mOpacity;
+        state.mTransform = mTransform;
+        state.mDrawInTime = mDrawInTime;
+        for (int index = 0; index < 4; ++index) state.mAnimParams[index] = mAnimParams[index];
+        state.mVisibilityOverrideEnabled = mVisibilityOverrideEnabled;
+        state.mVisibilityOverrideValue = mVisibilityOverrideValue;
+        state.mOpacityOverrideEnabled = mOpacityOverrideEnabled;
+        state.mOpacityOverrideValue = mOpacityOverrideValue;
+        state.mTransformOverrideEnabled = mTransformOverrideEnabled;
+        state.mTransformOverrideValue = mTransformOverrideValue;
+        state.mEvaluatedMaxRepeatCount = mEvaluatedMaxRepeatCount;
+        state.mIsPlaying = mIsPlaying;
+        state.mHasStopTime = mHasStopTime;
+        state.mStoppedByAction = mStoppedByAction;
+        state.mStartTime = mStartTime;
+        state.mStopTime = mStopTime;
+        state.mLastActiveSpanStart = mLastActiveSpanStart;
+        state.mLastActiveSpanClockOrigin = mLastActiveSpanClockOrigin;
+        state.mHasActiveSpanClockOrigin = mHasActiveSpanClockOrigin;
+        state.mStartOffset = mStartOffset;
+        return state;
+    }
+
+    void Layer::RestorePlaybackState(const PlaybackState & state, piTick wallClockShift)
+    {
+        mVisible = state.mVisible;
+        mPotentiallyVisible = state.mPotentiallyVisible;
+        mOpacity = state.mOpacity;
+        mTransform = state.mTransform;
+        mDrawInTime = state.mDrawInTime;
+        for (int index = 0; index < 4; ++index) mAnimParams[index] = state.mAnimParams[index];
+        mVisibilityOverrideEnabled = state.mVisibilityOverrideEnabled;
+        mVisibilityOverrideValue = state.mVisibilityOverrideValue;
+        mOpacityOverrideEnabled = state.mOpacityOverrideEnabled;
+        mOpacityOverrideValue = state.mOpacityOverrideValue;
+        mTransformOverrideEnabled = state.mTransformOverrideEnabled;
+        mTransformOverrideValue = state.mTransformOverrideValue;
+        mEvaluatedMaxRepeatCount = state.mEvaluatedMaxRepeatCount;
+        mIsPlaying = state.mIsPlaying;
+        mHasStopTime = state.mHasStopTime;
+        mStoppedByAction = state.mStoppedByAction;
+        const piTick groupShift = mType == Type::Group ? wallClockShift : piTick(0);
+        mStartTime = state.mStartTime + groupShift;
+        mStopTime = state.mStopTime + groupShift;
+        mLastActiveSpanStart = state.mLastActiveSpanStart;
+        mLastActiveSpanClockOrigin = state.mLastActiveSpanClockOrigin +
+            (state.mHasActiveSpanClockOrigin ? wallClockShift : piTick(0));
+        mHasActiveSpanClockOrigin = state.mHasActiveSpanClockOrigin;
+        mStartOffset = state.mStartOffset;
+    }
+
+    void Layer::ResetPlaybackStateForEvaluation()
+    {
+        mVisible = mCanonicalVisible;
+        mOpacity = mCanonicalOpacity;
+        mTransform = mCanonicalTransform;
+        mDrawInTime = 1.0;
+        mAnimParams[0] = 0.0; mAnimParams[1] = 0.7;
+        mAnimParams[2] = 0.3; mAnimParams[3] = 0.7;
+        mEvaluatedMaxRepeatCount = mMaxRepeatCount;
+        mIsPlaying = false;
+        mHasStopTime = false;
+        mStoppedByAction = false;
+        mStartTime = piTick(0);
+        mStopTime = piTick(0);
+        mLastActiveSpanStart = piTick(0);
+        mLastActiveSpanClockOrigin = piTick(0);
+        mHasActiveSpanClockOrigin = false;
+        mStartOffset = piTick(0);
+    }
+
     bool Layer::CanEvaluateInContext(const EvaluationContext * context) const
     {
         return context == nullptr || (context->Contains(this) && this != context->mBoundary &&

@@ -136,6 +136,43 @@ namespace ImmImporter
             bool ConsumeAction(const Layer * layer, ImmCore::piTick time);
         };
 
+        // Evaluated/runtime state only: no keys, canonical properties, hierarchy,
+        // assets or geometry ownership. Overrides and potential visibility are
+        // included for exact restoration even though context evaluation does not
+        // change them. The owner must exclude concurrent edits to these fields,
+        // or explicitly reconcile them before restoring the capsule.
+        struct PlaybackState
+        {
+            bool mVisible = true;
+            bool mPotentiallyVisible = true;
+            float mOpacity = 1.0f;
+            ImmCore::trans3d mTransform = ImmCore::trans3d::identity();
+            double mDrawInTime = 1.0;
+            double mAnimParams[4] = {0.0, 0.7, 0.3, 0.7};
+            bool mVisibilityOverrideEnabled = false;
+            bool mVisibilityOverrideValue = true;
+            bool mOpacityOverrideEnabled = false;
+            float mOpacityOverrideValue = 1.0f;
+            bool mTransformOverrideEnabled = false;
+            ImmCore::trans3d mTransformOverrideValue = ImmCore::trans3d::identity();
+            uint32_t mEvaluatedMaxRepeatCount = 1;
+            bool mIsPlaying = false;
+            bool mHasStopTime = false;
+            bool mStoppedByAction = false;
+            ImmCore::piTick mStartTime = ImmCore::piTick(0);
+            ImmCore::piTick mStopTime = ImmCore::piTick(0);
+            ImmCore::piTick mLastActiveSpanStart = ImmCore::piTick(0);
+            ImmCore::piTick mLastActiveSpanClockOrigin = ImmCore::piTick(0);
+            bool mHasActiveSpanClockOrigin = false;
+            ImmCore::piTick mStartOffset = ImmCore::piTick(0);
+        };
+        PlaybackState CapturePlaybackState() const;
+        // Shift must fit absolute piTick values. Local span start/offset do not shift.
+        void RestorePlaybackState(const PlaybackState & state, ImmCore::piTick wallClockShift = ImmCore::piTick(0));
+        // Preserve canonical state, source action flags, overrides and streaming
+        // eligibility; reset only evaluated pose and playback clocks/span caches.
+        void ResetPlaybackStateForEvaluation();
+
 
 
 		bool Init(Type type, const wchar_t* name, bool visible, const ImmCore::trans3d & transform, const ImmCore::trans3d& pivot, float opacity, bool isTimeLine, ImmCore::piTick duration, uint32_t maxRepeatCount, uint32_t assetID, ImmCore::piLog *log, bool publishToParent = true);

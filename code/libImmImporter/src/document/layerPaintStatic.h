@@ -43,6 +43,17 @@ namespace ImmImporter
         void SetOffset(uint32_t offsetFrames) override;
         void SetMaxRepeatCount(uint32_t count) override;
         void SetEvaluatedMaxRepeatCount(uint32_t count) override;
+        struct PlaybackState
+        {
+            ImmCore::piTick mTime = ImmCore::piTick(0);
+            bool mIsPlaying = false;
+            uint32_t mEvaluatedMaxRepeatCount = 1;
+            uint32_t mOffset = 0; // Transient frame offset, not authored Offset-key ticks.
+        };
+        PlaybackState CapturePlaybackState() const;
+        // Reselects retained time against the CURRENT canonical frame table.
+        // Does not restore tables, drawings, frame rate or canonical repeat count.
+        void RestorePlaybackState(const PlaybackState & state);
 
 
 		// for deserializing... (ugly!)

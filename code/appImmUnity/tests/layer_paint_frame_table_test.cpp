@@ -300,8 +300,54 @@ static void CheckIndependentEvaluationContext()
     root->ReevaluateVisibilityAt(wallTime, &log, &context);
     requireFrames(!root->GetVisible() && root->GetStopTime() == piTick(2) && root->IsStoppedByAction() &&
         !root->GetWorldVisible(&context), "outside state and main root hold stay unchanged");
+    inner->SetVisibilityOverride(true, false);
+    inner->SetOpacityOverride(true, 0.3f);
+    inner->SetTransformOverride(true, placement);
+    inner->ResetActionStatesAt(piTick::FromFrames(2, 30));
+    const auto savedRoot = root->CapturePlaybackState();
+    const auto savedInner = inner->CapturePlaybackState();
+    paint->SetTime(piTick::FromFrames(4, 30)); // Same old frame index1, retained time4.
+    paint->SetPlaying(false);
+    const auto savedPaint = paint->CapturePlaybackState();
+    root->ResetPlaybackStateForEvaluation();
+    inner->ResetPlaybackStateForEvaluation();
+    const auto resetInner = inner->CapturePlaybackState();
+    requireFrames(!resetInner.mIsPlaying && !resetInner.mHasStopTime && !resetInner.mHasActiveSpanClockOrigin &&
+        resetInner.mOpacity == inner->GetCanonicalOpacity() && resetInner.mVisibilityOverrideEnabled &&
+        inner->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool,
+        "evaluation reset leaves overrides and consumed source actions intact");
+    inner->SetCanonicalOpacity(0.8f); // A later owner must reconcile this canonical edit after restoration.
+    inner->SetVisibilityOverride(false, true);
+    inner->SetOpacityOverride(false, 1.0f);
+    inner->SetTransformOverride(false, trans3d::identity());
+    inner->SetPotentiallyVisible(false);
+    const piTick wallShift(100);
+    root->RestorePlaybackState(savedRoot, wallShift);
+    inner->RestorePlaybackState(savedInner, wallShift);
+    const auto restoredInner = inner->CapturePlaybackState();
+    requireFrames(root->GetStartTime() == savedRoot.mStartTime + wallShift &&
+        root->GetStopTime() == savedRoot.mStopTime + wallShift && !root->GetPlaying() && root->IsStoppedByAction() &&
+        restoredInner.mStartTime == savedInner.mStartTime + wallShift &&
+        restoredInner.mStopTime == savedInner.mStopTime + wallShift &&
+        restoredInner.mLastActiveSpanClockOrigin == savedInner.mLastActiveSpanClockOrigin + wallShift &&
+        restoredInner.mLastActiveSpanStart == savedInner.mLastActiveSpanStart &&
+        restoredInner.mStartOffset == savedInner.mStartOffset && restoredInner.mIsPlaying == savedInner.mIsPlaying &&
+        inner->GetPotentiallyVisible() && inner->GetVisibilityOverrideEnabled() &&
+        inner->GetOpacityOverrideEnabled() && inner->GetTransformOverrideEnabled() && inner->GetCanonicalOpacity() == 0.8f,
+        "capsule restores clocks/intent/overrides with shifted absolute time without reverting canonical edits");
+    auto editedFrames = LayerPaintStatic::PrepareFrameTable({2, 0}, 3);
+    requireFrames(editedFrames && paint->PublishFrameTable(*editedFrames), "edit canonical table while holding capsule");
+    paint->SetMaxRepeatCount(2);
+    paint->SetPlaying(true); paint->SetTime(piTick(0)); paint->SetOffset(1);
+    paint->RestorePlaybackState(savedPaint);
+    requireFrames(!paint->GetPlaying() && paint->GetNumFrames() == 2 && paint->GetFrameBuffer()[0] == 2 &&
+        paint->GetFrameBuffer()[1] == 0 && paint->GetMaxRepeatCount() == 2 &&
+        paint->GetCurrentDrawing() == paint->GetDrawing(2) &&
+        paint->CapturePlaybackState().mTime == piTick::FromFrames(4, 30),
+        "paint capsule reselects saved time against edited table without reverting canonical repeat or paused intent");
     sequence.Deinit(&log); log.End();
     std::puts("[IMM_LAYER_EVALUATION_CONTEXT_TEST] boundaryClock=1 scopedProperties=1 localActions=1 sharedAudioUntouched=1 foundationOnly=1");
+    std::puts("[IMM_PLAYBACK_CAPSULE_TEST] restoredClocksAndIntent=1 currentTableReselected=1 canonicalEditsPreserved=1");
 }
 
 static void CheckLayerDrivenPaintFrameGrowth()
