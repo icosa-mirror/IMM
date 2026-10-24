@@ -4073,6 +4073,11 @@ the historical sizes/check counts below describe this earlier source only.
    lab's earlier Busy failure; it does not establish which owner caused the old
    insufficiently instrumented attempts or fix arbitrary hosts bypassing the
    coordinator.
+3. Precision correction 3411a506 is committed and pushed after pulling main.
+   FULL [run 40043633784](https://github.com/icosa-mirror/IMM/actions/runs/40043633784)
+   targets 3411a5063b3a5a6ea59647641aa230d189eaedc1 and is queued; the preceding
+   scope run 40043337869 is active. Receipt:
+   artifacts/live-timeline-keytime-ci-runs.json. Hosted acceptance remains pending.
 
 ## 7. Consolidated documents
 
