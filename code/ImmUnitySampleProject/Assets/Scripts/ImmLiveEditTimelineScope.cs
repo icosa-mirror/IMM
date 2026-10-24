@@ -156,7 +156,7 @@ namespace ImmPlayer
                 if (GUILayout.Button(TimelinePreviewActive ? "Return to scene" : "Preview local", GUILayout.Width(120)))
                     Run(() => ControlTimelinePreview(TimelinePreviewActive ? 4 : 0));
                 GUI.enabled = true;
-                GUILayout.Label(TimelinePreviewActive ? "Independent preview · audio muted · exit to edit" : "Scene occurrence · open preview to play locally", GUILayout.Width(330));
+                GUILayout.Label(TimelinePreviewActive ? "Independent preview · audio muted · edit child tracks" : "Scene occurrence · open preview to play locally", GUILayout.Width(330));
             }
             GUILayout.EndHorizontal();
         }

@@ -207,13 +207,13 @@ namespace ImmPlayer
 
         private void CopyTimelineKey(bool cut)
         {
-            if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit || TimelinePreviewActive) return;
+            if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit || (cut && !PreviewCanEditLayer(selectedKeyLayer))) return;
             clipboardTimelineKey = selectedTimelineKey.Value;
             if (cut) DeleteTimelineKey();
             else Log("Key copied. Select a layer and paste at the playhead.");
         }
 
-        private bool CanPasteTimelineKey => attached && !TimelinePreviewActive && !loading && pending == 0 && !awaitingCommit &&
+        private bool CanPasteTimelineKey => attached && PreviewCanEditSelected && !loading && pending == 0 && !awaitingCommit &&
             clipboardTimelineKey.HasValue && timelineClockValid && (timelineClock.flags & ClockActive) != 0 &&
             treeNodes.TryGetValue(selected, out LayerNode pasteNode) && InTimelineScope(pasteNode);
 
@@ -242,8 +242,9 @@ namespace ImmPlayer
         private void DrawTimelineClipboard(float x)
         {
             bool previous = GUI.enabled;
-            GUI.enabled = attached && !TimelinePreviewActive && pending == 0 && !awaitingCommit && selectedTimelineKey.HasValue;
+            GUI.enabled = attached && pending == 0 && !awaitingCommit && selectedTimelineKey.HasValue;
             if (GUI.Button(new Rect(x, 4, 60, 22), new GUIContent("Copy", "Copy selected key (Ctrl/Cmd+C)"))) Run(() => CopyTimelineKey(false));
+            GUI.enabled &= PreviewCanEditLayer(selectedKeyLayer);
             if (GUI.Button(new Rect(x + 64, 4, 60, 22), new GUIContent("Cut", "Cut selected key (Ctrl/Cmd+X)"))) Run(() => CopyTimelineKey(true));
             GUI.enabled = CanPasteTimelineKey;
             if (GUI.Button(new Rect(x + 128, 4, 60, 22), new GUIContent("Paste", "Paste at the playhead on the selected layer (Ctrl/Cmd+V)"))) Run(PasteTimelineKey);
@@ -332,10 +333,11 @@ namespace ImmPlayer
                 {
                     GUI.FocusControl(null);
                     SelectTimelineKey(node.Info.Id, key);
-                    if (TimelinePreviewActive) { input.Use(); continue; }
+                    if (!PreviewCanEditLayer(node.Info.Id)) { input.Use(); continue; }
                     draggingKey = true; draggedKeyTime = key.seconds;
                     scrubControl = GUIUtility.GetControlID(FocusType.Passive); GUIUtility.hotControl = scrubControl;
-                    document.Pause(); input.Use();
+                    if (TimelinePreviewActive) ControlTimelinePreview(3); else document.Pause();
+                    input.Use();
                 }
             }
         }

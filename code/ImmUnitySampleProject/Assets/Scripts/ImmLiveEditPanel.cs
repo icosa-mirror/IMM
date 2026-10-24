@@ -159,7 +159,7 @@ namespace ImmPlayer
         private void DrawPanel(int id)
         {
             scroll = GUILayout.BeginScrollView(scroll);
-            GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading && !TimelinePreviewActive;
+            GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading && PreviewCanEditSelected;
             GUI.enabled &= selected >= 0;
             GUILayout.Label($"Selected layer {selected}");
             GUILayout.Label(evaluated, wrapped, GUILayout.Width(window.width - 50));
@@ -187,7 +187,7 @@ namespace ImmPlayer
             GUILayout.Label($"Pivot ({pivot.tx:F2}, {pivot.ty:F2}, {pivot.tz:F2})");
             GUI.enabled &= pivotSupported;
             if (GUILayout.Button("Pivot +0.1m X")) Submit("Pivot", () => { pivot.tx += 0.1f; return N.ImmAuthoring_LayerSetPivot(Doc, selected, ref pivot); });
-            GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading && selected >= 0;
+            GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading && selected >= 0 && PreviewCanEditSelected;
             GUILayout.BeginHorizontal();
             repeat = GUILayout.TextField(repeat, GUILayout.Width(70));
             if (GUILayout.Button("Set paint repeat (0 = loop)")) Submit("Paint repeat", () =>
@@ -234,6 +234,7 @@ namespace ImmPlayer
             GUILayout.Label("Marker m", GUILayout.Width(65)); markerSize = GUILayout.TextField(markerSize, GUILayout.Width(55));
             GUILayout.EndHorizontal();
             DrawTimelineFrameTools();
+            GUI.enabled &= !TimelinePreviewActive;
             if (GUILayout.Button("Replace frame's drawing with marker at local origin")) Submit("Drawing geometry", ReplaceDrawing);
             GUILayout.Space(8);
             GUILayout.Label("Hierarchy — parent is a layer ID, index is its child position", wrapped, GUILayout.Width(window.width - 50));
@@ -275,7 +276,7 @@ namespace ImmPlayer
 
         private void Submit(string label, Func<int> queue)
         {
-            if (!attached || pending != 0 || awaitingCommit || TimelinePreviewActive) return;
+            if (!attached || pending != 0 || awaitingCommit || !PreviewCanEditSelected) return;
             historyRecording = null;
             try
             {
@@ -588,7 +589,14 @@ namespace ImmPlayer
         private void OnDisable()
         {
             ReleaseTimelineCapture();
-            if (TimelinePreviewActive || previewCameraSaved) Run(() => ControlTimelinePreview(4));
+            if ((TimelinePreviewActive || previewCameraSaved) && attached && document != null)
+                Run(() =>
+                {
+                    int result = N.ImmAuthoring_TimelinePreviewControl(Doc, timelineScope, 4, 0);
+                    // Busy retains the in-flight edit and requests native exit
+                    // immediately after its publication/terminal rejection.
+                    if (result != -7) N.Check(result);
+                });
             RestorePreviewCamera();
         }
 

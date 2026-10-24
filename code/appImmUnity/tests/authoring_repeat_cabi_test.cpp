@@ -655,6 +655,39 @@ int wmain(int argc, wchar_t ** argv)
     void * inactiveTimeline = ImmExporter_CreateGroupLayer(clockSequence, nullptr, "InactiveClock", 1, 1.0f,
         &identity, &identity, 1, 100, 1);
     requireRepeat(finiteTimeline && infiniteTimeline && inactiveTimeline, "clock fixture timelines");
+    void * previewChild = ImmExporter_CreateGroupLayer(clockSequence, finiteTimeline, "PreviewChild", 1, 1.0f,
+        &identity, &identity, 0, 0, 1);
+    requireRepeat(previewChild && ImmExporter_LayerAddAnimationKey(previewChild, 0, 0, 0, 1, 0, 0, 0, &identity),
+        "preview fixture child visibility");
+    ImmExporterTransformC laterPlacement = identity;
+    laterPlacement.tx = 9;
+    requireRepeat(ImmExporter_LayerAddAnimationKey(previewChild, 1, 0, 0, 0, 0, 1.0f, 0, &identity) &&
+        ImmExporter_LayerAddAnimationKey(previewChild, 1, 90, 0, 0, 0, 0.75f, 0, &identity) &&
+        ImmExporter_LayerAddAnimationKey(previewChild, 9, 0, 0, 0, 0, 0, 0, &identity) &&
+        ImmExporter_LayerAddAnimationKey(previewChild, 9, 90, 0, 0, 0, 0, 0, &laterPlacement),
+        "preview fixture separates preview-local and held-main key selections");
+    void * previewPaint = ImmExporter_CreatePaintLayer(clockSequence, finiteTimeline, "PreviewPaint", 1, 1.0f,
+        &identity, &identity, 0, 0, 1);
+    requireRepeat(previewPaint != nullptr, "preview fixture paint");
+    for (uint32_t drawingIndex = 0; drawingIndex < 2; ++drawingIndex)
+    {
+        void * drawing = ImmExporter_CreateDrawing(previewPaint);
+        requireRepeat(drawing && ImmExporter_DrawingInit(drawing, 1, 0), "preview fixture drawing");
+        void * element = ImmExporter_DrawingGetElement(drawing, 0);
+        requireRepeat(element && ImmExporter_ElementInit(element, 2, 2, 1), "preview fixture Circle element");
+        ImmExporterPointC points[2]{};
+        for (uint32_t index = 0; index < 2; ++index)
+        {
+            points[index].px = -0.5f + drawingIndex * 0.3f + index * 0.2f;
+            points[index].py = 1.5f; points[index].ny = 1.0f; points[index].dz = 1.0f;
+            points[index].r = 1.0f; points[index].a = 1.0f; points[index].width = 0.03f;
+            points[index].length = index * 0.2f; points[index].time = static_cast<float>(index);
+        }
+        requireRepeat(ImmExporter_ElementSetPoints(element, 0, points, 2), "preview fixture points");
+        ImmExporter_ComputeElementBounds(element); ImmExporter_ComputeDrawingBounds(drawing);
+        ImmExporter_PaintAddFrame(previewPaint, ImmExporter_GetDrawingIndex(drawing));
+        ImmExporter_DestroyDrawing(drawing);
+    }
     for (void * layer : {finiteTimeline, infiniteTimeline, inactiveTimeline})
         requireRepeat(ImmExporter_LayerAddAnimationKey(layer, 0, layer == inactiveTimeline ? 500 : 100,
             0, 1, 0, 0, 0, &identity), "clock fixture visibility span");
@@ -670,7 +703,7 @@ int wmain(int argc, wchar_t ** argv)
         player.GetDocumentState(state, clockDoc);
         return state.mLoadingState == Player::LoadingState::Loaded;
     }), "load timeline clock fixture");
-    int clockRootId = -1, finiteId = -1, infiniteId = -1, inactiveId = -1;
+    int clockRootId = -1, finiteId = -1, infiniteId = -1, inactiveId = -1, previewChildId = -1, previewPaintId = -1;
     for (int index = 0; index < player.GetLayerCount(clockDoc); ++index)
     {
         Player::LayerInfo info{};
@@ -679,8 +712,15 @@ int wmain(int argc, wchar_t ** argv)
         if (std::wcscmp(info.name, L"FiniteClock") == 0) finiteId = info.id;
         if (std::wcscmp(info.name, L"InfiniteClock") == 0) infiniteId = info.id;
         if (std::wcscmp(info.name, L"InactiveClock") == 0) inactiveId = info.id;
+        if (std::wcscmp(info.name, L"PreviewChild") == 0) previewChildId = info.id;
+        if (std::wcscmp(info.name, L"PreviewPaint") == 0) previewPaintId = info.id;
     }
-    requireRepeat(clockRootId >= 0 && finiteId >= 0 && infiniteId >= 0 && inactiveId >= 0, "clock fixture layer IDs");
+    requireRepeat(clockRootId >= 0 && finiteId >= 0 && infiniteId >= 0 && inactiveId >= 0 && previewChildId >= 0 && previewPaintId >= 0,
+        "clock fixture layer IDs");
+    requireRepeat(wait([&]() {
+        ImmAuthoringTimelineClock ready{};
+        return ImmAuthoring_TimelineGetClock(clockDoc, clockRootId, &ready, sizeof(ready)) == IMM_AUTHORING_OK;
+    }), "clock fixture CPU evaluation and paint ownership ready");
     player.Pause(clockDoc);
     requireRepeat(wait([&]() {
         Player::DocumentState state{};
@@ -735,6 +775,10 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(ImmAuthoring_Attach(clockDoc) == IMM_AUTHORING_OK, "attach preview fixture");
     const auto mainBeforePreview = readClock(clockRootId);
     const auto finiteBeforePreview = readClock(finiteId);
+    Player::LayerDiagnostics previewChildBefore{};
+    requireRepeat(player.GetLayerDiagnostics(clockDoc, previewChildId, previewChildBefore) &&
+        previewChildBefore.opacity == 0.75f && previewChildBefore.transform.mTranslation.x == 9,
+        "held main child starts at finite-local tick100");
     requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 0, 0) == IMM_AUTHORING_OK &&
         ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 1, 150) == IMM_AUTHORING_OK,
         "begin and seek independent preview");
@@ -754,10 +798,81 @@ int wmain(int argc, wchar_t ** argv)
     blockedKey.property = IMM_AUTHORING_ANIM_PROPERTY_OPACITY; blockedKey.floatValue = 0.5f;
     blockedKey.scale = 1; blockedKey.qw = 1;
     requireRepeat(ImmAuthoring_KeySet(clockDoc, finiteId, &blockedKey) == IMM_AUTHORING_OK,
-        "preview may stage but cannot publish an authoring batch");
+        "preview boundary edit may stage for authoritative commit validation");
     uint64_t blockedRevision = 99;
-    requireRepeat(ImmAuthoring_Commit(clockDoc, &blockedRevision) == IMM_AUTHORING_QUEUE_FULL && blockedRevision == 99 &&
-        ImmAuthoring_DiscardPending(clockDoc) == IMM_AUTHORING_OK, "preview rejects authoring publication without losing ownership");
+    requireRepeat(ImmAuthoring_Commit(clockDoc, &blockedRevision) == IMM_AUTHORING_UNSUPPORTED && blockedRevision == 99 &&
+        ImmAuthoring_DiscardPending(clockDoc) == IMM_AUTHORING_OK, "preview rejects boundary publication without losing ownership");
+    const auto requirePreviewPose = [&](float opacity, double x) {
+        Player::LayerDiagnostics diagnostics{};
+        requireRepeat(player.GetLayerDiagnostics(clockDoc, previewChildId, diagnostics) &&
+            diagnostics.opacity == opacity && diagnostics.transform.mTranslation.x == x &&
+            (readClock(finiteId).flags & IMM_AUTHORING_TIMELINE_PREVIEW) && readClock(finiteId).localTicks == 50 &&
+            readClock(clockRootId).rootEvaluatedTicks == mainBeforePreview.rootEvaluatedTicks,
+            "paused descendant edit uses preview-local time and preserves held main clock");
+    };
+    const auto presentPreviewEdit = [&]() {
+        uint64_t revision = 0;
+        requireRepeat(ImmAuthoring_Commit(clockDoc, &revision) == IMM_AUTHORING_OK && revision != 0,
+            "seal allowed preview descendant edit");
+        requireRepeat(wait([&]() {
+            ImmAuthoringCommitStatus status{};
+            status.structSize = sizeof(status); status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(clockDoc, revision, &status) == IMM_AUTHORING_OK &&
+                status.state != IMM_AUTHORING_COMMIT_REJECTED, "preview descendant commit status");
+            return status.state == IMM_AUTHORING_COMMIT_PRESENTED;
+        }), "preview descendant edit presents without exiting session");
+    };
+    ImmAuthoringKey localOpacity{};
+    localOpacity.structSize = sizeof(localOpacity); localOpacity.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    localOpacity.property = IMM_AUTHORING_ANIM_PROPERTY_OPACITY;
+    localOpacity.timeSeconds = 40.0 / 12600.0; localOpacity.floatValue = 0.25f;
+    ImmAuthoringKey localTransform{};
+    localTransform.structSize = sizeof(localTransform); localTransform.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    localTransform.property = IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM;
+    localTransform.timeSeconds = localOpacity.timeSeconds;
+    localTransform.qw = 1; localTransform.scale = 1; localTransform.tx = 3;
+    requirePreviewPose(1.0f, 0);
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, previewChildId, &localOpacity) == IMM_AUTHORING_OK,
+        "insert paused preview opacity key");
+    presentPreviewEdit(); requirePreviewPose(0.25f, 0);
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, previewChildId, &localTransform) == IMM_AUTHORING_OK,
+        "insert paused preview transform key");
+    presentPreviewEdit(); requirePreviewPose(0.25f, 3);
+    uint64_t paintA = 0, paintB = 0, frameHandle = 0;
+    requireRepeat(ImmAuthoring_DrawingGetHandle(clockDoc, previewPaintId, 0, &paintA) == IMM_AUTHORING_OK &&
+        ImmAuthoring_DrawingGetHandle(clockDoc, previewPaintId, 1, &paintB) == IMM_AUTHORING_OK && paintA != paintB,
+        "scoped frame fixture stable drawing handles");
+    requireRepeat(ImmAuthoring_FrameSetHandle(clockDoc, previewPaintId, 0, paintB) == IMM_AUTHORING_OK,
+        "queue scoped paint frame mapping");
+    presentPreviewEdit();
+    requireRepeat(ImmAuthoring_FrameGetDrawingHandle(clockDoc, previewPaintId, 0, &frameHandle) == IMM_AUTHORING_OK &&
+        frameHandle == paintB && (readClock(finiteId).flags & IMM_AUTHORING_TIMELINE_PREVIEW), "scoped frame mapping presents in preview");
+    const uint64_t editedTable[] = {paintB, paintA, paintB};
+    requireRepeat(ImmAuthoring_FrameSequenceSetHandles(clockDoc, previewPaintId, editedTable, 3) == IMM_AUTHORING_OK,
+        "queue scoped whole frame table");
+    presentPreviewEdit(); requirePreviewPose(0.25f, 3);
+    for (int property : {IMM_AUTHORING_ANIM_PROPERTY_OPACITY, IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM})
+    {
+        requireRepeat(ImmAuthoring_KeyRemove(clockDoc, previewChildId, property, 40.0 / 12600.0) == IMM_AUTHORING_OK,
+            "undo inserted preview key by removing original missing-track state");
+        presentPreviewEdit();
+    }
+    requirePreviewPose(1.0f, 0);
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, previewChildId, &localOpacity) == IMM_AUTHORING_OK, "redo preview opacity key");
+    presentPreviewEdit();
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, previewChildId, &localTransform) == IMM_AUTHORING_OK, "redo preview transform key");
+    presentPreviewEdit(); requirePreviewPose(0.25f, 3);
+    // Change a later key too: main-local100 must use these new values on exit,
+    // while preview-local50 retains the inserted values. A blind capsule restore
+    // would incorrectly expose the old held-main opacity0.75/translation9.
+    localOpacity.timeSeconds = 90.0 / 12600.0; localOpacity.floatValue = 0.5f;
+    localTransform.timeSeconds = localOpacity.timeSeconds; localTransform.tx = 5;
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, previewChildId, &localOpacity) == IMM_AUTHORING_OK,
+        "replace later opacity key while preview remains paused");
+    presentPreviewEdit();
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, previewChildId, &localTransform) == IMM_AUTHORING_OK,
+        "replace later transform key while preview remains paused");
+    presentPreviewEdit(); requirePreviewPose(0.25f, 3);
     requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 2, 0) == IMM_AUTHORING_OK &&
         wait([&]() { return readClock(finiteId).elapsedTicks > 150; }), "independent preview advances while main root is held");
     requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 3, 0) == IMM_AUTHORING_OK,
@@ -777,6 +892,64 @@ int wmain(int argc, wchar_t ** argv)
         finiteAfterPreview.elapsedTicks == finiteBeforePreview.elapsedTicks &&
         finiteAfterPreview.flags == finiteBeforePreview.flags,
         "preview exit restores held main and nested clocks/intent exactly");
+    Player::LayerDiagnostics previewChildAfter{};
+    uint32_t retainedKeys = 0;
+    requireRepeat(player.GetLayerDiagnostics(clockDoc, previewChildId, previewChildAfter) &&
+        previewChildAfter.opacity == 0.5f && previewChildAfter.transform.mTranslation.x == 5 &&
+        ImmAuthoring_KeyGetCount(clockDoc, previewChildId, IMM_AUTHORING_ANIM_PROPERTY_OPACITY, &retainedKeys) ==
+        IMM_AUTHORING_OK && retainedKeys == 3 &&
+        ImmAuthoring_KeyGetCount(clockDoc, previewChildId, IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM, &retainedKeys) ==
+        IMM_AUTHORING_OK && retainedKeys == 3,
+        "preview exit retains edited canonical tracks and reevaluates them at held main time");
+    std::puts("[IMM_SCOPED_PREVIEW_EDIT_CABI_TEST] pass=1 pausedLocalKeys=1 presentedInPreview=1 undoRemove=1 redo=1 canonicalTracksRetained=1 heldMainReevaluated=1");
+    for (int frameIndex = 0; frameIndex < 3; ++frameIndex)
+        requireRepeat(ImmAuthoring_FrameGetDrawingHandle(clockDoc, previewPaintId, frameIndex, &frameHandle) == IMM_AUTHORING_OK &&
+            frameHandle == editedTable[frameIndex], "scoped edited frame table survives preview exit");
+    requireRepeat(ImmAuthoring_DrawingGetHandle(clockDoc, previewPaintId, 0, &frameHandle) == IMM_AUTHORING_OK &&
+        frameHandle == paintA && ImmAuthoring_DrawingGetHandle(clockDoc, previewPaintId, 1, &frameHandle) == IMM_AUTHORING_OK &&
+        frameHandle == paintB, "scoped frame editing retains drawing identities");
+    for (bool reject : {false, true})
+    {
+        requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 0, 0) == IMM_AUTHORING_OK &&
+            ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 1, 150) == IMM_AUTHORING_OK,
+            "begin pending-exit preview");
+        ImmAuthoringKey pendingKey{};
+        pendingKey.structSize = sizeof(pendingKey); pendingKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+        pendingKey.property = IMM_AUTHORING_ANIM_PROPERTY_LOOP; pendingKey.boolValue = reject ? 0 : 1;
+        _putenv_s("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS", "1");
+        requireRepeat(ImmAuthoring_KeySet(clockDoc, previewPaintId, &pendingKey) == IMM_AUTHORING_OK,
+            "queue held scoped playback key");
+        uint64_t revision = 0;
+        requireRepeat(ImmAuthoring_Commit(clockDoc, &revision) == IMM_AUTHORING_OK && revision != 0,
+            "commit held scoped playback key");
+        ImmAuthoringCommitStatus status{};
+        requireRepeat(wait([&]() {
+            status.structSize = sizeof(status); status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(clockDoc, revision, &status) == IMM_AUTHORING_OK, "held scoped key status");
+            return status.state == IMM_AUTHORING_COMMIT_PREPARED;
+        }), "scoped key waits before publication");
+        requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 4, 0) == IMM_AUTHORING_QUEUE_FULL &&
+            (readClock(finiteId).flags & IMM_AUTHORING_TIMELINE_PREVIEW), "pending preview exit reports busy and retains context");
+        if (reject) _putenv_s("IMM_LIVE_EDIT_FAIL_PRESENT", "1");
+        _putenv_s("IMM_LIVE_EDIT_HOLD_PAINT_PLAYBACK_KEYS", "");
+        requireRepeat(wait([&]() {
+            status.structSize = sizeof(status); status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(clockDoc, revision, &status) == IMM_AUTHORING_OK, "draining scoped key status");
+            return status.state == IMM_AUTHORING_COMMIT_PRESENTED || status.state == IMM_AUTHORING_COMMIT_REJECTED;
+        }), "pending scoped key reaches terminal state");
+        _putenv_s("IMM_LIVE_EDIT_FAIL_PRESENT", "");
+        requireRepeat(status.state == (reject ? IMM_AUTHORING_COMMIT_REJECTED : IMM_AUTHORING_COMMIT_PRESENTED) &&
+            status.result == (reject ? -10 : 0), "pending preview key preserves success/rejection semantics");
+        requireRepeat(wait([&]() { return !(readClock(finiteId).flags & IMM_AUTHORING_TIMELINE_PREVIEW); }),
+            "pending exit drains automatically after terminal key publication");
+        ImmAuthoringKey retainedLoop{};
+        retainedLoop.structSize = sizeof(retainedLoop); retainedLoop.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+        requireRepeat(ImmAuthoring_KeyGet(clockDoc, previewPaintId, IMM_AUTHORING_ANIM_PROPERTY_LOOP, 0, &retainedLoop) ==
+            IMM_AUTHORING_OK && retainedLoop.boolValue == 1 &&
+            readClock(clockRootId).rootEvaluatedTicks == mainBeforePreview.rootEvaluatedTicks,
+            "successful key survives exit and rejected replacement preserves it with held main clock");
+    }
+    std::puts("[IMM_PREVIEW_PENDING_EXIT_CABI_TEST] pass=1 busyWhilePrepared=1 presentedDrain=1 rejectedDrain=1 scopedFrameTableRetained=1 stableDrawings=1");
     requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 0, 0) == IMM_AUTHORING_OK &&
         player.SetLayerOpacity(clockDoc, finiteId, 0.42f) &&
         !(readClock(finiteId).flags & IMM_AUTHORING_TIMELINE_PREVIEW), "legacy override exits preview before applying");
@@ -788,7 +961,7 @@ int wmain(int argc, wchar_t ** argv)
         (readClock(inactiveId).flags & IMM_AUTHORING_TIMELINE_ACTIVE_SPAN), "inactive main occurrence can preview independently");
     requireRepeat(ImmAuthoring_Detach(clockDoc) == IMM_AUTHORING_OK &&
         !(readClock(inactiveId).flags & IMM_AUTHORING_TIMELINE_PREVIEW), "detach ends preview safely");
-    std::puts("[IMM_TIMELINE_PREVIEW_CABI_TEST] pass=1 independentClock=1 pausedMain=1 heldRestore=1 publicationBlocked=1 inactiveScope=1 detach=1 mutedAudioOnly=1");
+    std::puts("[IMM_TIMELINE_PREVIEW_CABI_TEST] pass=1 independentClock=1 pausedMain=1 heldRestore=1 boundaryPublicationBlocked=1 scopedEdits=1 inactiveScope=1 detach=1 mutedAudioOnly=1");
     player.UnloadAllSync();
     gImmUnityPlugin.mBridge.Shutdown();
     context->Release();

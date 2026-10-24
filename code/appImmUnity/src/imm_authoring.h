@@ -357,8 +357,11 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_TimelineGetClock(in
     int32_t timelineLayerId, ImmAuthoringTimelineClock * clockOut, uint32_t capacityBytes);
 // Independent, initially muted preview of a nested timeline. Actions: 0 begin
 // paused, 1 seek (unwrapped ticks, paused), 2 play, 3 pause, 4 exit. Calls publish
-// under the scene mutex. Main runtime state is restored on exit; authoring
-// commits are temporarily rejected while preview is active.
+// under the scene mutex. Main runtime state is restored on exit; committed
+// descendant keys/properties/frame tables remain and resample at the main clock.
+// Boundary, sound, structure and drawing-geometry edits are unsupported in preview.
+// Visibility edits retain static-subtree restrictions. Exit returns QUEUE_FULL
+// while a commit is pending and automatically completes once that commit drains.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_TimelinePreviewControl(int32_t docId,
     int32_t timelineLayerId, int32_t action, int64_t ticks);
 // Accumulated evaluated layer/ancestor transform in document coordinates;

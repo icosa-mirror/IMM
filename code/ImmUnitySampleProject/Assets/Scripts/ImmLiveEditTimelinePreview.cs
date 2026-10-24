@@ -12,6 +12,15 @@ namespace ImmPlayer
         private float mainCameraNear, mainCameraFar;
         private bool TimelinePreviewActive => timelineClockValid && (timelineClock.flags & ClockPreview) != 0;
 
+        private bool PreviewCanEditLayer(int layer)
+        {
+            if (!TimelinePreviewActive) return true;
+            return layer != timelineScope && treeNodes.TryGetValue(layer, out LayerNode node) &&
+                node.Info.Type != ImmDocument.LayerType.Sound && InTimelineScope(node);
+        }
+
+        private bool PreviewCanEditSelected => PreviewCanEditLayer(selected);
+
         private void ControlTimelinePreview(int action, long ticks = 0)
         {
             if (!attached || pending != 0 || awaitingCommit) return;
@@ -24,7 +33,14 @@ namespace ImmPlayer
             }
             if (action == 4) RestorePreviewCamera();
             UpdateTimelineClock();
-            if (action == 0) FramePreviewContents();
+            if (action == 0)
+            {
+                FramePreviewContents();
+                if (!PreviewCanEditSelected && ScopeNode != null)
+                    foreach (LayerNode child in ScopeNode.Children)
+                        if (PreviewCanEditLayer(child.Info.Id))
+                        { selected = child.Info.Id; Run(ReadSelected); break; }
+            }
         }
 
         private void RestorePreviewCamera()

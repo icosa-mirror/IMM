@@ -4332,6 +4332,46 @@ the historical sizes/check counts below describe this earlier source only.
    new full validation starts, so their cleanup cannot interfere with it.
    Full acceptance of the serialization change remains pending.
 
+5. Both old runs are now terminal with no active/cancelling jobs; repository
+   inventory found no other active licence owners. Commit `586bf208` was pulled
+   and pushed, starting full validation [40053560065](https://github.com/icosa-mirror/IMM/actions/runs/40053560065).
+   Its acceptance remains pending; the older interrupted runs are not passes.
+
+### 6.123. Editing within independent nested preview
+
+1. The scoped preview draft permits descendant properties, keys and frame-table
+   edits while preserving the frozen main clock. Returning restores runtime state
+   and resamples edited canonical channels in the main clock; it does not restore
+   old canonical data. Boundary, sound, structure and drawing-geometry edits remain
+   unsupported. Visibility edits retain the existing static-subtree restriction.
+2. Native Release, the existing CPU suite, managed panel compilation and the
+   loaded WARP C ABI suite pass. The C ABI fixture edits separate opacity and
+   transform tracks, removes/reinserts their keys, and verifies distinct main/local
+   samples plus retained keys on exit. Evidence: artifacts/scoped-preview-edit-*.
+3. Review found and corrected a deferred-exit drain placed in the wrong function,
+   and a canonical visibility restriction missing for sound-containing groups.
+4. The fresh D3D12 sample passes nine live Game-view steps: begin preview selects
+   an editable child; seek to local 0.25 seconds; set an opacity key through the
+   timeline button; undo/redo that key through the toolbar; insert a paint hold
+   through the panel handler; undo/redo the hold through toolbar buttons; return
+   to main. The main clock stays at 25,200 ticks throughout, and both edits remain
+   on return with the expected evaluated opacity. These are injected Game-view
+   events and panel handlers, not a human acceptance claim. Evidence:
+   artifacts/scoped-preview-edit-ui-probe.json and scoped-preview-edit-ui.png.
+5. The final loaded C ABI suite also passes scoped paint frame remapping/table
+   replacement with stable drawing handles, plus two held-publication exit cases.
+   Exit returns busy while publication is held, then completes automatically after
+   either Presented or injected rejection without another seek/control call.
+   Rejected canonical keys remain unchanged and the main clock stays held.
+   Evidence: artifacts/scoped-preview-edit-cabi-final/report.json / run.log,
+   markers IMM_SCOPED_PREVIEW_EDIT_CABI_TEST and IMM_PREVIEW_PENDING_EXIT_CABI_TEST.
+6. Audible local preview, complex drawing-clock projections and unsupported
+   channels remain unfinished; the timeline UI goal remains active. Full CI
+   40053560065 validates the preceding visibility/licence fixes, not these edits;
+   this scoped-edit milestone still needs its own full validation push.
+   Focused source rereview confirmed the exit/visibility/frame-publication fixes
+   and found no further concrete blocker; whitespace checks pass.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

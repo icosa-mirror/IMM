@@ -25,6 +25,11 @@ using namespace ImmImporter;
 
 namespace ImmPlayer
 {
+    enum PreviewEditFields : uint32_t
+    {
+        PreviewTransform = 1, PreviewOpacity = 2, PreviewVisibility = 4,
+        PreviewPaintPlayback = 8, PreviewNavigation = 16
+    };
     struct Document::TimelinePreviewSession
     {
         struct SavedLayer
@@ -35,12 +40,15 @@ namespace ImmPlayer
             LayerPaintStatic::PlaybackState paintState;
             LayerSound * sound;
             bool soundPaused;
+            uint32_t edited = 0;
         };
         Layer::EvaluationContext context;
         std::vector<SavedLayer> saved;
         piTick mainCPUTime = piTick(0);
         PlaybackState mainPlayback = PlaybackState::Paused;
         bool playing = false;
+        bool exitRequested = false;
+        piLog * log = nullptr;
     };
 
     const Layer::EvaluationContext * Document::GetTimelinePreviewContext() const
@@ -63,7 +71,16 @@ namespace ImmPlayer
             if (saved.sound) saved.sound->SetPaused(saved.soundPaused);
         }
         mState.mPlaybackState = mTimelinePreview->mainPlayback;
-        mTimelinePreview.reset();
+        auto preview = std::move(mTimelinePreview);
+        bool volumeChanged = false;
+        for (const auto & saved : preview->saved)
+        {
+            if (saved.edited) iRefreshTimelineEdit(saved.layer, saved.edited, now, preview->log);
+            volumeChanged |= (saved.edited & (PreviewOpacity | PreviewVisibility)) != 0;
+        }
+        if (volumeChanged)
+            for (const auto & saved : preview->saved)
+                if (saved.sound) saved.layer->ReevaluateOpacityAt(now, preview->log);
         ++mEvaluationRevision;
     }
 
@@ -84,11 +101,16 @@ namespace ImmPlayer
     {
         if (action < 0 || action > 4 || ticks < piTick(0)) return -2;
         if (mState.mLoadingState != LoadingState::Loaded || !mEditing) return -4;
+        if (action == 4)
+        {
+            if (mTimelinePreview && HasPendingEdits())
+            { mTimelinePreview->exitRequested = true; return -7; }
+            iEndTimelinePreview(now); return 0;
+        }
         if (HasPendingEdits() || !mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
             !mOpenFrameMappings.empty() || !mOpenFrameSequences.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() || !mOpenInitialSpawnAreaEdits.empty() ||
             !mOpenSpawnAreaEdits.empty() || !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() || !mOpenLayerReparents.empty()) return -7;
-        if (action == 4) { iEndTimelinePreview(now); return 0; }
         if (mHidden) return -4;
         if (!boundary) return -1;
         if (boundary == mSequence.GetRoot() || boundary->GetType() != Layer::Type::Group || !boundary->GetIsTimeline()) return -3;
@@ -99,6 +121,7 @@ namespace ImmPlayer
             auto preview = std::make_unique<TimelinePreviewSession>();
             preview->mainCPUTime = mLastCPUTime;
             preview->mainPlayback = mState.mPlaybackState;
+            preview->log = log;
             preview->context.mBoundary = boundary;
             preview->context.mBoundaryDuration = boundary->GetDuration();
             preview->context.mBoundaryRepeatCount = boundary->GetMaxRepeatCount();
@@ -206,20 +229,20 @@ namespace ImmPlayer
         return iCanRefreshStaticVisibility(layer) ? 0 : -3;
     }
 
-    static void iRefreshStaticVisibility(Layer * layer, piTick now, piLog * log)
+    static void iRefreshStaticVisibility(Layer * layer, piTick now, piLog * log, Layer::EvaluationContext * context = nullptr)
     {
         if (layer->GetType() == Layer::Type::Paint)
         {
             if (layer->GetNumAnimKeys(Layer::AnimProperty::Visibility) == 0)
                 layer->SetCanonicalVisible(layer->GetCanonicalVisible());
-            layer->ReevaluatePaintPlaybackAt(now, log);
+            layer->ReevaluatePaintPlaybackAt(now, log, context);
         }
-        else layer->ReevaluateVisibilityAt(now, log);
-        layer->ReevaluateTransformAt(now, log);
-        layer->ReevaluateOpacityAt(now, log);
+        else layer->ReevaluateVisibilityAt(now, log, context);
+        layer->ReevaluateTransformAt(now, log, context);
+        layer->ReevaluateOpacityAt(now, log, context);
         if (layer->GetType() == Layer::Type::Group)
             for (uint32_t index = 0; index < layer->GetNumChildren(); ++index)
-                iRefreshStaticVisibility(layer->GetChild(index), now, log);
+                iRefreshStaticVisibility(layer->GetChild(index), now, log, context);
     }
 
     // Instance links can reach into a subtree from outside its parent hierarchy.
@@ -248,6 +271,45 @@ namespace ImmPlayer
                 if (iSubtreeHasSpawnArea(layer->GetChild(index)))
                     return true;
         return false;
+    }
+
+    bool Document::iCanEditTimelinePreview(uint32_t layerId) const
+    {
+        if (!mTimelinePreview) return true;
+        for (const auto & saved : mTimelinePreview->saved)
+            if (saved.layer->GetID() == layerId)
+                return saved.layer != mTimelinePreview->context.mBoundary &&
+                    saved.layer->GetType() != Layer::Type::Sound && mTimelinePreview->context.Contains(saved.layer);
+        return false;
+    }
+
+    void Document::iMarkTimelinePreviewEdit(Layer * layer, uint32_t fields)
+    {
+        if (!mTimelinePreview) return;
+        for (auto & saved : mTimelinePreview->saved)
+            if (saved.layer == layer)
+            {
+                saved.edited |= fields;
+                // Eligibility is a conservative render hint. Retained revealing
+                // canonical edits must not be hidden by the old runtime capsule.
+                saved.state.mPotentiallyVisible |= layer->GetPotentiallyVisible();
+                return;
+            }
+    }
+
+    void Document::iRefreshTimelineEdit(Layer * layer, uint32_t fields, piTick now, piLog * log)
+    {
+        auto * context = mTimelinePreview ? &mTimelinePreview->context : nullptr;
+        if (fields & PreviewVisibility) iRefreshStaticVisibility(layer, now, log, context);
+        else
+        {
+            if (fields & PreviewTransform) layer->ReevaluateTransformAt(now, log, context);
+            if (fields & PreviewOpacity) layer->ReevaluateOpacityAt(now, log, context);
+        }
+        if (fields & PreviewPaintPlayback) layer->ReevaluatePaintPlaybackAt(now, log, context);
+        if (context == nullptr && (fields & (PreviewTransform | PreviewVisibility | PreviewNavigation)) &&
+            iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+        iMarkTimelinePreviewEdit(layer, fields);
     }
 
     Document::PreparedLayerFullName::~PreparedLayerFullName()
@@ -650,8 +712,10 @@ namespace ImmPlayer
         const Command * command, const Command * queuedCommand)
     {
         mLastCPUTime = now;
+        if (mTimelinePreview && mTimelinePreview->exitRequested && !HasPendingEdits()) iEndTimelinePreview(now);
         // Ordinary host commands explicitly return to main-scene playback.
-        if (mTimelinePreview && command != nullptr && command->mType != Command::Type::None)
+        if (mTimelinePreview && command != nullptr && command->mType != Command::Type::None &&
+            command->mType != Command::Type::AuthoringCommit)
             iEndTimelinePreview(now);
         const bool trackedCommand = mPlaybackRequestStatus == PlaybackRequestStatus::Pending &&
             command != nullptr &&
@@ -1278,24 +1342,22 @@ namespace ImmPlayer
                         property, std::move(mPendingPresentation.mAnimationKeys));
                     if (property == Layer::AnimProperty::Transform)
                     {
-                        layer->ReevaluateTransformAt(mLastCPUTime, log);
-                        if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+                        iRefreshTimelineEdit(layer, PreviewTransform, mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
                     if (property == Layer::AnimProperty::Opacity)
                     {
-                        layer->ReevaluateOpacityAt(mLastCPUTime, log);
+                        iRefreshTimelineEdit(layer, PreviewOpacity, mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
                     if (property == Layer::AnimProperty::Visibility)
                     {
-                        iRefreshStaticVisibility(layer, mLastCPUTime, log);
-                        if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+                        iRefreshTimelineEdit(layer, PreviewVisibility, mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
                     if (paintPlaybackKey)
                     {
-                        layer->ReevaluatePaintPlaybackAt(mLastCPUTime, log);
+                        iRefreshTimelineEdit(layer, PreviewPaintPlayback, mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
                     mPendingPresentation = PendingPresentation{};
@@ -1339,31 +1401,51 @@ namespace ImmPlayer
                 }
                 else
                 {
+                    uint32_t edited = 0;
                     if (mPendingPresentation.mSetLayerVisibility)
+                    {
                         layer->SetCanonicalVisible(mPendingPresentation.mLayerVisible);
+                        edited |= PreviewVisibility;
+                    }
                     if (mPendingPresentation.mSetLayerOpacity)
+                    {
                         layer->SetCanonicalOpacity(mPendingPresentation.mLayerOpacity);
+                        edited |= PreviewOpacity;
+                    }
                     if (mPendingPresentation.mSetLayerTransform)
+                    {
                         layer->SetCanonicalTransform(mPendingPresentation.mLayerTransform);
+                        edited |= PreviewTransform;
+                    }
                     if (mPendingPresentation.mSetLayerPivot)
                     {
                         layer->SetPivot(mPendingPresentation.mLayerPivot);
-                        layer->ReevaluateTransformAt(mLastCPUTime, log);
-                        if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+                        edited |= PreviewTransform;
                         ++mEvaluationRevision;
                     }
                     if (rename)
                     {
                         for (const auto & name : mPendingPresentation.mPreparedLayerFullNames) name->Publish();
-                        if (iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
+                        edited |= PreviewNavigation;
                         ++mEvaluationRevision;
                     }
                     if (mPendingPresentation.mSetPaintRepeat)
                     {
                         auto * paint = static_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation());
                         paint->SetMaxRepeatCount(mPendingPresentation.mPaintRepeat);
-                        layer->ReevaluatePaintPlaybackAt(mLastCPUTime, log);
+                        edited |= PreviewPaintPlayback;
                         ++mEvaluationRevision;
+                    }
+                    // Preserve the normal path's base-value semantics. Preview
+                    // additionally resamples keyed values in its own clock and
+                    // records exactly what main state must reconcile on exit.
+                    if (mTimelinePreview) iRefreshTimelineEdit(layer, edited, mLastCPUTime, log);
+                    else
+                    {
+                        if (mPendingPresentation.mSetLayerPivot) layer->ReevaluateTransformAt(mLastCPUTime, log);
+                        if (mPendingPresentation.mSetPaintRepeat) layer->ReevaluatePaintPlaybackAt(mLastCPUTime, log);
+                        if ((mPendingPresentation.mSetLayerPivot || rename) &&
+                            iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
                     }
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
@@ -1387,6 +1469,8 @@ namespace ImmPlayer
                     iRejectCommit(revision, -6, 0, mPendingPresentation.mObject);
                 else
                 {
+                    if (mTimelinePreview)
+                        iRefreshTimelineEdit(mPendingPresentation.mLayer, PreviewPaintPlayback, mLastCPUTime, log);
                     if (status != nullptr)
                         iSetCommitState(status, AuthoringCommitState::Presented);
                     mPresentedRevision = revision;
@@ -1479,6 +1563,8 @@ namespace ImmPlayer
                 else
                 {
                     frames[mPendingPresentation.mFrameIndex] = mPendingPresentation.mDrawingIndex;
+                    if (mTimelinePreview)
+                        iRefreshTimelineEdit(mPendingPresentation.mLayer, PreviewPaintPlayback, mLastCPUTime, log);
                     const uint32_t presentedFrame = mPendingPresentation.mFrameIndex;
                     const uint64_t presentedDrawing = mPendingPresentation.mObject;
                     mPendingPresentation = PendingPresentation{};
@@ -3516,8 +3602,22 @@ namespace ImmPlayer
     {
         if (mTimelinePreview)
         {
-            if (resultOut) *resultOut = -7;
-            return 0;
+            bool allowed = mOpenDrawingCreations.empty() && mOpenGeometryEdits.empty() &&
+                mOpenDrawingDeletions.empty() && mOpenInitialSpawnAreaEdits.empty() && mOpenSpawnAreaEdits.empty() &&
+                mOpenLayerCreations.empty() && mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
+            for (const auto & edit : mOpenAnimationKeyEdits) allowed &= iCanEditTimelinePreview(edit.mLayerId);
+            for (const auto & edit : mOpenLayerPropertyEdits)
+            {
+                allowed &= iCanEditTimelinePreview(edit.mLayerId);
+                if (edit.mSetVisibility)
+                {
+                    Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), edit.mLayerId);
+                    allowed &= layer != nullptr && iCanRefreshStaticVisibility(layer);
+                }
+            }
+            for (const auto & edit : mOpenFrameMappings) allowed &= iCanEditTimelinePreview(edit.mLayerId);
+            for (const auto & edit : mOpenFrameSequences) allowed &= iCanEditTimelinePreview(edit.mLayerId);
+            if (!allowed) { if (resultOut) *resultOut = -3; return 0; }
         }
         const uint64_t commitStartedNs = iAuthoringClockNs();
         if (resultOut != nullptr)

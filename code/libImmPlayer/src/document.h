@@ -192,7 +192,8 @@ namespace ImmPlayer {
         ImmCore::piTick GetCompletedCPUTime() const { return mLastCPUTime; }
         uint64_t GetEvaluationRevision() const { return mEvaluationRevision; }
         // Called only under the Player scene mutex. Preview reuses evaluated
-        // objects; canonical authoring publication is blocked until exit.
+        // objects; canonical child-track/property edits survive returning to main.
+        // Structural, drawing-geometry and sound edits require leaving preview.
         int32_t ControlTimelinePreview(ImmImporter::Layer * boundary, int32_t action,
             ImmCore::piTick ticks, ImmCore::piTick now, ImmCore::piLog * log);
         const ImmImporter::Layer::EvaluationContext * GetTimelinePreviewContext() const;
@@ -304,6 +305,10 @@ namespace ImmPlayer {
         std::unique_ptr<TimelinePreviewSession> mTimelinePreview;
         void iEvaluateTimelinePreview(ImmCore::piTick now, ImmCore::piLog * log);
         void iEndTimelinePreview(ImmCore::piTick now);
+        bool iCanEditTimelinePreview(uint32_t layerId) const;
+        void iMarkTimelinePreviewEdit(ImmImporter::Layer * layer, uint32_t fields);
+        void iRefreshTimelineEdit(ImmImporter::Layer * layer, uint32_t fields,
+            ImmCore::piTick now, ImmCore::piLog * log);
         uint64_t mRequestedPlaybackCommand = 0;
         uint64_t mCompletedPlaybackCommand = 0;
         PlaybackRequestStatus mPlaybackRequestStatus = PlaybackRequestStatus::None;
