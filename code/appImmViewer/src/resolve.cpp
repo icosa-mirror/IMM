@@ -17,15 +17,15 @@ static const char* vsShaderAAResolve = ""
 
 static const char* fsShaderAAResolve = ""
 
-#if EXPLICIT_UNIFORMS
+"\n#if EXPLICIT_UNIFORMS\n"
 "layout(binding = 0) uniform sampler2DMS unTex0;"
 "layout(location = 1) uniform vec4 unFade;"
 "layout(location = 2) uniform int  unXOffset;"
-#else
+"\n#else\n"
 "uniform sampler2DMS unTex0;"
 "uniform vec4 unFade;"
 "uniform int  unXOffset;"
-#endif
+"\n#endif\n"
 "layout(location = 0, index = 0) out vec4 outColor;"
 
 
@@ -69,15 +69,15 @@ static const char* fsShaderAAResolve = ""
 
 static const char* fsShaderResolve = ""
 
-#if EXPLICIT_UNIFORMS
+"\n#if EXPLICIT_UNIFORMS\n"
 "layout(binding = 0) uniform sampler2D unTex0;"
 "layout(location = 1) uniform vec4 unFade;"
 "layout(location = 2) uniform int  unXOffset;"
-#else
+"\n#else\n"
 "uniform sampler2D unTex0;"
 "uniform vec4 unFade;"
 "uniform int  unXOffset;"
-#endif
+"\n#endif\n"
 "layout(location = 0, index = 0) out vec4 outColor;"
 
 "vec3 linear2srgb(vec3 val)"

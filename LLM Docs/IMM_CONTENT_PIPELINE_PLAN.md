@@ -4925,6 +4925,45 @@ the historical sizes/check counts below describe this earlier source only.
    Required timing/variant changes are being prepared separately; no rendering
    acceptance or full timeline completion is claimed by this framing milestone.
 
+### 6.139. GL/Android draw-in rendering in progress
+
+1. Retained point time in packed static and pretessellated GPU vertices and
+   enabled matching DrawIn variants. Desktop format0 layouts stay unchanged;
+   these are internal GPU layouts, with no file/API version introduced.
+2. Windows Release and cached Android importer/player builds pass, as do shader
+   syntax/SPIR-V checks. Actual old-viewer captures establish the missing effect:
+   zero, partial and full all render the same red target in both techniques,
+   while an independent blue reference remains unchanged. The first new-viewer
+   capture still fails identically; desktop fragment shaders guard alpha coverage
+   behind a GLES extension macro, so vertex alpha alone is insufficient. That
+   correction and GL error triage are in progress. Do not count shader compile
+   results as rendering acceptance. Evidence: artifacts/draw-in-gl-red2/report.json
+   and draw-in-gl-green/report.json.
+3. A framing follow-up keeps focus clipping aligned during manual camera movement
+   and preserves that focus across preview camera save/restore. Managed compile
+   passes; live acceptance against the next rebuilt Editor remains pending.
+4. The earlier Action FULL run40072857603 has the requested FULL classification,
+   exact source55ae4f0501fec9770430a9ec40c0573581618fd3, and no failures so far.
+   Final licensed engine gates and full acceptance remain pending. This goal stays
+   active, including actual audio-output confirmation.
+
+### 6.140. Standalone GL resolve uniform correction
+
+1. Actual render captures exposed a pre-existing high-severity GL error once per
+   frame, in both old and new viewers and both paint techniques. Resolve shaders
+   selected their explicit-uniform declarations with the C++ preprocessor even
+   though EXPLICIT_UNIFORMS is a runtime GLSL option. Desktop code then wrote
+   hard-coded locations whose driver-assigned uniform types could differ.
+2. Move those two declaration branches into the GLSL source strings so the runtime
+   option controls declarations and writes consistently. Windows Release passes.
+   All eight new captures report zero rendering errors, compared with 90 errors
+   per case before this correction. The test now explicitly rejects rendering
+   and shader errors. Evidence: artifacts/draw-in-gl-green2/report.json.
+3. This independently fixes resolve state; it does not close draw-in rendering.
+   Coverage pixels still fail in the single-sample validation path, which disables
+   multisampling and therefore needs explicit single-sample alpha coverage rather
+   than relying solely on the shader sample mask. That work remains in progress.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
