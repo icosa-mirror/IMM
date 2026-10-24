@@ -4368,7 +4368,9 @@ the historical sizes/check counts below describe this earlier source only.
 6. Audible local preview, complex drawing-clock projections and unsupported
    channels remain unfinished; the timeline UI goal remains active. Full CI
    40053560065 validates the preceding visibility/licence fixes, not these edits;
-   this scoped-edit milestone still needs its own full validation push.
+   scoped-edit commit `bbc767e0` is now pushed and has its own full validation
+   [40054027952](https://github.com/icosa-mirror/IMM/actions/runs/40054027952), initially
+   pending. Both runs remain unaccepted until their required evidence completes.
    Focused source rereview confirmed the exit/visibility/frame-publication fixes
    and found no further concrete blocker; whitespace checks pass.
 
