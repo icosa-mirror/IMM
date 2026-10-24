@@ -20,7 +20,7 @@ Windows Vulkan and deferred headset evidence remain outside hosted acceptance.
 Later source is not fully accepted yet. Timeline work now includes nested local
 preview, scoped edits, resizable panes, authored exposure projection, Draw-in keys,
 and independent audio enable/mute with separate voices and main-cursor retention.
-Latest feature source `1ddf8eff` passes native Release, CPU/loaded-C-ABI checks and
+Audio feature source `1ddf8eff` passes native Release, CPU/loaded-C-ABI checks and
 nine actual Unity button/ruler steps; see 6.131 for evidence and its limits. This
 is a development test UI. Action editing, GL/Android draw-in support, the main-scene
 Frame selected occlusion follow-up and audible Unity/device confirmation remain.
@@ -28,6 +28,9 @@ The timeline goal stays active, including the required missing runtime features.
 Later native Action publication (`29d72074`) and late finite-occurrence correction
 (`0f81d964`) pass local native/CPU/C-ABI checks; their FULL run 40066922009 is
 pending. MakeDefault provenance and Action UI integration remain open (6.132-6.133).
+Latest tip `a702bd6a` also closes the finite-ancestor cascade and fixes main
+Play/Continue sound handling, with native/CPU/C-ABI checks and six actual Unity
+button steps. Its FULL run40068611847 is pending (6.134-6.135).
 
 CI corrections since the accepted baseline retain serialized Unity licence
 ownership, preserve Android native inputs until their delayed consumers finish,
@@ -4802,9 +4805,15 @@ the historical sizes/check counts below describe this earlier source only.
    play-at-stop-cpu-{run.log,report.json}, play-at-stop-cabi/report.json,
    play-at-stop-managed-build.log, story-stop-ui-probe.json and
    story-stop-ui-final-hold.png. Clock milestone is `41c8719c`; this separate
-   transport milestone is ready to commit with its matching Windows DLL. Goal
+   transport milestone is committed/pushed as `a702bd6a` with its tested DLL. Goal
    remains active: MakeDefault provenance/undo, Action controls and the other
    outstanding timeline requirements remain.
+6. FULL [40068611847](https://github.com/icosa-mirror/IMM/actions/runs/40068611847)
+   is pending. Older full runs remain failure-free at their last checks. Actual
+   7b9 Unity Android and Godot device producers/classifiers now pass their strict
+   artifact audits (receipts timeline-ci-agent-40063347058-android-audit.json and
+   timeline-ci-agent-7b9-godot-android-audit.json); licensed engines and the final
+   required hosted matrix still remain before that full run can be accepted.
 
 ## 7. Consolidated documents
 
