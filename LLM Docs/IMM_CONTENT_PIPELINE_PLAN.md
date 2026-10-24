@@ -9,48 +9,40 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
-Current checkpoint (2026-10-23): full hosted run 39945112846 on 47a0240d
-completed SUCCESS: 49 jobs passed, 22 skipped, no failures. Actual final artifact
-12501160640 passes all 20 required hosted evidence rows, with zero invalid/missing
-required rows and all 43 preserved manifests identifying the correct source.
-The repeated FFmpeg setup failure is closed by consumer-only pinned provisioning,
-verified on Linux and in both physical-device paths (6.74, 6.77). The native live
-Loop/Offset milestone is included in that full regression source; its operation-
-specific acceptance remains scoped to the documented Windows/native tests.
-Hardware-only Unity Windows Vulkan and deferred headset evidence remain outside
-hosted acceptance. Full M2, managed cutover and scene-wide Quill fidelity are open.
+Current checkpoint (2026-10-24): the latest accepted hosted baseline is FULL
+[40044825617](https://github.com/icosa-mirror/IMM/actions/runs/40044825617), source
+`0babd47acd7944b6939343e68c229ecc5196ae4c`: 49 jobs passed, 22 skipped, no failures.
+Actual final artifact 12543875599 passes all 20 required hosted rows; all 43
+preserved manifests identify that source. Receipt:
+artifacts/timeline-ci-agent-40044825617-acceptance-audit.json. Hardware-only Unity
+Windows Vulkan and deferred headset evidence remain outside hosted acceptance.
 
-C5 milestones now include the extracted standalone library (026abe3b), production
-CLI (c78d5206), and the prototype self-contained Windows CLI archive (6.75-6.78).
-Those library/CLI/package sources and the ANSI host-trace correction are now
-included in accepted full CI source 47a0240d. The shared application host
-(e7f5c100), desktop window (3ec46758) and Unity editor window (6.82) are later
-milestones: local checks and matched Editor/CLI conversion pass (6.85), and
-full run 39963637687 on cab50dfa included these and all later native repeat
-milestones, but is superseded for the reviewed native Editor licence lifecycle
-correction (6.91). A corrected replacement is pending; full acceptance remains
-unproved. Run 39954000025 was superseded for the test-platform correction (6.88-6.89).
-Live UI input, clean-machine and dependency licence documentation acceptance remain open. Earlier numbered
-checkpoints retain historical states; use this checkpoint and the latest entries
-for current acceptance. Source chapter/startup mapping, broader timing/navigation,
-media/reverse fidelity and revision-selected live save retain their own exit gates.
+Later source is not fully accepted yet. Timeline work now includes nested local
+preview, scoped edits, resizable panes, authored exposure projection, Draw-in keys,
+and independent audio enable/mute with separate voices and main-cursor retention.
+Latest feature source `1ddf8eff` passes native Release, CPU/loaded-C-ABI checks and
+nine actual Unity button/ruler steps; see 6.131 for evidence and its limits. This
+is a development test UI. Action editing, GL/Android draw-in support, the main-scene
+Frame selected occlusion follow-up and audible Unity/device confirmation remain.
+The timeline goal stays active, including the required missing runtime features.
 
-The C5 full run 39942955962 on fe5d91ed failed in the Windows archive verifier:
-conversion and local-runtime checks passed, but implicit Python text decoding
-corrupted the native ANSI trace's Unicode path. The failure is reproduced/fixed
-under forced Python UTF-8 mode with the exact path checks preserved (6.79).
-Cancellation of that superseded run was requested; fresh full validation of the
-isolated correction passed in run 39945112846, including the Windows archive gate.
-Desktop shared-host and form work passes local component/runtime checks
-(6.80-6.81), outside the validation source. Live mouse/keyboard acceptance remains
-open because the Computer Use Windows native pipe is unavailable.
+CI corrections since the accepted baseline retain serialized Unity licence
+ownership, preserve Android native inputs until their delayed consumers finish,
+and attribute the observed foreign Android permission-controller Java crash
+without masking app/ambiguous/native or visual failures. Runs 40057279837,
+40058475651 and 40062003931 are terminal Cancelled for the classifier source fix;
+none counts as accepted. Strict successful device evidence is retained. Corrected
+full runs 40063347058, 40063894055 and 40065289529 remain active at the last recorded check;
+6.129-6.131 record their exact source heads and subsequent receipts.
 
-Later local native repeat milestones (6.84, 6.86) add canonical static-paint
-setter/getter publication, CPU guards and six rendered Windows DirectX cases.
-They were included in superseded full CI source cab50dfa and remain required in
-its corrected replacement. Linked production C-export delivery
-also passes locally in a loaded-document WARP host (6.87). Unity/PInvoke live
-delivery, managed mapping, broader backend and full M2 acceptance remain open.
+The broader shared roadmap is also open: scene-wide Quill chapter/startup,
+timing/navigation/media/reverse fidelity, full runtime-authoring acceptance,
+revision-selected live save and clean-machine/shared-host interaction acceptance
+retain their own exit gates. C5 standalone library, CLI and packaging foundations
+exist; their earlier failures and corrections are recorded in the numbered history.
+Historical entries retain their then-current states. Use this checkpoint and the
+latest numbered entries for current progress; queued/cancelled/local-only evidence
+must not be described as full hosted acceptance.
 
 ## 1. Objective and document ownership
 
@@ -4669,9 +4661,13 @@ the historical sizes/check counts below describe this earlier source only.
    and audio-preview-ui-enabled.png. The ignored fixture generator and original
    wrong-coordinate probe receipt remain available. Offline mixer proof is in
    6.130; this live check proves UI/native state and lifecycle, not audible output.
-7. Goal remains active. Audible Unity/device confirmation, Action editing and the
-   remaining requirements in 6.127 are not complete. Session code is being finalized
-   into a source/DLL milestone before its own full hosted validation run.
+7. Source/DLL milestone `1ddf8eff` is pushed. FULL
+   [40065289529](https://github.com/icosa-mirror/IMM/actions/runs/40065289529)
+   is pending (six jobs passed at the latest check). Corrected-classifier and
+   voice-foundation runs 40063347058/40063894055 remain active, with 18/17 passed
+   jobs and no failures at that check; no healthy run was cancelled for this feature
+   milestone. None is accepted yet. Goal remains active: audible Unity/device
+   confirmation, Action editing and the remaining requirements in 6.127 are open.
 
 ## 7. Consolidated documents
 
