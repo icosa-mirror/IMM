@@ -2678,6 +2678,14 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Timel
     return IMM_AUTHORING_OK;
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_TimelinePreviewControl(
+    int32_t docId, int32_t timelineLayerId, int32_t action, int64_t ticks)
+{
+    if (action < 0 || action > 4 || ticks < 0 || (action != 4 && timelineLayerId < 0))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    return iPlayer().ControlTimelinePreview(docId, timelineLayerId, action, ticks);
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetWorldTransform(
     int32_t docId, int32_t layerId, ImmAuthoringLayerPivot * transformOut)
 {

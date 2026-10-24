@@ -162,7 +162,7 @@ namespace ImmPlayer
 
         private void ReplayTimelineHistory(bool undo)
         {
-            if (!attached || pending != 0 || awaitingCommit || historyReplay != null) return;
+            if (!attached || pending != 0 || awaitingCommit || historyReplay != null || TimelinePreviewActive) return;
             var from = undo ? timelineUndo : timelineRedo;
             if (from.Count == 0) return;
             N.Revisions currentRevision = HistoryRevisions();
@@ -197,7 +197,7 @@ namespace ImmPlayer
         private void DrawTimelineHistory(float x)
         {
             bool previous = GUI.enabled;
-            bool ready = attached && pending == 0 && !awaitingCommit && scrubControl == 0;
+            bool ready = attached && !TimelinePreviewActive && pending == 0 && !awaitingCommit && scrubControl == 0;
             GUI.enabled = ready && timelineUndo.Count > 0;
             string undoTip = timelineUndo.Count > 0 ? $"Undo {timelineUndo[timelineUndo.Count - 1].Label}" : historyNotice;
             if (GUI.Button(new Rect(x, 4, 80, 22), new GUIContent($"Undo ({timelineUndo.Count})", undoTip))) Run(() => ReplayTimelineHistory(true));

@@ -207,13 +207,13 @@ namespace ImmPlayer
 
         private void CopyTimelineKey(bool cut)
         {
-            if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit) return;
+            if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit || TimelinePreviewActive) return;
             clipboardTimelineKey = selectedTimelineKey.Value;
             if (cut) DeleteTimelineKey();
             else Log("Key copied. Select a layer and paste at the playhead.");
         }
 
-        private bool CanPasteTimelineKey => attached && !loading && pending == 0 && !awaitingCommit &&
+        private bool CanPasteTimelineKey => attached && !TimelinePreviewActive && !loading && pending == 0 && !awaitingCommit &&
             clipboardTimelineKey.HasValue && timelineClockValid && (timelineClock.flags & ClockActive) != 0 &&
             treeNodes.TryGetValue(selected, out LayerNode pasteNode) && InTimelineScope(pasteNode);
 
@@ -242,7 +242,7 @@ namespace ImmPlayer
         private void DrawTimelineClipboard(float x)
         {
             bool previous = GUI.enabled;
-            GUI.enabled = attached && pending == 0 && !awaitingCommit && selectedTimelineKey.HasValue;
+            GUI.enabled = attached && !TimelinePreviewActive && pending == 0 && !awaitingCommit && selectedTimelineKey.HasValue;
             if (GUI.Button(new Rect(x, 4, 60, 22), new GUIContent("Copy", "Copy selected key (Ctrl/Cmd+C)"))) Run(() => CopyTimelineKey(false));
             if (GUI.Button(new Rect(x + 64, 4, 60, 22), new GUIContent("Cut", "Cut selected key (Ctrl/Cmd+X)"))) Run(() => CopyTimelineKey(true));
             GUI.enabled = CanPasteTimelineKey;
@@ -332,6 +332,7 @@ namespace ImmPlayer
                 {
                     GUI.FocusControl(null);
                     SelectTimelineKey(node.Info.Id, key);
+                    if (TimelinePreviewActive) { input.Use(); continue; }
                     draggingKey = true; draggedKeyTime = key.seconds;
                     scrubControl = GUIUtility.GetControlID(FocusType.Passive); GUIUtility.hotControl = scrubControl;
                     document.Pause(); input.Use();

@@ -217,7 +217,8 @@ enum
     IMM_AUTHORING_TIMELINE_ACTION_HELD = 1u << 4, // This timeline/root is held by an authored action.
     IMM_AUTHORING_TIMELINE_CLAMPED = 1u << 5, // Native finite-repeat end branch is selected.
     IMM_AUTHORING_TIMELINE_ACTIVE_SPAN = 1u << 6,
-    IMM_AUTHORING_TIMELINE_INACTIVE = 1u << 7
+    IMM_AUTHORING_TIMELINE_INACTIVE = 1u << 7,
+    IMM_AUTHORING_TIMELINE_PREVIEW = 1u << 8 // Independent session clock, not main-scene occurrence.
 };
 
 // Unversioned, read-only 96-byte snapshot at the completed CPU timestamp.
@@ -351,9 +352,16 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetTimeline(in
 // capacity; invalid/not-ready/async-owned queries leave caller memory unchanged.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_TimelineGetClock(int32_t docId,
     int32_t timelineLayerId, ImmAuthoringTimelineClock * clockOut, uint32_t capacityBytes);
+// Independent, initially muted preview of a nested timeline. Actions: 0 begin
+// paused, 1 seek (unwrapped ticks, paused), 2 play, 3 pause, 4 exit. Calls publish
+// under the scene mutex. Main runtime state is restored on exit; authoring
+// commits are temporarily rejected while preview is active.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_TimelinePreviewControl(int32_t docId,
+    int32_t timelineLayerId, int32_t action, int64_t ticks);
 // Accumulated evaluated layer/ancestor transform in document coordinates;
 // excludes document placement and viewer/camera transforms. Reuses the 48-byte
 // pivot layout as a transform value; initialize its size/version before calling.
+// Preview descendants use the active composition boundary's coordinates.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetWorldTransform(int32_t docId,
     int32_t layerId, ImmAuthoringLayerPivot * transformOut);
 // Stored key times use the parent timeline's coordinates, before content Offset.

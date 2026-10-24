@@ -732,6 +732,63 @@ int wmain(int argc, wchar_t ** argv)
         IMM_AUTHORING_UNSUPPORTED && std::memcmp(&untouchedClock, &originalClockBytes, sizeof(untouchedClock)) == 0,
         "paint layers cannot masquerade as timeline clocks");
     std::puts("[IMM_TIMELINE_CLOCK_CABI_TEST] pass=1 rootAndNested=1 finiteClamp=1 infiniteWrap=1 inactive=1 heldAndActions=1 noMutation=1 capacityPreserved=1");
+    requireRepeat(ImmAuthoring_Attach(clockDoc) == IMM_AUTHORING_OK, "attach preview fixture");
+    const auto mainBeforePreview = readClock(clockRootId);
+    const auto finiteBeforePreview = readClock(finiteId);
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 0, 0) == IMM_AUTHORING_OK &&
+        ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 1, 150) == IMM_AUTHORING_OK,
+        "begin and seek independent preview");
+    const auto previewClock = readClock(finiteId);
+    SpawnAreaSnapshot unavailableMainPose{};
+    requireRepeat(player.GetSpawnAreaSnapshot(clockDoc, unavailableMainPose, 0, nullptr) == -4,
+        "main viewpoint snapshot cannot mix preview evaluated state");
+    requireRepeat((previewClock.flags & IMM_AUTHORING_TIMELINE_PREVIEW) &&
+        (previewClock.flags & IMM_AUTHORING_TIMELINE_HELD) && previewClock.elapsedTicks == 150 &&
+        previewClock.localTicks == 50 && previewClock.cycleIndex == 1 &&
+        readClock(clockRootId).elapsedTicks == mainBeforePreview.elapsedTicks,
+        "preview has its own clock and excludes parent-domain Offset/main Stop");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, infiniteId, 0, 0) == IMM_AUTHORING_QUEUE_FULL,
+        "another preview cannot replace the active session");
+    ImmAuthoringKey blockedKey{};
+    blockedKey.structSize = sizeof(blockedKey); blockedKey.structVersion = 1;
+    blockedKey.property = IMM_AUTHORING_ANIM_PROPERTY_OPACITY; blockedKey.floatValue = 0.5f;
+    blockedKey.scale = 1; blockedKey.qw = 1;
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, finiteId, &blockedKey) == IMM_AUTHORING_OK,
+        "preview may stage but cannot publish an authoring batch");
+    uint64_t blockedRevision = 99;
+    requireRepeat(ImmAuthoring_Commit(clockDoc, &blockedRevision) == IMM_AUTHORING_QUEUE_FULL && blockedRevision == 99 &&
+        ImmAuthoring_DiscardPending(clockDoc) == IMM_AUTHORING_OK, "preview rejects authoring publication without losing ownership");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 2, 0) == IMM_AUTHORING_OK &&
+        wait([&]() { return readClock(finiteId).elapsedTicks > 150; }), "independent preview advances while main root is held");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 3, 0) == IMM_AUTHORING_OK,
+        "pause preview");
+    const auto pausedPreview = readClock(finiteId);
+    tick(); tick();
+    requireRepeat(readClock(finiteId).elapsedTicks == pausedPreview.elapsedTicks &&
+        readClock(clockRootId).rootEvaluatedTicks == mainBeforePreview.rootEvaluatedTicks,
+        "paused preview and main clock remain fixed");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 4, 0) == IMM_AUTHORING_OK,
+        "exit preview");
+    const auto mainAfterPreview = readClock(clockRootId);
+    const auto finiteAfterPreview = readClock(finiteId);
+    requireRepeat(!(finiteAfterPreview.flags & IMM_AUTHORING_TIMELINE_PREVIEW) &&
+        mainAfterPreview.rootReportedTicks == mainBeforePreview.rootReportedTicks &&
+        mainAfterPreview.rootEvaluatedTicks == mainBeforePreview.rootEvaluatedTicks &&
+        finiteAfterPreview.elapsedTicks == finiteBeforePreview.elapsedTicks &&
+        finiteAfterPreview.flags == finiteBeforePreview.flags,
+        "preview exit restores held main and nested clocks/intent exactly");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, finiteId, 0, 0) == IMM_AUTHORING_OK &&
+        player.SetLayerOpacity(clockDoc, finiteId, 0.42f) &&
+        !(readClock(finiteId).flags & IMM_AUTHORING_TIMELINE_PREVIEW), "legacy override exits preview before applying");
+    Player::LayerDiagnostics overrideDiagnostics{};
+    requireRepeat(player.GetLayerDiagnostics(clockDoc, finiteId, overrideDiagnostics) &&
+        overrideDiagnostics.opacityOverrideEnabled && overrideDiagnostics.opacityOverrideValue == 0.42f,
+        "successful legacy override survives preview exit");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, inactiveId, 0, 0) == IMM_AUTHORING_OK &&
+        (readClock(inactiveId).flags & IMM_AUTHORING_TIMELINE_ACTIVE_SPAN), "inactive main occurrence can preview independently");
+    requireRepeat(ImmAuthoring_Detach(clockDoc) == IMM_AUTHORING_OK &&
+        !(readClock(inactiveId).flags & IMM_AUTHORING_TIMELINE_PREVIEW), "detach ends preview safely");
+    std::puts("[IMM_TIMELINE_PREVIEW_CABI_TEST] pass=1 independentClock=1 pausedMain=1 heldRestore=1 publicationBlocked=1 inactiveScope=1 detach=1 mutedAudioOnly=1");
     player.UnloadAllSync();
     gImmUnityPlugin.mBridge.Shutdown();
     context->Release();

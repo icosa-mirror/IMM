@@ -191,6 +191,13 @@ namespace ImmPlayer {
         // Read only while holding the owning Player's scene/publication mutex.
         ImmCore::piTick GetCompletedCPUTime() const { return mLastCPUTime; }
         uint64_t GetEvaluationRevision() const { return mEvaluationRevision; }
+        // Called only under the Player scene mutex. Preview reuses evaluated
+        // objects; canonical authoring publication is blocked until exit.
+        int32_t ControlTimelinePreview(ImmImporter::Layer * boundary, int32_t action,
+            ImmCore::piTick ticks, ImmCore::piTick now, ImmCore::piLog * log);
+        const ImmImporter::Layer::EvaluationContext * GetTimelinePreviewContext() const;
+        ImmImporter::Layer * GetTimelinePreviewBoundary() const;
+        ImmCore::piTick GetTimelineMainCPUTime() const;
 
         //----------------------------------------------------------------------
         // Live editing. Additive: nothing changes for a document that is only
@@ -293,6 +300,10 @@ namespace ImmPlayer {
         void GetSpawnAreaPoseState(int spawnAreaId, SpawnAreaPoseState & pose);
         uint64_t mEvaluationRevision = 0;
         ImmCore::piTick mLastCPUTime = ImmCore::piTick(0);
+        struct TimelinePreviewSession;
+        std::unique_ptr<TimelinePreviewSession> mTimelinePreview;
+        void iEvaluateTimelinePreview(ImmCore::piTick now, ImmCore::piLog * log);
+        void iEndTimelinePreview(ImmCore::piTick now);
         uint64_t mRequestedPlaybackCommand = 0;
         uint64_t mCompletedPlaybackCommand = 0;
         PlaybackRequestStatus mPlaybackRequestStatus = PlaybackRequestStatus::None;

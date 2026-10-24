@@ -4199,8 +4199,8 @@ the historical sizes/check counts below describe this earlier source only.
    preview; scoped live editing and audible preview remain unfinished.
 3. The draft also handles ordinary host commands, detach and unload by ending
    preview before main-scene operations. Allocation for saved records and action
-   sidecars precedes runtime mutation. Native integration checks/review are in
-   progress; these changes are not yet validated or committed.
+   sidecars precedes runtime mutation. Native integration checks/review and live
+   checks now pass as recorded below; hosted acceptance remains separate.
 4. Runtime capsule helpers pass the existing CPU suite, including shifted group
    clocks/span origins, retained playback intent/overrides, unchanged canonical
    data/action flags, and paint reselection against an edited current frame table.
@@ -4208,8 +4208,38 @@ the historical sizes/check counts below describe this earlier source only.
    Session controls also pass the loaded WARP C ABI suite for independent clocks,
    held main restoration, pause, inactive scopes and detach. A reviewer found that
    accepted runtime override writes could be overwritten on exit; setters/clearers
-   now exit preview before applying, with a passing C ABI regression. Live managed
-   transport/render/camera checks remain in progress.
+   now exit preview before applying, with a passing C ABI regression. Runtime
+   capsule source was committed separately as 7f0d07dd.
+5. Seven injected live Game-view checks pass begin/play/pause/local ruler seek,
+   unchanged held main time, exit camera/clock restoration, reentry and component
+   disable cleanup. Visual inspection then caught an empty preview: Frame selected
+   applied an extra Z reflection although the lab's native document placement is
+   identity. Framing the raw scope bounds made the isolated content visible;
+   the helper is corrected. Fresh managed compilation/reload and repeated seven-step
+   interaction checks pass. Separate held-preview and returned-main images were
+   inspected after the correction; they show isolated content and the restored
+   original scene respectively.
+   Clock checks alone did not establish rendered acceptance. The intermediate
+   capture taken while clicking Exit showed the returned main scene, so it is not
+   treated as isolated-render evidence. The separately held capture is retained
+   at artifacts/live-timeline-preview-isolated-held.png.
+6. Ordinary runtime override calls now exit preview before applying. Tracked main
+   viewpoint selection/snapshots reject preview-local state, valid legacy selection
+   exits preview, and disabling the panel ends preview and restores its camera.
+   Native C ABI checks pass after these review corrections. Evidence:
+   artifacts/live-timeline-preview-session-cabi-final/report.json / run.log and
+   live-timeline-preview-session-ui-probe.json. The feature remains muted and
+   temporarily read-only during playback preview.
+7. Frame also fits/pans content into the scene area beside the inspector and
+   above the timeline, without altering the camera's native render target.
+   All eight scope-bound corners project inside that available area in the live
+   framing check. The toolbar fills the available width and keeps its breadcrumb
+   on one line. Evidence: artifacts/live-timeline-preview-framing-check.json,
+   live-timeline-preview-isolated-held.png, live-timeline-preview-main-restored.png,
+   live-timeline-preview-session-managed-build.log and the repeated UI probe above.
+   Original Snoopy is restored after these checks. Scoped preview editing,
+   audible preview, complex drawing-clock projections and remaining channels
+   are still unfinished; the goal is active.
 
 ### 6.120. Android system-crash attribution correction
 
@@ -4232,6 +4262,22 @@ the historical sizes/check counts below describe this earlier source only.
    targets accf76e9ec23bf92e70d5519b2f3071500abf3dd and is queued. Receipt:
    artifacts/android-audioserver-full-runs.json. Hosted acceptance of the fix is
    pending; the uncommitted session draft is not included in this run.
+4. Android acceptance for accf76e9 is now audited: both actual device producers,
+   the strict classifier and all 11 required metric/structure/log/video reports
+   pass, with both APK native plugin hashes matching the same-run native build.
+   Evidence: artifacts/timeline-ci-agent-40047649061-android-audit.json.
+5. That full run subsequently failed before iOS app compilation: the installed
+   Unity Editor reported unsupported iOS Simulator target. Distinct entitlement
+   errors are absent from the passing predecessor; exact licence-versus-install
+   cause is unproven. Preserve successful jobs and retry only simulator job
+   120732935216 plus dependents once after the parent run becomes terminal.
+   This retry is authorized but not yet eligible at the latest snapshot; repeated
+   failure remains unresolved. Evidence:
+   artifacts/timeline-ci-agent-40047649061-ios-failure-audit.json.
+6. Earlier FULL run 40040654620 is fully accepted for d35ae2e6: final artifact
+   audit confirms 20/20 required hosted rows and matching source provenance.
+   Evidence: artifacts/timeline-ci-agent-40040654620-acceptance-audit.json. This
+   accepts history/nearest-tick behavior, not the later preview changes.
 
 ## 7. Consolidated documents
 

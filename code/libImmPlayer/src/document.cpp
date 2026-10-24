@@ -25,6 +25,164 @@ using namespace ImmImporter;
 
 namespace ImmPlayer
 {
+    struct Document::TimelinePreviewSession
+    {
+        struct SavedLayer
+        {
+            Layer * layer;
+            Layer::PlaybackState state;
+            LayerPaintStatic * paint;
+            LayerPaintStatic::PlaybackState paintState;
+            LayerSound * sound;
+            bool soundPaused;
+        };
+        Layer::EvaluationContext context;
+        std::vector<SavedLayer> saved;
+        piTick mainCPUTime = piTick(0);
+        PlaybackState mainPlayback = PlaybackState::Paused;
+        bool playing = false;
+    };
+
+    const Layer::EvaluationContext * Document::GetTimelinePreviewContext() const
+    { return mTimelinePreview ? &mTimelinePreview->context : nullptr; }
+
+    Layer * Document::GetTimelinePreviewBoundary() const
+    { return mTimelinePreview ? mTimelinePreview->context.mBoundary : nullptr; }
+
+    piTick Document::GetTimelineMainCPUTime() const
+    { return mTimelinePreview ? mTimelinePreview->mainCPUTime : mLastCPUTime; }
+
+    void Document::iEndTimelinePreview(piTick now)
+    {
+        if (!mTimelinePreview) return;
+        const piTick shift = now - mTimelinePreview->mainCPUTime;
+        for (const auto & saved : mTimelinePreview->saved)
+        {
+            saved.layer->RestorePlaybackState(saved.state, shift);
+            if (saved.paint) saved.paint->RestorePlaybackState(saved.paintState);
+            if (saved.sound) saved.sound->SetPaused(saved.soundPaused);
+        }
+        mState.mPlaybackState = mTimelinePreview->mainPlayback;
+        mTimelinePreview.reset();
+        ++mEvaluationRevision;
+    }
+
+    void Document::iEvaluateTimelinePreview(piTick now, piLog * log)
+    {
+        auto & preview = *mTimelinePreview;
+        if (preview.playing) preview.context.mBoundaryElapsed = now - preview.context.mBoundaryStartTime;
+        auto evaluate = [&](Layer * layer, int, int, bool) -> bool
+        { layer->SetStateAt(now, log, &preview.context); return true; };
+        preview.context.mBoundary->Recurse(evaluate, 0, 0, false, false, false, false, false);
+        if (!preview.playing)
+            for (auto & saved : preview.saved)
+                if (saved.paint && preview.context.Contains(saved.layer)) saved.paint->SetPlaying(false);
+        ++mEvaluationRevision;
+    }
+
+    int32_t Document::ControlTimelinePreview(Layer * boundary, int32_t action, piTick ticks, piTick now, piLog * log)
+    {
+        if (action < 0 || action > 4 || ticks < piTick(0)) return -2;
+        if (mState.mLoadingState != LoadingState::Loaded || !mEditing) return -4;
+        if (HasPendingEdits() || !mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
+            !mOpenFrameMappings.empty() || !mOpenFrameSequences.empty() || !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() || !mOpenInitialSpawnAreaEdits.empty() ||
+            !mOpenSpawnAreaEdits.empty() || !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() || !mOpenLayerReparents.empty()) return -7;
+        if (action == 4) { iEndTimelinePreview(now); return 0; }
+        if (mHidden) return -4;
+        if (!boundary) return -1;
+        if (boundary == mSequence.GetRoot() || boundary->GetType() != Layer::Type::Group || !boundary->GetIsTimeline()) return -3;
+        if (mTimelinePreview && mTimelinePreview->context.mBoundary != boundary) return -7;
+        if (!mTimelinePreview)
+        {
+            if (action != 0) return -4;
+            auto preview = std::make_unique<TimelinePreviewSession>();
+            preview->mainCPUTime = mLastCPUTime;
+            preview->mainPlayback = mState.mPlaybackState;
+            preview->context.mBoundary = boundary;
+            preview->context.mBoundaryDuration = boundary->GetDuration();
+            preview->context.mBoundaryRepeatCount = boundary->GetMaxRepeatCount();
+            size_t actionCapacity = 0;
+            auto capture = [&](Layer * layer, int, int, bool) -> bool
+            {
+                const size_t actions = layer->GetNumAnimKeys(Layer::AnimProperty::Action);
+                if (actions > SIZE_MAX - actionCapacity) return false;
+                actionCapacity += actions;
+                TimelinePreviewSession::SavedLayer saved{};
+                saved.layer = layer; saved.state = layer->CapturePlaybackState();
+                if (layer->GetType() == Layer::Type::Paint)
+                {
+                    saved.paint = dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation());
+                    if (!saved.paint) return false;
+                    saved.paintState = saved.paint->CapturePlaybackState();
+                }
+                if (layer->GetType() == Layer::Type::Sound)
+                { saved.sound = (LayerSound *)layer->GetImplementation(); saved.soundPaused = saved.sound->GetPaused(); }
+                preview->saved.push_back(saved); return true;
+            };
+            if (!mSequence.Recurse(capture, false, false, false, false)) return -3;
+            // All action-sidecar allocation precedes the first runtime mutation.
+            // Canonical edits are blocked for this session, so this bound stays valid.
+            preview->context.mConsumedActions.reserve(actionCapacity);
+            mTimelinePreview = std::move(preview);
+            for (auto & saved : mTimelinePreview->saved) if (saved.sound) saved.sound->SetPaused(true);
+        }
+        auto & preview = *mTimelinePreview;
+        auto & context = preview.context;
+        if (action == 0 || action == 1)
+        {
+            preview.playing = false;
+            context.mBoundaryStartTime = now - ticks; context.mBoundaryElapsed = ticks;
+            context.mHeld = true; context.mActionsEnabled = false; context.mConsumedActions.clear();
+            context.mDefaultSpawnAreaLayerId = UINT32_MAX;
+            for (auto & saved : preview.saved)
+                if (saved.layer != boundary && context.Contains(saved.layer))
+                {
+                    saved.layer->ResetPlaybackStateForEvaluation();
+                    if (saved.paint)
+                    { saved.paint->SetPlaying(false); saved.paint->SetEvaluatedMaxRepeatCount(saved.paint->GetMaxRepeatCount()); saved.paint->SelectFrameAtTime(piTick(0)); }
+                }
+            iEvaluateTimelinePreview(now, log);
+            // Seeking marks earlier actions consumed only in this session. An
+            // action at the exact target remains available when playback resumes.
+            for (auto & saved : preview.saved)
+                if (saved.layer != boundary && context.Contains(saved.layer))
+                {
+                    Layer * timeline = saved.layer->GetTimeline(&context);
+                    const piTick elapsed = timeline->GetTimelineElapsed(now, &context);
+                    const piTick duration = timeline == boundary ? context.mBoundaryDuration : timeline->GetDuration();
+                    const uint32_t repeat = timeline == boundary ? context.mBoundaryRepeatCount : timeline->GetEvaluatedMaxRepeatCount();
+                    const piTick local = duration != piTick(0) ? (repeat && piTick::CastInt(elapsed) / piTick::CastInt(duration) >= repeat ? duration : elapsed % duration) : elapsed;
+                    for (uint32_t index = 0; index < saved.layer->GetNumAnimKeys(Layer::AnimProperty::Action); ++index)
+                    {
+                        const auto * key = saved.layer->GetAnimKey(Layer::AnimProperty::Action, index);
+                        if (key->mTime < local) context.mConsumedActions.push_back({saved.layer->GetID(), key->mTime});
+                    }
+                }
+            context.mActionsEnabled = true;
+        }
+        else if (action == 2)
+        {
+            if (!preview.playing)
+            {
+                const piTick shift = now - (context.mBoundaryStartTime + context.mBoundaryElapsed);
+                for (auto & saved : preview.saved)
+                    if (saved.layer != boundary && context.Contains(saved.layer))
+                        saved.layer->RestorePlaybackState(saved.layer->CapturePlaybackState(), shift);
+                context.mBoundaryStartTime = now - context.mBoundaryElapsed;
+            }
+            preview.playing = true; context.mHeld = false;
+        }
+        else if (action == 3)
+        {
+            if (preview.playing) iEvaluateTimelinePreview(now, log);
+            preview.playing = false; context.mHeld = true;
+            for (auto & saved : preview.saved) if (saved.paint && context.Contains(saved.layer)) saved.paint->SetPlaying(false);
+        }
+        mState.mPlaybackState = preview.playing ? PlaybackState::Playing : PlaybackState::Paused;
+        return 0;
+    }
+
     // Visibility publication can refresh these descendants without restarting
     // timeline clocks, executing actions or touching media playback lifecycles.
     static bool iCanRefreshStaticVisibility(Layer * layer)
@@ -211,6 +369,7 @@ namespace ImmPlayer
 
     void Document::End(void)
     {
+        mTimelinePreview.reset();
         mLastCPUTime = piTick(0);
 		mOpenDrawingCreations.clear();
         mOpenGeometryEdits.clear();
@@ -319,6 +478,7 @@ namespace ImmPlayer
 
     int Document::GetSpawnAreaSnapshot(SpawnAreaSnapshot & snapshot, int capacity, int * ids)
     {
+        if (mTimelinePreview) return -4; // Main-scene poses are not evaluated in preview context.
         const int count = GetAvailableSpawnAreaIds(capacity, ids);
         if (count < 0) return -1;
         snapshot = {};
@@ -346,7 +506,7 @@ namespace ImmPlayer
         SpawnAreaPoseState & pose)
     {
         pose = {};
-        if (mPlaybackRequestStatus == PlaybackRequestStatus::Pending ||
+        if (mTimelinePreview || mPlaybackRequestStatus == PlaybackRequestStatus::Pending ||
             (expectedEvaluationRevision != 0 && expectedEvaluationRevision != mEvaluationRevision) ||
             !IsSpawnAreaAvailable(spawnAreaId))
             return false;
@@ -369,6 +529,8 @@ namespace ImmPlayer
 
     void Document::SetSpawnArea(int spawnAreaId)
     {
+        if (spawnAreaId < 0 || spawnAreaId >= GetSpawnAreaCount()) return;
+        iEndTimelinePreview(mLastCPUTime);
         mPlayerManager.SetSpawnArea(spawnAreaId);
     }
 
@@ -426,7 +588,7 @@ namespace ImmPlayer
 
     void Document::GetTime(piTick now, piTick * timeSinceStart, piTick * timeSinceStop)
     {
-        mPlayerManager.GetTime(now, timeSinceStart, timeSinceStop);
+        mPlayerManager.GetTime(mTimelinePreview ? mTimelinePreview->mainCPUTime : now, timeSinceStart, timeSinceStop);
     }
 
     void Document::SetTime(piTick now, piTick timeSinceStart, piTick timeSinceStop)
@@ -434,6 +596,7 @@ namespace ImmPlayer
         if (mState.mLoadingState != LoadingState::Loaded ||
             !mPlayerManager.GetIsPlaying() || mSequence.GetRoot() == nullptr)
             return;
+        iEndTimelinePreview(now);
         mPlayerManager.SetTime(now, timeSinceStart, timeSinceStop);
         // A seek resets keyed playback state. Evaluate its requested pose now,
         // before a subsequent queued Pause can suppress the ordinary update.
@@ -487,6 +650,9 @@ namespace ImmPlayer
         const Command * command, const Command * queuedCommand)
     {
         mLastCPUTime = now;
+        // Ordinary host commands explicitly return to main-scene playback.
+        if (mTimelinePreview && command != nullptr && command->mType != Command::Type::None)
+            iEndTimelinePreview(now);
         const bool trackedCommand = mPlaybackRequestStatus == PlaybackRequestStatus::Pending &&
             command != nullptr &&
             (command->mType == Command::Type::RequestSetChapter ||
@@ -760,6 +926,7 @@ namespace ImmPlayer
         {
             if (mState.mLoadingState != LoadingState::Loaded) mState.mPlaybackState = PlaybackState::PausedAndHidden;
             else if (mHidden) mState.mPlaybackState = PlaybackState::PausedAndHidden;
+            else if (mTimelinePreview) mState.mPlaybackState = mTimelinePreview->playing ? PlaybackState::Playing : PlaybackState::Paused;
             else if (mPlayerManager.GetIsFinished()) mState.mPlaybackState = PlaybackState::Finished;  // story has reached the end, need to check this before waiting!!!
             else if (mPlayerManager.GetIsPaused()) mState.mPlaybackState = PlaybackState::Paused;
             else if (mPlayerManager.GetIsWaiting()) mState.mPlaybackState = PlaybackState::Waiting;   // story driven pause/wait to proceed, still playing
@@ -776,7 +943,11 @@ namespace ImmPlayer
 
         if (shouldRender)
         {
-            if (mPlayerManager.GetIsPlaying())
+            if (mTimelinePreview)
+            {
+                if (mTimelinePreview->playing) iEvaluateTimelinePreview(now, log);
+            }
+            else if (mPlayerManager.GetIsPlaying())
             {
                 const bool evaluates = !mPlayerManager.GetIsPaused() || trackedCommandApplied;
                 mPlayerManager.Update(now, trackedCommandApplied);
@@ -1509,6 +1680,7 @@ namespace ImmPlayer
 
         mDrawingHandles.clear();
         mCommitStatuses.clear();
+        iEndTimelinePreview(mLastCPUTime);
         mEditing = false;
         return true;
     }
@@ -3342,6 +3514,11 @@ namespace ImmPlayer
 
     uint64_t Document::CommitEdits(int32_t * resultOut)
     {
+        if (mTimelinePreview)
+        {
+            if (resultOut) *resultOut = -7;
+            return 0;
+        }
         const uint64_t commitStartedNs = iAuthoringClockNs();
         if (resultOut != nullptr)
             *resultOut = 0;
@@ -3500,6 +3677,7 @@ namespace ImmPlayer
         piLog *log,
         const piTick now)
     {
+        iEndTimelinePreview(now);
         iInvalidateAuthoringSession();
         if (IsLoadingAsync(&mSequence))
         {

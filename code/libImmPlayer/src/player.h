@@ -192,7 +192,8 @@ namespace ImmPlayer {
             TimelineClockActionHeld = 1u << 4,
             TimelineClockClamped = 1u << 5,
             TimelineClockActiveSpan = 1u << 6,
-            TimelineClockInactive = 1u << 7
+            TimelineClockInactive = 1u << 7,
+            TimelineClockPreview = 1u << 8
         };
         struct TimelineClock
         {
@@ -213,6 +214,7 @@ namespace ImmPlayer {
             uint64_t requestedRevision = 0;
         };
         int32_t GetTimelineClock(int docId, uint32_t timelineLayerId, TimelineClock & clock);
+        int32_t ControlTimelinePreview(int docId, int32_t timelineLayerId, int32_t action, int64_t ticks);
         int32_t GetAnimationKeyCount(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, uint32_t & count);
         int32_t GetAnimationKey(int docId, uint32_t layerId,

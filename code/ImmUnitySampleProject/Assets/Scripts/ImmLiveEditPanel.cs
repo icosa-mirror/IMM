@@ -159,7 +159,7 @@ namespace ImmPlayer
         private void DrawPanel(int id)
         {
             scroll = GUILayout.BeginScrollView(scroll);
-            GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading;
+            GUI.enabled = attached && pending == 0 && !awaitingCommit && !loading && !TimelinePreviewActive;
             GUI.enabled &= selected >= 0;
             GUILayout.Label($"Selected layer {selected}");
             GUILayout.Label(evaluated, wrapped, GUILayout.Width(window.width - 50));
@@ -275,7 +275,7 @@ namespace ImmPlayer
 
         private void Submit(string label, Func<int> queue)
         {
-            if (!attached || pending != 0 || awaitingCommit) return;
+            if (!attached || pending != 0 || awaitingCommit || TimelinePreviewActive) return;
             historyRecording = null;
             try
             {
@@ -417,6 +417,7 @@ namespace ImmPlayer
 
         private void ReadViewpoints()
         {
+            if (TimelinePreviewActive) return;
             viewpoints = document.GetAvailableSpawnAreaIds();
             if (Array.IndexOf(viewpoints, selectedViewpoint) < 0)
             {
@@ -509,6 +510,7 @@ namespace ImmPlayer
         private int retiring = -1;
         private void Unload()
         {
+            RestorePreviewCamera();
             ReleaseTimelineCapture();
             ClearTimelineHistory();
             timelineScope = -1; timelineClockValid = false; timelineClockMissing = false; timelineClockError = "";
@@ -533,6 +535,7 @@ namespace ImmPlayer
         private void FrameScene()
         {
             if (view == null || document == null) return;
+            if (TimelinePreviewActive) { FramePreviewContents(); return; }
             FrameBounds(document.GetBoundingBox());
         }
 
@@ -547,7 +550,10 @@ namespace ImmPlayer
                         N.Check(N.ImmAuthoring_LayerGetWorldTransform(Doc, selected, ref pose));
                         Vector3 scale = Vector3.one * pose.scale;
                         if (pose.flip >= 1 && pose.flip <= 3) scale[pose.flip - 1] = -scale[pose.flip - 1];
-                        Matrix4x4 matrix = transform.localToWorldMatrix * Matrix4x4.Scale(new Vector3(1, 1, -1)) * Matrix4x4.TRS(new Vector3(pose.tx, pose.ty, pose.tz),
+                        // The lab leaves native document placement at identity.
+                        // Its bounds/transforms already use the display-world
+                        // coordinates passed to the camera; do not reflect Z again.
+                        Matrix4x4 matrix = Matrix4x4.TRS(new Vector3(pose.tx, pose.ty, pose.tz),
                             new Quaternion(pose.qx, pose.qy, pose.qz, pose.qw), scale);
                         Bounds local = layer.Bounds;
                         Bounds world = new Bounds(matrix.MultiplyPoint3x4(local.center), Vector3.zero);
@@ -565,12 +571,26 @@ namespace ImmPlayer
         {
             if (view == null) return;
             float radius = Mathf.Max(0.1f, bounds.extents.magnitude);
-            view.transform.position = bounds.center - view.transform.forward * radius / Mathf.Sin(view.fieldOfView * Mathf.Deg2Rad * 0.5f) * 1.15f;
+            Rect area = visible ? new Rect(window.xMax + 8, toolbarWindow.yMax + 8,
+                Mathf.Max(1, Screen.width - window.xMax - 20), Mathf.Max(1, timelineWindow.y - toolbarWindow.yMax - 16)) :
+                new Rect(0, 0, Screen.width, Screen.height);
+            float fraction = Mathf.Max(0.05f, Mathf.Min(area.height / Screen.height, area.width / Screen.width * view.aspect));
+            float halfFov = view.fieldOfView * Mathf.Deg2Rad * 0.5f;
+            float distance = radius / (Mathf.Sin(halfFov) * fraction) * 1.15f;
+            float x = (area.center.x / Screen.width * 2 - 1) * view.aspect;
+            float y = 1 - area.center.y / Screen.height * 2;
+            view.transform.position = bounds.center - view.transform.forward * distance -
+                (view.transform.right * x + view.transform.up * y) * distance * Mathf.Tan(halfFov);
             view.nearClipPlane = Mathf.Max(0.01f, radius / 1000);
-            view.farClipPlane = Mathf.Max(1000, radius * 20);
+            view.farClipPlane = Mathf.Max(1000, distance + radius * 4);
         }
 
-        private void OnDisable() => ReleaseTimelineCapture();
+        private void OnDisable()
+        {
+            ReleaseTimelineCapture();
+            if (TimelinePreviewActive || previewCameraSaved) Run(() => ControlTimelinePreview(4));
+            RestorePreviewCamera();
+        }
 
         private void OnDestroy()
         {

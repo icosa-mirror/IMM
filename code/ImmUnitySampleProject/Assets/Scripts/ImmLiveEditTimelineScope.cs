@@ -49,6 +49,7 @@ namespace ImmPlayer
                     return;
                 }
                 timelineClock = value; timelineClockValid = true; timelineClockError = "";
+                if (previewCameraSaved && (value.flags & ClockPreview) == 0) RestorePreviewCamera();
                 timelinePlayTime = value.local / 12600.0;
                 if (revealTimelinePlayhead)
                 {
@@ -92,6 +93,7 @@ namespace ImmPlayer
             if (pending != 0 || awaitingCommit || !treeNodes.TryGetValue(layer, out LayerNode node) ||
                 (node.Parent != null && !node.Info.IsTimeline)) return;
             if (layer == timelineScope) return;
+            if (TimelinePreviewActive) ControlTimelinePreview(4);
             if (ScopeNode != null) timelineViews[timelineScope] = new TimelineView
                 { Start = timelineStart, Range = timelineRange, Scroll = layerScroll, Filter = filter };
             ReleaseTimelineCapture();
@@ -141,14 +143,21 @@ namespace ImmPlayer
             var names = new List<string>();
             for (LayerNode node = ScopeNode; node != null; node = node.Parent) names.Add(node.Info.Name);
             names.Reverse();
-            GUILayout.Label(string.Join(" / ", names), GUILayout.MinWidth(100));
+            GUILayout.Label(string.Join(" / ", names), GUILayout.MinWidth(100), GUILayout.ExpandWidth(true));
             string clockState = !timelineClockValid ? timelineClockError : (timelineClock.flags & ClockInactive) != 0 ? "Inactive" :
                 (timelineClock.flags & ClockActionHeld) != 0 ? "Action hold" : (timelineClock.flags & ClockClamped) != 0 ? "Finite end" :
                 (timelineClock.flags & ClockHeld) != 0 ? "Paused" : "Playing";
             string iteration = !timelineClockValid || (timelineClock.flags & ClockInactive) != 0 ? clockState :
                 (timelineClock.flags & ClockClamped) != 0 ? $"End ({timelineClock.effectiveRepeat} cycles)" : $"Cycle {timelineClock.cycle + 1} · {clockState}";
             GUILayout.Label(iteration, GUILayout.Width(180));
-            if (!IsRootScope) GUILayout.Label("Local timeline view · playback preview pending", GUILayout.Width(320));
+            if (!IsRootScope)
+            {
+                GUI.enabled = attached && pending == 0 && !awaitingCommit && !queuedTimelineSeekTicks.HasValue && timelineSeekRequest == 0;
+                if (GUILayout.Button(TimelinePreviewActive ? "Return to scene" : "Preview local", GUILayout.Width(120)))
+                    Run(() => ControlTimelinePreview(TimelinePreviewActive ? 4 : 0));
+                GUI.enabled = true;
+                GUILayout.Label(TimelinePreviewActive ? "Independent preview · audio muted · exit to edit" : "Scene occurrence · open preview to play locally", GUILayout.Width(330));
+            }
             GUILayout.EndHorizontal();
         }
     }

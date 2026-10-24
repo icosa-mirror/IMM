@@ -1,6 +1,7 @@
 #define CUSTOM_ALPHA_TO_COVERAGE 1
 //#define UNITY
 #include <stdlib.h>
+#include <stdexcept>
 #include <thread>
 #include <chrono>
 #include <cwchar>
@@ -542,6 +543,7 @@ namespace ImmPlayer
             return false;
 
         // Override animated visibility so runtime changes are respected.
+        if (doc->GetTimelinePreviewBoundary() && doc->ControlTimelinePreview(nullptr, 4, piTick(0), mTime, mLog) != 0) return false;
         layer->SetVisibilityOverride(true, visible);
         return true;
     }
@@ -793,7 +795,8 @@ namespace ImmPlayer
         Layer * layer = iFindLayerById(doc->GetSequence(), layerId);
         if (layer == nullptr) return -1;
         if (IsLoadingAsync(doc->GetSequence())) return -7;
-        transform = layer->GetTransformToWorld();
+        const auto * context = doc->GetTimelinePreviewContext();
+        transform = layer->GetTransformToWorld(context && context->Contains(layer) ? context : nullptr);
         return 0;
     }
 
@@ -836,28 +839,35 @@ namespace ImmPlayer
         if (layer == nullptr || root == nullptr) return -1;
         const bool isRoot = layer == root;
         if (!isRoot && (layer->GetType() != Layer::Type::Group || !layer->GetIsTimeline())) return -3;
-        const piTick now = doc->GetCompletedCPUTime();
+        const auto * context = doc->GetTimelinePreviewContext();
+        const bool preview = context != nullptr && context->Contains(layer);
+        if (!preview) context = nullptr;
+        const bool boundary = preview && context->mBoundary == layer;
+        const piTick now = preview ? doc->GetCompletedCPUTime() : doc->GetTimelineMainCPUTime();
         piTick reported(0), stopped(0);
         doc->GetTime(now, &reported, &stopped);
-        const bool worldVisible = layer->GetWorldVisible();
-        const bool active = isRoot || (worldVisible && layer->HasEvaluatedVisibilitySpan());
+        const bool worldVisible = layer->GetWorldVisible(context);
+        const bool active = isRoot || boundary || (worldVisible && layer->HasEvaluatedVisibilitySpan());
         TimelineClock value;
         value.timelineLayerId = static_cast<int32_t>(layer->GetID());
         value.parentTimelineLayerId = isRoot ? -1 : static_cast<int32_t>(layer->GetTimeline()->GetID());
         value.rootReportedTicks = piTick::CastInt(reported);
-        value.rootEvaluatedTicks = piTick::CastInt(root->GetTimelineElapsed(now));
-        value.durationTicks = piTick::CastInt(layer->GetDuration());
+        value.rootEvaluatedTicks = piTick::CastInt(root->GetTimelineElapsed(doc->GetTimelineMainCPUTime()));
+        value.durationTicks = piTick::CastInt(boundary ? context->mBoundaryDuration : layer->GetDuration());
         value.canonicalRepeat = layer->GetMaxRepeatCount();
-        value.effectiveRepeat = layer->GetEvaluatedMaxRepeatCount();
+        value.effectiveRepeat = boundary ? context->mBoundaryRepeatCount : layer->GetEvaluatedMaxRepeatCount();
+        const bool held = preview ? context->mHeld || context->mActionHeld : root->HasStopTime();
+        const bool actionHeld = preview ? context->mActionHeld : root->IsStoppedByAction();
         value.flags = (isRoot ? TimelineClockRoot : 0u) |
-            (layer->GetPlaying() ? TimelineClockPlaying : 0u) |
+            ((boundary ? !held : layer->GetPlaying()) ? TimelineClockPlaying : 0u) |
             (worldVisible ? TimelineClockWorldVisible : 0u) |
-            ((layer->HasStopTime() || root->HasStopTime()) ? TimelineClockHeld : 0u) |
-            ((layer->IsStoppedByAction() || root->IsStoppedByAction()) ? TimelineClockActionHeld : 0u) |
-            (active ? TimelineClockActiveSpan : TimelineClockInactive);
+            (((!boundary && layer->HasStopTime()) || held) ? TimelineClockHeld : 0u) |
+            (((!boundary && layer->IsStoppedByAction()) || actionHeld) ? TimelineClockActionHeld : 0u) |
+            (active ? TimelineClockActiveSpan : TimelineClockInactive) |
+            (preview ? TimelineClockPreview : 0u);
         if (active)
         {
-            value.elapsedTicks = piTick::CastInt(layer->GetTimelineElapsed(now));
+            value.elapsedTicks = piTick::CastInt(layer->GetTimelineElapsed(now, context));
             // Same wrap/clamp decision used by descendants in SetStateAtImpl.
             // cycleIndex is the raw elapsed quotient, even beyond a finite end.
             value.cycleIndex = value.durationTicks != 0 ?
@@ -874,6 +884,22 @@ namespace ImmPlayer
         value.requestedRevision = revisions.mRequested;
         clock = value;
         return 0;
+    }
+
+    int32_t Player::ControlTimelinePreview(int docId, int32_t timelineLayerId, int32_t action, int64_t ticks)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded || doc->GetEvaluationRevision() == 0) return -4;
+        if (IsLoadingAsync(doc->GetSequence())) return -7;
+        const int command = doc->GetCommandId();
+        if (command < 0 || command >= mCommandList.GetLength()) return -4;
+        if (mCommandList[command].mCommand.mType != Document::Command::Type::None) return -7;
+        Layer * boundary = timelineLayerId >= 0 ? iFindLayerById(doc->GetSequence(), static_cast<uint32_t>(timelineLayerId)) : nullptr;
+        try { return doc->ControlTimelinePreview(boundary, action, piTick(ticks), mTime, mLog); }
+        catch (const std::bad_alloc &) { return -5; }
+        catch (const std::length_error &) { return -5; }
     }
 
     int32_t Player::GetAnimationKeyCount(int docId, uint32_t layerId,
@@ -1064,6 +1090,7 @@ namespace ImmPlayer
         if (!layer)
             return false;
 
+        if (doc->GetTimelinePreviewBoundary() && doc->ControlTimelinePreview(nullptr, 4, piTick(0), mTime, mLog) != 0) return false;
         layer->SetOpacityOverride(true, opacity);
         return true;
     }
@@ -1081,6 +1108,7 @@ namespace ImmPlayer
         if (!layer)
             return false;
 
+        if (doc->GetTimelinePreviewBoundary() && doc->ControlTimelinePreview(nullptr, 4, piTick(0), mTime, mLog) != 0) return false;
         layer->SetVisibilityOverride(false, layer->GetVisible());
         return true;
     }
@@ -1098,6 +1126,7 @@ namespace ImmPlayer
         if (!layer)
             return false;
 
+        if (doc->GetTimelinePreviewBoundary() && doc->ControlTimelinePreview(nullptr, 4, piTick(0), mTime, mLog) != 0) return false;
         layer->SetTransformOverride(true, transform);
         return true;
     }
@@ -1115,6 +1144,7 @@ namespace ImmPlayer
         if (!layer)
             return false;
 
+        if (doc->GetTimelinePreviewBoundary() && doc->ControlTimelinePreview(nullptr, 4, piTick(0), mTime, mLog) != 0) return false;
         layer->SetTransformOverride(false, layer->GetTransform());
         return true;
     }
@@ -1145,8 +1175,10 @@ namespace ImmPlayer
         outDiag.canonicalOpacity = layer->GetCanonicalOpacity();
         outDiag.opacityOverrideEnabled = layer->GetOpacityOverrideEnabled() ? 1 : 0;
         outDiag.opacityOverrideValue = layer->GetOpacityOverrideValue();
-        outDiag.isWorldVisible = layer->GetWorldVisible() ? 1 : 0;
-        outDiag.worldOpacity = layer->GetWorldOpacity();
+        const auto * context = doc->GetTimelinePreviewContext();
+        if (context && !context->Contains(layer)) context = nullptr;
+        outDiag.isWorldVisible = layer->GetWorldVisible(context) ? 1 : 0;
+        outDiag.worldOpacity = layer->GetWorldOpacity(context);
         Layer *parent = layer->GetParent();
         outDiag.parentId = parent ? (int)parent->GetID() : -1;
         outDiag.visibilityOverrideEnabled = layer->GetVisibilityOverrideEnabled() ? 1 : 0;
@@ -1767,7 +1799,14 @@ namespace ImmPlayer
                     if (!iEnvFlagEnabled("IMM_UNITY_SKIP_DISPLAY_PRERENDER"))
                     {
                         iTraceUnityGlobalRender("before-display-prerender-layer");
-                        iDisplayPreRenderLayer(doc->GetSequence()->GetRoot(), doc->GetDocumentToWorld(), 1.0f, mViewerInfo.mWorldToHead, doc->GetSuppress360Backdrops());
+                        Layer * preview = doc->GetTimelinePreviewBoundary();
+                        if (preview != nullptr)
+                        {
+                            for (uint32_t child = 0; child < preview->GetNumChildren(); ++child)
+                                iDisplayPreRenderLayer(preview->GetChild(child), doc->GetDocumentToWorld(), 1.0f,
+                                    mViewerInfo.mWorldToHead, doc->GetSuppress360Backdrops());
+                        }
+                        else iDisplayPreRenderLayer(doc->GetSequence()->GetRoot(), doc->GetDocumentToWorld(), 1.0f, mViewerInfo.mWorldToHead, doc->GetSuppress360Backdrops());
                         iTraceUnityGlobalRender("after-display-prerender-layer");
                     }
                     else
@@ -1778,7 +1817,8 @@ namespace ImmPlayer
                     if (!iEnvFlagEnabled("IMM_UNITY_SKIP_UNLOAD_NOT_IN_TIMELINE"))
                     {
                         iTraceUnityGlobalRender("before-unload-not-in-timeline");
-                        iUnloadNotInTimeline(doc->GetSequence()->GetRoot(), mTime);
+                        if (doc->GetTimelinePreviewBoundary() == nullptr)
+                            iUnloadNotInTimeline(doc->GetSequence()->GetRoot(), mTime);
                         iTraceUnityGlobalRender("after-unload-not-in-timeline");
                     }
                     else

@@ -112,6 +112,7 @@ namespace ImmPlayer
             out double duration, out double offset, out uint frameRate, out uint frames, out uint maxRepeat);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerGetWorldTransform(int doc, int layer, ref Pivot transform);
         [DllImport(Library)] internal static extern int ImmAuthoring_TimelineGetClock(int doc, int layer, ref TimelineClock clock, uint capacity);
+        [DllImport(Library)] internal static extern int ImmAuthoring_TimelinePreviewControl(int doc, int layer, int action, long ticks);
         [DllImport(Library)] internal static extern int ImmAuthoring_KeyRemove(int doc, int layer, int property, double seconds);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerCreate(int doc, int parent, int type, byte[] name, uint count, out int layer);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerDestroy(int doc, int layer);

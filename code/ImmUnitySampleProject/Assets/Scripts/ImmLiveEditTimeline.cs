@@ -35,7 +35,7 @@ namespace ImmPlayer
             GUI.Box(toolbarWindow, GUIContent.none);
             GUILayout.BeginArea(new Rect(toolbarWindow.x + 8, toolbarWindow.y + 4, toolbarWindow.width - 16, toolbarWindow.height - 8));
             toolbarScroll = GUILayout.BeginScrollView(toolbarScroll, false, false);
-            GUILayout.BeginVertical(GUILayout.MinWidth(1000));
+            GUILayout.BeginVertical(GUILayout.MinWidth(Mathf.Max(1000, toolbarWindow.width - 40)));
             DrawToolbar();
             GUILayout.EndVertical();
             GUILayout.EndScrollView();
@@ -66,16 +66,16 @@ namespace ImmPlayer
             if (GUILayout.Button("Frame selected", GUILayout.Width(105))) FrameSelected();
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal();
-            GUI.enabled &= IsRootScope && timelineClockValid;
-            if (GUILayout.Button("Play", GUILayout.Width(55))) document.Resume();
-            if (GUILayout.Button("Pause", GUILayout.Width(55))) document.Pause();
-            if (GUILayout.Button("Restart", GUILayout.Width(65))) document.Restart();
+            GUI.enabled &= (IsRootScope || TimelinePreviewActive) && timelineClockValid;
+            if (GUILayout.Button("Play", GUILayout.Width(55))) Run(() => { if (TimelinePreviewActive) ControlTimelinePreview(2); else document.Resume(); });
+            if (GUILayout.Button("Pause", GUILayout.Width(55))) Run(() => { if (TimelinePreviewActive) ControlTimelinePreview(3); else document.Pause(); });
+            if (GUILayout.Button("Restart", GUILayout.Width(65))) Run(() => { if (TimelinePreviewActive) { ControlTimelinePreview(1, 0); ControlTimelinePreview(2); } else document.Restart(); });
             if (GUILayout.Button("< frame", GUILayout.Width(65))) { Run(() => PauseAndSeekTimeline(Math.Max(0, timelinePlayTime - 1.0 / timelineFrameRate))); }
             if (GUILayout.Button("frame >", GUILayout.Width(65))) { Run(() => PauseAndSeekTimeline(timelinePlayTime + 1.0 / timelineFrameRate)); }
             seek = GUILayout.TextField(seek, GUILayout.Width(60));
             if (GUILayout.Button("Seek s", GUILayout.Width(60))) Run(() => SeekTimeline(Number(seek)));
             int index = Array.IndexOf(viewpoints, selectedViewpoint);
-            GUI.enabled = document != null && viewpoints.Length > 0;
+            GUI.enabled = document != null && !TimelinePreviewActive && viewpoints.Length > 0;
             if (GUILayout.Button("<", GUILayout.Width(26))) selectedViewpoint = viewpoints[(index - 1 + viewpoints.Length) % viewpoints.Length];
             GUILayout.Label($"View {Mathf.Max(0, index + 1)} / {viewpoints.Length}", GUILayout.Width(90));
             if (GUILayout.Button(">", GUILayout.Width(26))) selectedViewpoint = viewpoints[(index + 1) % viewpoints.Length];
@@ -131,7 +131,7 @@ namespace ImmPlayer
             followPlayhead = GUI.Toggle(new Rect(namesWidth + 480, 4, 75, 22), followPlayhead, "Follow");
             snapKeys = GUI.Toggle(new Rect(namesWidth + 560, 4, 70, 22), snapKeys, "Snap");
             GUI.Label(new Rect(namesWidth + 630, 4, 175, 22), timelineClockValid ? $"{playTime:F3} s / {timelineFrameRate} fps" : "Clock unavailable");
-            GUI.enabled = attached && timelineClockValid && (timelineClock.flags & ClockActive) != 0 && pending == 0 && !awaitingCommit &&
+            GUI.enabled = attached && !TimelinePreviewActive && timelineClockValid && (timelineClock.flags & ClockActive) != 0 && pending == 0 && !awaitingCommit &&
                 treeNodes.TryGetValue(selected, out LayerNode selectedNode) && InTimelineScope(selectedNode);
             if (GUI.Button(new Rect(namesWidth + 810, 4, 70, 22), "Set key"))
             { keyTime = SnapTime(playTime).ToString("0.######", CultureInfo.InvariantCulture); Submit("Set key", SetKey); }
@@ -222,7 +222,7 @@ namespace ImmPlayer
             var scrubArea = new Rect(namesWidth, 30, tracksWidth, timelineWindow.height - headerExtra - 54);
             int control = GUIUtility.GetControlID(FocusType.Passive);
             Event input = Event.current;
-            if (document != null && !loading && IsRootScope && input.type == EventType.MouseDown && input.button == 0 && scrubArea.Contains(input.mousePosition))
+            if (document != null && !loading && (IsRootScope || TimelinePreviewActive) && input.type == EventType.MouseDown && input.button == 0 && scrubArea.Contains(input.mousePosition))
             { GUI.FocusControl(null); scrubControl = control; GUIUtility.hotControl = control; ScrubAt(input.mousePosition.x, namesWidth, tracksWidth); input.Use(); }
             else if (scrubControl != 0 && GUIUtility.hotControl == scrubControl)
             {
@@ -260,7 +260,7 @@ namespace ImmPlayer
         private void PauseAndSeekTimeline(double seconds)
         {
             SeekTimeline(seconds);
-            pauseBeforeTimelineSeek = true;
+            pauseBeforeTimelineSeek = !TimelinePreviewActive;
         }
 
         private void UpdateTimelinePlayback()
@@ -295,10 +295,16 @@ namespace ImmPlayer
         {
             if (document == null || double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0)
                 throw new ArgumentException("Seek time must be finite and nonnegative.");
-            if (!IsRootScope) throw new InvalidOperationException("Local playback preview is not available yet. Use the main timeline for scene playback.");
+            if (!IsRootScope && !TimelinePreviewActive) throw new InvalidOperationException("Open local preview to seek this timeline independently.");
             long ticks = checked((long)Math.Round(seconds * 12600, MidpointRounding.AwayFromZero));
             if (!timelineClockValid) throw new InvalidOperationException("Wait for the timeline clock to become ready.");
-            queuedTimelineSeekTicks = RootOccurrenceTick(timelineClock, ticks);
+            long occurrence = RootOccurrenceTick(timelineClock, ticks);
+            if (TimelinePreviewActive)
+            {
+                ControlTimelinePreview(1, occurrence);
+                revealTimelinePlayhead = true;
+            }
+            else queuedTimelineSeekTicks = occurrence;
             timelineSeekDeadline = Time.unscaledTime + 5;
             seek = seconds.ToString("0.###", CultureInfo.InvariantCulture);
             keyTime = (ticks / 12600.0).ToString("R", CultureInfo.InvariantCulture);
