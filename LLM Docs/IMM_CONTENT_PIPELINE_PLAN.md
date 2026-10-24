@@ -5174,6 +5174,38 @@ the historical sizes/check counts below describe this earlier source only.
    precondition and was undone; it is not counted as a runtime failure or accepted
    result. The accepted pass records the selected layer throughout.
 
+### 6.148. Real-scene holds, hierarchy and local-preview evaluation
+
+1. Nine Snoopy hold-editing steps pass: insert a hold into the actual six-frame
+   drawing sequence, Undo/Redo, remove that inserted frame and restore the original
+   handle sequence. The exposure change affects1,578viewport pixels; restoration
+   matches exactly. Evidence: artifacts/snoopy-hold-edit-pass.json and
+   snoopy-hold-scene-comparison.json.
+2. Existing inspector controls create a temporary group and paint layer in the
+   Snoopy hierarchy. New paint supplies one empty drawing/frame, so the existing
+   marker-replacement control can populate it; no new drawing control is needed.
+   Reparenting and deletion preserve the original artist's79layers.
+3. Initial main-view marker images were occluded by the artwork and are not visual
+   acceptance. Existing local preview isolates the authored content and clearly
+   displays the marker. Reparented preview pixels match exactly; the isolated
+   marker has5,732display-encoded magenta pixels. After cleanup and returning to
+   Snoopy, the original scene image also matches exactly. Evidence:
+   artifacts/snoopy-new-paint-preview-pass.json,
+   snoopy-preview-hierarchy-pass.json and
+   snoopy-preview-hierarchy-scene-comparison.json. The initial overly narrow color
+   probe is retained separately, not treated as an application rendering failure.
+4. The seventeen-step combined preview/hierarchy pass includes local Play/Pause,
+   ruler scrubbing, forward/back frame stepping and return to the held main scene.
+   Main root time stays at2s throughout local playback. No added controls or new
+   runtime/rendering work were needed. Marker placement at the imported group's
+   local origin can be occluded; production-editor placement behavior is a
+   prototyping observation, not an additional feature requirement here.
+5. Track-filter feature source5e34d0144ed27134e7e3e28952cc4e9b25d079ed is pushed;
+   FULL[40080086930](https://github.com/icosa-mirror/IMM/actions/runs/40080086930)
+   is active alongside the healthy567replacement full. Both still need actual
+   acceptance, especially the corrected macOS Editor smoke. Remaining local pass:
+   explicit visibility-key editing and existing-drawing replacement/reload.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
