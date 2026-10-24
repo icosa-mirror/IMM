@@ -39,6 +39,12 @@ wrap to the expected source section, and valid offsets still work afterward.
 Its marker amplitudes identify the source section; the SDK check separately verifies
 the numerical playback clock.
 
+The backend check also reverses a pause immediately, waiting for acknowledgement
+when needed, and verifies that Resume retains the current source marker without
+Play/seek. PCM and Opus runs cover buffer sizes 480, 960 and 1920. The standalone
+state-transaction test exercises callback-aware failure rollback, logical Stop,
+late opposite-state callbacks and newer-request protection without the SDK.
+
 ## Findings and chosen sequence
 
 Verified on 2026-10-17 against bundled Windows SDK v1.7.12-62c879690ee3:

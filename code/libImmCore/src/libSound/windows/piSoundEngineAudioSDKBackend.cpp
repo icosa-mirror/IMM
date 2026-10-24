@@ -19,6 +19,7 @@
 #include "../../libBasics/piVecTypes.h"
 
 #include "piSoundEngineAudioSDKBackend.h"
+#include "../piSoundPlaybackState.h"
 
 #include "fakeWAV.h"
 #include "memStream.h"
@@ -99,17 +100,14 @@ namespace ImmCore {
             FakeWav* mStream;
             MemStream* mCompressedStream;
             piLog* mLog;
-            piSoundEngine::PlaybackState mState;
-            // A logical stop keeps the decoder paused and seeks only on the next Play().
-            std::atomic<bool> mLogicalStopped;
+            SoundPlaybackState mPlayback;
             ModifierParameters mModifier;
 
             void Init()
             {
                 mModifier.mType = piSoundEngine::ModifierType::None;
                 mID = -1;
-                mState = piSoundEngine::PlaybackState::Stopped;
-                mLogicalStopped = true;
+                mPlayback.Reset();
                 mAudioObject = nullptr;
                 mChannelMap = ChannelMap::UNKNOWN;
                 mNumChannels = 0;
@@ -191,6 +189,7 @@ namespace ImmCore {
 
     class piSoundEngineAudioSDK : public piSoundEngine
     {
+        using Playback = SoundPlaybackState;
     public:
 
 
@@ -201,8 +200,7 @@ namespace ImmCore {
             switch (ev)
             {
                 case Event::END_OF_STREAM:
-                    me->mLogicalStopped = true;
-                    me->mState = PlaybackState::Stopped;
+                    me->mPlayback.OnStopped();
 #ifdef _DEBUG
                     me->mLog->Printf(LT_DEBUG, L"piSoundEngineAudioSDK::Event(): id = %d EOS play state", me->mID);
 #endif
@@ -216,22 +214,21 @@ namespace ImmCore {
                         break;
 
                     case PlayState::PAUSED:
-                        me->mState = me->mLogicalStopped ? PlaybackState::Stopped : PlaybackState::Paused;
+                        me->mPlayback.OnPlaybackChanged(false);
 #ifdef _DEBUG
                         me->mLog->Printf(LT_DEBUG, L"piSoundEngineAudioSDK::Event(): id = %d PAUSED play state", me->mID);
 #endif
                         break;
 
                     case PlayState::PLAYING:
-                        me->mState = me->mLogicalStopped ? PlaybackState::StoppingStarted : PlaybackState::Playing;
+                        me->mPlayback.OnPlaybackChanged(true);
 #ifdef _DEBUG
                         me->mLog->Printf(LT_DEBUG, L"piSoundEngineAudioSDK::Event(): id = %d PLAYING play state", me->mID);
 #endif
                         break;
 
                     case PlayState::STOPPED:
-                        me->mLogicalStopped = true;
-                        me->mState = PlaybackState::Stopped;
+                        me->mPlayback.OnStopped();
 #ifdef _DEBUG
                         me->mLog->Printf(LT_DEBUG, L"piSoundEngineAudioSDK::Event(): id = %d STOPPED play state", me->mID);
 #endif
@@ -365,7 +362,7 @@ namespace ImmCore {
 
             pAudioObject->shouldSpatialise(true);
             pAudioObject->setAudioBufferCallback(callback, me->mNumChannels, me->mChannelMap, userData);
-            me->mLogicalStopped = false;
+            me->mPlayback.Reset(false);
             pAudioObject->play();
             return me->mID;
         }
@@ -418,7 +415,7 @@ namespace ImmCore {
 
             me->mAudioObject = pAudioObject;
             me->mLog = mLog;
-            me->mState = PlaybackState::Stopped;
+            me->mPlayback.OnStopped();
             me->mAudioObject->setEventCallback(iSoundObjectCallback, me);
             free(filenameA);
 #ifdef _DEBUG
@@ -464,7 +461,7 @@ namespace ImmCore {
             pAudioObject->shouldSpatialise(me->mType == SoundType::Positional);
 
             me->mAudioObject = pAudioObject;
-            me->mState = PlaybackState::Stopped;
+            me->mPlayback.OnStopped();
             me->mLog = mLog;
             me->mAudioObject->setEventCallback(iSoundObjectCallback, me);
 #ifdef _DEBUG
@@ -510,7 +507,7 @@ namespace ImmCore {
             pAudioObject->shouldSpatialise(me->mType == SoundType::Positional);
 
             me->mAudioObject = pAudioObject;
-            me->mState = PlaybackState::Stopped;
+            me->mPlayback.OnStopped();
             me->mLog = mLog;
             me->mAudioObject->setEventCallback(iSoundObjectCallback, me);
 #ifdef _DEBUG
@@ -561,27 +558,26 @@ namespace ImmCore {
 #ifdef _DEBUG
             mLog->Printf(LT_DEBUG, L"piSoundEngineAudioSDK::Play(): id = %d, offset %llu", id, microSecondOffset);
 #endif
-            if (me->mState == PlaybackState::Playing || me->mState == PlaybackState::PlayingStarting)
+            const auto state = Playback::State(me->mPlayback.Capture());
+            if (state == PlaybackState::Playing || state == PlaybackState::PlayingStarting)
             {
 #ifdef _DEBUG
                 mLog->Printf(LT_DEBUG, L"piSoundEngineAudioSDK::Play(): id = %d interrupted wrong state",id);
 #endif
                 return false;
             }
-            const bool wasLogicallyStopped = me->mLogicalStopped;
-            const bool stopPending = wasLogicallyStopped && me->mState == PlaybackState::StoppingStarted;
-            me->mLogicalStopped = false;
+            Playback::Snapshot previous;
+            const auto pending = me->mPlayback.Request(PlaybackState::PlayingStarting, false, previous);
+            const bool stopPending = Playback::LogicallyStopped(previous) && Playback::State(previous) == PlaybackState::StoppingStarted;
             // A queued pause can otherwise land after an immediate play and leave
             // the sound silent. Schedule past one device buffer only in that case.
             const float bufferMs = 1000.0f * mBk->pEngine->getBufferSize() / mBk->pEngine->getSampleRate();
             const EngineError playError = stopPending ? me->mAudioObject->playScheduled(bufferMs) : me->mAudioObject->play();
             if (playError != EngineError::OK)
             {
-                me->mLogicalStopped = wasLogicallyStopped;
+                me->mPlayback.Rollback(pending, previous);
                 return false;
             }
-
-            me->mState = PlaybackState::PlayingStarting;
 
             return true;
         }
@@ -597,24 +593,24 @@ namespace ImmCore {
             iSoundEngineAudioSDKBackend::Sound *me = (iSoundEngineAudioSDKBackend::Sound*)mBk->mSounds.GetAddress(id);
 
             // Paused and StoppingStarted share the same legacy enum value.
-            if (me->mState == PlaybackState::Stopped ||
-                (me->mLogicalStopped && me->mState == PlaybackState::StoppingStarted)) return false;
+            Playback::Snapshot previous = me->mPlayback.Capture();
+            if (Playback::State(previous) == PlaybackState::Stopped ||
+                (Playback::LogicallyStopped(previous) && Playback::Pending(previous))) return false;
 
             // Audio360's Opus decoder rejects a new seek after stop(), or after a
             // zero reset while paused. Keep it seekable; Play(offset) performs
             // the requested reset/seek before playback, without reopening the asset.
-            const PlaybackState previousState = me->mState;
-            me->mLogicalStopped = true;
-            me->mState = PlaybackState::StoppingStarted;
+            const auto pending = me->mPlayback.Request(PlaybackState::PausingStarted, true, previous);
             if (me->mAudioObject->pause() != EngineError::OK)
             {
-                me->mLogicalStopped = false;
-                me->mState = previousState;
+                me->mPlayback.Rollback(pending, previous);
                 return false;
             }
             // Pausing an already paused object need not emit a state-change event.
             if (me->mAudioObject->getPlayState() == PlayState::PAUSED)
-                me->mState = PlaybackState::Stopped;
+            {
+                me->mPlayback.Acknowledge(pending, PlaybackState::Paused, true);
+            }
 
             return true;
         }
@@ -628,12 +624,21 @@ namespace ImmCore {
             iSoundEngineAudioSDKBackend::Sound *me = (iSoundEngineAudioSDKBackend::Sound*)mBk->mSounds.GetAddress(id);
 
             if (me->mAudioObject == nullptr) return false;
-            if (me->mState != PlaybackState::Playing || me->mState == PlaybackState::PlayingStarting) return false;
-
-            me->mState = PlaybackState::PausingStarted;
-
-            if (me->mAudioObject->pause() != EngineError::OK)
+            Playback::Snapshot previous = me->mPlayback.Capture();
+            if (Playback::State(previous) != PlaybackState::Playing || Playback::LogicallyStopped(previous)) return false;
+            Playback::Snapshot pending;
+            if (!me->mPlayback.RequestIf(previous, PlaybackState::PausingStarted, false, pending)) return false;
+            const EngineError result = me->mAudioObject->pause();
+            if (me->mAudioObject->getPlayState() == PlayState::PAUSED)
+            {
+                me->mPlayback.Acknowledge(pending, PlaybackState::Paused, false);
+                return true;
+            }
+            if (result != EngineError::OK)
+            {
+                me->mPlayback.Rollback(pending, previous);
                 return false;
+            }
 
             return true;
         }
@@ -646,11 +651,22 @@ namespace ImmCore {
 #endif
             iSoundEngineAudioSDKBackend::Sound *me = (iSoundEngineAudioSDKBackend::Sound*)mBk->mSounds.GetAddress(id);
 
-            if (me->mState != PlaybackState::Paused || me->mLogicalStopped) return false;
             if (me->mAudioObject == nullptr) return false;
-
-            if (me->mAudioObject->play() != EngineError::OK)
+            Playback::Snapshot previous = me->mPlayback.Capture();
+            if (Playback::State(previous) != PlaybackState::Paused || Playback::LogicallyStopped(previous)) return false;
+            Playback::Snapshot pending;
+            if (!me->mPlayback.RequestIf(previous, PlaybackState::PlayingStarting, false, pending)) return false;
+            const EngineError result = me->mAudioObject->play();
+            if (me->mAudioObject->getPlayState() == PlayState::PLAYING)
+            {
+                me->mPlayback.Acknowledge(pending, PlaybackState::Playing, false);
+                return true;
+            }
+            if (result != EngineError::OK)
+            {
+                me->mPlayback.Rollback(pending, previous);
                 return false;
+            }
 
             return true;
         }
@@ -679,7 +695,7 @@ namespace ImmCore {
         {
             piAssert(id >= 0 && id<mBk->mSounds.GetMaxLength() && mBk->mSounds.IsUsed(id));
             const iSoundEngineAudioSDKBackend::Sound *me = (iSoundEngineAudioSDKBackend::Sound*)mBk->mSounds.GetAddress(id);
-            return me->mState;
+            return Playback::State(me->mPlayback.Capture());
         }
 
         float GetVolume(int id) const

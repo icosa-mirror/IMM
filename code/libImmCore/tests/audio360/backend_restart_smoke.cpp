@@ -91,6 +91,22 @@ int main(int argc, char** argv)
             require(engine->Pause(id), "regular pause");
             require(mix(3) < 0.0001, "paused sound must be silent");
             require(engine->GetPlaybackState(id) == piSoundEngine::PlaybackState::Paused, "regular paused state");
+            require(engine->Resume(id), "resume acknowledged pause");
+            check(0.1, "resume retains source marker", 2);
+            require(engine->Pause(id), "rapid pause request");
+            if (!engine->Resume(id))
+            {
+                // A reversal during an asynchronous pause must become possible
+                // once that pause is acknowledged; it must not need Play/seek.
+                for (int attempt = 0; attempt < 10 && engine->GetPlaybackState(id) != piSoundEngine::PlaybackState::Paused; ++attempt)
+                    mix(1);
+                require(engine->Resume(id), "resume after pending pause completes");
+            }
+            check(0.1, "pause-resume reversal retains source marker", 2);
+            require(engine->GetPlaybackState(id) == piSoundEngine::PlaybackState::Playing, "playing after pause-resume reversal");
+            require(engine->Pause(id), "pause after reversal");
+            require(mix(3) < 0.0001, "pause after reversal is silent");
+            require(engine->GetPlaybackState(id) == piSoundEngine::PlaybackState::Paused, "paused after reversal");
             require(engine->Stop(id), "stop an already paused sound");
             mix(3);
             require(engine->GetPlaybackState(id) == piSoundEngine::PlaybackState::Stopped, "stop from paused state");

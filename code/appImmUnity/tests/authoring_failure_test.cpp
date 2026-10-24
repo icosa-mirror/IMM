@@ -21,6 +21,7 @@ void CheckArrayReserveFailure();
 void CheckPaintFrameTables();
 void CheckTimelineRepeatKeys();
 void CheckPaintPlaybackReselection();
+void CheckSoundPlaybackReconciliation();
 static void require(bool ok, const char* message)
 {
     if (!ok) { std::fprintf(stderr, "[IMM_AUTHORING_FAILURE_TEST] %s\n", message); std::exit(1); }
@@ -230,6 +231,7 @@ int wmain(int argc, wchar_t** argv)
     CheckPaintFrameTables();
     CheckTimelineRepeatKeys();
     CheckPaintPlaybackReselection();
+    CheckSoundPlaybackReconciliation();
     Document doc;
     require(doc.Init(L"authoring-failures", 0), "document init");
     auto cpu = [&](const Document::Command* command = nullptr) {

@@ -10,6 +10,11 @@ target_link_libraries(imm_audio360_seek_smoke PRIVATE "${SDK}/Windows/x64/Audio3
 add_custom_command(TARGET imm_audio360_seek_smoke POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SDK}/Windows/x64/Audio360.dll" "$<TARGET_FILE_DIR:imm_audio360_seek_smoke>")
 enable_testing()
+add_executable(imm_audio360_playback_state_test playback_state_test.cpp)
+target_compile_features(imm_audio360_playback_state_test PRIVATE cxx_std_17)
+target_include_directories(imm_audio360_playback_state_test PRIVATE "${IMM_ROOT}/code")
+add_test(NAME audio360_playback_state_transactions COMMAND imm_audio360_playback_state_test)
+set_tests_properties(audio360_playback_state_transactions PROPERTIES TIMEOUT 10)
 add_test(NAME audio360_pending_seek_play COMMAND imm_audio360_seek_smoke)
 set_tests_properties(audio360_pending_seek_play PROPERTIES TIMEOUT 30)
 

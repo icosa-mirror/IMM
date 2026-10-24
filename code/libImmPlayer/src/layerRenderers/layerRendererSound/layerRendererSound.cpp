@@ -23,7 +23,7 @@ namespace ImmPlayer
 		int   mSoundID = -1;
       //bool  mLoopingCache; // cannot be animated
         bool  mPlayingCached;
-        bool  mPausedCached;
+        bool  mPauseRequested;
         float mFinalVolumeCached;
         uint64_t mOffsetCached;
         LayerSound::AttenuationType mAttenuationTypeCached;
@@ -77,8 +77,8 @@ namespace ImmPlayer
         snd->mSoundID = -1;
         
         snd->mPlayingCached = false;
+        snd->mPauseRequested = false;
         snd->mFinalVolumeCached = lp->GetVolume() * lp->GetGain();
-        snd->mPausedCached = false;
         snd->mOffsetCached = lp->GetOffset();
 
         LayerSound::AttenuationParameters atten;
@@ -165,8 +165,8 @@ namespace ImmPlayer
 
         // reset
         snd->mPlayingCached = false;
+        snd->mPauseRequested = false;
         snd->mFinalVolumeCached = 0.0f;
-        snd->mPausedCached = false;
         snd->mOffsetCached = 0;        
         
 
@@ -262,11 +262,11 @@ namespace ImmPlayer
                     LoadInSPU(soundEngine, log, la);
 
                 // play anyways to enable force restart
-                soundEngine->Play(me->mSoundID, offset);                
+                if (soundEngine->Play(me->mSoundID, offset)) me->mPauseRequested = false;
             }
             else if (me->mSoundID>=0)
             {
-                soundEngine->Stop(me->mSoundID);
+                if (soundEngine->Stop(me->mSoundID)) me->mPauseRequested = false;
 #ifdef UNLOAD_SOUNDS
                 if(!UnloadInSPU(soundEngine, la))                    
                     log->Printf(LT_ERROR, L"Could not unload from SPU layer %s",la->GetName().GetS());
@@ -282,13 +282,15 @@ namespace ImmPlayer
         if (me->mSoundID < 0) 
             return;
 
+        const auto playbackState = soundEngine->GetPlaybackState(me->mSoundID);
         if (playing)
         {
-           if (soundEngine->GetPlaybackState(me->mSoundID) == piSoundEngine::PlaybackState::Stopped)
+           if (playbackState == piSoundEngine::PlaybackState::Stopped)
             {
                 // non looping sound has stopped
                 ls->SetPlaying(false);
                 me->mPlayingCached = false;
+                me->mPauseRequested = false;
 #ifdef UNLOAD_SOUNDS
                 if (!UnloadInSPU(soundEngine, la))
                     log->Printf(LT_ERROR, L"Could not unload from SPU layer %s", la->GetName().GetS());
@@ -299,12 +301,22 @@ namespace ImmPlayer
             }
         }
 
-        const bool paused = ls->GetPaused();
-        if (me->mPausedCached != paused)
+        // Requests can be rejected during startup or remain asynchronous.
+        // Reconcile the actual acknowledged state each frame; a cached request
+        // would lose retries and reversals while a previous pause is pending.
+        // Only resume our own pauses, preserving external/focus pause ownership.
+        if (playing && playbackState != piSoundEngine::PlaybackState::Stopped)
         {
-            if (paused) soundEngine->Pause(me->mSoundID);
-            else        soundEngine->Resume(me->mSoundID);
-            me->mPausedCached = paused;
+            if (ls->GetPaused() && playbackState == piSoundEngine::PlaybackState::Playing)
+            {
+                if (soundEngine->Pause(me->mSoundID)) me->mPauseRequested = true;
+            }
+            else if (!ls->GetPaused() && playbackState == piSoundEngine::PlaybackState::Paused && me->mPauseRequested)
+            {
+                if (soundEngine->Resume(me->mSoundID)) me->mPauseRequested = false;
+            }
+            else if (!ls->GetPaused() && playbackState == piSoundEngine::PlaybackState::Playing)
+                me->mPauseRequested = false;
         }
         
         const float modifierVolume = soundEngine->ComputeModifiers(me->mSoundID);

@@ -4520,6 +4520,38 @@ the historical sizes/check counts below describe this earlier source only.
    [40058475651](https://github.com/icosa-mirror/IMM/actions/runs/40058475651), initially
    queued. Neither run is accepted yet.
 
+### 6.128. Test UI scope and audio pause acknowledgement
+
+1. The user clarified that this is a development test UI, and explicitly included
+   missing runtime features such as Action editing and independent audio in the
+   goal. Keep the UI utilitarian; those runtime capabilities remain required.
+2. The real sound renderer lost pause/resume requests by caching a requested
+   value even when the engine rejected it during an asynchronous transition.
+   Five controlled cases fail against the preceding library and pass after
+   actual-state reconciliation. A sixth case caught an intermediate regression:
+   resuming an externally paused voice. Renderer pause ownership now records only
+   accepted requests, preserving external pauses and retrying its own failures.
+   Evidence: artifacts/audio-preview-ack-{red,unowned-red,final-cpu-run}.log.
+3. Audio360 now uses an internal atomic snapshot of physical state, logical Stop,
+   pending target and request identity. Callbacks acknowledge the requested target;
+   failed requests restore prior intent without discarding physical observations,
+   EOS or a newer request. A queued Pause during failed Play cannot turn an old
+   logical Stop into an ordinary resumable pause. Existing API enum values remain.
+4. Native Release, the CPU suite (all six renderer cases), loaded C ABI suite and
+   direct state-transaction checks pass. All six Audio360 CTests pass, including
+   real silent PCM mixing at buffers 480/960/1920, plus separate Opus mixer runs
+   at all three sizes. Those checks preserve marker audio across pause/resume
+   reversals, require silence while paused/stopped, retain restart/EOF contracts,
+   and fail on backend error logs. Focused final review finds no further blocker.
+   Evidence: artifacts/audio-preview-ack-final-cpu-run.log,
+   audio-preview-ack-final-ctest.log, audio-preview-ack-opus.log and
+   audio-preview-ack-cabi/report.json. This is actual offline mixer proof;
+   audible/Unity/device acceptance is still separate.
+5. This prerequisite does not yet provide independent audio. Next work needs
+   session-owned duplicate voices, full Sound runtime capture, routing that keeps
+   original voice cursors paused, and teardown before borrowed sound data unload.
+   Action publication/cache reconciliation and the other items in 6.127 remain.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
