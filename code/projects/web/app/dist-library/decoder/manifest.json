@@ -3,7 +3,7 @@
   "sha256": {
     "imm-web-decoder-worker.mjs": "cbe131fc7f6900d2c8da71045ec1a187517a9c228db9b5f9bc1f870101508165",
     "imm-web-decoder.mjs": "5f7d4ff908e995dbbffc99e29d979bd9f86d2d529e99248dac9ccde2368dd944",
-    "imm-web-decoder.wasm": "c818426239a04a578b9c1ce668c20581375ef0b75cb54c6b94eac4ac2387e863",
+    "imm-web-decoder.wasm": "37835fd07d03943fb85cba564f71d34b5b37545d63b12dae23b4f7724a783924",
     "imm-web-paint-packet.mjs": "ca3fbf455aa77d74bc9456ddd597d33c1a039c3edaa0c2afad4b0db17aaa1fff"
   }
 }
