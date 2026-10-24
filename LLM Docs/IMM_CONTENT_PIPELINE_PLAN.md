@@ -4815,6 +4815,43 @@ the historical sizes/check counts below describe this earlier source only.
    timeline-ci-agent-7b9-godot-android-audit.json); licensed engines and the final
    required hosted matrix still remain before that full run can be accepted.
 
+### 6.136. MakeDefault execution provenance and live publication
+
+1. MakeDefault is now authorable on viewpoints through the existing Action uint
+   payload. The effective-default getter retains its existing navigation meaning.
+   Internally, an explicit baseline is separate from an execution-ordered effect
+   history. Actual execution order determines the winner, not timestamps from
+   unrelated layer clocks. Removing a key disables its historical effect; Undo
+   re-enables that identity in its original execution position without replay.
+2. Explicit default choices supersede older effects. Successful Detach ends the
+   UI history lifetime, retaining the effective choice as a fresh baseline. Reload
+   and teardown release history. Target deletion drops only affected identities
+   and the deleted baseline, then falls back to a surviving effect/baseline; it
+   does not clear unrelated history. Active viewpoint selection is unchanged.
+3. Preview keeps its own history. Its canonical key edits reconcile preview
+   effects immediately while main effects remain frozen. Exit reconciles the
+   retained keys against main history once, without copying key arrays or replaying
+   actions. Seek resets the independent effect history with its action sidecar.
+4. Initial loading reserves source history before evaluation. Live preparation
+   reserves for retained history plus both old and new authored identities:
+   old keys can execute between preparation and publication and become retained
+   Undo entries. A real Document red case failed to record the new effect in both
+   main/preview with the earlier new-total-only bound; both now pass. Recording
+   allocates nothing and succeeds before action consumption; capacity failure
+   leaves the action retryable and its effect unchanged.
+5. Native Release, CPU authoring suite and loaded WARP C ABI checks pass. Coverage
+   includes actual execution order versus key-time order, removal/Undo, explicit
+   choice precedence, preview/main isolation and exit reconciliation, deletion
+   fallback, unchanged active selection, failure/retry, teardown and the prepared
+   old/new-key race. Evidence: artifacts/default-action-native-final-build.log,
+   default-action-cpu-{run.log,report.json}, default-action-cabi-final/report.json,
+   default-action-capacity-before.log. Existing setter/import notification behavior
+   is retained; only effective runtime effect changes request an update.
+6. The Action controls are implemented in the working tree and pass managed
+   compilation/review, but their live UI acceptance and commit are still pending.
+   The native milestone is being committed separately with its matching Windows
+   DLL. No new API/layout version was introduced. The timeline goal remains active.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

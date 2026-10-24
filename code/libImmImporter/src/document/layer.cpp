@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <new>
+#include <stdexcept>
 
 #include "layer.h"
 #include "layerInstance.h"
@@ -44,13 +45,71 @@ namespace ImmImporter
         return false;
     }
 
-    bool Layer::EvaluationContext::ConsumeAction(const Layer * layer, piTick time)
+    bool Layer::EvaluationContext::CanConsumeAction(const Layer * layer, piTick time) const noexcept
     {
         if (!mActionsEnabled || !Contains(layer) || layer == mBoundary) return false;
         for (const auto & consumed : mConsumedActions)
             if (consumed.layerId == layer->GetID() && consumed.time == time) return false;
+        return true;
+    }
+
+    bool Layer::EvaluationContext::ConsumeAction(const Layer * layer, piTick time)
+    {
+        if (!CanConsumeAction(layer, time)) return false;
         mConsumedActions.push_back(ConsumedAction{layer->GetID(), time});
         return true;
+    }
+
+    bool Layer::EvaluationContext::PrepareDefaultActionCapacity(size_t additionalIdentities)
+    {
+        if (additionalIdentities > mDefaultActionHistory.max_size() - mDefaultActionHistory.size()) return false;
+        try
+        {
+            mDefaultActionHistory.reserve(mDefaultActionHistory.size() + additionalIdentities);
+            return true;
+        }
+        catch (const std::bad_alloc &) { return false; }
+        catch (const std::length_error &) { return false; }
+    }
+
+    bool Layer::EvaluationContext::RecordDefaultActionExecution(const Layer * layer, piTick time) noexcept
+    {
+        if (!layer || layer->GetType() != Type::SpawnArea || !Contains(layer) || layer == mBoundary) return false;
+        for (size_t index = 0; index < mDefaultActionHistory.size(); ++index)
+            if (mDefaultActionHistory[index].layerId == layer->GetID() && mDefaultActionHistory[index].time == time)
+            {
+                const DefaultActionExecution entry{layer->GetID(), time, true};
+                mDefaultActionHistory.erase(mDefaultActionHistory.begin() + index);
+                mDefaultActionHistory.push_back(entry);
+                mDefaultSpawnAreaLayerId = layer->GetID();
+                return true;
+            }
+        if (mDefaultActionHistory.size() == mDefaultActionHistory.capacity()) return false;
+        mDefaultActionHistory.push_back(DefaultActionExecution{layer->GetID(), time, true});
+        mDefaultSpawnAreaLayerId = layer->GetID();
+        return true;
+    }
+
+    void Layer::EvaluationContext::ReconcileDefaultActionKeys(const Layer * layer, const std::vector<AnimKey> & keys) noexcept
+    {
+        if (!layer) return;
+        for (auto & entry : mDefaultActionHistory)
+            if (entry.layerId == layer->GetID())
+            {
+                const auto key = std::lower_bound(keys.begin(), keys.end(), entry.time,
+                    [](const AnimKey & candidate, piTick time) { return candidate.mTime < time; });
+                entry.active = key != keys.end() && key->mTime == entry.time &&
+                    key->mValue.mInt == static_cast<uint32_t>(AnimAction::MakeDefault);
+            }
+        mDefaultSpawnAreaLayerId = UINT32_MAX;
+        for (auto entry = mDefaultActionHistory.rbegin(); entry != mDefaultActionHistory.rend(); ++entry)
+            if (entry->active) { mDefaultSpawnAreaLayerId = entry->layerId; break; }
+    }
+
+    void Layer::EvaluationContext::ResetDefaultActionHistory() noexcept
+    {
+        mDefaultActionHistory.clear();
+        mDefaultSpawnAreaLayerId = UINT32_MAX;
     }
 
 	Layer::Layer(Sequence* sq, Layer* parent, uint32_t id)
@@ -1147,9 +1206,27 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
             case AnimProperty::Action:
             {
                 AnimAction action = static_cast<AnimAction>(lastKey->mValue.mInt);
-                if (context != nullptr ? context->ConsumeAction(this, lastKey->mTime) : !lastKey->mValue.mBool)
+                if (context != nullptr ? context->CanConsumeAction(this, lastKey->mTime) : !lastKey->mValue.mBool)
                 {
-                    if (context == nullptr) lastKey->mValue.mBool = true; // flag to only run actions once
+                    if (action == AnimAction::MakeDefault && isSpawnArea)
+                    {
+                        // Reserve both sidecars before evaluation. Recording the
+                        // effect must succeed before either consumption flag can
+                        // change; a failure remains retryable on the next sample.
+                        const bool consumedCapacity = context == nullptr ||
+                            context->mConsumedActions.size() < context->mConsumedActions.capacity();
+                        const bool recorded = consumedCapacity && (context != nullptr ?
+                            context->RecordDefaultActionExecution(this, lastKey->mTime) :
+                            mSequence->RecordDefaultActionExecution(this, lastKey->mTime));
+                        if (!recorded)
+                        {
+                            if (log) log->Printf(LT_ERROR, L"[IMM_ACTION_DEFAULT] record failed layer=%u tick=%lld",
+                                mID, static_cast<long long>(piTick::CastInt(lastKey->mTime)));
+                            break;
+                        }
+                    }
+                    if (context != nullptr) context->ConsumeAction(this, lastKey->mTime);
+                    else lastKey->mValue.mBool = true; // flag to only run actions once
 
                     if (action == AnimAction::Stop)
                     {
@@ -1166,13 +1243,6 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     }
                     if (action == AnimAction::MakeDefault && isSpawnArea)
                     {
-                        if (context != nullptr)
-                            context->mDefaultSpawnAreaLayerId = GetID();
-                        else
-                        {
-                            mSequence->SetInitialSpawnArea(this);
-                            mSequence->SetSpawnAreaNeedsUpdate(true);
-                        }
                         log->Printf(LT_DEBUG, L"[LayerSetState] SpawnArea action %s", mName.GetS());
                     }
                 }

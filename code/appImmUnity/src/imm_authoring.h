@@ -344,10 +344,12 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetName(int32_
 // DrawInTime accepts finite nonnegative doubleValue on static paint. Publication
 // resamples a held pose; removing its final key restores the layer's base value.
 // Draw-in rendering availability is separate from canonical key authoring.
-// Action uses uintValue: 0 Stop on timeline groups, 1 Play / 2 Loop on root.
+// Action uses uintValue: 0 Stop on timeline groups, 1 Play / 2 Loop on root,
+// 3 MakeDefault on viewpoints. MakeDefault tracks actual execution order;
+// removal/Undo changes effect membership without replay or active-view selection.
 // Step interpolation only; boolValue stays zero, never a consumed-action flag.
 // Publication preserves existing holds and unchanged live consumption. New past
-// identities are consumed, exact/future identities armed. MakeDefault is pending.
+// identities are consumed, exact/future identities armed.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeySet(int32_t docId, int32_t layerId,
     const ImmAuthoringKey * key);
 // Canonical static-paint repeat count; zero repeats indefinitely. Publication

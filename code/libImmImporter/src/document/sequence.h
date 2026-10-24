@@ -1,5 +1,7 @@
 #pragma once
 #include <atomic>
+#include <cstddef>
+#include <vector>
 
 #include <functional>
 
@@ -64,8 +66,18 @@ public:
 
     bool GetAnimateOnStart(void) const;
 	void SetAnimateOnStart(bool b);
+    // Explicit choice supersedes prior MakeDefault executions. The getter below
+    // remains the effective choice used by navigation.
 	void SetInitialSpawnArea(const Layer* vp);
 	const Layer* GetInitialSpawnArea(void) const;
+    const Layer* GetInitialSpawnAreaBaseline() const { return mInitialSpawnAreaBaseline; }
+    bool PrepareDefaultActionCapacity(size_t additionalIdentities);
+    bool RecordDefaultActionExecution(const Layer* layer, ImmCore::piTick time) noexcept;
+    void ReconcileDefaultActionKeys(const Layer* layer, const std::vector<Layer::AnimKey>& keys) noexcept;
+    void ReconcileDefaultActionKeys() noexcept;
+    // Must run before any removed target Layer is freed.
+    void ReconcileDefaultActionTargets(Layer* const* survivors, size_t count) noexcept;
+    void ResetDefaultActionHistory() noexcept;
     void SetSpawnAreaNeedsUpdate(bool state);
     bool GetSpawnAreaNeedsUpdate() const;
 
@@ -78,6 +90,16 @@ public:
     void SetFrameRate(uint32_t fps); // TODO: this is only temporarily needed before we serialize global framerate at sequence level
 
 private:
+    struct DefaultActionExecution
+    {
+        const Layer* target;
+        uint32_t layerId;
+        ImmCore::piTick time;
+        bool active;
+    };
+    void RecomputeInitialSpawnArea() noexcept;
+    const Layer* mInitialSpawnAreaBaseline = nullptr;
+    std::vector<DefaultActionExecution> mDefaultActionExecutions;
     ImportState mImportState;
     ImmCore::piTArray<Layer*> mLayers; // just a flat array. Hierarchy is captured through the child pointers in LayerGroup
 	ImmCore::piTArray<Asset>  mAssetTable;

@@ -20,6 +20,8 @@ using namespace ImmPlayer;
 void CheckArrayReserveFailure();
 void CheckPaintFrameTables();
 void CheckTimelineRepeatKeys();
+void CheckDefaultActionHistory();
+void CheckDocumentDefaultActionRace(const wchar_t* fixturePath);
 void CheckPaintPlaybackReselection();
 void CheckSoundPlaybackReconciliation();
 void CheckDocumentPreviewAudio(const wchar_t * fixturePath);
@@ -284,6 +286,8 @@ int wmain(int argc, wchar_t** argv)
     CheckArrayReserveFailure();
     CheckPaintFrameTables();
     CheckTimelineRepeatKeys();
+    CheckDefaultActionHistory();
+    CheckDocumentDefaultActionRace(argv[1]);
     CheckPaintPlaybackReselection();
     CheckSoundPlaybackReconciliation();
     CheckDocumentPreviewAudio(argv[1]);

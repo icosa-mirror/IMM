@@ -43,13 +43,24 @@ namespace ImmPlayer
 
     static int32_t iValidateTimelineAction(Layer * layer, Layer * root, const Layer::AnimValue * value)
     {
+        if (value && value->mInt >= static_cast<uint32_t>(Layer::AnimAction::MAX)) return -2;
+        if (layer->GetType() == Layer::Type::SpawnArea)
+            return !value || value->mInt == static_cast<uint32_t>(Layer::AnimAction::MakeDefault) ? 0 : -3;
         if (layer->GetType() != Layer::Type::Group || (layer != root && !layer->GetIsTimeline())) return -3;
         if (!value) return 0;
-        if (value->mInt >= static_cast<uint32_t>(Layer::AnimAction::MAX)) return -2;
-        // MakeDefault needs execution provenance before it can be live-authored.
         if (value->mInt == static_cast<uint32_t>(Layer::AnimAction::MakeDefault)) return -3;
         if (layer != root && value->mInt != static_cast<uint32_t>(Layer::AnimAction::Stop)) return -3;
         return 0;
+    }
+
+    static size_t iDefaultActionCount(const Layer * layer)
+    {
+        if (layer->GetType() != Layer::Type::SpawnArea) return 0;
+        size_t count = 0;
+        for (uint32_t index = 0; index < layer->GetNumAnimKeys(Layer::AnimProperty::Action); ++index)
+            if (layer->GetAnimKey(Layer::AnimProperty::Action, index)->mValue.mInt ==
+                static_cast<uint32_t>(Layer::AnimAction::MakeDefault)) ++count;
+        return count;
     }
 
     struct Document::TimelinePreviewSession
@@ -86,6 +97,7 @@ namespace ImmPlayer
         bool playing = false;
         bool exitRequested = false;
         bool mainAudioReady = false;
+        bool defaultActionsEdited = false;
         piLog * log = nullptr;
     };
 
@@ -112,7 +124,9 @@ namespace ImmPlayer
                 if (saved.layer == layer) { mainClock = saved.mainActionClock; break; }
         layer->ReconcileActionPlayback(keys, mainClock);
         if (!mTimelinePreview || !mTimelinePreview->context.Contains(layer)) return;
+        mTimelinePreview->defaultActionsEdited = true;
         auto & context = mTimelinePreview->context;
+        context.ReconcileDefaultActionKeys(layer, keys);
         auto unchanged = [&](piTick time, const Layer::AnimKey * replacement) {
             const auto * old = layer->GetAnimKeyAt(Layer::AnimProperty::Action, time);
             return replacement && old && old->mTime == time && replacement->mTime == time &&
@@ -221,6 +235,7 @@ namespace ImmPlayer
         if (volumeChanged)
             for (const auto & saved : preview->saved)
                 if (saved.sound) saved.layer->ReevaluateOpacityAt(now, preview->log);
+        if (preview->defaultActionsEdited) mSequence.ReconcileDefaultActionKeys();
         ++mEvaluationRevision;
     }
 
@@ -289,11 +304,18 @@ namespace ImmPlayer
             preview->context.mBoundaryDuration = boundary->GetDuration();
             preview->context.mBoundaryRepeatCount = boundary->GetMaxRepeatCount();
             size_t actionCapacity = 0;
+            size_t defaultActionCapacity = 0;
             auto capture = [&](Layer * layer, int, int, bool) -> bool
             {
                 const size_t actions = layer->GetNumAnimKeys(Layer::AnimProperty::Action);
                 if (actions > SIZE_MAX - actionCapacity) return false;
                 actionCapacity += actions;
+                if (preview->context.Contains(layer))
+                {
+                    const size_t defaults = iDefaultActionCount(layer);
+                    if (defaults > SIZE_MAX - defaultActionCapacity) return false;
+                    defaultActionCapacity += defaults;
+                }
                 TimelinePreviewSession::SavedLayer saved{};
                 saved.layer = layer; saved.state = layer->CapturePlaybackState();
                 saved.mainActionClock = iActionLocalClock(layer, mLastCPUTime);
@@ -311,6 +333,7 @@ namespace ImmPlayer
             // All action-sidecar allocation precedes the first runtime mutation.
             // Canonical edits are blocked for this session, so this bound stays valid.
             preview->context.mConsumedActions.reserve(actionCapacity);
+            if (!preview->context.PrepareDefaultActionCapacity(defaultActionCapacity)) return -5;
             mTimelinePreview = std::move(preview);
             for (auto & saved : mTimelinePreview->saved) if (saved.sound) saved.sound->SetPaused(true);
         }
@@ -358,7 +381,7 @@ namespace ImmPlayer
             preview.playing = false;
             context.mBoundaryStartTime = now - ticks; context.mBoundaryElapsed = ticks;
             context.mHeld = true; context.mActionsEnabled = false; context.mConsumedActions.clear();
-            context.mDefaultSpawnAreaLayerId = UINT32_MAX;
+            context.ResetDefaultActionHistory();
             for (auto & saved : preview.saved)
                 if (saved.layer != boundary && context.Contains(saved.layer))
                 {
@@ -1025,6 +1048,19 @@ namespace ImmPlayer
         }
         else if (st == LoadingState::LoadingComplete)
         {
+            size_t defaults = 0;
+            const bool counted = mSequence.Recurse([&](Layer * layer, int, int, bool) {
+                const size_t count = iDefaultActionCount(layer);
+                if (count > SIZE_MAX - defaults) return false;
+                defaults += count; return true;
+            }, false, false, false, false);
+            if (!counted || !mSequence.PrepareDefaultActionCapacity(defaults))
+            {
+                log->Printf(LT_ERROR, L"[IMM_ACTION_DEFAULT] Could not prepare initial action history");
+                mState.mErrorState = ErrorState::FailedCPU;
+                mState.mLoadingState = LoadingState::UnloadingGPU;
+                return false;
+            }
             // after a new document is loaded
             // update the viewer position in player to rencenter
             // the player needs to save this to do origin calibration when changing spawn areas
@@ -1545,6 +1581,7 @@ namespace ImmPlayer
                         property, std::move(mPendingPresentation.mAnimationKeys));
                     if (property == Layer::AnimProperty::Action)
                     {
+                        if (!mTimelinePreview) mSequence.ReconcileDefaultActionKeys();
                         if (layer == mSequence.GetRoot()) mPlayerManager.RefreshRootActionMetadata(GetTimelineMainCPUTime());
                         ++mEvaluationRevision;
                     }
@@ -1980,6 +2017,7 @@ namespace ImmPlayer
         mDrawingHandles.clear();
         mCommitStatuses.clear();
         iEndTimelinePreview(mLastCPUTime);
+        mSequence.ResetDefaultActionHistory();
         mEditing = false;
         return true;
     }
@@ -2848,12 +2886,8 @@ namespace ImmPlayer
         if (!mPendingPresentation.mHasPreparedSpawnAreas)
             return;
         const Layer * active = mPlayerManager.GetSpawnAreaLayer(mPlayerManager.GetSpawnArea());
-        const Layer * preferred = mSequence.GetInitialSpawnArea();
-        bool preferredSurvives = preferred == nullptr;
-        for (const Layer * layer : mPendingPresentation.mPreparedSpawnAreas)
-            preferredSurvives = preferredSurvives || layer == preferred;
-        if (!preferredSurvives)
-            mSequence.SetInitialSpawnArea(nullptr);
+        mSequence.ReconcileDefaultActionTargets(mPendingPresentation.mPreparedSpawnAreas.data(),
+            mPendingPresentation.mPreparedSpawnAreas.size());
         mPlayerManager.PublishPreparedSpawnAreas(mPendingPresentation.mPreparedSpawnAreas.data(),
             static_cast<uint32_t>(mPendingPresentation.mPreparedSpawnAreas.size()), active);
         mSequence.SetSpawnAreaNeedsUpdate(true);
@@ -3506,6 +3540,43 @@ namespace ImmPlayer
                     iRejectCommit(batch.mRevision, -5, 0, candidate.mLayerId);
                     return;
                 }
+            }
+            if (actionKey && layer->GetType() == Layer::Type::SpawnArea)
+            {
+                size_t nextTrack = 0, allDefaults = 0, scopedDefaults = 0;
+                for (const auto & key : keys)
+                    if (key.mValue.mInt == static_cast<uint32_t>(Layer::AnimAction::MakeDefault)) ++nextTrack;
+                const bool counted = mSequence.Recurse([&](Layer * candidate, int, int, bool) {
+                    const size_t count = iDefaultActionCount(candidate);
+                    if (count > SIZE_MAX - allDefaults) return false;
+                    allDefaults += count;
+                    if (mTimelinePreview && mTimelinePreview->context.Contains(candidate))
+                    {
+                        if (count > SIZE_MAX - scopedDefaults) return false;
+                        scopedDefaults += count;
+                    }
+                    return true;
+                }, false, false, false, false);
+                const size_t oldTrack = iDefaultActionCount(layer);
+                if (!counted || nextTrack > SIZE_MAX - (allDefaults - oldTrack))
+                { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
+                const size_t allAfter = allDefaults - oldTrack + nextTrack;
+                if (allAfter > SIZE_MAX - allDefaults)
+                { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
+                // Reserve against all still-unexecuted identities as well as
+                // retained execution history. Old keys may execute while this
+                // replacement is prepared, then survive as inactive Undo history.
+                size_t scopedAdditional = 0;
+                if (mTimelinePreview)
+                {
+                    const size_t scopedAfter = scopedDefaults - oldTrack + nextTrack;
+                    if (scopedAfter > SIZE_MAX - scopedDefaults)
+                    { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
+                    scopedAdditional = scopedDefaults + scopedAfter;
+                }
+                if (!mSequence.PrepareDefaultActionCapacity(allDefaults + allAfter) ||
+                    (mTimelinePreview && !mTimelinePreview->context.PrepareDefaultActionCapacity(scopedAdditional)))
+                { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
             }
             if (actionKey && mTimelinePreview)
             {

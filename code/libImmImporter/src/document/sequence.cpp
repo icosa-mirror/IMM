@@ -15,6 +15,9 @@ Sequence::~Sequence() {}
 
 bool Sequence::Init(const Type & type, uint16_t caps, const vec3 & backgroundColor)
 {
+    mInitialSpawnArea = nullptr;
+    mInitialSpawnAreaBaseline = nullptr;
+    mDefaultActionExecutions.clear();
     mBackgroundColor = backgroundColor;
 	mType = type;
 	mCaps = caps;
@@ -37,6 +40,9 @@ bool Sequence::Init(const Type & type, uint16_t caps, const vec3 & backgroundCol
 
 void Sequence::Deinit(piLog *log) 
 { 
+    std::vector<DefaultActionExecution>().swap(mDefaultActionExecutions);
+    mInitialSpawnAreaBaseline = nullptr;
+    mInitialSpawnArea = nullptr;
     // Hierarchy teardown releases implementations first. The flat registry owns
     // the Layer allocations, including unpublished layers whose Init failed.
     if (mRoot != nullptr)
@@ -86,7 +92,122 @@ void Sequence::SetSpawnAreaNeedsUpdate(bool state)
 
 void Sequence::SetInitialSpawnArea(const Layer* la)
 {
-	mInitialSpawnArea = la;
+    mInitialSpawnAreaBaseline = la;
+    mDefaultActionExecutions.clear();
+    mInitialSpawnArea = la;
+}
+
+bool Sequence::PrepareDefaultActionCapacity(size_t additionalIdentities)
+{
+    if (additionalIdentities > mDefaultActionExecutions.max_size() - mDefaultActionExecutions.size())
+        return false;
+    try
+    {
+        mDefaultActionExecutions.reserve(mDefaultActionExecutions.size() + additionalIdentities);
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+void Sequence::RecomputeInitialSpawnArea() noexcept
+{
+    const Layer* effective = mInitialSpawnAreaBaseline;
+    for (const auto& execution : mDefaultActionExecutions)
+        if (execution.active) effective = execution.target;
+    if (effective != mInitialSpawnArea)
+    {
+        mInitialSpawnArea = effective;
+        mSpawnAreaNeedsUpdate = true;
+    }
+}
+
+bool Sequence::RecordDefaultActionExecution(const Layer* layer, piTick time) noexcept
+{
+    if (layer == nullptr || layer->GetType() != Layer::Type::SpawnArea) return false;
+    const uint32_t id = layer->GetID();
+    for (size_t i = 0; i < mDefaultActionExecutions.size(); ++i)
+    {
+        const auto& old = mDefaultActionExecutions[i];
+        if (old.target != layer || old.layerId != id || old.time != time) continue;
+        // Re-execution changes execution order, not the identity's authored time.
+        const DefaultActionExecution execution{ layer, id, time, true };
+        for (size_t j = i + 1; j < mDefaultActionExecutions.size(); ++j)
+            mDefaultActionExecutions[j - 1] = mDefaultActionExecutions[j];
+        mDefaultActionExecutions.back() = execution;
+        RecomputeInitialSpawnArea();
+        return true;
+    }
+    if (mDefaultActionExecutions.size() == mDefaultActionExecutions.capacity()) return false;
+    mDefaultActionExecutions.push_back({ layer, id, time, true });
+    RecomputeInitialSpawnArea();
+    return true;
+}
+
+void Sequence::ReconcileDefaultActionKeys(const Layer* layer, const std::vector<Layer::AnimKey>& keys) noexcept
+{
+    if (layer == nullptr) return;
+    for (auto& execution : mDefaultActionExecutions)
+    {
+        if (execution.target != layer || execution.layerId != layer->GetID()) continue;
+        execution.active = false;
+        for (const auto& key : keys)
+            if (key.mTime == execution.time && key.mValue.mInt == static_cast<uint32_t>(Layer::AnimAction::MakeDefault))
+            {
+                execution.active = true;
+                break;
+            }
+    }
+    RecomputeInitialSpawnArea();
+}
+
+void Sequence::ReconcileDefaultActionTargets(Layer* const* survivors, size_t count) noexcept
+{
+    const auto survives = [survivors, count](const Layer* target) {
+        if (target == nullptr) return true;
+        for (size_t i = 0; survivors != nullptr && i < count; ++i)
+            if (survivors[i] == target) return true;
+        return false;
+    };
+    if (!survives(mInitialSpawnAreaBaseline)) mInitialSpawnAreaBaseline = nullptr;
+    size_t retained = 0;
+    for (size_t i = 0; i < mDefaultActionExecutions.size(); ++i)
+        if (survives(mDefaultActionExecutions[i].target))
+            mDefaultActionExecutions[retained++] = mDefaultActionExecutions[i];
+    mDefaultActionExecutions.resize(retained);
+    RecomputeInitialSpawnArea();
+}
+
+void Sequence::ReconcileDefaultActionKeys() noexcept
+{
+    // Deleted targets must already have been pruned before their Layer is freed.
+    // Reconcile the whole live scene before selecting a winner, including when
+    // canonical keys changed while main playback was frozen by a preview.
+    for (auto& execution : mDefaultActionExecutions)
+    {
+        execution.active = false;
+        const Layer* layer = execution.target;
+        if (layer->GetID() != execution.layerId) continue;
+        const uint32_t count = layer->GetNumAnimKeys(Layer::AnimProperty::Action);
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const Layer::AnimKey* key = layer->GetAnimKey(Layer::AnimProperty::Action, i);
+            if (key->mTime == execution.time && key->mValue.mInt == static_cast<uint32_t>(Layer::AnimAction::MakeDefault))
+            {
+                execution.active = true;
+                break;
+            }
+        }
+    }
+    RecomputeInitialSpawnArea();
+}
+
+void Sequence::ResetDefaultActionHistory() noexcept
+{
+    mInitialSpawnAreaBaseline = mInitialSpawnArea;
+    mDefaultActionExecutions.clear();
 }
 
 

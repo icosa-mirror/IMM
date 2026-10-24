@@ -1094,6 +1094,112 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 4, 0) == IMM_AUTHORING_OK,
         "exit Action publication preview");
     std::puts("[IMM_ACTION_PUBLICATION_CABI_TEST] rootChapters=1 targetValidation=1 newPastConsumed=1 retimeFutureArmed=1 holdPreserved=1 explicitSeekRelease=1 mainFrozen=1");
+    // Execution history, not key-time sorting, determines the effective default.
+    void * defaultSequence = ImmExporter_CreateSequence(1, 0, 0, 0, 0, 30, 0, 0, 0, 0);
+    requireRepeat(defaultSequence && ImmExporter_SetRootLayerProperties(defaultSequence, 1, 1, &identity, &identity,
+        0, 0, 1, 0, 0), "default Action sequence");
+    void * defaultBase = ImmExporter_CreateSpawnAreaLayer(defaultSequence, nullptr, "DefaultBase", &identity, 1);
+    void * defaultScope = ImmExporter_CreateGroupLayer(defaultSequence, nullptr, "DefaultScope", 1, 1,
+        &identity, &identity, 1, 0, 1);
+    void * defaultA = ImmExporter_CreateSpawnAreaLayer(defaultSequence, defaultScope, "DefaultA", &identity, 1);
+    void * defaultB = ImmExporter_CreateSpawnAreaLayer(defaultSequence, defaultScope, "DefaultB", &identity, 1);
+    requireRepeat(defaultBase && defaultScope && defaultA && defaultB, "default Action layers");
+    for (void * layer : { defaultBase, defaultScope, defaultA, defaultB })
+        requireRepeat(ImmExporter_LayerAddAnimationKey(layer, 0, 0, 0, 1, 0, 0, 0, &identity), "default fixture visibility");
+    requireRepeat(ImmExporter_LayerAddAnimationKey(defaultA, 6, 2000000000, 0, 0, 3, 0, 0, &identity) &&
+        ImmExporter_LayerAddAnimationKey(defaultB, 6, 1000000000, 0, 0, 3, 0, 0, &identity) &&
+        ImmExporter_SetInitialSpawnArea(defaultSequence, defaultBase) &&
+        ImmExporter_ExportToFile(defaultSequence, "default-actions.imm", 96000, 0), "default fixture export");
+    ImmExporter_DestroySequence(defaultSequence);
+    const int defaultDoc = player.Load(L"default-actions.imm");
+    requireRepeat(defaultDoc >= 0 && wait([&]() {
+        Player::DocumentState state{}; player.GetDocumentState(state, defaultDoc);
+        return state.mLoadingState == Player::LoadingState::Loaded;
+    }), "load default Action fixture");
+    player.Pause(defaultDoc);
+    requireRepeat(wait([&]() {
+        Player::DocumentState state{}; player.GetDocumentState(state, defaultDoc);
+        return state.mPlaybackState == Player::PlaybackState::Paused;
+    }) && ImmAuthoring_Attach(defaultDoc) == IMM_AUTHORING_OK, "pause and attach default fixture");
+    int defaultRootId = -1, defaultBaseId = -1, defaultAId = -1, defaultBId = -1, defaultScopeId = -1;
+    for (int index = 0; index < player.GetLayerCount(defaultDoc); ++index)
+    {
+        Player::LayerInfo info{};
+        requireRepeat(player.GetLayerInfoByIndex(defaultDoc, index, info), "default layer query");
+        if (info.parentId < 0) defaultRootId = info.id;
+        if (std::wcscmp(info.name, L"DefaultBase") == 0) defaultBaseId = info.id;
+        if (std::wcscmp(info.name, L"DefaultA") == 0) defaultAId = info.id;
+        if (std::wcscmp(info.name, L"DefaultB") == 0) defaultBId = info.id;
+        if (std::wcscmp(info.name, L"DefaultScope") == 0) defaultScopeId = info.id;
+    }
+    requireRepeat(defaultRootId >= 0 && defaultBaseId >= 0 && defaultAId >= 0 && defaultBId >= 0 && defaultScopeId >= 0,
+        "default fixture IDs");
+    const int activeDefaultOrdinal = player.GetSpawnArea(defaultDoc);
+    const auto defaultClock = [&]() {
+        ImmAuthoringTimelineClock value{};
+        requireRepeat(ImmAuthoring_TimelineGetClock(defaultDoc, defaultRootId, &value, sizeof(value)) == IMM_AUTHORING_OK,
+            "default root clock");
+        return value.elapsedTicks;
+    };
+    const auto presentDefaultEdit = [&]() {
+        uint64_t revision = 0;
+        requireRepeat(ImmAuthoring_Commit(defaultDoc, &revision) == IMM_AUTHORING_OK, "commit default Action edit");
+        requireRepeat(wait([&]() {
+            ImmAuthoringCommitStatus status{}; status.structSize = sizeof(status); status.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(defaultDoc, revision, &status) == IMM_AUTHORING_OK &&
+                status.state != IMM_AUTHORING_COMMIT_REJECTED, "default Action status");
+            return status.state == IMM_AUTHORING_COMMIT_PRESENTED;
+        }), "default Action presents");
+    };
+    const auto setDefaultKey = [&](int layer, int64_t time) {
+        ImmAuthoringKey key{}; key.structSize = sizeof(key); key.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+        key.property = IMM_AUTHORING_ANIM_PROPERTY_ACTION; key.uintValue = 3; key.timeSeconds = static_cast<double>(time) / 12600.0;
+        key.qw = 1; key.scale = 1;
+        requireRepeat(ImmAuthoring_KeySet(defaultDoc, layer, &key) == IMM_AUTHORING_OK, "stage MakeDefault");
+    };
+    const auto removeDefaultKey = [&](int layer, int64_t time) {
+        requireRepeat(ImmAuthoring_KeyRemove(defaultDoc, layer, IMM_AUTHORING_ANIM_PROPERTY_ACTION,
+            static_cast<double>(time) / 12600.0) == IMM_AUTHORING_OK, "remove MakeDefault");
+    };
+    // This addition must reserve for both other, still-unexecuted identities.
+    setDefaultKey(defaultBaseId, 500000000); presentDefaultEdit();
+    player.SetTime(defaultDoc, piTick(2000000010), piTick(0));
+    requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultBId && player.GetSpawnArea(defaultDoc) == activeDefaultOrdinal,
+        "actual traversal execution order wins over largest key timestamp without selecting a viewpoint");
+    const int64_t heldDefaultClock = defaultClock();
+    removeDefaultKey(defaultBId, 1000000000); presentDefaultEdit();
+    requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultAId && defaultClock() == heldDefaultClock,
+        "removing executed MakeDefault restores prior executed effect without seek");
+    setDefaultKey(defaultBId, 1000000000); presentDefaultEdit();
+    requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultBId && defaultClock() == heldDefaultClock,
+        "Undo restores effect history without replay");
+    requireRepeat(ImmAuthoring_SetInitialSpawnArea(defaultDoc, defaultBaseId) == IMM_AUTHORING_OK, "explicit default override");
+    presentDefaultEdit();
+    removeDefaultKey(defaultBId, 1000000000); presentDefaultEdit();
+    setDefaultKey(defaultBId, 1000000000); presentDefaultEdit();
+    requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultBaseId,
+        "later explicit choice supersedes earlier Action history");
+    player.SetTime(defaultDoc, piTick(0), piTick(0));
+    player.SetTime(defaultDoc, piTick(2000000010), piTick(0));
+    requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultBId, "rearmed execution history");
+    const int64_t mainDefaultClock = defaultClock();
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(defaultDoc, defaultScopeId, 0, 2000000000) == IMM_AUTHORING_OK &&
+        ImmAuthoring_TimelinePreviewControl(defaultDoc, defaultScopeId, 2, 0) == IMM_AUTHORING_OK, "play independent default preview");
+    requireRepeat(wait([&]() { tick(); return player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultBId; }), "preview keeps main default");
+    removeDefaultKey(defaultBId, 1000000000); presentDefaultEdit();
+    requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultBId && defaultClock() == mainDefaultClock,
+        "preview publication defers main effect reconciliation");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(defaultDoc, defaultScopeId, 4, 0) == IMM_AUTHORING_OK &&
+        player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultAId && defaultClock() == mainDefaultClock,
+        "preview exit reconciles retained canonical keys at frozen main state");
+    setDefaultKey(defaultBId, 1000000000); presentDefaultEdit();
+    requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultBId && player.GetSpawnArea(defaultDoc) == activeDefaultOrdinal,
+        "post-preview Undo restores default without changing active viewpoint");
+    requireRepeat(ImmAuthoring_LayerDestroy(defaultDoc, defaultBId) == IMM_AUTHORING_OK, "delete effective default target");
+    presentDefaultEdit();
+    requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultAId && player.GetSpawnArea(defaultDoc) == activeDefaultOrdinal,
+        "target deletion restores surviving effect and keeps active viewpoint");
+    std::puts("[IMM_DEFAULT_ACTION_CABI_TEST] executionOrder=1 undo=1 explicitChoice=1 previewIsolation=1 exitReconcile=1 deletionFallback=1 activeSelectionStable=1");
     player.UnloadAllSync();
     gImmUnityPlugin.mBridge.Shutdown();
     context->Release();

@@ -317,11 +317,44 @@ static void CheckIndependentEvaluationContext()
     requireFrames(spawnImpl->Init(volume, LayerSpawnArea::TrackingLevel::Floor), "context spawn");
     spawn->SetImplementation(spawnImpl);
     value.init(); value.mInt = static_cast<uint32_t>(Layer::AnimAction::MakeDefault);
-    add(spawn, Layer::AnimProperty::Action, piTick(0), value);
+    add(spawn, Layer::AnimProperty::Action, piTick(300), value);
+    spawn->SetStateAt(wallTime, &log, &context);
+    requireFrames(context.mDefaultSpawnAreaLayerId == UINT32_MAX && context.mDefaultActionHistory.empty() &&
+        context.mConsumedActions.size() == 1 && !spawn->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool,
+        "default action cannot partially record or consume without prepared sidecars");
+    Layer::EvaluationContext capacityGuard;
+    capacityGuard.mBoundary = boundary; capacityGuard.mBoundaryStartTime = context.mBoundaryStartTime;
+    capacityGuard.mBoundaryElapsed = context.mBoundaryElapsed; capacityGuard.mBoundaryDuration = context.mBoundaryDuration;
+    capacityGuard.mBoundaryRepeatCount = context.mBoundaryRepeatCount; capacityGuard.mHeld = true;
+    requireFrames(capacityGuard.PrepareDefaultActionCapacity(1), "prepare capacity-guard default ledger");
+    spawn->SetStateAt(wallTime, &log, &capacityGuard);
+    requireFrames(capacityGuard.mDefaultActionHistory.empty() && capacityGuard.mConsumedActions.empty() &&
+        capacityGuard.mDefaultSpawnAreaLayerId == UINT32_MAX, "consumption capacity is checked before recording a default effect");
+    requireFrames(context.PrepareDefaultActionCapacity(2), "prepare context default ledger");
+    context.mConsumedActions.reserve(3);
     spawn->SetStateAt(wallTime, &log, &context);
     requireFrames(context.mDefaultSpawnAreaLayerId == spawn->GetID() && sequence.GetInitialSpawnArea() == nullptr &&
         !sequence.GetSpawnAreaNeedsUpdate() && !spawn->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool,
         "preview default-spawn action never changes source navigation or flags");
+    Layer * earlier = make(Layer::Type::SpawnArea, boundary, L"EarlierAuthoredDefault", true, 1.0f, false);
+    auto * earlierImpl = new LayerSpawnArea();
+    requireFrames(earlierImpl->Init(volume, LayerSpawnArea::TrackingLevel::Floor), "earlier authored spawn");
+    earlier->SetImplementation(earlierImpl);
+    add(earlier, Layer::AnimProperty::Action, piTick(100), value);
+    earlier->SetStateAt(wallTime, &log, &context);
+    requireFrames(context.mDefaultSpawnAreaLayerId == earlier->GetID() && context.mDefaultActionHistory.size() == 2,
+        "context default follows actual execution order rather than latest authored timestamp");
+    std::vector<Layer::AnimKey> earlierKeys;
+    requireFrames(earlier->CopyAnimKeys(Layer::AnimProperty::Action, earlierKeys), "copy default action for undo");
+    context.ReconcileDefaultActionKeys(earlier, {});
+    requireFrames(context.mDefaultSpawnAreaLayerId == spawn->GetID(), "removing last executed default reveals prior effect");
+    context.ReconcileDefaultActionKeys(earlier, earlierKeys);
+    requireFrames(context.mDefaultSpawnAreaLayerId == earlier->GetID() && sequence.GetInitialSpawnArea() == nullptr &&
+        !earlier->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool,
+        "undo reactivates historical default order without replay or main navigation mutation");
+    context.ResetDefaultActionHistory();
+    requireFrames(context.mDefaultSpawnAreaLayerId == UINT32_MAX && context.mDefaultActionHistory.empty() &&
+        context.mConsumedActions.size() == 3, "default-history reset does not alter independent action-consumption state");
     Layer * soundLayer = make(Layer::Type::Sound, boundary, L"Sound", true, 1.0f, false);
     auto * sound = new LayerSound();
     LayerSound::AttenuationParameters attenuation{}; LayerSound::ModifierParameters modifier{};
@@ -471,6 +504,42 @@ static void CheckLayerDrivenPaintFrameGrowth()
         "imported keyless paint remains stopped after actual layer evaluation and growth");
     sequence.Deinit(&log);
     log.End();
+}
+
+static void CheckDefaultActionConsumption()
+{
+    using namespace ImmCore;
+    using namespace ImmImporter;
+    piLog log;
+    requireFrames(log.Init(L"artifacts/default-action-consumption.log", PILOG_TXT), "default consumption log");
+    Sequence sequence;
+    requireFrames(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "default consumption sequence");
+    Layer * root = sequence.GetRoot();
+    requireFrames(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+        1.0f, true, piTick(0), 1, UINT32_MAX, &log), "default consumption root");
+    root->SetStartTime(piTick(0)); root->SetPlaying(true);
+    Layer * spawn = sequence.CreateLayer(root);
+    requireFrames(spawn && spawn->Init(Layer::Type::SpawnArea, L"Default", true, trans3d::identity(),
+        trans3d::identity(), 1.0f, false, piTick(0), 1, UINT32_MAX, &log), "default consumption spawn");
+    auto * implementation = new LayerSpawnArea();
+    LayerSpawnArea::Volume volume{}; volume.mType = LayerSpawnArea::Volume::Type::Sphere;
+    volume.mShape.mSphere = vec4(0, 0, 0, 1);
+    requireFrames(implementation->Init(volume, LayerSpawnArea::TrackingLevel::Floor), "default consumption implementation");
+    spawn->SetImplementation(implementation);
+    Layer::AnimValue key{}; key.mInt = static_cast<uint32_t>(Layer::AnimAction::MakeDefault);
+    requireFrames(spawn->AddKey(piTick(0), Layer::AnimProperty::Action, key, Layer::InterpolationType::None), "default action0");
+    spawn->SetStateAt(piTick(10), &log);
+    requireFrames(!spawn->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool && sequence.GetInitialSpawnArea() == nullptr &&
+        !sequence.GetSpawnAreaNeedsUpdate(), "failed main default record leaves effect and consumption retryable");
+    requireFrames(sequence.PrepareDefaultActionCapacity(1), "prepare main default capacity");
+    spawn->SetStateAt(piTick(10), &log);
+    requireFrames(spawn->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool && sequence.GetInitialSpawnArea() == spawn &&
+        sequence.GetSpawnAreaNeedsUpdate(), "retry records main default before consumption");
+    sequence.SetSpawnAreaNeedsUpdate(false);
+    spawn->ResetActionStatesAt(piTick(0)); spawn->SetStateAt(piTick(10), &log);
+    requireFrames(!sequence.GetSpawnAreaNeedsUpdate(), "same effective default does not generate redundant navigation dirty state");
+    sequence.Deinit(&log); log.End();
+    std::puts("[IMM_ACTION_DEFAULT_CONSUMPTION] pass=1 failureAtomic=1 retry=1 effectiveDirtyOnly=1");
 }
 
 static void CheckFiniteFinalActionOccurrence()
@@ -682,6 +751,7 @@ void CheckPaintFrameTables()
     CheckLayerDrivenPlaybackKeys<LayerPaintPretessellated>();
     CheckLayerDrivenSoundOffsets();
     CheckIndependentEvaluationContext();
+    CheckDefaultActionConsumption();
     CheckHiddenLayerRenderEligibility();
     CheckFiniteFinalActionOccurrence();
     CheckFiniteAncestorClockCascade();

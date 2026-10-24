@@ -130,10 +130,24 @@ namespace ImmImporter
                 ImmCore::piTick time;
             };
             std::vector<ConsumedAction> mConsumedActions;
+            struct DefaultActionExecution
+            {
+                uint32_t layerId;
+                ImmCore::piTick time;
+                bool active;
+            };
+            // Inactive executed identities retain their order so restoring a
+            // removed MakeDefault key can restore its effect without replay.
+            std::vector<DefaultActionExecution> mDefaultActionHistory;
             uint32_t mDefaultSpawnAreaLayerId = UINT32_MAX;
 
             bool Contains(const Layer * layer) const;
+            bool CanConsumeAction(const Layer * layer, ImmCore::piTick time) const noexcept;
             bool ConsumeAction(const Layer * layer, ImmCore::piTick time);
+            bool PrepareDefaultActionCapacity(size_t additionalIdentities);
+            bool RecordDefaultActionExecution(const Layer * layer, ImmCore::piTick time) noexcept;
+            void ReconcileDefaultActionKeys(const Layer * layer, const std::vector<AnimKey> & keys) noexcept;
+            void ResetDefaultActionHistory() noexcept;
         };
 
         // Evaluated/runtime state only: no keys, canonical properties, hierarchy,
