@@ -446,11 +446,25 @@ namespace ImmPlayer
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) != nullptr;
     }
 
-    static int32_t iValidateStaticVisibility(Sequence * sequence, Layer * layer)
+    static bool iCanRefreshVisibility(Layer * layer)
+    {
+        // Root visibility also controls the transport clock. Keep its existing
+        // static-only contract until that separate clock behavior is editable.
+        if (layer->GetParent() == nullptr) return iCanRefreshStaticVisibility(layer);
+        if (layer->GetType() == Layer::Type::Group)
+        {
+            for (uint32_t index = 0; index < layer->GetNumChildren(); ++index)
+                if (!iCanRefreshVisibility(layer->GetChild(index))) return false;
+            return true;
+        }
+        return layer->GetType() == Layer::Type::Sound || iCanRefreshStaticVisibility(layer);
+    }
+
+    static int32_t iValidateVisibility(Sequence * sequence, Layer * layer)
     {
         if (layer == nullptr) return -1;
         if (IsLoadingAsync(sequence)) return -7;
-        return iCanRefreshStaticVisibility(layer) ? 0 : -3;
+        return iCanRefreshVisibility(layer) ? 0 : -3;
     }
 
     static int32_t iValidateAnimationKeyTarget(Sequence * sequence, Layer * layer,
@@ -460,7 +474,7 @@ namespace ImmPlayer
         if (property == Layer::AnimProperty::Action)
             return iValidateTimelineAction(layer, sequence->GetRoot(), nullptr);
         if (property == Layer::AnimProperty::Visibility)
-            return iValidateStaticVisibility(sequence, layer);
+            return iValidateVisibility(sequence, layer);
         if ((property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset) &&
             layer->GetType() == Layer::Type::Group &&
             (layer->GetParent() == nullptr || layer->GetIsTimeline()) &&
@@ -523,7 +537,7 @@ namespace ImmPlayer
         for (const auto & saved : mTimelinePreview->saved)
             if (saved.layer->GetID() == layerId)
                 return saved.layer != mTimelinePreview->context.mBoundary &&
-                    saved.layer->GetType() != Layer::Type::Sound && mTimelinePreview->context.Contains(saved.layer);
+                    mTimelinePreview->context.Contains(saved.layer);
         return false;
     }
 
@@ -553,7 +567,12 @@ namespace ImmPlayer
     void Document::iRefreshTimelineEdit(Layer * layer, uint32_t fields, piTick now, piLog * log)
     {
         auto * context = mTimelinePreview ? &mTimelinePreview->context : nullptr;
-        if (fields & PreviewVisibility) iRefreshStaticVisibility(layer, now, log, context);
+        if (fields & PreviewVisibility)
+        {
+            if (iCanRefreshStaticVisibility(layer)) iRefreshStaticVisibility(layer, now, log, context);
+            else iRefreshPlaybackSubtree(layer, now, log, context == nullptr &&
+                (mPlayerManager.GetIsPaused() || !mPlayerManager.GetIsPlaying()), context);
+        }
         else
         {
             if (fields & PreviewTransform) layer->ReevaluateTransformAt(now, log, context);
@@ -1657,6 +1676,16 @@ namespace ImmPlayer
                 Layer * layer = mPendingPresentation.mLayer;
                 const uint64_t layerId = mPendingPresentation.mObject;
                 const bool rename = !mPendingPresentation.mPreparedLayerFullNames.empty();
+                if (mPendingPresentation.mSetLayerVisibility)
+                {
+                    const int32_t visibilityResult = iValidateVisibility(&mSequence, layer);
+                    if (visibilityResult != 0)
+                    {
+                        iRejectCommit(revision, visibilityResult, 0, layerId);
+                        mPendingPresentation = PendingPresentation{};
+                        return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                    }
+                }
                 if (rename && std::getenv("IMM_LIVE_EDIT_HOLD_LAYER_RENAME") != nullptr)
                     return mState.mPlaybackState != PlaybackState::PausedAndHidden;
                 if ((rename || mPendingPresentation.mSetLayerPivot) && IsLoadingAsync(&mSequence))
@@ -2393,6 +2422,11 @@ namespace ImmPlayer
             return -1;
         if (!setVisibility && !setOpacity && !setTransform && !setPaintRepeat && newName == nullptr && newPivot == nullptr)
             return -2;
+        if (setVisibility)
+        {
+            const int32_t result = iValidateVisibility(&mSequence, layer);
+            if (result != 0) return result;
+        }
         if (newPivot != nullptr)
         {
             if (layer->GetParent() == nullptr || (layer->GetType() != Layer::Type::Group &&
@@ -3634,6 +3668,11 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
                 return;
             }
+            if (edit.mSetVisibility)
+            {
+                const int32_t result = iValidateVisibility(&mSequence, layer);
+                if (result != 0) { iRejectCommit(batch.mRevision, result, 0, edit.mLayerId); return; }
+            }
             if (edit.mSetPivot)
             {
                 if (layer->GetParent() == nullptr || (layer->GetType() != Layer::Type::Group &&
@@ -3949,7 +3988,7 @@ namespace ImmPlayer
                 if (edit.mSetVisibility)
                 {
                     Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), edit.mLayerId);
-                    allowed &= layer != nullptr && iCanRefreshStaticVisibility(layer);
+                    allowed &= layer != nullptr && iCanRefreshVisibility(layer);
                 }
             }
             for (const auto & edit : mOpenFrameMappings) allowed &= iCanEditTimelinePreview(edit.mLayerId);

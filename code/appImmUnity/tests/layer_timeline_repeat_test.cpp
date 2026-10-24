@@ -446,6 +446,16 @@ namespace
         RequireTimeline(leaf && leaf->Init(Layer::Type::Group, L"Pose", true, trans3d::identity(),
             trans3d::identity(), 1.0f, false, piTick(0), 1, UINT32_MAX, log), "refresh pose");
         for (Layer * layer : { root, timeline, leaf }) AddBool(layer, Layer::AnimProperty::Visibility, 0, true);
+        Layer * soundLayer = sequence.CreateLayer(timeline);
+        RequireTimeline(soundLayer && soundLayer->Init(Layer::Type::Sound, L"RefreshSound", true,
+            trans3d::identity(), trans3d::identity(), 1.0f, false, piTick(0), 1, UINT32_MAX, log), "refresh sound");
+        auto * sound = new LayerSound();
+        LayerSound::AttenuationParameters attenuation{};
+        LayerSound::ModifierParameters modifier{};
+        RequireTimeline(sound->Init(false, false, 1.0f, attenuation, modifier, LayerSound::Type::Flat, 10.0f, log),
+            "refresh sound implementation");
+        soundLayer->SetImplementation(sound); soundLayer->SetLoaded(true);
+        AddBool(soundLayer, Layer::AnimProperty::Visibility, 0, true);
         Layer::AnimValue value; value.init();
         RequireTimeline(leaf->AddKey(piTick(0), Layer::AnimProperty::Transform, value,
             Layer::InterpolationType::Linear), "refresh first pose");
@@ -463,6 +473,7 @@ namespace
         Layer::EvaluationContext context;
         context.mBoundary = root; context.mBoundaryStartTime = epoch; context.mBoundaryElapsed = piTick(1135);
         context.mBoundaryDuration = piTick(1000); context.mBoundaryRepeatCount = 0; context.mHeld = true;
+        context.mAudioEnabled = true;
         Layer::EvaluationContext * scope = independent ? &context : nullptr;
         if (independent) { root->SetStopTime(epoch + piTick(2), true, true); root->SetPlaying(false); }
         else root->SetStateAt(initial, log);
@@ -480,6 +491,7 @@ namespace
         const auto refresh = [&]() {
             timeline->ReevaluatePlaybackAt(now, log, !independent, scope);
             leaf->ReevaluatePlaybackAt(now, log, !independent, scope);
+            soundLayer->ReevaluatePlaybackAt(now, log, !independent, scope);
             RequireTimeline(root->GetTimelineElapsed(now) == mainElapsed, "refresh preserves held main clock");
             RequireTimeline(context.mConsumedActions.size() == consumed, "refresh does not consume Actions");
         };
@@ -494,6 +506,26 @@ namespace
         RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - (actionHold ? 1.9 : 5.0)) < 1e-9, "Loop refresh clamps held children");
         timeline->ReplaceAnimKeys(Layer::AnimProperty::Loop, {}); refresh();
         RequireTimeline(std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - expected) < 1e-9, "Loop removal restores authored repeat");
+        timeline->ReplaceAnimKeys(Layer::AnimProperty::Visibility, {});
+        AddBool(timeline, Layer::AnimProperty::Visibility, 10, false); refresh();
+        RequireTimeline(!leaf->GetWorldVisible(scope) && !sound->GetPlaying(), "timeline hide stops descendant sound");
+        timeline->ReplaceAnimKeys(Layer::AnimProperty::Visibility, {});
+        AddBool(timeline, Layer::AnimProperty::Visibility, 0, true); refresh();
+        std::printf("[IMM_VISIBILITY_REFRESH] independent=%d actionHold=%d visible=%d sound=%d pose=%f offset=%llu expectedOffset=%llu paused=%d\n",
+            independent, actionHold, leaf->GetWorldVisible(scope), sound->GetPlaying(),
+            leaf->CapturePlaybackState().mTransform.mTranslation.x, static_cast<unsigned long long>(sound->GetOffset()),
+            static_cast<unsigned long long>(piTick::ToMicroSeconds(piTick(actionHold ? 19 : 35))), sound->GetPaused());
+        RequireTimeline(leaf->GetWorldVisible(scope) && sound->GetPlaying() &&
+            std::fabs(leaf->CapturePlaybackState().mTransform.mTranslation.x - expected) < 1e-9 &&
+            sound->GetOffset() == piTick::ToMicroSeconds(piTick(actionHold ? 19 : 35)) &&
+            (independent || sound->GetPaused()), "timeline reveal restores held pose and seeks paused sound");
+        soundLayer->ReplaceAnimKeys(Layer::AnimProperty::Visibility, {});
+        AddBool(soundLayer, Layer::AnimProperty::Visibility, 0, false); refresh();
+        RequireTimeline(!sound->GetPlaying(), "direct sound hide stops voice intent");
+        soundLayer->ReplaceAnimKeys(Layer::AnimProperty::Visibility, {});
+        AddBool(soundLayer, Layer::AnimProperty::Visibility, 0, true); refresh();
+        RequireTimeline(sound->GetPlaying() && sound->GetOffset() == piTick::ToMicroSeconds(piTick(actionHold ? 19 : 35)),
+            "direct sound reveal restores correct cursor");
         if (actionHold)
         {
             timeline->ReplaceAnimKeys(Layer::AnimProperty::Visibility, {});

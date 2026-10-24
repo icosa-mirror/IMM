@@ -21,7 +21,7 @@ namespace ImmPlayer
         {
             if (!TimelinePreviewActive) return true;
             return layer != timelineScope && treeNodes.TryGetValue(layer, out LayerNode node) &&
-                node.Info.Type != ImmDocument.LayerType.Sound && InTimelineScope(node);
+                InTimelineScope(node);
         }
 
         private bool PreviewCanEditSelected => PreviewCanEditLayer(selected);

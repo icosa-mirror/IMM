@@ -1001,12 +1001,14 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         if (!CanEvaluateInContext(context)) return;
         if (mType == Type::Paint && dynamic_cast<LayerPaintStatic *>((LayerPaint *)GetImplementation()) != nullptr)
         {
+            if (GetNumAnimKeys(AnimProperty::Visibility) == 0) mVisible = mCanonicalVisible;
             ReevaluatePaintPlaybackAt(now, log, context);
             ReevaluateTransformAt(now, log, context);
             ReevaluateOpacityAt(now, log, context);
             ReevaluateDrawInTimeAt(now, log, context);
         }
         else SetStateAtImpl(now, log, false, AnimProperty::MAX, context, true, transportPaused);
+        if (GetVisible()) mPotentiallyVisible = true;
         if (mType == Type::Sound && context == nullptr)
             static_cast<LayerSound *>(GetImplementation())->SetPaused(
                 transportPaused || mSequence->GetRoot()->IsStoppedByAction());
@@ -1439,6 +1441,14 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                         mVisible = false;
                         break;
                     }
+                    if (refreshPlayback)
+                    {
+                        if (mStoppedByAction && mHasActiveSpanClockOrigin)
+                            mStopTime = timelineOccurrenceStart +
+                                (mStopTime - (mLastActiveSpanClockOrigin - oldSpanKeyTime));
+                        mLastActiveSpanClockOrigin = timelineOccurrenceStart + lastKey->mTime;
+                        mHasActiveSpanClockOrigin = true;
+                    }
                     const piTick timeSinceStop = (timelineTime - lastKey->mTime) + mStartOffset;
                     const piTick stopTime = context != nullptr || timelineClamped ?
                         timelineOccurrenceStart + lastKey->mTime - mStartOffset : now - timeSinceStop;
@@ -1446,7 +1456,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     if (isTimeline && mIsPlaying)
                     {
                         SetPlaying(false);
-                        SetStopTime(stopTime);
+                        if (!refreshPlayback || !mStoppedByAction) SetStopTime(stopTime);
 #ifdef _DEBUG
                         log->Printf(LT_DEBUG, L"[LayerSetState] Stopping timeline %s", mName.GetS());
 #endif

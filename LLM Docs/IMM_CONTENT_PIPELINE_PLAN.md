@@ -5360,9 +5360,9 @@ the historical sizes/check counts below describe this earlier source only.
    discussion become explicit tasks. Earlier milestones document restrictions;
    they do not establish complete editing coverage. The previous statement that
    only CI remained was too broad. These tasks are added to this goal; execution
-   remains paused. Timeline scope/navigation design remains separately provisional
+   resumed on2026-10-24. Timeline scope/navigation design remains separately provisional
    in6.150 and is not silently implemented by this task-list update.
-2. [ ] Fix UI capability gating. Apply native-compatible per-layer/subtree rules to
+2. [x] Fix UI capability gating (6.155; sourceaacdf01d). Apply native-compatible per-layer/subtree rules to
    key creation/replacement, removal, retiming, clipboard and history operations.
    In particular, the UI currently enables Visibility for targets that native
    iCanRefreshStaticVisibility rejects, including nested timeline groups and media
@@ -5507,6 +5507,53 @@ the historical sizes/check counts below describe this earlier source only.
    it remains in progress without reported failures at this checkpoint. This new
    milestone still needs its own hosted acceptance. Next implementation work is
    nested-timeline/media Visibility with lifecycle-safe refresh and Undo.
+7. Committed/pushed94ad7fee after pulling main. FULL
+   [40121056214](https://github.com/icosa-mirror/IMM/actions/runs/40121056214)
+   is queued for exact source94ad7fee5506cff919ec8ff0f6573310c723cb25.
+   Restored52-layer source, Root scope, selected8, paused1.125s, authored camera;
+   revisions/pending0 and no timeline read error. The reference text is untracked.
+
+### 6.157. Nested-timeline and sound Visibility milestone (2026-10-24)
+
+1. Native eligibility now accepts Visibility on nested timelines, sound layers and
+   non-root groups containing the supported static/timeline/sound descendants.
+   Key and canonical-property queue/preparation/publication use the same target
+   check. The existing native-driven UI updates automatically; sound descendants
+   are also editable inside independent preview. No SDK/version change was added.
+2. Use playback-aware subtree refresh for these targets, preserving retained main
+   clocks and consumed Actions. Correct a hide/reveal case that discarded a nested
+   Action Stop in independent preview. Static-paint selection restores canonical
+   visibility when its final key is removed. Existing static-only targets retain
+   their narrower refresh path.
+3. Windows Release build, managed compile (zero errors, two existing warnings),
+   and existing CPU authoring regressions pass. The existing focused held-clock
+   helper now checks timeline and direct sound hide/reveal in main/local evaluation,
+   with/without an Action Stop, paused voice intent and exact seek cursors. It
+   caught the independent Stop loss before the rebuilt plugin was evaluated live.
+4. Nine D3D12 timeline-button steps pass: hide/Undo a nested Snoopy timeline and a
+   real imported sound layer, holding Root23625 ticks. The hidden scene changes
+   11380 pixels and Undo restores exactly. Four local-preview steps also pass:
+   hide Socks, exit with the edit retained, Undo to restore visibility and timing;
+   Root remains23625. Evidence: artifacts/timeline-visibility-live-buttons.json,
+   timeline-visibility-scene-comparison.json and timeline-visibility-preview-buttons.json.
+5. The existing two-tone fixture verifies actual Windows output from the owned
+   Unity audio session during preview. Set key hides the playing sound; toolbar
+   Undo restores output. Measured peaks: playing0.03268, hidden below0.000000001,
+   restored0.03273, paused below0.000000001. Root603154 stays fixed throughout.
+   Evidence: artifacts/timeline-visibility-audio-analysis.json, with phase/meter
+   captures using the same prefix. This is process-output evidence, not a claim
+   about physical speakers or human listening.
+6. This is another partial milestone in6.153.3. Root Visibility with timed/media
+   descendants remains read-only because it also controls the main transport clock;
+   making it editable must preserve hide/reveal recovery and clock semantics.
+   Root Offset still lacks a separate content phase. Picture/Model/Effect/Reference/
+   Instance Visibility remains outside the accepted target set; assess existing
+   playback/import support before expanding it. These restrictions are unfinished
+   coverage, not a completed all-layer editing contract.
+7. Restore the official52-layer Snoopy source/view before committing. The untracked
+   hierarchy reference remains excluded. Full40116011672 continues for gating
+   sourceaacdf01d; Full40121056214 is queued for Loop/Offset source94ad7fee.
+   Neither run validates this new Visibility source; hosted acceptance is pending.
 
 ## 7. Consolidated documents
 
