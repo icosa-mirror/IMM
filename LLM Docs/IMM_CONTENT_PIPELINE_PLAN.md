@@ -4892,7 +4892,11 @@ the historical sizes/check counts below describe this earlier source only.
 5. Action editing and independent audio are explicitly included in this timeline
    test UI goal. Independent voices are implemented, but audible confirmation,
    GL/Android draw-in rendering and main-scene selected-layer framing remain open.
-   The Action UI milestone is complete locally; its new FULL CI run is pending push.
+   The Action UI milestone is complete locally and pushed as `55ae4f05` with the
+   `[CI VALIDATION]` marker. FULL
+   [40072857603](https://github.com/icosa-mirror/IMM/actions/runs/40072857603) targets
+   exact source `55ae4f0501fec9770430a9ec40c0573581618fd3`; it is queued/pending,
+   not accepted. The independent native fixes are `8fb3de4c` and `42f36784`.
    Later healthy FULL CI runs still await serialized licensed engine jobs; the
    accepted exact-source baseline remains the receipt in the top checkpoint.
 
