@@ -13,6 +13,13 @@ namespace ImmPlayer
         private N.TimelineClock timelineClock;
         private bool timelineClockValid, timelineClockMissing;
         private string timelineClockError = "";
+        private sealed class TimelineView
+        {
+            internal double Start, Range;
+            internal Vector2 Scroll;
+            internal string Filter;
+        }
+        private readonly Dictionary<int, TimelineView> timelineViews = new Dictionary<int, TimelineView>();
 
         private LayerNode ScopeNode => treeNodes.TryGetValue(timelineScope, out LayerNode node) ? node : null;
         private bool IsRootScope => ScopeNode != null && ScopeNode.Parent == null;
@@ -84,13 +91,23 @@ namespace ImmPlayer
         {
             if (pending != 0 || awaitingCommit || !treeNodes.TryGetValue(layer, out LayerNode node) ||
                 (node.Parent != null && !node.Info.IsTimeline)) return;
+            if (layer == timelineScope) return;
+            if (ScopeNode != null) timelineViews[timelineScope] = new TimelineView
+                { Start = timelineStart, Range = timelineRange, Scroll = layerScroll, Filter = filter };
             ReleaseTimelineCapture();
             timelineScope = layer; timelineClockValid = false; timelineClock = default; timelinePlayTime = 0; queuedTimelineSeekTicks = null;
             timelineSeekRequest = 0; revealTimelinePlayhead = false;
-            timelineStart = 0; layerScroll = Vector2.zero; selectedTimelineKey = null;
-            filter = ""; FilterTree();
-            if (timelineData.TryGetValue(layer, out TimelineData data) && data.Duration > 0 && node.Parent != null)
-                timelineRange = Math.Max(0.125, data.Duration * 1.05);
+            selected = layer; selectedTimelineKey = null;
+            if (timelineViews.TryGetValue(layer, out TimelineView saved))
+            { timelineStart = saved.Start; timelineRange = saved.Range; layerScroll = saved.Scroll; filter = saved.Filter; }
+            else
+            {
+                timelineStart = 0; timelineRange = 5; layerScroll = Vector2.zero; filter = "";
+                if (timelineData.TryGetValue(layer, out TimelineData data) && data.Duration > 0 && node.Parent != null)
+                    timelineRange = Math.Max(0.125, data.Duration * 1.05);
+            }
+            FilterTree();
+            Run(ReadSelected);
             UpdateTimelineClock();
         }
 

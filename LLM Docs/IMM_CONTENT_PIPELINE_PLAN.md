@@ -4043,9 +4043,10 @@ the historical sizes/check counts below describe this earlier source only.
    framing remains available in nested scopes. The source-only compile without
    Input System also passes. No general local-to-root inverse is claimed.
 4. The user preference between independent composition playback and playback
-   tied to the current main-scene occurrence remains unanswered. Neither mode
-   has been implemented by assumption. Other outstanding timeline features in
-   earlier sections remain open.
+   tied to the current main-scene occurrence remains unanswered. No opening-time
+   playback policy has been selected by assumption. Independent preview will be
+   an explicit workspace action, with main-scene playback available from the root
+   workspace. Other outstanding timeline features in earlier sections remain open.
 5. Both clean Android Unity builds passed in full runs 40038310055 and
    40040654620. At the latest monitoring snapshot, neither run has failures, but
    both are still active; neither validates the new clock/scope source yet.
@@ -4135,6 +4136,34 @@ the historical sizes/check counts below describe this earlier source only.
    targets 0babd47acd7944b6939343e68c229ecc5196ae4c and is queued. Receipt:
    artifacts/live-timeline-clipboard-ci-runs.json. The original Snoopy track is
    restored in the running lab after the checks; the goal remains active.
+
+### 6.118. Nested timeline navigation and independent preview (active)
+
+1. Nested timeline rows now have a direct open control instead of a collapse
+   arrow that could not expose their children. Their metadata identifies them as
+   timelines with a local duration. Each scope retains its range, zoom, vertical
+   scroll and filter; switching scopes selects the relevant container instead of
+   leaving an unrelated inspector selection. Source-only compilation and four
+   live Game-view checks pass direct row entry, Up/root viewport restoration,
+   child viewport restoration and the unchanged root/local clocks (2 seconds and
+   0.5 seconds respectively). Evidence:
+   artifacts/live-timeline-scope-navigation-probe.json and live-timeline-scope-entry.png.
+2. Independent playback will use a Document-owned session and an explicit Layer
+   evaluation context. Canonical Sequence roots, authoring IDs, key vectors and
+   drawing resources remain owned by the original document. The preview boundary
+   supplies a virtual clock; its own placement/control keys belong to its parent
+   composition and must not be reinterpreted as local content keys.
+3. Native context implementation is in progress. It must exclude outside ancestor
+   visibility/opacity and main-root holds, and use session-local action consumption.
+   Document transport, renderer scope, context-aware live-edit refresh/framing,
+   unload/structural-edit handling and exact main-state restoration are still
+   required before enabling nested playback. Restoring an old canonical key/frame
+   table would discard edits and is prohibited. Paint intent must be restored
+   separately from reselecting against the current edited frame table.
+4. Main playback remains frozen during independent preview. Initial preview audio
+   can be muted, but audible independent preview needs separate voice ownership
+   and remains an explicit unfinished requirement. A context foundation alone
+   does not satisfy the nested transport feature or complete this goal.
 
 ## 7. Consolidated documents
 

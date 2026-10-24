@@ -512,6 +512,7 @@ namespace ImmPlayer
             ReleaseTimelineCapture();
             ClearTimelineHistory();
             timelineScope = -1; timelineClockValid = false; timelineClockMissing = false; timelineClockError = "";
+            timelineViews.Clear();
             timelinePlayTime = 0; queuedTimelineSeekTicks = null; pauseBeforeTimelineSeek = false; timelinePauseRequested = false;
             timelineSeekRequest = 0; revealTimelinePlayhead = false;
             if (load != null) { StopCoroutine(load); load = null; }

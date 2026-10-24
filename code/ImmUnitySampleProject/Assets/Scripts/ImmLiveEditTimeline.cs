@@ -169,9 +169,12 @@ namespace ImmPlayer
                 Fill(new Rect(0, y, content.width, RowHeight), selected == node.Info.Id ? new Color(0.19f, 0.31f, 0.43f) :
                     i % 2 == 0 ? new Color(0.19f, 0.20f, 0.22f) : new Color(0.16f, 0.17f, 0.19f));
                 float indent = Math.Min(depth * 16, namesWidth - 130);
-                if (property == -1 && GUI.Button(new Rect(6 + indent, y + 2, 20, 20), node.Children.Count > 0 ? (collapsedNodes.Contains(node.Info.Id) ? "▶" : "▼") : expandedKeyLayers.Contains(node.Info.Id) ? "−" : "+"))
+                bool nestedTimeline = node.Info.IsTimeline && node.Info.Id != timelineScope;
+                string treeIcon = nestedTimeline ? "↳" : node.Children.Count > 0 ? (collapsedNodes.Contains(node.Info.Id) ? "▶" : "▼") : expandedKeyLayers.Contains(node.Info.Id) ? "−" : "+";
+                if (property == -1 && GUI.Button(new Rect(6 + indent, y + 2, 20, 20), new GUIContent(treeIcon, nestedTimeline ? "Open local timeline" : "Expand or collapse")))
                 {
-                    if (node.Children.Count > 0) { if (!collapsedNodes.Add(node.Info.Id)) collapsedNodes.Remove(node.Info.Id); }
+                    if (nestedTimeline) OpenTimelineScope(node.Info.Id);
+                    else if (node.Children.Count > 0) { if (!collapsedNodes.Add(node.Info.Id)) collapsedNodes.Remove(node.Info.Id); }
                     else if (!expandedKeyLayers.Add(node.Info.Id)) expandedKeyLayers.Remove(node.Info.Id);
                 }
                 string name = property >= 0 ? channels[Array.IndexOf(channelIds, property)] : string.IsNullOrEmpty(node.Info.Name) ? "(unnamed)" : node.Info.Name;
@@ -202,7 +205,8 @@ namespace ImmPlayer
                 {
                     if (CanProjectSequence(node, data)) DrawSequence(data, y, namesWidth, tracksWidth);
                     else if (data.Frames > 0) GUI.Label(new Rect(namesWidth + 8, y + 2, tracksWidth - 12, 20), "Local sequence — clock mapping pending");
-                    string detail = data.Frames > 0 ? $"{data.Frames}f @ {data.FrameRate} fps · {(data.Repeat == 0 ? "loop" : $"repeat {data.Repeat}")}" : node.Info.Type.ToString();
+                    string detail = data.Frames > 0 ? $"{data.Frames}f @ {data.FrameRate} fps · {(data.Repeat == 0 ? "loop" : $"repeat {data.Repeat}")}" :
+                        nestedTimeline ? $"Timeline · {data.Duration:0.###} s · open ↳" : node.Info.Type.ToString();
                     if (data.Frames == 0) GUI.Label(new Rect(namesWidth + 8, y + 2, 270, 20), detail);
                     else GUI.Label(new Rect(namesWidth - 60, y + 2, 54, 20), new GUIContent($"{data.Frames}f", detail));
                 }
