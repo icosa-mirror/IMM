@@ -7,6 +7,25 @@ using namespace ImmCore;
 namespace ImmImporter
 {
 
+    LayerSound::RuntimePlaybackState LayerSound::CaptureRuntimePlaybackState() const
+    {
+        return { mPlay, mPaused, mOffset, mForceRestart, mVolume };
+    }
+
+    void LayerSound::RestoreRuntimePlaybackState(const RuntimePlaybackState& state)
+    {
+        mPlay = state.playing;
+        mPaused = state.paused;
+        mOffset = state.offset;
+        mForceRestart = state.forceRestart;
+        mVolume = state.volume;
+    }
+
+    void LayerSound::ResetRuntimePlaybackState()
+    {
+        RestoreRuntimePlaybackState({ false, false, 0, false, 0.0f });
+    }
+
 	LayerSound::LayerSound()
 	{
 		mEncodedFormat = 0;

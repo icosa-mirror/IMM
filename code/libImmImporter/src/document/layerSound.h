@@ -77,6 +77,19 @@ namespace ImmImporter
                   Type type, float duration, ImmCore::piLog *log);
 		void Deinit(void);
 
+        struct RuntimePlaybackState
+        {
+            bool playing;
+            bool paused;
+            uint64_t offset;
+            bool forceRestart;
+            float volume;
+        };
+
+        RuntimePlaybackState CaptureRuntimePlaybackState() const;
+        void RestoreRuntimePlaybackState(const RuntimePlaybackState& state);
+        void ResetRuntimePlaybackState();
+
 		void SetPlaying(bool value, uint64_t microseconds = 0);
         void SetPaused(bool value);
         void SetVolume(float value);

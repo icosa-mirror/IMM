@@ -30,6 +30,17 @@ namespace ImmPlayer
 		bool LoadInSPU(ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* la) ;
 		bool UnloadInSPU(ImmCore::piSoundEngine* sound, ImmImporter::Layer *la) ;
 
+        // Borrowed source bytes must outlive the voice. These voices own no mSounds slot.
+        struct PreviewVoice;
+        PreviewVoice* CreatePreviewVoice(ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* layer);
+        void DestroyPreviewVoice(ImmCore::piSoundEngine* sound, PreviewVoice* voice);
+        // Success means requests were accepted, not that asynchronous playback has completed.
+        bool UpdatePreviewVoice(ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* layer,
+                                PreviewVoice* voice, float masterVolume, bool audible, bool restart,
+                                const ImmCore::trans3d* layerToWorld = nullptr);
+        // The caller must suppress normal GlobalWork while holding this pause barrier.
+        bool PauseMainVoice(ImmCore::piSoundEngine* sound, ImmImporter::Layer* layer);
+
 		void GlobalWork(ImmCore::piRenderer* renderer, ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* la, float masterVolume) override;
 		void PrepareForDisplay(StereoMode stereoMode) override;
 		void DisplayPreRender(ImmCore::piRenderer* renderer, ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* la, const ImmCore::frustum3& frus, const ImmCore::trans3d & layerToViewer, float opacity) override;

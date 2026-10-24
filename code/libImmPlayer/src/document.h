@@ -199,6 +199,9 @@ namespace ImmPlayer {
         const ImmImporter::Layer::EvaluationContext * GetTimelinePreviewContext() const;
         ImmImporter::Layer * GetTimelinePreviewBoundary() const;
         ImmCore::piTick GetTimelineMainCPUTime() const;
+        // Pause original voices without playing, stopping or seeking them. Preview
+        // dispatch must bypass their ordinary GlobalWork until the session exits.
+        bool PauseTimelinePreviewSounds(LayerRendererSound * renderer, ImmCore::piSoundEngine * sound);
 
         //----------------------------------------------------------------------
         // Live editing. Additive: nothing changes for a document that is only

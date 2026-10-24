@@ -16,9 +16,11 @@ public:
         PausingStarted = 2,
         Paused = 3,
 
-        StoppingStarted = 3,
+        StoppingStarted = 5,
         Stopped = 4
     };
+    static_assert(PlaybackState::StoppingStarted != PlaybackState::Paused,
+        "A pending stop must not report an acknowledged pause");
 
     enum class AttenuationType
     {

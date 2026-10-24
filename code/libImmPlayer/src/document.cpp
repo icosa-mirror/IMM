@@ -39,7 +39,7 @@ namespace ImmPlayer
             LayerPaintStatic * paint;
             LayerPaintStatic::PlaybackState paintState;
             LayerSound * sound;
-            bool soundPaused;
+            LayerSound::RuntimePlaybackState soundState;
             uint32_t edited = 0;
         };
         Layer::EvaluationContext context;
@@ -60,6 +60,15 @@ namespace ImmPlayer
     piTick Document::GetTimelineMainCPUTime() const
     { return mTimelinePreview ? mTimelinePreview->mainCPUTime : mLastCPUTime; }
 
+    bool Document::PauseTimelinePreviewSounds(LayerRendererSound * renderer, piSoundEngine * sound)
+    {
+        if (!mTimelinePreview || !sound) return true;
+        bool ready = true;
+        for (const auto & saved : mTimelinePreview->saved)
+            if (saved.sound && !renderer->PauseMainVoice(sound, saved.layer)) ready = false;
+        return ready;
+    }
+
     void Document::iEndTimelinePreview(piTick now)
     {
         if (!mTimelinePreview) return;
@@ -68,7 +77,7 @@ namespace ImmPlayer
         {
             saved.layer->RestorePlaybackState(saved.state, shift);
             if (saved.paint) saved.paint->RestorePlaybackState(saved.paintState);
-            if (saved.sound) saved.sound->SetPaused(saved.soundPaused);
+            if (saved.sound) saved.sound->RestoreRuntimePlaybackState(saved.soundState);
         }
         mState.mPlaybackState = mTimelinePreview->mainPlayback;
         auto preview = std::move(mTimelinePreview);
@@ -140,7 +149,7 @@ namespace ImmPlayer
                     saved.paintState = saved.paint->CapturePlaybackState();
                 }
                 if (layer->GetType() == Layer::Type::Sound)
-                { saved.sound = (LayerSound *)layer->GetImplementation(); saved.soundPaused = saved.sound->GetPaused(); }
+                { saved.sound = (LayerSound *)layer->GetImplementation(); saved.soundState = saved.sound->CaptureRuntimePlaybackState(); }
                 preview->saved.push_back(saved); return true;
             };
             if (!mSequence.Recurse(capture, false, false, false, false)) return -3;

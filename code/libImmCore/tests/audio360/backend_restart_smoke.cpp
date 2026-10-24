@@ -135,6 +135,26 @@ int main(int argc, char** argv)
             }
             engine->DelSound(id);
         }
+        // Two voices borrow the same payload while retaining independent cursors.
+        // Spending longer than a marker interval in preview must not advance main.
+        const int mainVoice = engine->AddSound(1, audio.size(), audio.data(), false);
+        const int previewVoice = engine->AddSound(1, audio.size(), audio.data(), false);
+        require(mainVoice >= 0 && previewVoice >= 0 && mainVoice != previewVoice, "independent voice identities");
+        require(engine->Play(mainVoice, 0), "main voice start");
+        check(0.1, "main marker before preview", 2);
+        require(engine->Pause(mainVoice), "pause main before preview");
+        require(mix(3) < 0.0001, "main pause barrier is silent");
+        require(engine->GetPlaybackState(mainVoice) == piSoundEngine::PlaybackState::Paused, "main pause barrier acknowledged");
+        engine->SetLooping(previewVoice, true);
+        require(engine->Play(previewVoice, 1600000), "preview starts at independent offset");
+        check(0.4, "preview marker excludes paused main");
+        mix(30);
+        require(engine->GetPlaybackState(mainVoice) == piSoundEngine::PlaybackState::Paused, "preview leaves main paused");
+        engine->DelSound(previewVoice);
+        require(mix(3) < 0.0001, "destroying preview leaves main silent");
+        require(engine->Resume(mainVoice), "resume main after preview teardown");
+        check(0.1, "main cursor retained across independent preview", 2);
+        engine->DelSound(mainVoice);
         require(errors == 0, "backend logged an audio error");
         backend->Deinit();
         piSoundEngineAudioSDKBackend::Destroy(backend);

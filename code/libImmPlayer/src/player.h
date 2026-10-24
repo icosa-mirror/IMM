@@ -402,7 +402,7 @@ namespace ImmPlayer {
 		void GetChapterInfo(size_t& numChapters, ImmCore::piTArray<ImmCore::piTick>& chapterLengths, bool& hasPlays, int id);
 
     private:
-        void iGlobalWorkLayer(Layer* la, float masterVolum);
+        void iGlobalWorkLayer(Layer* la, float masterVolum, bool skipSound = false);
         void iDisplayPreRenderLayer(Layer* la, const ImmCore::trans3d & parentLocation, float parentOpacity, const ImmCore::trans3d & worldToViewer, bool suppress360Backdrops);
         void iUnloadNotInTimeline(Layer* root, ImmCore::piTick now);
         ImmCore::mat4x4 iConvertProjectionMatrix(const ImmCore::mat4x4 & mat);

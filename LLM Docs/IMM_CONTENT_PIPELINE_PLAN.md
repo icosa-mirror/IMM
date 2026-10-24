@@ -4577,8 +4577,8 @@ the historical sizes/check counts below describe this earlier source only.
    with an explicit foreign-process warning:
    artifacts/timeline-ci-agent-723-godot-reclassified.json.
 3. The three active FULL runs 40057279837, 40058475651 and 40062003931 contain
-   the old classifier. Cancellation was requested for their remaining jobs;
-   none is accepted. Preserve successful independent evidence, including
+   the old classifier. All three are now terminal Cancelled with no remaining
+   jobs; none is accepted. Preserve successful independent evidence, including
    the strict Unity Android audit in
    artifacts/timeline-ci-agent-40057279837-android-audit.json.
 4. Fix `3feb1586` is pushed in integration tip `7b9a0c5f`, after merging CI
@@ -4590,6 +4590,42 @@ the historical sizes/check counts below describe this earlier source only.
 5. Independent audio is in progress: separate renderer-owned preview voices and
    full Sound runtime capture are the next contained foundation. Document routing,
    clock gating, UI controls and end-to-end preview acceptance remain outstanding.
+
+### 6.130. Separate sound voice foundation and original-cursor protection
+
+1. Added renderer-owned preview voice handles that borrow the source audio bytes
+   and own a separate backend voice. Creation does not overwrite the source GPU
+   ID, authored type or runtime intent, or append persistent renderer slots.
+   Callers must destroy these voices before the source bytes or engine unload.
+2. New/held preview voices remain silent without Play. Pause/resume retains the
+   duplicate cursor; seeks latch while held, reconcile duplicate Stop to actual
+   acknowledgement, then Play at the latest offset. This avoids Audio360's
+   seek-before-reject behavior when Play is called on an already playing voice.
+   Pending restarts and EOF remain muted, and EOF does not automatically replay.
+   Positional/ambisonic voices accept a context-relative transform override.
+3. Muted preview now bypasses ordinary sound GlobalWork and only pauses existing
+   original voices. It cannot start or seek a pending original voice. Accepted
+   pause ownership lets normal dispatch resume main on exit without Play/Stop.
+   Sound runtime capture/restore includes playing, paused, offset, restart and
+   volume; authored metadata and payload ownership remain separate.
+4. Internal C++ sound state StoppingStarted is now distinct from Paused (5 versus
+   3); other values and exported C/managed APIs are unchanged. A pending Stop
+   cannot satisfy the main pause barrier. No API or layout version was introduced.
+5. Native Release, CPU authoring suite and loaded WARP C ABI suite pass. The
+   production renderer's controlled lifecycle covers duplicate-only transport,
+   asynchronous restart without repeated seeking, EOF, teardown and main runtime
+   restoration. All six Audio360 CTests pass. Actual offline PCM and separate
+   Opus mixer runs at buffers 480/960/1920 pause main, play another offset longer
+   than a marker interval, destroy preview, and resume main at its retained marker.
+   The tracked Windows DLL matches the tested CPU receipt hash. Evidence:
+   artifacts/audio-preview-voices-{native-build,cpu-run,ctest}.log,
+   audio-preview-voices-cpu-report.json, audio-preview-voices-cabi/report.json and
+   audio-preview-voices-opus-{480,960,1920}.log.
+6. This completes a foundation, not independent audible preview. Remaining work:
+   transactional session voice creation/teardown, audio enable/mute, full Sound
+   evaluation/reset, original-pause clock gating, nested Stop/finite-repeat clock
+   handling and UI controls. Audible Unity/device acceptance is still pending.
+   Action editing and the other outstanding items in 6.127 remain in this goal.
 
 ## 7. Consolidated documents
 

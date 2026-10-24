@@ -1656,7 +1656,9 @@ namespace ImmPlayer
                     bool docReady = doc->UpdateStateCPU(&mLayerRenderSound, mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mColorSpace, mPaintRenderingTechnique, mSoundEngine, mLog, mTime, cmd, queuedCommand);
                     if (docReady)
                     {
-                        iGlobalWorkLayer(doc->GetSequence()->GetRoot(), doc->GetVolume());
+                        const bool preview = doc->GetTimelinePreviewBoundary() != nullptr;
+                        if (preview) doc->PauseTimelinePreviewSounds(&mLayerRenderSound, mSoundEngine);
+                        iGlobalWorkLayer(doc->GetSequence()->GetRoot(), doc->GetVolume(), preview);
                     }
                     anyDocReady |= docReady;
 
@@ -1843,7 +1845,7 @@ namespace ImmPlayer
         //log->Printf(LT_MESSAGE, L"Global Done!");
     }
 
-    void Player::iGlobalWorkLayer(Layer* la, float masterVolume)
+    void Player::iGlobalWorkLayer(Layer* la, float masterVolume, bool skipSound)
     {
         const Layer::Type lt = la->GetType();
 
@@ -1853,7 +1855,7 @@ namespace ImmPlayer
             for (int i = 0; i < num; i++)
             {
                 Layer* lc = la->GetChild(i);
-                iGlobalWorkLayer(lc, masterVolume);
+                iGlobalWorkLayer(lc, masterVolume, skipSound);
             }
             return;
         }
@@ -1861,6 +1863,7 @@ namespace ImmPlayer
         // we need to process sounds no matter what (so we can stop them)
         // that includes groups that may contain sounds, so we can only
         // early exit after parsing groups
+        if (lt == Layer::Type::Sound && skipSound) return;
         if (lt != Layer::Type::Sound && !la->GetVisible()) return;
 
         LayerRenderer *lr = nullptr;

@@ -592,7 +592,7 @@ namespace ImmCore {
 #endif
             iSoundEngineAudioSDKBackend::Sound *me = (iSoundEngineAudioSDKBackend::Sound*)mBk->mSounds.GetAddress(id);
 
-            // Paused and StoppingStarted share the same legacy enum value.
+            // A pending logical stop must not be issued again before acknowledgment.
             Playback::Snapshot previous = me->mPlayback.Capture();
             if (Playback::State(previous) == PlaybackState::Stopped ||
                 (Playback::LogicallyStopped(previous) && Playback::Pending(previous))) return false;

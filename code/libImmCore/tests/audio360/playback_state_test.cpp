@@ -35,6 +35,9 @@ int main()
 
     Playing(state);
     state.Request(Phase::PausingStarted, true, previous);
+    Require(SoundPlaybackState::State(state.Capture()) == Phase::StoppingStarted &&
+        SoundPlaybackState::State(state.Capture()) != Phase::Paused,
+        "pending-logical-stop-is-not-pause-ready");
     state.OnPlaybackChanged(false); // A physical Pause implements logical Stop.
     Require(SoundPlaybackState::LogicallyStopped(state.Capture()) &&
         SoundPlaybackState::State(state.Capture()) == Phase::Stopped, "prior-logical-stop");

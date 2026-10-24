@@ -12,11 +12,150 @@
 #include "libImmImporter/src/document/layerSound.h"
 
 #include "layerRendererSound.h"
+#include <new>
+#include <memory>
 
 using namespace ImmCore;
 using namespace ImmImporter;
 namespace ImmPlayer
 {
+
+    // AddSound borrows the source payload; neither path transfers importer ownership.
+    static int AddSourceSound(piSoundEngine* engine, LayerSound* source)
+    {
+        const piWav* wav = source->GetSound();
+        const bool positional = source->GetType() == LayerSound::Type::Positional;
+        if (source->GetCompressed())
+            return engine->AddSound(wav->mNumChannels, wav->mDataSize, wav->mData, positional);
+        return engine->AddSound(wav->mRate, wav->mBits, wav->mNumChannels,
+                                wav->mDataSize, wav->mData, positional);
+    }
+
+    struct LayerRendererSound::PreviewVoice
+    {
+        Layer* source = nullptr;
+        int soundId = -1;
+        piSoundEngine::SoundType type;
+        bool playing = false;
+        bool started = false;
+        bool pauseRequested = false;
+        bool restartPending = false;
+        bool ended = false;
+        uint64_t offset = 0;
+    };
+
+    LayerRendererSound::PreviewVoice* LayerRendererSound::CreatePreviewVoice(piSoundEngine* engine, piLog* log, Layer* layer)
+    {
+        if (!engine || !layer || !layer->GetLoaded() || layer->GetType() != Layer::Type::Sound)
+            return nullptr;
+        std::unique_ptr<PreviewVoice> voice(new (std::nothrow) PreviewVoice());
+        if (!voice) return nullptr;
+        LayerSound* source = static_cast<LayerSound*>(layer->GetImplementation());
+        voice->source = layer;
+        voice->soundId = AddSourceSound(engine, source);
+        if (voice->soundId < 0)
+        {
+            if (log) log->Printf(LT_ERROR, L"[IMM_PREVIEW_AUDIO] voice creation failed");
+            return nullptr;
+        }
+        // Legacy ambisonic detection is local to this duplicate, never an authored type repair.
+        voice->type = engine->GetType(voice->soundId);
+        engine->SetLooping(voice->soundId, source->GetLooping());
+        engine->SetVolume(voice->soundId, 0.0f);
+        return voice.release();
+    }
+
+    void LayerRendererSound::DestroyPreviewVoice(piSoundEngine* engine, PreviewVoice* voice)
+    {
+        if (!voice) return;
+        if (engine && voice->soundId >= 0) engine->DelSound(voice->soundId);
+        delete voice;
+    }
+
+    bool LayerRendererSound::UpdatePreviewVoice(piSoundEngine* engine, piLog* log, Layer* layer,
+                                                PreviewVoice* voice, float masterVolume, bool audible,
+                                                bool restart, const trans3d* transform)
+    {
+        if (!engine || !voice || voice->source != layer || !layer || !layer->GetLoaded()) return false;
+        LayerSound* source = static_cast<LayerSound*>(layer->GetImplementation());
+        const bool playing = source->GetPlaying();
+        const uint64_t offset = source->GetOffset();
+        if (restart || (playing && (!voice->playing || offset != voice->offset)))
+        {
+            voice->restartPending = true;
+            voice->ended = false;
+        }
+        voice->playing = playing;
+        voice->offset = offset;
+        const bool run = audible && playing && !source->GetPaused();
+        const auto state = engine->GetPlaybackState(voice->soundId);
+        if (voice->started && state == piSoundEngine::PlaybackState::Stopped && !voice->restartPending)
+            voice->ended = true;
+
+        bool accepted = true;
+        if (run && voice->restartPending)
+        {
+            // Play(offset) seeks even if it rejects an already-playing voice. First
+            // reconcile an explicit restart to acknowledged Stop, without reseek loops.
+            if (state == piSoundEngine::PlaybackState::Playing || state == piSoundEngine::PlaybackState::Paused)
+                accepted = engine->Stop(voice->soundId);
+            if (accepted && engine->GetPlaybackState(voice->soundId) == piSoundEngine::PlaybackState::Stopped)
+            {
+                accepted = engine->Play(voice->soundId, offset);
+                if (accepted)
+                {
+                    voice->started = true;
+                    voice->restartPending = false;
+                    voice->pauseRequested = false;
+                }
+            }
+        }
+        else if (!run && state == piSoundEngine::PlaybackState::Playing)
+        {
+            accepted = engine->Pause(voice->soundId);
+            if (accepted) voice->pauseRequested = true;
+        }
+        else if (run && !voice->ended && voice->pauseRequested && state == piSoundEngine::PlaybackState::Paused)
+        {
+            accepted = engine->Resume(voice->soundId);
+            if (accepted) voice->pauseRequested = false;
+        }
+
+        const trans3d layerToWorld = transform ? *transform : layer->GetTransformToWorld();
+        if (voice->type == piSoundEngine::SoundType::Positional)
+        {
+            LayerSound::AttenuationParameters atten;
+            LayerSound::ModifierParameters modifier;
+            source->GetAttenuation(&atten);
+            source->GetModifier(&modifier);
+            engine->SetAttenMode(voice->soundId, static_cast<piSoundEngine::AttenuationType>(atten.mType));
+            engine->SetAttenMinMax(voice->soundId, atten.mMin * getScale(layerToWorld), atten.mMax * getScale(layerToWorld));
+            engine->SetModifierType(voice->soundId, static_cast<piSoundEngine::ModifierType>(modifier.mType));
+            if (modifier.mType == LayerSound::ModifierType::DirectionalCone)
+                engine->SetModifierCone(voice->soundId, modifier.mParams.mDirectionalCone.mAngleIn,
+                                        modifier.mParams.mDirectionalCone.mAngleBand, modifier.mParams.mDirectionalCone.mAttenOut);
+            else if (modifier.mType == LayerSound::ModifierType::DirectionalFrus)
+                engine->SetModifierFrustum(voice->soundId, modifier.mParams.mDirectionalFrus.mAngleInX,
+                                           modifier.mParams.mDirectionalFrus.mAngleInY,
+                                           modifier.mParams.mDirectionalFrus.mAngleBand, modifier.mParams.mDirectionalFrus.mAttenOut);
+            const vec3d position = layerToWorld.mTranslation;
+            const vec3d direction = normalize((layerToWorld * vec4d(0, 0, -1, 0)).xyz());
+            const vec3d up = normalize((layerToWorld * vec4d(0, 1, 0, 0)).xyz());
+            engine->SetPositionOrientation(voice->soundId, (double*)&position, (double*)&direction, (double*)&up);
+        }
+        else if (voice->type == piSoundEngine::SoundType::Ambisonic)
+        {
+            const vec3d direction = normalize((layerToWorld * vec4d(0, 0, -1, 0)).xyz());
+            const vec3d up = normalize((layerToWorld * vec4d(0, 1, 0, 0)).xyz());
+            engine->SetOrientation(voice->soundId, (double*)&direction, (double*)&up);
+        }
+        const float volume = run && !voice->restartPending && !voice->ended
+            ? masterVolume * source->GetVolume() * source->GetGain() * engine->ComputeModifiers(voice->soundId)
+            : 0.0f;
+        engine->SetVolume(voice->soundId, volume);
+        // Failed commands remain pending for retry; do not flood the per-frame log.
+        return accepted;
+    }
 
 	struct iSound
 	{
@@ -44,6 +183,25 @@ namespace ImmPlayer
         //LayerSound::Type mTypeCache;
 
 	};
+
+    bool LayerRendererSound::PauseMainVoice(piSoundEngine* engine, Layer* layer)
+    {
+        if (!engine || !layer || !layer->GetLoaded()) return true;
+        if (layer->GetType() != Layer::Type::Sound) return false;
+        LayerSound* source = static_cast<LayerSound*>(layer->GetImplementation());
+        const int index = source->GetGpuId();
+        if (index == -1) return true;
+        if (index < 0 || static_cast<uint64_t>(index) >= mSounds.GetLength()) return false;
+        iSound* voice = static_cast<iSound*>(mSounds.GetAddress(index));
+        if (voice->mSoundID < 0) return true;
+        auto state = engine->GetPlaybackState(voice->mSoundID);
+        if (state == piSoundEngine::PlaybackState::Playing)
+        {
+            if (engine->Pause(voice->mSoundID)) voice->mPauseRequested = true;
+            state = engine->GetPlaybackState(voice->mSoundID);
+        }
+        return state == piSoundEngine::PlaybackState::Paused || state == piSoundEngine::PlaybackState::Stopped;
+    }
 
 	LayerRendererSound::LayerRendererSound() : LayerRenderer() {}
 	LayerRendererSound::~LayerRendererSound() {}
@@ -126,13 +284,12 @@ namespace ImmPlayer
         if (lp->GetCompressed())
         {
             const piWav *wav = lp->GetSound();
-            snd->mSoundID = soundEngine->AddSound(wav->mNumChannels, wav->mDataSize, wav->mData, (type == LayerSound::Type::Positional));
+            snd->mSoundID = AddSourceSound(soundEngine, lp);
             log->Printf(LT_MESSAGE, L"Add OGG OPUS sound object %s ID=%d chan=%d", la->GetName().GetS(), snd->mSoundID, wav->mNumChannels);
         }
         else
         {
-            const piWav *wav = lp->GetSound();
-            snd->mSoundID = soundEngine->AddSound(wav->mRate, wav->mBits, wav->mNumChannels, wav->mDataSize, wav->mData, (type == LayerSound::Type::Positional));
+            snd->mSoundID = AddSourceSound(soundEngine, lp);
             log->Printf(LT_MESSAGE, L"Add WAV sound object %s ID=%d", la->GetName().GetS(), snd->mSoundID);
         }
 

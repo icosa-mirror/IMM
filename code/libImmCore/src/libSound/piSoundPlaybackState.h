@@ -7,7 +7,7 @@
 namespace ImmCore
 {
     // Internal voice transport state shared by SDK callbacks and its controller.
-    // Physical pause and logical stop remain distinct despite the legacy API enum.
+    // Physical pause and logical stop remain distinct through pending requests.
     class SoundPlaybackState
     {
     public:

@@ -39,6 +39,11 @@ wrap to the expected source section, and valid offsets still work afterward.
 Its marker amplitudes identify the source section; the SDK check separately verifies
 the numerical playback clock.
 
+The backend check also runs two voices borrowing the same marker payload. Main is
+paused while preview plays a different offset for longer than one marker interval;
+destroying preview and resuming main must retain main's original marker. This is
+offline PCM/Opus mixer evidence, separate from audible Unity/device acceptance.
+
 The backend check also reverses a pause immediately, waiting for acknowledgement
 when needed, and verifies that Resume retains the current source marker without
 Play/seek. PCM and Opus runs cover buffer sizes 480, 960 and 1920. The standalone
