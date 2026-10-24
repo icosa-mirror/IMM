@@ -4079,6 +4079,32 @@ the historical sizes/check counts below describe this earlier source only.
    scope run 40043337869 is active. Receipt:
    artifacts/live-timeline-keytime-ci-runs.json. Hosted acceptance remains pending.
 
+### 6.116. Complete transform values and channel-specific key controls
+
+1. The inspector now offers local rotation, uniform scale and None/X/Y/Z
+   reflection alongside position. Rotation uses degrees in ZXY order; untouched
+   quaternions are retained exactly rather than reconstructed on position edits.
+   Position and scale fields also use round-trip strings when read from native
+   values. These controls feed both canonical transform edits and transform keys.
+2. Loop has its own boolean and Offset its own integer-tick field; neither reuses
+   the paint repeat count. Opacity has a key-specific slider. Visibility, Loop
+   and Offset select Step automatically, matching their native contract.
+3. The source-only compile without Input System passes. A four-step live Snoopy
+   probe passes exact frame-13 seek, publication of a 30-degree/1.25-scale/Y-flip
+   transform key, selection without quaternion reconstruction, and undo to the
+   original key track. Evidence:
+   artifacts/live-timeline-transform-inspector-probe.json and
+   live-timeline-transform-inspector.png. The running inspector was visually
+   inspected; no human mouse acceptance or hosted acceptance is claimed.
+4. A five-step live check passes dedicated Offset/Loop inputs and undo of each
+   complete original track: 16777217 offset ticks remain exact, Loop remains true
+   despite an unrelated paint repeat field of 1, and both use Step interpolation.
+   The initial probe incorrectly assumed Snoopy had no Offset keys; inspection
+   found its existing zero-time key, so the probe was corrected to compare the
+   full baseline track. No production change was needed for that probe failure.
+   Evidence: artifacts/live-timeline-key-inputs-probe.json and
+   live-timeline-key-inputs.png.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

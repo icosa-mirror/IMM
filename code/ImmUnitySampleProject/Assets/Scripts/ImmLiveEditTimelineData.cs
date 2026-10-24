@@ -26,6 +26,50 @@ namespace ImmPlayer
         private int timelineFrameRate = 24;
         private string timelineReadError = "";
         private string drawingIndex = "0";
+        private string rotationX = "0", rotationY = "0", rotationZ = "0", transformScale = "1", keyOffset = "0";
+        private bool rotationEdited, keyLoop = true;
+        private static readonly string[] ReflectionNames = { "None", "X", "Y", "Z" };
+
+        private void SyncTransformFields()
+        {
+            positionX = properties.tx.ToString("R", CultureInfo.InvariantCulture);
+            positionY = properties.ty.ToString("R", CultureInfo.InvariantCulture);
+            positionZ = properties.tz.ToString("R", CultureInfo.InvariantCulture);
+            var angles = new Quaternion(properties.qx, properties.qy, properties.qz, properties.qw).eulerAngles;
+            rotationX = angles.x.ToString("0.###", CultureInfo.InvariantCulture);
+            rotationY = angles.y.ToString("0.###", CultureInfo.InvariantCulture);
+            rotationZ = angles.z.ToString("0.###", CultureInfo.InvariantCulture);
+            transformScale = properties.scale.ToString("R", CultureInfo.InvariantCulture);
+            rotationEdited = false;
+        }
+
+        private void DrawTransformFields()
+        {
+            GUILayout.Label(new GUIContent("Local rotation X / Y / Z (degrees)", "Applied in ZXY order using IMM local axes."));
+            GUILayout.BeginHorizontal();
+            string x = GUILayout.TextField(rotationX), y = GUILayout.TextField(rotationY), z = GUILayout.TextField(rotationZ);
+            rotationEdited |= x != rotationX || y != rotationY || z != rotationZ;
+            rotationX = x; rotationY = y; rotationZ = z;
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Scale", GUILayout.Width(40));
+            transformScale = GUILayout.TextField(transformScale, GUILayout.Width(90));
+            GUILayout.Label("Reflection", GUILayout.Width(65));
+            properties.flip = GUILayout.SelectionGrid(properties.flip, ReflectionNames, 4);
+            GUILayout.EndHorizontal();
+        }
+
+        private void ReadTransformFields()
+        {
+            ReadPositionFields();
+            properties.scale = (float)Number(transformScale);
+            if (!rotationEdited) return;
+            var angles = new Vector3((float)Number(rotationX), (float)Number(rotationY), (float)Number(rotationZ));
+            if (!float.IsFinite(angles.x) || !float.IsFinite(angles.y) || !float.IsFinite(angles.z))
+                throw new ArgumentException("Rotation must be finite.");
+            Quaternion rotation = Quaternion.Euler(angles);
+            properties.qx = rotation.x; properties.qy = rotation.y; properties.qz = rotation.z; properties.qw = rotation.w;
+        }
 
         private void DrawTimelineFrameTools()
         {
@@ -117,16 +161,14 @@ namespace ImmPlayer
             keyTime = key.seconds.ToString("0.######", CultureInfo.InvariantCulture);
             if (key.property == 0) keyVisible = key.boolean != 0;
             else if (key.property == 1) properties.opacity = key.value;
-            else if (key.property == 7) repeat = key.boolean != 0 ? "0" : "1";
-            else if (key.property == 8) repeat = key.ticks.ToString(CultureInfo.InvariantCulture);
+            else if (key.property == 7) keyLoop = key.boolean != 0;
+            else if (key.property == 8) keyOffset = key.ticks.ToString(CultureInfo.InvariantCulture);
             else if (key.property == 9)
             {
                 properties.tx = key.tx; properties.ty = key.ty; properties.tz = key.tz;
                 properties.qx = key.qx; properties.qy = key.qy; properties.qz = key.qz; properties.qw = key.qw;
                 properties.scale = key.scale; properties.flip = key.flip;
-                positionX = key.tx.ToString("R", CultureInfo.InvariantCulture);
-                positionY = key.ty.ToString("R", CultureInfo.InvariantCulture);
-                positionZ = key.tz.ToString("R", CultureInfo.InvariantCulture);
+                SyncTransformFields();
             }
         }
 

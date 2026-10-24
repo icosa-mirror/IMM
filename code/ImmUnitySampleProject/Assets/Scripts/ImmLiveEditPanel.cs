@@ -157,7 +157,7 @@ namespace ImmPlayer
             GUI.enabled &= selected >= 0;
             GUILayout.Label($"Selected layer {selected}");
             GUILayout.Label(evaluated, wrapped, GUILayout.Width(window.width - 50));
-            GUILayout.Label("Canonical properties — animation keys may override these.", wrapped, GUILayout.Width(window.width - 50));
+            GUILayout.Label("Values — Apply edits the base layer; Set key edits animation.", wrapped, GUILayout.Width(window.width - 50));
             layerName = GUILayout.TextField(layerName, GUILayout.Width(window.width - 50));
             if (GUILayout.Button("Rename")) RenameSelected();
             GUILayout.BeginHorizontal();
@@ -172,8 +172,9 @@ namespace ImmPlayer
             GUILayout.BeginHorizontal();
             positionX = GUILayout.TextField(positionX); positionY = GUILayout.TextField(positionY); positionZ = GUILayout.TextField(positionZ);
             GUILayout.EndHorizontal();
+            DrawTransformFields();
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Apply position")) ChangeProperties("Transform", 4, ReadPositionFields);
+            if (GUILayout.Button("Apply transform")) ChangeProperties("Transform", 4, ReadTransformFields);
             if (GUILayout.Button("+0.1m X")) ChangeProperties("Move X", 4, () => properties.tx += 0.1f);
             if (GUILayout.Button("Mirror X")) ChangeProperties("Reflection", 4, () => properties.flip = properties.flip == 1 ? 0 : 1);
             GUILayout.EndHorizontal();
@@ -191,8 +192,24 @@ namespace ImmPlayer
             GUI.enabled &= treeNodes.TryGetValue(selected, out LayerNode keyNode) && InTimelineScope(keyNode);
             GUILayout.Label("Keys — uses current inspector values at the entered time", wrapped, GUILayout.Width(window.width - 50));
             keyChannel = GUILayout.SelectionGrid(keyChannel, channels, 3);
+            bool keyInputsEnabled = GUI.enabled;
+            bool discreteKey = keyChannel == 0 || keyChannel == 3 || keyChannel == 4;
+            if (discreteKey) keyInterpolation = 0;
+            GUI.enabled &= !discreteKey;
             keyInterpolation = GUILayout.SelectionGrid(keyInterpolation, new[] { "Step", "Linear", "Smooth", "Ease in", "Ease out", "Spline", "Auto" }, 3);
+            GUI.enabled = keyInputsEnabled;
             if (keyChannel == 0) keyVisible = GUILayout.Toggle(keyVisible, "Key visible");
+            if (keyChannel == 1)
+            {
+                GUILayout.Label($"Key opacity {properties.opacity:F3}");
+                properties.opacity = GUILayout.HorizontalSlider(properties.opacity, 0, 1);
+            }
+            if (keyChannel == 3) keyLoop = GUILayout.Toggle(keyLoop, "Loop indefinitely");
+            if (keyChannel == 4)
+            {
+                GUILayout.Label("Offset (ticks, 12600 per second)");
+                keyOffset = GUILayout.TextField(keyOffset);
+            }
             GUILayout.BeginHorizontal();
             keyTime = GUILayout.TextField(keyTime, GUILayout.Width(65));
             if (GUILayout.Button("Set key")) Submit("Set key", SetKey);
@@ -203,7 +220,6 @@ namespace ImmPlayer
             GUI.enabled &= selectedTimelineKey.HasValue;
             if (GUILayout.Button("Move selected key to entered time")) Run(() => MoveTimelineKey(Number(keyTime)));
             GUI.enabled = canEditKey;
-            GUILayout.Label("Loop key uses repeat=0 as true; Offset uses repeat field as exact ticks.", wrapped, GUILayout.Width(window.width - 50));
             GUI.enabled = inspectorEditable;
             GUILayout.Space(8);
             GUILayout.Label("Drawing replacement — changes the selected frame's drawing", wrapped, GUILayout.Width(window.width - 50));
@@ -294,12 +310,13 @@ namespace ImmPlayer
         private int SetKey()
         {
             RecordTimelineBefore(selected, channelIds[keyChannel]);
-            if (keyChannel == 2) ReadPositionFields();
+            if (keyChannel == 2) ReadTransformFields();
             var key = new N.Key { size = 80, version = 1, property = channelIds[keyChannel], interpolation = keyInterpolation, seconds = Number(keyTime),
-                boolean = keyChannel == 3 ? (Unsigned(repeat) == 0 ? 1 : 0) : (keyVisible ? 1 : 0),
+                boolean = keyChannel == 3 ? (keyLoop ? 1 : 0) : (keyVisible ? 1 : 0),
                 value = properties.opacity, tx = properties.tx, ty = properties.ty, tz = properties.tz,
                 qx = properties.qx, qy = properties.qy, qz = properties.qz, qw = properties.qw,
-                scale = properties.scale, flip = properties.flip, ticks = keyChannel == 4 ? Unsigned(repeat) : 0 };
+                scale = properties.scale, flip = properties.flip, ticks = keyChannel == 4 ? Unsigned(keyOffset) : 0 };
+            if (keyChannel == 0 || keyChannel == 3 || keyChannel == 4) key.interpolation = 0;
             return N.ImmAuthoring_KeySet(Doc, selected, ref key);
         }
 
@@ -416,9 +433,7 @@ namespace ImmPlayer
             if (selected < 0) return;
             properties = N.Properties.Empty;
             N.Check(N.ImmAuthoring_LayerGetProperties(Doc, selected, ref properties));
-            positionX = properties.tx.ToString("G6", CultureInfo.InvariantCulture);
-            positionY = properties.ty.ToString("G6", CultureInfo.InvariantCulture);
-            positionZ = properties.tz.ToString("G6", CultureInfo.InvariantCulture);
+            SyncTransformFields();
             layerName = N.ReadName(Doc, selected);
             pivot = N.Pivot.Empty;
             pivotSupported = N.ImmAuthoring_LayerGetPivot(Doc, selected, ref pivot) == 0;
