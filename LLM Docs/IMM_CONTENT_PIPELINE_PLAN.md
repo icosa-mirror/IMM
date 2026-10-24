@@ -4941,7 +4941,12 @@ the historical sizes/check counts below describe this earlier source only.
    and draw-in-gl-green/report.json.
 3. A framing follow-up keeps focus clipping aligned during manual camera movement
    and preserves that focus across preview camera save/restore. Managed compile
-   passes; live acceptance against the next rebuilt Editor remains pending.
+   passes. A fresh rebuilt Editor now passes seven checks covering closer camera
+   movement, selected content still visible, preview focus save/restore, camera
+   pose restoration and authored-view clipping reset. Evidence:
+   artifacts/framing-navigation-ui-probe.json and framing-navigation-closer.png.
+   The camera translation invokes the normal focus-update helper directly; this
+   is not a physical WASD-input claim.
 4. The earlier Action FULL run40072857603 has the requested FULL classification,
    exact source55ae4f0501fec9770430a9ec40c0573581618fd3, and no failures so far.
    Final licensed engine gates and full acceptance remain pending. This goal stays

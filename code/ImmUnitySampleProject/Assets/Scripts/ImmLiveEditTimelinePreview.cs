@@ -10,6 +10,7 @@ namespace ImmPlayer
         private Vector3 mainCameraPosition;
         private Quaternion mainCameraRotation;
         private float mainCameraNear, mainCameraFar;
+        private Bounds? mainCameraFocusBounds;
         private bool TimelinePreviewActive => timelineClockValid && (timelineClock.flags & ClockPreview) != 0;
         private bool TimelinePreviewAudioEnabled => TimelinePreviewActive && (timelineClock.flags & ClockPreviewAudioEnabled) != 0;
         private string TimelinePreviewAudioStatus => (timelineClock.flags & ClockPreviewAudioPending) != 0
@@ -33,6 +34,7 @@ namespace ImmPlayer
             {
                 mainCameraPosition = view.transform.position; mainCameraRotation = view.transform.rotation;
                 mainCameraNear = view.nearClipPlane; mainCameraFar = view.farClipPlane;
+                mainCameraFocusBounds = cameraFocusBounds;
                 previewCameraSaved = true;
             }
             if (action == 4) RestorePreviewCamera();
@@ -53,6 +55,7 @@ namespace ImmPlayer
             {
                 view.transform.SetPositionAndRotation(mainCameraPosition, mainCameraRotation);
                 view.nearClipPlane = mainCameraNear; view.farClipPlane = mainCameraFar;
+                cameraFocusBounds = mainCameraFocusBounds;
             }
             previewCameraSaved = false;
         }

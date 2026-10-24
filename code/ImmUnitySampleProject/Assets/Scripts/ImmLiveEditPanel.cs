@@ -15,6 +15,7 @@ namespace ImmPlayer
         private const string Prefix = "[IMM_LIVE_PANEL]";
         private readonly ImmLiveEditInput labInput = new ImmLiveEditInput();
         private ImmDocument document;
+        private Bounds? cameraFocusBounds;
         private ImmPlayerManager manager;
         private ImmDocument.LayerInfo[] layers = Array.Empty<ImmDocument.LayerInfo>();
         private int selected = -1;
@@ -129,6 +130,7 @@ namespace ImmPlayer
             {
                 view.transform.rotation = Quaternion.Euler(-motion.y * 0.12f, motion.x * 0.12f, 0) * view.transform.rotation;
                 view.transform.Translate(movement * Time.unscaledDeltaTime * (faster ? 8 : 2));
+                UpdateFocusClipping();
             }
 
         }
@@ -451,6 +453,7 @@ namespace ImmPlayer
             if (view == null || document == null || !document.TryGetSpawnAreaWorldPose(selectedViewpoint, transform, out Pose pose))
             { Log("No evaluated viewpoint is available at this time."); return; }
             view.transform.SetPositionAndRotation(pose.position, pose.rotation);
+            cameraFocusBounds = null;
             view.nearClipPlane = 0.01f;
             view.farClipPlane = 10000;
             Log($"Moved to viewpoint {Array.IndexOf(viewpoints, selectedViewpoint) + 1}");
@@ -604,8 +607,18 @@ namespace ImmPlayer
             // Fitting a selection can move the camera behind other artwork.
             // Keep every selected-bound corner beyond the near plane while
             // clipping foreground geometry that would otherwise hide it.
-            view.nearClipPlane = Mathf.Max(0.01f, clipForeground ? distance - radius * 1.05f : radius / 1000);
+            cameraFocusBounds = clipForeground ? bounds : (Bounds?)null;
+            view.nearClipPlane = Mathf.Max(0.01f, radius / 1000);
+            UpdateFocusClipping();
             view.farClipPlane = Mathf.Max(1000, distance + radius * 4);
+        }
+
+        private void UpdateFocusClipping()
+        {
+            if (view == null || !cameraFocusBounds.HasValue) return;
+            Bounds bounds = cameraFocusBounds.Value;
+            float depth = Vector3.Dot(bounds.center - view.transform.position, view.transform.forward);
+            view.nearClipPlane = Mathf.Max(0.01f, depth - Mathf.Max(0.1f, bounds.extents.magnitude) * 1.05f);
         }
 
         private void OnDisable()
