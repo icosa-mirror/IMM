@@ -794,6 +794,18 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		}
 	}
 
+    void Layer::ReconcileActionPlayback(std::vector<AnimKey> & prepared, piTick localTime) const noexcept
+    {
+        const auto & live = mAnimKeys[static_cast<int>(AnimProperty::Action)];
+        for (AnimKey & key : prepared)
+        {
+            const auto current = std::lower_bound(live.begin(), live.end(), key.mTime,
+                [](const AnimKey & candidate, piTick time) { return candidate.mTime < time; });
+            const bool unchanged = current != live.end() && current->mTime == key.mTime &&
+                current->mValue.mInt == key.mValue.mInt;
+            key.mValue.mBool = unchanged ? current->mValue.mBool : key.mTime < localTime;
+        }
+    }
 	void Layer::ReplaceAnimKeys(AnimProperty property, std::vector<AnimKey> && keys)
 	{
 		mAnimKeys[static_cast<int>(property)].swap(keys);

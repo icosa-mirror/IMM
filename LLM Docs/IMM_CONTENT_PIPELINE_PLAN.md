@@ -4669,6 +4669,39 @@ the historical sizes/check counts below describe this earlier source only.
    milestone. None is accepted yet. Goal remains active: audible Unity/device
    confirmation, Action editing and the remaining requirements in 6.127 are open.
 
+### 6.132. Stop/Play/Loop Action publication foundation
+
+1. The native key path now authors Step Action values: Stop on timeline groups,
+   Play/Loop on root. Existing descriptor/uint payloads are reused; consumed flags
+   are never imported from callers. MakeDefault and the sample's Action controls
+   remain pending until effect provenance is implemented. This is a foundation,
+   not completion of the Action/UI requirement.
+2. Publication reconciles against LIVE time/kind identity, not prepared consumed
+   snapshots. Unchanged actions retain actual consumption, new/retimed past keys
+   are consumed and exact/future keys armed. Preview prunes obsolete sidecar
+   identities and reserves sufficient total action capacity before publication.
+   Frozen main action clocks are captured before preview mutation so main flags
+   and independent sidecars are reconciled in their own clock domains.
+3. Root metadata refresh recounts Play/Stop chapters, clears removed Loop cache,
+   and computes current chapter from the held pose without Enter/Restart/seek or
+   audio/default/viewpoint mutation. Existing Stop holds survive authored deletion
+   until explicit transport. Root Loop retains its existing behavior on the next
+   ordinary playback tick; the consumed flag is not a new Loop arming mechanism.
+4. Native Release and CPU authoring checks pass. The loaded WARP C ABI scenario
+   passes chapter-mode changes, target/Step/consumption validation, past Action
+   publication, future retime, preserved Stop hold and explicit-seek release with
+   main held. The C ABI harness needed reattachment after its existing Detach
+   lifecycle test; Action removal also needed its native dispatch case. Evidence:
+   artifacts/action-keys-native-build-committable.log, action-keys-cpu-{run.log,report.json}
+   and action-keys-cabi-wide-clock/report.json.
+5. The initial six-millisecond C ABI scope could skip to the final repeat before
+   sampling. A dedicated ten-second scope removes that first-cycle oracle race.
+   Separately, review confirms a real finite-end occurrence defect: raw elapsed
+   continues advancing while local time is clamped, so a freshly armed descendant
+   Stop's absolute time drifts with late sampling. A stable final occurrence origin
+   and one-time child alignment are the next priority fix. Full source/goal
+   acceptance is not claimed; MakeDefault provenance and UI work remain required.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

@@ -314,6 +314,8 @@ namespace ImmPlayer {
         void iEvaluateTimelinePreview(ImmCore::piTick now, ImmCore::piLog * log);
         void iReanchorTimelinePreviewClock(ImmCore::piTick now);
         void iEndTimelinePreview(ImmCore::piTick now);
+        void iReconcileActionPublication(ImmImporter::Layer * layer,
+            std::vector<ImmImporter::Layer::AnimKey> & keys);
         bool iCanEditTimelinePreview(uint32_t layerId) const;
         void iMarkTimelinePreviewEdit(ImmImporter::Layer * layer, uint32_t fields);
         void iRefreshTimelineEdit(ImmImporter::Layer * layer, uint32_t fields,

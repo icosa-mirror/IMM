@@ -2821,6 +2821,13 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
     value.init();
     switch (key->property)
     {
+    case IMM_AUTHORING_ANIM_PROPERTY_ACTION:
+        if (key->uintValue >= static_cast<uint32_t>(ImmImporter::Layer::AnimAction::MAX) ||
+            key->boolValue != 0 || key->interpolation != IMM_AUTHORING_INTERPOLATION_NONE)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        property = ImmImporter::Layer::AnimProperty::Action;
+        value.mInt = key->uintValue;
+        break;
     case IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY:
         if ((key->boolValue != 0 && key->boolValue != 1) ||
             key->interpolation != IMM_AUTHORING_INTERPOLATION_NONE)
@@ -2903,6 +2910,9 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyRe
     ImmImporter::Layer::AnimProperty property;
     switch (propertyValue)
     {
+    case IMM_AUTHORING_ANIM_PROPERTY_ACTION:
+        property = ImmImporter::Layer::AnimProperty::Action;
+        break;
     case IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY:
         property = ImmImporter::Layer::AnimProperty::Visibility;
         break;

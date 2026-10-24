@@ -28,6 +28,58 @@ static void require(bool ok, const char* message)
     if (!ok) { std::fprintf(stderr, "[IMM_AUTHORING_FAILURE_TEST] %s\n", message); std::exit(1); }
 }
 
+static void checkActionPlaybackReconciliation(piLog * log)
+{
+    Sequence sequence;
+    require(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "action reconciliation sequence");
+    Layer * root = sequence.GetRoot();
+    require(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+        1.0f, true, piTick(0), 1, UINT32_MAX, log), "action reconciliation root");
+    const auto value = [](Layer::AnimAction action, bool consumed) {
+        Layer::AnimValue result{}; result.init(); result.mInt = static_cast<uint32_t>(action);
+        result.mBool = consumed; result.mFloat = 0.25f; result.mDouble = 0.875;
+        result.mTransform.mTranslation.x = 17.0;
+        return result;
+    };
+    require(root->AddKey(piTick(5), Layer::AnimProperty::Action, value(Layer::AnimAction::Stop, false), Layer::InterpolationType::None) &&
+        root->AddKey(piTick(7), Layer::AnimProperty::Action, value(Layer::AnimAction::Play, false), Layer::InterpolationType::None) &&
+        root->AddKey(piTick(8), Layer::AnimProperty::Action, value(Layer::AnimAction::Loop, false), Layer::InterpolationType::None) &&
+        root->AddKey(piTick(15), Layer::AnimProperty::Action, value(Layer::AnimAction::Stop, true), Layer::InterpolationType::None),
+        "action reconciliation source keys");
+    std::vector<Layer::AnimKey> prepared;
+    require(root->CopyAnimKeys(Layer::AnimProperty::Action, prepared), "prepare action keys before playback");
+    root->SetStartTime(piTick(1000000)); root->SetPlaying(true);
+    root->SetStateAt(piTick(1000005), log);
+    require(root->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool && root->IsStoppedByAction(),
+        "live playback consumes Stop after preparation");
+    prepared[1].mValue.mBool = true; // Stale prepared flags must never become runtime truth.
+    require(Layer::SetAnimKey(prepared, piTick(8), value(Layer::AnimAction::Play, false), Layer::InterpolationType::Auto) &&
+        Layer::RemoveAnimKey(prepared, piTick(15)) &&
+        Layer::SetAnimKey(prepared, piTick(9), value(Layer::AnimAction::Stop, false), Layer::InterpolationType::None) &&
+        Layer::SetAnimKey(prepared, piTick(10), value(Layer::AnimAction::Loop, true), Layer::InterpolationType::None) &&
+        Layer::SetAnimKey(prepared, piTick(20), value(Layer::AnimAction::Stop, true), Layer::InterpolationType::None),
+        "changed kind, retimed past, exact and future action candidates");
+    const auto authored = prepared;
+    const piTick localTime(10);
+    static_assert(noexcept(root->ReconcileActionPlayback(prepared, localTime)), "publication reconciliation cannot throw");
+    root->ReconcileActionPlayback(prepared, localTime);
+    const bool consumed[] = { true, false, true, true, false, false };
+    require(prepared.size() == 6, "action reconciliation candidate count");
+    for (size_t index = 0; index < prepared.size(); ++index)
+        require(prepared[index].mValue.mBool == consumed[index] && prepared[index].mTime == authored[index].mTime &&
+            prepared[index].mValue.mInt == authored[index].mValue.mInt &&
+            prepared[index].mInterpolation == authored[index].mInterpolation &&
+            prepared[index].mValue.mFloat == authored[index].mValue.mFloat &&
+            prepared[index].mValue.mDouble == authored[index].mValue.mDouble &&
+            prepared[index].mValue.mTransform.mTranslation.x == authored[index].mValue.mTransform.mTranslation.x,
+            "reconciliation changes only consumption and preserves live time/kind identities");
+    require(root->HasStopTime() && root->GetStopTime() == piTick(1000004) &&
+        !root->GetAnimKey(Layer::AnimProperty::Action, 1)->mValue.mBool,
+        "reconciliation preserves live keys and existing Stop hold");
+    sequence.Deinit(log);
+    std::puts("[IMM_ACTION_PLAYBACK_RECONCILE_TEST] pass=1 liveConsumption=1 kindIdentity=1 retimePast=1 exactFutureArmed=1 authoredValuesPreserved=1 holdPreserved=1");
+}
+
 static void checkEmptySpawnCleanup()
 {
     // Heap contents must not determine whether an absent preview is freed.
@@ -223,6 +275,7 @@ int wmain(int argc, wchar_t** argv)
     require(argc == 2, "fixture argument");
     piLog log;
     require(log.Init(L"artifacts/authoring-failure-runtime.log", PILOG_TXT), "log init");
+    checkActionPlaybackReconciliation(&log);
     checkLayerInitialization(&log);
     checkHeldPivotTransform(&log);
     checkSpawnCacheLifecycle(&log);

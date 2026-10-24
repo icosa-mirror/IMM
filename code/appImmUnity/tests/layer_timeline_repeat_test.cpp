@@ -243,6 +243,89 @@ namespace
         sequence.Deinit(log);
     }
 
+    void CheckRootActionMetadataRefresh(piLog* log)
+    {
+        Sequence sequence;
+        RequireTimeline(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "metadata sequence");
+        sequence.SetInitialSpawnArea(nullptr);
+        Layer* root = sequence.GetRoot();
+        RequireTimeline(root->Init(Layer::Type::Group, L"MetadataRoot", true, trans3d::identity(),
+            trans3d::identity(), 1.0f, true, piTick(0), 0, UINT32_MAX, log), "metadata root");
+        const auto addAction = [&](int64_t time, Layer::AnimAction action) {
+            Layer::AnimValue value{};
+            value.mInt = static_cast<uint32_t>(action);
+            RequireTimeline(root->AddKey(piTick(time), Layer::AnimProperty::Action, value,
+                Layer::InterpolationType::None), "metadata action");
+        };
+        addAction(20, Layer::AnimAction::Play);
+        addAction(40, Layer::AnimAction::Play);
+        addAction(60, Layer::AnimAction::Stop);
+        addAction(90, Layer::AnimAction::Loop);
+        ImmPlayer::MngrPlayer player;
+        RequireTimeline(player.Init(log), "metadata player");
+        const piTick epoch(1000000);
+        player.Enter(&sequence, epoch);
+        player.Update(epoch + piTick(40));
+        player.Pause(epoch + piTick(40));
+
+        const auto refreshUnchanged = [&](piTick now) {
+            const piTick start = root->GetStartTime(), stop = root->GetStopTime();
+            const piTick elapsed = root->GetTimelineElapsed(now);
+            const bool playing = root->GetPlaying(), paused = player.GetIsPaused();
+            const bool waiting = player.GetIsWaiting(), finished = player.GetIsFinished();
+            const Layer* initial = sequence.GetInitialSpawnArea();
+            const int spawn = player.GetSpawnArea();
+            std::vector<Layer::AnimKey> before;
+            RequireTimeline(root->CopyAnimKeys(Layer::AnimProperty::Action, before), "metadata snapshot");
+            player.RefreshRootActionMetadata(now);
+            RequireTimeline(root->GetStartTime() == start && root->GetStopTime() == stop &&
+                root->GetTimelineElapsed(now) == elapsed && root->GetPlaying() == playing &&
+                player.GetIsPaused() == paused && player.GetIsWaiting() == waiting &&
+                player.GetIsFinished() == finished && sequence.GetInitialSpawnArea() == initial &&
+                player.GetSpawnArea() == spawn, "metadata refresh preserves clocks, holds and spawn selection");
+            for (unsigned int i = 0; i < before.size(); ++i)
+                RequireTimeline(root->GetAnimKey(Layer::AnimProperty::Action, i)->mValue.mBool == before[i].mValue.mBool,
+                    "metadata refresh preserves action consumption");
+        };
+        refreshUnchanged(epoch + piTick(1000));
+        RequireTimeline(player.GetHasPlays() && player.GetChapterCount() == 3 && player.GetCurrentChapter() == 2,
+            "paused exact Play boundary belongs to new chapter, using held rather than wall clock");
+
+        root->ReplaceAnimKeys(Layer::AnimProperty::Action, {});
+        addAction(20, Layer::AnimAction::Stop);
+        addAction(40, Layer::AnimAction::Stop);
+        addAction(60, Layer::AnimAction::Stop);
+        refreshUnchanged(epoch + piTick(1000));
+        RequireTimeline(!player.GetHasPlays() && player.GetChapterCount() == 4 && player.GetCurrentChapter() == 1,
+            "removing last Play selects Stop-only chapters, whose exact boundary remains prior chapter");
+
+        root->ReplaceAnimKeys(Layer::AnimProperty::Action, {});
+        addAction(200, Layer::AnimAction::Stop);
+        refreshUnchanged(epoch + piTick(1000));
+        player.Resume(epoch + piTick(1000));
+        const piTick resumedStart = root->GetStartTime();
+        player.Update(epoch + piTick(1060));
+        RequireTimeline(root->GetStartTime() == resumedStart && root->GetPlaying() &&
+            root->GetTimelineElapsed(epoch + piTick(1060)) == piTick(100) && !player.GetIsWaiting(),
+            "removed last Loop does not rewind on next ordinary tick beyond its cached marker");
+
+        player.Update(epoch + piTick(1160));
+        RequireTimeline(player.GetIsWaiting() && root->IsStoppedByAction() &&
+            root->GetTimelineElapsed(epoch + piTick(1160)) == piTick(199), "metadata authored Stop hold");
+        refreshUnchanged(epoch + piTick(2000));
+        RequireTimeline(player.GetCurrentChapter() == 0, "held Stop pose stays in prior Stop chapter");
+        root->ReplaceAnimKeys(Layer::AnimProperty::Action, {});
+        addAction(199, Layer::AnimAction::Play);
+        addAction(200, Layer::AnimAction::Play);
+        refreshUnchanged(epoch + piTick(2000));
+        RequireTimeline(player.GetHasPlays() && player.GetChapterCount() == 3 && player.GetCurrentChapter() == 1,
+            "action-held exact Play boundary refresh preserves waiting intent");
+        player.Exit();
+        player.Deinit();
+        sequence.Deinit(log);
+        std::puts("[IMM_ROOT_ACTION_METADATA_TEST] pausedBoundary=1 chapterMode=1 removedLoop=1 actionHold=1 preservedState=1");
+    }
+
     void CheckHeldRootControl(piLog * log)
     {
         Sequence sequence;
@@ -324,6 +407,7 @@ void CheckTimelineRepeatKeys()
     }
     CheckFiniteBoundaries(&log, 2, true, true);
     CheckHeldRootControl(&log);
+    CheckRootActionMetadataRefresh(&log);
     const bool nestedStopMain = CheckNestedStopDomain(&log, false);
     const bool nestedStopIndependent = CheckNestedStopDomain(&log, true);
     const bool laterStopMain = CheckNestedStopDomain(&log, false, true);

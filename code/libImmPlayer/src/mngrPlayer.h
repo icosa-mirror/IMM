@@ -21,6 +21,9 @@ namespace ImmPlayer
         bool Init(ImmCore::piLog* log);
         void Deinit();
         void Update(const ImmCore::piTick now, bool evaluateWhilePaused = false); // should be called every frame
+        // Refresh only cached root Action metadata at the current evaluated/held clock.
+        // Does not evaluate keys, consume actions, or alter playback/hold intent.
+        void RefreshRootActionMetadata(ImmCore::piTick now);
 
         // All file types
         void Enter(Sequence * document, const ImmCore::piTick now);
@@ -59,6 +62,8 @@ namespace ImmPlayer
         inline bool GetIsPlaying(void) const { return mIsPlaying; }
 
     private:
+        void iRefreshRootActionCounts();
+        void iUpdateCurrentChapter(ImmCore::piTick now);
         bool iGetChapterStartTime(size_t chapterIndex, ImmCore::piTick* rootTime) const;
         void iJumpAndReset(const ImmCore::piTick now, const ImmCore::piTick rootTime);
         int FindSpawnAreaIdByLayer(const Layer* spawnAreaLayer) const ;

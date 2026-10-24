@@ -697,6 +697,13 @@ int wmain(int argc, wchar_t ** argv)
         &identity, &identity, 0, 0, 1);
     requireRepeat(previewChild && ImmExporter_LayerAddAnimationKey(previewChild, 0, 0, 0, 1, 0, 0, 0, &identity),
         "preview fixture child visibility");
+    void * actionBoundary = ImmExporter_CreateGroupLayer(clockSequence, nullptr, "ActionBoundary", 1, 1.0f,
+        &identity, &identity, 1, 126000, 1);
+    requireRepeat(actionBoundary != nullptr, "Action fixture boundary");
+    void * actionChild = ImmExporter_CreateGroupLayer(clockSequence, actionBoundary, "ActionChild", 1, 1.0f,
+        &identity, &identity, 1, 0, 1);
+    requireRepeat(actionChild && ImmExporter_LayerAddAnimationKey(actionChild, 0, 0, 0, 1, 0, 0, 0, &identity),
+        "preview Action fixture timeline");
     ImmExporterTransformC laterPlacement = identity;
     laterPlacement.tx = 9;
     requireRepeat(ImmExporter_LayerAddAnimationKey(previewChild, 1, 0, 0, 0, 0, 1.0f, 0, &identity) &&
@@ -741,7 +748,7 @@ int wmain(int argc, wchar_t ** argv)
         player.GetDocumentState(state, clockDoc);
         return state.mLoadingState == Player::LoadingState::Loaded;
     }), "load timeline clock fixture");
-    int clockRootId = -1, finiteId = -1, infiniteId = -1, inactiveId = -1, previewChildId = -1, previewPaintId = -1;
+    int clockRootId = -1, finiteId = -1, infiniteId = -1, inactiveId = -1, previewChildId = -1, previewPaintId = -1, actionChildId = -1, actionBoundaryId = -1;
     for (int index = 0; index < player.GetLayerCount(clockDoc); ++index)
     {
         Player::LayerInfo info{};
@@ -752,6 +759,8 @@ int wmain(int argc, wchar_t ** argv)
         if (std::wcscmp(info.name, L"InactiveClock") == 0) inactiveId = info.id;
         if (std::wcscmp(info.name, L"PreviewChild") == 0) previewChildId = info.id;
         if (std::wcscmp(info.name, L"PreviewPaint") == 0) previewPaintId = info.id;
+        if (std::wcscmp(info.name, L"ActionChild") == 0) actionChildId = info.id;
+        if (std::wcscmp(info.name, L"ActionBoundary") == 0) actionBoundaryId = info.id;
     }
     requireRepeat(clockRootId >= 0 && finiteId >= 0 && infiniteId >= 0 && inactiveId >= 0 && previewChildId >= 0 && previewPaintId >= 0,
         "clock fixture layer IDs");
@@ -1007,6 +1016,75 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(ImmAuthoring_Detach(clockDoc) == IMM_AUTHORING_OK &&
         !(readClock(inactiveId).flags & IMM_AUTHORING_TIMELINE_PREVIEW), "detach ends preview safely");
     std::puts("[IMM_TIMELINE_PREVIEW_CABI_TEST] pass=1 independentClock=1 pausedMain=1 heldRestore=1 boundaryPublicationBlocked=1 scopedEdits=1 inactiveScope=1 detach=1 mutedAudioOnly=1");
+    requireRepeat(actionChildId >= 0 && actionBoundaryId >= 0, "Action fixture IDs");
+    requireRepeat(ImmAuthoring_Attach(clockDoc) == IMM_AUTHORING_OK, "reattach after detach lifecycle coverage");
+    ImmAuthoringKey action{};
+    action.structSize = sizeof(action); action.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    action.property = IMM_AUTHORING_ANIM_PROPERTY_ACTION;
+    action.qw = 1; action.scale = 1;
+    const auto setAction = [&](int layer, int64_t at, Layer::AnimAction kind) {
+        action.timeSeconds = static_cast<double>(at) / 12600.0;
+        action.uintValue = static_cast<uint32_t>(kind);
+        const int32_t result = ImmAuthoring_KeySet(clockDoc, layer, &action);
+        if (result != IMM_AUTHORING_OK) std::fprintf(stderr, "[IMM_ACTION_PUBLICATION_CABI_TEST] stage result=%d layer=%d at=%lld kind=%u\n",
+            result, layer, static_cast<long long>(at), action.uintValue);
+        requireRepeat(result == IMM_AUTHORING_OK, "stage Action key");
+    };
+    const auto removeAction = [&](int layer, int64_t at) {
+        requireRepeat(ImmAuthoring_KeyRemove(clockDoc, layer, IMM_AUTHORING_ANIM_PROPERTY_ACTION,
+            static_cast<double>(at) / 12600.0) == IMM_AUTHORING_OK, "stage Action removal");
+    };
+    const auto heldMainActionClock = readClock(clockRootId);
+    setAction(clockRootId, 50, Layer::AnimAction::Play); presentPreviewEdit();
+    setAction(clockRootId, 100, Layer::AnimAction::Play); presentPreviewEdit();
+    requireRepeat(player.GetChapterCount(clockDoc) == 3 && player.GetCurrentChapter(clockDoc) == 2 &&
+        readClock(clockRootId).elapsedTicks == heldMainActionClock.elapsedTicks, "root Action publication refreshes chapters without seeking");
+    removeAction(clockRootId, 50); removeAction(clockRootId, 100); presentPreviewEdit();
+    requireRepeat(player.GetChapterCount(clockDoc) == 2 && player.GetCurrentChapter(clockDoc) == 0 &&
+        readClock(clockRootId).elapsedTicks == heldMainActionClock.elapsedTicks, "removing last Play restores Stop chapter mode and hold");
+    action.uintValue = static_cast<uint32_t>(Layer::AnimAction::MakeDefault);
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, clockRootId, &action) == IMM_AUTHORING_UNSUPPORTED,
+        "MakeDefault remains unsupported until effect provenance exists");
+    action.uintValue = static_cast<uint32_t>(Layer::AnimAction::Play);
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, actionChildId, &action) == IMM_AUTHORING_UNSUPPORTED,
+        "nonroot Play is not exposed as functional");
+    action.uintValue = static_cast<uint32_t>(Layer::AnimAction::Stop); action.boolValue = 1;
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, clockRootId, &action) == IMM_AUTHORING_INVALID_ARGUMENT,
+        "caller cannot inject consumed flags");
+    action.boolValue = 0; action.interpolation = IMM_AUTHORING_INTERPOLATION_LINEAR;
+    requireRepeat(ImmAuthoring_KeySet(clockDoc, clockRootId, &action) == IMM_AUTHORING_INVALID_ARGUMENT,
+        "Action requires Step interpolation");
+    action.interpolation = IMM_AUTHORING_INTERPOLATION_NONE;
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 0, 20) == IMM_AUTHORING_OK,
+        "begin Action publication preview");
+    setAction(actionChildId, 10, Layer::AnimAction::Stop); presentPreviewEdit();
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 2, 0) == IMM_AUTHORING_OK && wait([&]() {
+        return readClock(actionChildId).elapsedTicks >= 25;
+    }) && !(readClock(actionChildId).flags & IMM_AUTHORING_TIMELINE_ACTION_HELD),
+        "new past preview Action is consumed without retroactive Stop");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 1, 20) == IMM_AUTHORING_OK,
+        "hold Action preview for retime");
+    removeAction(actionChildId, 10); setAction(actionChildId, 2520, Layer::AnimAction::Stop); presentPreviewEdit();
+    const bool futureActionStopped = ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 2, 0) == IMM_AUTHORING_OK && wait([&]() {
+        return (readClock(actionChildId).flags & IMM_AUTHORING_TIMELINE_ACTION_HELD) != 0;
+    });
+    std::fprintf(stderr, "[IMM_ACTION_PUBLICATION_CABI_TEST] future stopped=%d childElapsed=%lld flags=%u main=%lld expectedMain=%lld\n",
+        futureActionStopped, static_cast<long long>(readClock(actionChildId).elapsedTicks), readClock(actionChildId).flags,
+        static_cast<long long>(readClock(clockRootId).elapsedTicks), static_cast<long long>(heldMainActionClock.elapsedTicks));
+    requireRepeat(futureActionStopped && readClock(actionChildId).elapsedTicks == 2519 &&
+        readClock(clockRootId).elapsedTicks == heldMainActionClock.elapsedTicks,
+        "retimed future Action arms independent sidecar and preserves main");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 3, 0) == IMM_AUTHORING_OK, "pause held Action preview");
+    removeAction(actionChildId, 2520); presentPreviewEdit();
+    requireRepeat(readClock(actionChildId).elapsedTicks == 2519 &&
+        (readClock(actionChildId).flags & IMM_AUTHORING_TIMELINE_ACTION_HELD), "authored removal preserves existing runtime hold");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 1, 0) == IMM_AUTHORING_OK &&
+        ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 2, 0) == IMM_AUTHORING_OK && wait([&]() {
+            return readClock(actionChildId).elapsedTicks > 85;
+        }) && !(readClock(actionChildId).flags & IMM_AUTHORING_TIMELINE_ACTION_HELD), "explicit seek clears removed Action hold");
+    requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 4, 0) == IMM_AUTHORING_OK,
+        "exit Action publication preview");
+    std::puts("[IMM_ACTION_PUBLICATION_CABI_TEST] rootChapters=1 targetValidation=1 newPastConsumed=1 retimeFutureArmed=1 holdPreserved=1 explicitSeekRelease=1 mainFrozen=1");
     player.UnloadAllSync();
     gImmUnityPlugin.mBridge.Shutdown();
     context->Release();

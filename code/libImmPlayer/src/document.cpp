@@ -30,6 +30,28 @@ namespace ImmPlayer
         PreviewTransform = 1, PreviewOpacity = 2, PreviewVisibility = 4,
         PreviewPaintPlayback = 8, PreviewNavigation = 16, PreviewDrawInTime = 32
     };
+    static piTick iActionLocalClock(Layer * layer, piTick now, const Layer::EvaluationContext * context = nullptr)
+    {
+        Layer * timeline = layer->GetTimeline(context);
+        const bool boundary = context && timeline == context->mBoundary;
+        const piTick duration = boundary ? context->mBoundaryDuration : timeline->GetDuration();
+        const uint32_t repeat = boundary ? context->mBoundaryRepeatCount : timeline->GetEvaluatedMaxRepeatCount();
+        const piTick elapsed = timeline->GetTimelineElapsed(now, context);
+        return duration > piTick(0) ?
+            (repeat && piTick::CastInt(elapsed) / piTick::CastInt(duration) >= repeat ? duration : elapsed % duration) : elapsed;
+    }
+
+    static int32_t iValidateTimelineAction(Layer * layer, Layer * root, const Layer::AnimValue * value)
+    {
+        if (layer->GetType() != Layer::Type::Group || (layer != root && !layer->GetIsTimeline())) return -3;
+        if (!value) return 0;
+        if (value->mInt >= static_cast<uint32_t>(Layer::AnimAction::MAX)) return -2;
+        // MakeDefault needs execution provenance before it can be live-authored.
+        if (value->mInt == static_cast<uint32_t>(Layer::AnimAction::MakeDefault)) return -3;
+        if (layer != root && value->mInt != static_cast<uint32_t>(Layer::AnimAction::Stop)) return -3;
+        return 0;
+    }
+
     struct Document::TimelinePreviewSession
     {
         struct DeleteVoice
@@ -53,6 +75,7 @@ namespace ImmPlayer
             LayerPaintStatic::PlaybackState paintState;
             LayerSound * sound;
             LayerSound::RuntimePlaybackState soundState;
+            piTick mainActionClock = piTick(0);
             uint32_t edited = 0;
         };
         Layer::EvaluationContext context;
@@ -80,6 +103,33 @@ namespace ImmPlayer
 
     bool Document::GetTimelinePreviewAudioPending() const
     { return GetTimelinePreviewAudioEnabled() && !mTimelinePreview->mainAudioReady; }
+
+    void Document::iReconcileActionPublication(Layer * layer, std::vector<Layer::AnimKey> & keys)
+    {
+        piTick mainClock = iActionLocalClock(layer, mLastCPUTime);
+        if (mTimelinePreview)
+            for (const auto & saved : mTimelinePreview->saved)
+                if (saved.layer == layer) { mainClock = saved.mainActionClock; break; }
+        layer->ReconcileActionPlayback(keys, mainClock);
+        if (!mTimelinePreview || !mTimelinePreview->context.Contains(layer)) return;
+        auto & context = mTimelinePreview->context;
+        auto unchanged = [&](piTick time, const Layer::AnimKey * replacement) {
+            const auto * old = layer->GetAnimKeyAt(Layer::AnimProperty::Action, time);
+            return replacement && old && old->mTime == time && replacement->mTime == time &&
+                replacement->mValue.mInt == old->mValue.mInt;
+        };
+        auto & consumed = context.mConsumedActions;
+        consumed.erase(std::remove_if(consumed.begin(), consumed.end(), [&](const Layer::EvaluationContext::ConsumedAction & entry) {
+            if (entry.layerId != layer->GetID()) return false;
+            const auto key = std::lower_bound(keys.begin(), keys.end(), entry.time,
+                [](const Layer::AnimKey & candidate, piTick time) { return candidate.mTime < time; });
+            return !unchanged(entry.time, key == keys.end() ? nullptr : &*key);
+        }), consumed.end());
+        const piTick local = iActionLocalClock(layer, mLastCPUTime, &context);
+        for (const auto & key : keys)
+            if (!unchanged(key.mTime, &key) && key.mTime < local)
+                consumed.push_back({ layer->GetID(), key.mTime });
+    }
 
     bool Document::PauseTimelinePreviewSounds(LayerRendererSound * renderer, piSoundEngine * sound)
     {
@@ -246,6 +296,7 @@ namespace ImmPlayer
                 actionCapacity += actions;
                 TimelinePreviewSession::SavedLayer saved{};
                 saved.layer = layer; saved.state = layer->CapturePlaybackState();
+                saved.mainActionClock = iActionLocalClock(layer, mLastCPUTime);
                 if (layer->GetType() == Layer::Type::Paint)
                 {
                     saved.paint = dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation());
@@ -1488,8 +1539,15 @@ namespace ImmPlayer
                 }
                 else
                 {
+                    if (property == Layer::AnimProperty::Action)
+                        iReconcileActionPublication(layer, mPendingPresentation.mAnimationKeys);
                     layer->ReplaceAnimKeys(
                         property, std::move(mPendingPresentation.mAnimationKeys));
+                    if (property == Layer::AnimProperty::Action)
+                    {
+                        if (layer == mSequence.GetRoot()) mPlayerManager.RefreshRootActionMetadata(GetTimelineMainCPUTime());
+                        ++mEvaluationRevision;
+                    }
                     if (property == Layer::AnimProperty::Transform)
                     {
                         iRefreshTimelineEdit(layer, PreviewTransform, mLastCPUTime, log);
@@ -2341,6 +2399,12 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
+        const bool actionKey = property == Layer::AnimProperty::Action;
+        if (actionKey)
+        {
+            const int32_t result = iValidateTimelineAction(layer, mSequence.GetRoot(), &value);
+            if (result != 0) return result;
+        }
         if (property == Layer::AnimProperty::Visibility)
         {
             const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
@@ -2351,7 +2415,7 @@ namespace ImmPlayer
         if (paintOnlyKey && (layer->GetType() != Layer::Type::Paint ||
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
             return -3;
-        if (!paintOnlyKey && property != Layer::AnimProperty::Visibility &&
+        if (!paintOnlyKey && !actionKey && property != Layer::AnimProperty::Visibility &&
             property != Layer::AnimProperty::Opacity &&
             property != Layer::AnimProperty::Transform)
             return -3;
@@ -2360,7 +2424,7 @@ namespace ImmPlayer
         if (interpolation < Layer::InterpolationType::None ||
             interpolation >= Layer::InterpolationType::MAX)
             return -2;
-        if (paintPlaybackKey && interpolation != Layer::InterpolationType::None)
+        if ((paintPlaybackKey || actionKey) && interpolation != Layer::InterpolationType::None)
             return -2;
         if (property == Layer::AnimProperty::Opacity &&
             (!std::isfinite(value.mFloat) || value.mFloat < 0.0f || value.mFloat > 1.0f))
@@ -2408,6 +2472,12 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
+        const bool actionKey = property == Layer::AnimProperty::Action;
+        if (actionKey)
+        {
+            const int32_t result = iValidateTimelineAction(layer, mSequence.GetRoot(), nullptr);
+            if (result != 0) return result;
+        }
         if (property == Layer::AnimProperty::Visibility)
         {
             const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
@@ -2418,7 +2488,7 @@ namespace ImmPlayer
         if (paintOnlyKey && (layer->GetType() != Layer::Type::Paint ||
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
             return -3;
-        if (!paintOnlyKey && property != Layer::AnimProperty::Visibility &&
+        if (!paintOnlyKey && !actionKey && property != Layer::AnimProperty::Visibility &&
             property != Layer::AnimProperty::Opacity &&
             property != Layer::AnimProperty::Transform)
             return -3;
@@ -3375,6 +3445,17 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
                 return;
             }
+            const bool actionKey = edit.mProperty == Layer::AnimProperty::Action;
+            if (actionKey)
+            {
+                for (const auto & candidate : batch.mAnimationKeyEdits)
+                {
+                    const int32_t result = iValidateTimelineAction(layer, mSequence.GetRoot(),
+                        candidate.mRemove ? nullptr : &candidate.mValue);
+                    if (result != 0 || candidate.mInterpolation != Layer::InterpolationType::None)
+                    { iRejectCommit(batch.mRevision, result != 0 ? result : -2, 0, edit.mLayerId); return; }
+                }
+            }
             if (edit.mProperty == Layer::AnimProperty::Visibility)
             {
                 const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
@@ -3425,6 +3506,27 @@ namespace ImmPlayer
                     iRejectCommit(batch.mRevision, -5, 0, candidate.mLayerId);
                     return;
                 }
+            }
+            if (actionKey && mTimelinePreview)
+            {
+                // Old actions may be consumed between prepare and publication.
+                // Reserve for either full track set before touching authored keys.
+                size_t total = 0;
+                for (const auto & saved : mTimelinePreview->saved)
+                {
+                    const size_t count = saved.layer->GetNumAnimKeys(Layer::AnimProperty::Action);
+                    if (count > SIZE_MAX - total)
+                    { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
+                    total += count;
+                }
+                const size_t other = total - layer->GetNumAnimKeys(Layer::AnimProperty::Action);
+                if (keys.size() > SIZE_MAX - other)
+                { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
+                try { mTimelinePreview->context.mConsumedActions.reserve(std::max(total, other + keys.size())); }
+                catch (const std::bad_alloc &)
+                { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
+                catch (const std::length_error &)
+                { iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId); return; }
             }
             if (status != nullptr)
             {

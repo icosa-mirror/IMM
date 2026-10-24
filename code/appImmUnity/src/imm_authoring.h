@@ -73,6 +73,7 @@ typedef enum ImmAuthoringAnimProperty
     IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY = 0,
     IMM_AUTHORING_ANIM_PROPERTY_OPACITY = 1,
     IMM_AUTHORING_ANIM_PROPERTY_DRAW_IN_TIME = 5,
+    IMM_AUTHORING_ANIM_PROPERTY_ACTION = 6,
     IMM_AUTHORING_ANIM_PROPERTY_LOOP = 7,
     IMM_AUTHORING_ANIM_PROPERTY_OFFSET = 8,
     IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM = 9
@@ -343,6 +344,10 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetName(int32_
 // DrawInTime accepts finite nonnegative doubleValue on static paint. Publication
 // resamples a held pose; removing its final key restores the layer's base value.
 // Draw-in rendering availability is separate from canonical key authoring.
+// Action uses uintValue: 0 Stop on timeline groups, 1 Play / 2 Loop on root.
+// Step interpolation only; boolValue stays zero, never a consumed-action flag.
+// Publication preserves existing holds and unchanged live consumption. New past
+// identities are consumed, exact/future identities armed. MakeDefault is pending.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeySet(int32_t docId, int32_t layerId,
     const ImmAuthoringKey * key);
 // Canonical static-paint repeat count; zero repeats indefinitely. Publication

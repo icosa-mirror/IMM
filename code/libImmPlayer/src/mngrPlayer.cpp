@@ -27,6 +27,10 @@ namespace ImmPlayer
         mLog = log;
         mIsAtEnd = false;
         mCurrentSpawnAreaId = -1;
+        mNumPlayMarkers = 0;
+        mNumStopMarkers = 0;
+        mCurrentChapter = 0;
+        mNumChapters = 0;
         mHasLoopKey = false;
         mLoopKeyTime = piTick::FromSeconds(60.0*60.0*1000.0);
         if (!mSpawnAreas.Init(6, true))
@@ -80,14 +84,27 @@ namespace ImmPlayer
         }
 
         // Count root plays and stops
-        Layer* root = mDocument->GetRoot();
-        const unsigned int numActionKeys = root->GetNumAnimKeys(Layer::AnimProperty::Action);
         mCurrentChapter = 0;
+        iRefreshRootActionCounts();
+
+        mLog->Printf(LT_MESSAGE, L"Has %d chapters", mNumChapters);
+
+        Restart(now);
+    }
+
+    void MngrPlayer::iRefreshRootActionCounts()
+    {
         mNumPlayMarkers = 0;
         mNumStopMarkers = 0;
+        mNumChapters = 0;
+        mHasLoopKey = false;
+        mLoopKeyTime = piTick::FromSeconds(60.0 * 60.0 * 1000.0);
+        const Layer* root = mDocument != nullptr ? mDocument->GetRoot() : nullptr;
+        if (root == nullptr) return;
+        const unsigned int numActionKeys = root->GetNumAnimKeys(Layer::AnimProperty::Action);
         for (unsigned int i = 0; i < numActionKeys; i++)
         {
-            Layer::AnimKey* key = (Layer::AnimKey*) root->GetAnimKey(Layer::AnimProperty::Action, i);
+            const Layer::AnimKey* key = root->GetAnimKey(Layer::AnimProperty::Action, i);
             Layer::AnimAction action = static_cast<Layer::AnimAction>(key->mValue.mInt);
             if (action == Layer::AnimAction::Stop)
                 mNumStopMarkers++;
@@ -102,9 +119,32 @@ namespace ImmPlayer
 
         mNumChapters = mNumPlayMarkers > 0 ? (mNumPlayMarkers + 1) : (mNumStopMarkers + 1);
 
-        mLog->Printf(LT_MESSAGE, L"Has %d chapters", mNumChapters);
+    }
 
-        Restart(now);
+    void MngrPlayer::iUpdateCurrentChapter(piTick now)
+    {
+        mCurrentChapter = 0;
+        const Layer* root = mDocument != nullptr ? mDocument->GetRoot() : nullptr;
+        if (root == nullptr || mNumChapters == 0) return;
+        // Use the evaluated pose clock. Public GetTime adds one tick at stops for
+        // reporting; chapter boundaries deliberately use the held pose instead.
+        const piTick rootTime = root->GetTimelineElapsed(now);
+        const unsigned int count = root->GetNumAnimKeys(Layer::AnimProperty::Action);
+        for (unsigned int i = 0; i < count; ++i)
+        {
+            const Layer::AnimKey* key = root->GetAnimKey(Layer::AnimProperty::Action, i);
+            if (key->mTime > rootTime || (mNumPlayMarkers == 0 && key->mTime == rootTime)) break;
+            const Layer::AnimAction action = static_cast<Layer::AnimAction>(key->mValue.mInt);
+            if ((mNumPlayMarkers > 0 && action == Layer::AnimAction::Play) ||
+                (mNumPlayMarkers == 0 && action == Layer::AnimAction::Stop))
+                ++mCurrentChapter;
+        }
+    }
+
+    void MngrPlayer::RefreshRootActionMetadata(piTick now)
+    {
+        iRefreshRootActionCounts();
+        iUpdateCurrentChapter(now);
     }
 
 	bool MngrPlayer::GetHasPlays(void) const
@@ -576,41 +616,7 @@ namespace ImmPlayer
             }
 
 
-            // Update current chapter
-            if (mNumChapters > 0)
-            {
-                piTick rootTime = root->GetPlaying() ? now - root->GetStartTime() : root->GetStopTime() - root->GetStartTime();
-                const int numKeys = root->GetNumAnimKeys(Layer::AnimProperty::Action);
-                mCurrentChapter = 0;
-                for (int i = 0; i < numKeys; i++)
-                {
-                    const Layer::AnimKey* key = root->GetAnimKey(Layer::AnimProperty::Action, i);
-                    const Layer::AnimAction action = static_cast<Layer::AnimAction>(key->mValue.mInt);
-                    // A Play marker starts its chapter at the marker itself.
-                    // Stop-only chapters still start after their Stop marker.
-                    if (key->mTime < rootTime || (mNumPlayMarkers > 0 && key->mTime == rootTime))
-                    {
-                        if (mNumPlayMarkers > 0)
-                        {
-                            if (action == Layer::AnimAction::Play)
-                            {
-                                mCurrentChapter++;
-                            }
-                        }
-                        else //if (mNumStopMarkers > 0)
-                        {
-                            if (action == Layer::AnimAction::Stop)
-                            {
-                                mCurrentChapter++;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
+            iUpdateCurrentChapter(now);
             if (evaluateWhilePaused && mIsPaused)
             {
                 // A seek can activate previously hidden sound/paint/timeline layers.

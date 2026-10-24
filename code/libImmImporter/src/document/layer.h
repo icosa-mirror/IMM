@@ -287,6 +287,9 @@ namespace ImmImporter
             const AnimValue & value, InterpolationType interpolation);
         static bool RemoveAnimKey(std::vector<AnimKey> & keys, ImmCore::piTick time);
         bool CopyAnimKeys(AnimProperty property, std::vector<AnimKey> & keysOut) const;
+        // Call at Action publication under the playback lock. Prepared flags may
+        // predate live action consumption; matching time/kind keeps live state.
+        void ReconcileActionPlayback(std::vector<AnimKey> & prepared, ImmCore::piTick localTime) const noexcept;
         void ReplaceAnimKeys(AnimProperty property, std::vector<AnimKey> && keys);
 
 		typedef std::function<bool(Layer* layer, int level, int child, bool instance)> VisitorF;
