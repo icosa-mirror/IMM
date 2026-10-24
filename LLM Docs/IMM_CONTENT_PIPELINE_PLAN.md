@@ -4016,6 +4016,28 @@ the historical sizes/check counts below describe this earlier source only.
    snapshot. They are not reported as passing. Receipt:
    artifacts/live-timeline-history-validation.json.
 
+### 6.114. Evaluated timeline clocks and nested workspace navigation (in progress)
+
+1. The native read-only timeline clock query now exposes evaluated local time,
+   elapsed time, repeat cycle, finite clamp, inactive-span and action-hold state,
+   plus publication revisions under the scene mutex. The unversioned 96-byte
+   output is capacity-checked; failed queries preserve caller memory.
+2. Windows Release build and the loaded WARP C ABI suite pass root/nested clocks,
+   finite and infinite repeats, inactive spans, authored Stop boundaries,
+   no-mutation and output-capacity checks. Evidence:
+   artifacts/live-timeline-clock-native-build.log and
+   artifacts/live-timeline-clock-cabi/report.json / run.log. This is local native
+   evidence; live managed/UI and hosted validation remain separate.
+3. The workspace integration is in progress: root/Up/open-selected navigation,
+   scope breadcrumbs, local key domains and evaluated playheads. Nested playback
+   and scrubbing remain disabled until their playback policy is implemented.
+   Root seeks now retain integer ticks after one rounding step; runtime checks
+   are pending. No general local-to-root inverse is claimed.
+4. The user preference between independent composition playback and playback
+   tied to the current main-scene occurrence remains unanswered. Neither mode
+   has been implemented by assumption. Other outstanding timeline features in
+   earlier sections remain open.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

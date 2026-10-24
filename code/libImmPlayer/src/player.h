@@ -183,6 +183,36 @@ namespace ImmPlayer {
             uint32_t maxRepeatCount = 0;
         };
         int32_t GetLayerTimeline(int docId, uint32_t layerId, LayerTimeline & timing);
+        enum TimelineClockFlags : uint32_t
+        {
+            TimelineClockRoot = 1u << 0,
+            TimelineClockPlaying = 1u << 1,
+            TimelineClockWorldVisible = 1u << 2,
+            TimelineClockHeld = 1u << 3,
+            TimelineClockActionHeld = 1u << 4,
+            TimelineClockClamped = 1u << 5,
+            TimelineClockActiveSpan = 1u << 6,
+            TimelineClockInactive = 1u << 7
+        };
+        struct TimelineClock
+        {
+            int32_t timelineLayerId = -1;
+            int32_t parentTimelineLayerId = -1;
+            int64_t rootReportedTicks = 0;
+            int64_t rootEvaluatedTicks = 0;
+            int64_t elapsedTicks = 0;
+            int64_t localTicks = 0;
+            int64_t durationTicks = 0;
+            uint64_t cycleIndex = 0;
+            uint32_t canonicalRepeat = 0;
+            uint32_t effectiveRepeat = 0;
+            uint32_t flags = 0;
+            uint32_t reserved = 0;
+            uint64_t evaluationRevision = 0;
+            uint64_t presentedRevision = 0;
+            uint64_t requestedRevision = 0;
+        };
+        int32_t GetTimelineClock(int docId, uint32_t timelineLayerId, TimelineClock & clock);
         int32_t GetAnimationKeyCount(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, uint32_t & count);
         int32_t GetAnimationKey(int docId, uint32_t layerId,

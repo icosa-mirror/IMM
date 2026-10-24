@@ -823,6 +823,59 @@ namespace ImmPlayer
         return 0;
     }
 
+    int32_t Player::GetTimelineClock(int docId, uint32_t timelineLayerId, TimelineClock & clock)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded || doc->GetEvaluationRevision() == 0) return -4;
+        Sequence * sequence = doc->GetSequence();
+        if (IsLoadingAsync(sequence)) return -7;
+        Layer * layer = iFindLayerById(sequence, timelineLayerId);
+        Layer * root = sequence->GetRoot();
+        if (layer == nullptr || root == nullptr) return -1;
+        const bool isRoot = layer == root;
+        if (!isRoot && (layer->GetType() != Layer::Type::Group || !layer->GetIsTimeline())) return -3;
+        const piTick now = doc->GetCompletedCPUTime();
+        piTick reported(0), stopped(0);
+        doc->GetTime(now, &reported, &stopped);
+        const bool worldVisible = layer->GetWorldVisible();
+        const bool active = isRoot || (worldVisible && layer->HasEvaluatedVisibilitySpan());
+        TimelineClock value;
+        value.timelineLayerId = static_cast<int32_t>(layer->GetID());
+        value.parentTimelineLayerId = isRoot ? -1 : static_cast<int32_t>(layer->GetTimeline()->GetID());
+        value.rootReportedTicks = piTick::CastInt(reported);
+        value.rootEvaluatedTicks = piTick::CastInt(root->GetTimelineElapsed(now));
+        value.durationTicks = piTick::CastInt(layer->GetDuration());
+        value.canonicalRepeat = layer->GetMaxRepeatCount();
+        value.effectiveRepeat = layer->GetEvaluatedMaxRepeatCount();
+        value.flags = (isRoot ? TimelineClockRoot : 0u) |
+            (layer->GetPlaying() ? TimelineClockPlaying : 0u) |
+            (worldVisible ? TimelineClockWorldVisible : 0u) |
+            ((layer->HasStopTime() || root->HasStopTime()) ? TimelineClockHeld : 0u) |
+            ((layer->IsStoppedByAction() || root->IsStoppedByAction()) ? TimelineClockActionHeld : 0u) |
+            (active ? TimelineClockActiveSpan : TimelineClockInactive);
+        if (active)
+        {
+            value.elapsedTicks = piTick::CastInt(layer->GetTimelineElapsed(now));
+            // Same wrap/clamp decision used by descendants in SetStateAtImpl.
+            // cycleIndex is the raw elapsed quotient, even beyond a finite end.
+            value.cycleIndex = value.durationTicks != 0 ?
+                static_cast<uint64_t>(value.elapsedTicks / value.durationTicks) : 0;
+            const bool clamped = value.durationTicks != 0 && value.effectiveRepeat != 0 &&
+                value.cycleIndex >= value.effectiveRepeat;
+            value.localTicks = clamped ? value.durationTicks : value.durationTicks != 0 ?
+                value.elapsedTicks % value.durationTicks : value.elapsedTicks;
+            if (clamped) value.flags |= TimelineClockClamped;
+        }
+        const auto revisions = doc->GetTimelineQueryRevisions();
+        value.evaluationRevision = doc->GetEvaluationRevision();
+        value.presentedRevision = revisions.mPresented;
+        value.requestedRevision = revisions.mRequested;
+        clock = value;
+        return 0;
+    }
+
     int32_t Player::GetAnimationKeyCount(int docId, uint32_t layerId,
         Layer::AnimProperty property, uint32_t & count)
     {

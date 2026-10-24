@@ -188,6 +188,9 @@ namespace ImmPlayer {
         void SetCommandId(int id);
         int  GetCommandId(void);
         bool IsSequenceReady(void) const { return mSequenceReady; }
+        // Read only while holding the owning Player's scene/publication mutex.
+        ImmCore::piTick GetCompletedCPUTime() const { return mLastCPUTime; }
+        uint64_t GetEvaluationRevision() const { return mEvaluationRevision; }
 
         //----------------------------------------------------------------------
         // Live editing. Additive: nothing changes for a document that is only
@@ -217,6 +220,8 @@ namespace ImmPlayer {
             uint64_t mPrepared = 0;
             uint64_t mPresented = 0;
         };
+        AuthoringRevisions GetTimelineQueryRevisions() const
+        { return AuthoringRevisions{mRequestedRevision, mPreparedRevision, mPresentedRevision}; }
 
         struct AuthoringCommitStatus
         {

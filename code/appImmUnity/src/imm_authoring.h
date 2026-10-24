@@ -208,6 +208,35 @@ typedef struct ImmAuthoringKey
     uint32_t reserved[2];
 } ImmAuthoringKey;
 
+enum
+{
+    IMM_AUTHORING_TIMELINE_ROOT = 1u << 0,
+    IMM_AUTHORING_TIMELINE_PLAYING = 1u << 1, // Logical intent, not proof that the clock advances.
+    IMM_AUTHORING_TIMELINE_WORLD_VISIBLE = 1u << 2,
+    IMM_AUTHORING_TIMELINE_HELD = 1u << 3, // This timeline or the root has a stop time.
+    IMM_AUTHORING_TIMELINE_ACTION_HELD = 1u << 4, // This timeline/root is held by an authored action.
+    IMM_AUTHORING_TIMELINE_CLAMPED = 1u << 5, // Native finite-repeat end branch is selected.
+    IMM_AUTHORING_TIMELINE_ACTIVE_SPAN = 1u << 6,
+    IMM_AUTHORING_TIMELINE_INACTIVE = 1u << 7
+};
+
+// Unversioned, read-only 96-byte snapshot at the completed CPU timestamp.
+// Root reported time preserves GetTime's stopped +1 convention; evaluated time
+// is GetTimelineElapsed. localTicks uses the native wrap/clamp rule. cycleIndex
+// is elapsed/duration, including beyond a finite end (zero for duration zero).
+// Nonroot active spans require an established evaluated visibility span and
+// world visibility. Inactive snapshots return elapsed/local/cycle zero; those
+// zeros are not a newly evaluated clock. Playing and Held may both be set.
+// These are observations of the current occurrence, not a root-seek mapping.
+typedef struct ImmAuthoringTimelineClock
+{
+    int32_t timelineLayerId, parentTimelineLayerId;
+    int64_t rootReportedTicks, rootEvaluatedTicks, elapsedTicks, localTicks, durationTicks;
+    uint64_t cycleIndex;
+    uint32_t canonicalRepeat, effectiveRepeat, flags, reserved;
+    uint64_t evaluationRevision, presentedRevision, requestedRevision;
+} ImmAuthoringTimelineClock;
+
 typedef struct ImmAuthoringSpawnArea
 {
     uint32_t structSize;
@@ -247,6 +276,22 @@ static_assert(offsetof(ImmAuthoringLayerProperties, transformFlip) == 56,
     "ImmAuthoringLayerProperties reflection offset changed");
 static_assert(sizeof(ImmAuthoringLayerPivot) == 48, "ImmAuthoringLayerPivot ABI changed");
 static_assert(sizeof(ImmAuthoringKey) == 80, "ImmAuthoringKey ABI changed");
+static_assert(sizeof(ImmAuthoringTimelineClock) == 96, "ImmAuthoringTimelineClock ABI changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, timelineLayerId) == 0, "Timeline clock layer offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, parentTimelineLayerId) == 4, "Timeline clock parent offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, rootReportedTicks) == 8, "Timeline clock reported offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, rootEvaluatedTicks) == 16, "Timeline clock evaluated offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, elapsedTicks) == 24, "Timeline clock elapsed offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, localTicks) == 32, "Timeline clock local offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, durationTicks) == 40, "Timeline clock duration offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, cycleIndex) == 48, "Timeline clock cycle offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, canonicalRepeat) == 56, "Timeline clock canonical offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, effectiveRepeat) == 60, "Timeline clock effective offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, flags) == 64, "Timeline clock flags offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, reserved) == 68, "Timeline clock reserved offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, evaluationRevision) == 72, "Timeline clock evaluation offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, presentedRevision) == 80, "Timeline clock presented offset changed");
+static_assert(offsetof(ImmAuthoringTimelineClock, requestedRevision) == 88, "Timeline clock requested offset changed");
 static_assert(offsetof(ImmAuthoringKey, uintValue) == 64, "ImmAuthoringKey value offset changed");
 static_assert(offsetof(ImmAuthoringKey, transformFlip) == 68, "ImmAuthoringKey reflection offset changed");
 static_assert(sizeof(ImmAuthoringSpawnArea) == 112, "ImmAuthoringSpawnArea ABI changed");
@@ -302,6 +347,10 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetTimeline(in
     int32_t layerId, int32_t * isTimelineOut, double * durationSecondsOut,
     double * startOffsetSecondsOut, uint32_t * paintFrameRateOut,
     uint32_t * paintNumFramesOut, uint32_t * maxRepeatCountOut);
+// Root or nonroot timeline Group only. Requires at least sizeof(clock) output
+// capacity; invalid/not-ready/async-owned queries leave caller memory unchanged.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_TimelineGetClock(int32_t docId,
+    int32_t timelineLayerId, ImmAuthoringTimelineClock * clockOut, uint32_t capacityBytes);
 // Accumulated evaluated layer/ancestor transform in document coordinates;
 // excludes document placement and viewer/camera transforms. Reuses the 48-byte
 // pivot layout as a transform value; initialize its size/version before calling.

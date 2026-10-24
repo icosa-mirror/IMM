@@ -157,6 +157,7 @@ namespace ImmImporter
 		ImmCore::piTick GetDuration() const;
         // Evaluated Offset key value, in the parent timeline's tick domain.
         ImmCore::piTick GetStartOffset() const { return mStartOffset; }
+        bool HasEvaluatedVisibilitySpan() const { return mHasActiveSpanClockOrigin; }
 		ImmCore::piTick GetStartTime() const;
 		uint32_t GetNumChildren(void) const;                    // if group
 		Layer* GetChild(uint32_t id);                           // if group

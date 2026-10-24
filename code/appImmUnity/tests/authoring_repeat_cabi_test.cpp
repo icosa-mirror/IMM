@@ -47,6 +47,12 @@ int wmain(int argc, wchar_t ** argv)
     const int doc = player.Load(argv[1]);
     requireRepeat(doc >= 0, "load fixture");
     requireEmptyTime(doc); // No GlobalWork has initialized the root/player manager yet.
+    ImmAuthoringTimelineClock untouchedClock;
+    std::memset(&untouchedClock, 0xa5, sizeof(untouchedClock));
+    const auto originalClockBytes = untouchedClock;
+    requireRepeat(ImmAuthoring_TimelineGetClock(doc, 0, &untouchedClock, sizeof(untouchedClock)) ==
+        IMM_AUTHORING_INVALID_STATE && std::memcmp(&untouchedClock, &originalClockBytes, sizeof(untouchedClock)) == 0,
+        "clock query before load preserves caller memory");
     const auto tick = [&]() {
         gImmUnityPlugin.mBridge.GlobalWork(true);
         player.MaintainGPU();
@@ -633,6 +639,99 @@ int wmain(int argc, wchar_t ** argv)
         "detached getter preserves caller output");
     requireRepeat(ImmAuthoring_PaintSetMaxRepeatCount(doc, target, 0) == IMM_AUTHORING_INVALID_STATE,
         "detached setter rejected");
+    // A separate group-only document exercises actual nested clocks without
+    // touching the paint fixture's authoring session or introducing test hooks.
+    void * clockSequence = ImmExporter_CreateSequence(1, 0, 0, 0, 0, 30, 0, 0, 0, 0);
+    requireRepeat(clockSequence != nullptr, "create timeline clock fixture");
+    ImmExporterTransformC identity{};
+    identity.qw = 1.0f; identity.scale = 1.0f;
+    requireRepeat(ImmExporter_SetRootLayerProperties(clockSequence, 1, 1.0f, &identity, &identity,
+        0, 0, 1, 1000, 0), "clock fixture root timing");
+    void * clockRoot = ImmExporter_GetRootLayer(clockSequence);
+    void * finiteTimeline = ImmExporter_CreateGroupLayer(clockSequence, nullptr, "FiniteClock", 1, 1.0f,
+        &identity, &identity, 1, 100, 2);
+    void * infiniteTimeline = ImmExporter_CreateGroupLayer(clockSequence, nullptr, "InfiniteClock", 1, 1.0f,
+        &identity, &identity, 1, 100, 0);
+    void * inactiveTimeline = ImmExporter_CreateGroupLayer(clockSequence, nullptr, "InactiveClock", 1, 1.0f,
+        &identity, &identity, 1, 100, 1);
+    requireRepeat(finiteTimeline && infiniteTimeline && inactiveTimeline, "clock fixture timelines");
+    for (void * layer : {finiteTimeline, infiniteTimeline, inactiveTimeline})
+        requireRepeat(ImmExporter_LayerAddAnimationKey(layer, 0, layer == inactiveTimeline ? 500 : 100,
+            0, 1, 0, 0, 0, &identity), "clock fixture visibility span");
+    requireRepeat(ImmExporter_LayerAddAnimationKey(finiteTimeline, 8, 0, 0, 0, 20, 0, 0, &identity),
+        "clock fixture finite offset");
+    requireRepeat(ImmExporter_LayerAddAnimationKey(clockRoot, 6, 700, 0, 0,
+        static_cast<uint32_t>(Layer::AnimAction::Stop), 0, 0, &identity), "clock fixture Stop action");
+    requireRepeat(ImmExporter_ExportToFile(clockSequence, "timeline-clock.imm", 96000, 0), "export timeline clock fixture");
+    ImmExporter_DestroySequence(clockSequence);
+    const int clockDoc = player.Load(L"timeline-clock.imm");
+    requireRepeat(clockDoc >= 0 && wait([&]() {
+        Player::DocumentState state{};
+        player.GetDocumentState(state, clockDoc);
+        return state.mLoadingState == Player::LoadingState::Loaded;
+    }), "load timeline clock fixture");
+    int clockRootId = -1, finiteId = -1, infiniteId = -1, inactiveId = -1;
+    for (int index = 0; index < player.GetLayerCount(clockDoc); ++index)
+    {
+        Player::LayerInfo info{};
+        requireRepeat(player.GetLayerInfoByIndex(clockDoc, index, info), "clock fixture layer enumeration");
+        if (info.parentId < 0) clockRootId = info.id;
+        if (std::wcscmp(info.name, L"FiniteClock") == 0) finiteId = info.id;
+        if (std::wcscmp(info.name, L"InfiniteClock") == 0) infiniteId = info.id;
+        if (std::wcscmp(info.name, L"InactiveClock") == 0) inactiveId = info.id;
+    }
+    requireRepeat(clockRootId >= 0 && finiteId >= 0 && infiniteId >= 0 && inactiveId >= 0, "clock fixture layer IDs");
+    player.Pause(clockDoc);
+    requireRepeat(wait([&]() {
+        Player::DocumentState state{};
+        player.GetDocumentState(state, clockDoc);
+        return state.mPlaybackState == Player::PlaybackState::Paused;
+    }), "pause clock fixture");
+    const auto readClock = [&](int layer) {
+        ImmAuthoringTimelineClock value{};
+        requireRepeat(ImmAuthoring_TimelineGetClock(clockDoc, layer, &value, sizeof(value)) == IMM_AUTHORING_OK &&
+            value.reserved == 0 && value.evaluationRevision != 0, "read clock without attaching editing");
+        return value;
+    };
+    player.SetTime(clockDoc, piTick(351), piTick(1)); // Evaluated root tick350, reported tick351.
+    const auto rootClock = readClock(clockRootId);
+    const auto finiteClock = readClock(finiteId);
+    const auto infiniteClock = readClock(infiniteId);
+    const auto inactiveClock = readClock(inactiveId);
+    requireRepeat(rootClock.parentTimelineLayerId == -1 && rootClock.rootReportedTicks == 351 &&
+        rootClock.rootEvaluatedTicks == 350 && rootClock.localTicks == 350 &&
+        (rootClock.flags & IMM_AUTHORING_TIMELINE_ROOT), "root reported/evaluated clock domains");
+    requireRepeat(finiteClock.parentTimelineLayerId == clockRootId && finiteClock.elapsedTicks == 270 &&
+        finiteClock.localTicks == 100 && finiteClock.cycleIndex == 2 && finiteClock.canonicalRepeat == 2 &&
+        finiteClock.effectiveRepeat == 2 && (finiteClock.flags & IMM_AUTHORING_TIMELINE_CLAMPED) &&
+        (finiteClock.flags & IMM_AUTHORING_TIMELINE_HELD), "finite nested span offset and clamp");
+    requireRepeat(infiniteClock.elapsedTicks == 250 && infiniteClock.localTicks == 50 &&
+        infiniteClock.cycleIndex == 2 && !(infiniteClock.flags & IMM_AUTHORING_TIMELINE_CLAMPED),
+        "infinite nested clock wraps at native duration");
+    requireRepeat((inactiveClock.flags & IMM_AUTHORING_TIMELINE_INACTIVE) &&
+        !(inactiveClock.flags & IMM_AUTHORING_TIMELINE_ACTIVE_SPAN) && inactiveClock.elapsedTicks == 0 &&
+        inactiveClock.localTicks == 0 && inactiveClock.cycleIndex == 0, "inactive timeline does not invent a clock");
+    const auto unchangedClock = readClock(clockRootId);
+    requireRepeat(std::memcmp(&rootClock, &unchangedClock, sizeof(rootClock)) == 0,
+        "clock queries preserve playback and all revision fields");
+    player.SetTime(clockDoc, piTick(1101), piTick(1));
+    const auto wrappedRoot = readClock(clockRootId);
+    requireRepeat(wrappedRoot.elapsedTicks == 1100 && wrappedRoot.localTicks == 100 && wrappedRoot.cycleIndex == 1,
+        "infinite root uses native wrapping rather than reported-time arithmetic");
+    player.SetTime(clockDoc, piTick(700), piTick(0)); // Exactly Stop700 evaluates the authored hold at699.
+    const auto actionClock = readClock(clockRootId);
+    requireRepeat(actionClock.rootReportedTicks == 700 && actionClock.rootEvaluatedTicks == 699 &&
+        (actionClock.flags & IMM_AUTHORING_TIMELINE_ACTION_HELD) && (actionClock.flags & IMM_AUTHORING_TIMELINE_HELD),
+        "authored Stop clock keeps native one-tick hold domain");
+    untouchedClock = originalClockBytes;
+    requireRepeat(ImmAuthoring_TimelineGetClock(clockDoc, finiteId, &untouchedClock, sizeof(untouchedClock) - 1) ==
+        IMM_AUTHORING_INVALID_ARGUMENT && ImmAuthoring_TimelineGetClock(-1, finiteId, &untouchedClock, sizeof(untouchedClock)) ==
+        IMM_AUTHORING_NOT_FOUND && std::memcmp(&untouchedClock, &originalClockBytes, sizeof(untouchedClock)) == 0,
+        "invalid or undersized clock requests preserve caller memory");
+    requireRepeat(ImmAuthoring_TimelineGetClock(doc, sibling, &untouchedClock, sizeof(untouchedClock)) ==
+        IMM_AUTHORING_UNSUPPORTED && std::memcmp(&untouchedClock, &originalClockBytes, sizeof(untouchedClock)) == 0,
+        "paint layers cannot masquerade as timeline clocks");
+    std::puts("[IMM_TIMELINE_CLOCK_CABI_TEST] pass=1 rootAndNested=1 finiteClamp=1 infiniteWrap=1 inactive=1 heldAndActions=1 noMutation=1 capacityPreserved=1");
     player.UnloadAllSync();
     gImmUnityPlugin.mBridge.Shutdown();
     context->Release();

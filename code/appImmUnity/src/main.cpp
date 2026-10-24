@@ -2651,6 +2651,33 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     return IMM_AUTHORING_OK;
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_TimelineGetClock(
+    int32_t docId, int32_t timelineLayerId, ImmAuthoringTimelineClock * clockOut, uint32_t capacityBytes)
+{
+    if (timelineLayerId < 0 || clockOut == nullptr || capacityBytes < sizeof(ImmAuthoringTimelineClock))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    Player::TimelineClock snapshot;
+    const int32_t result = iPlayer().GetTimelineClock(docId, static_cast<uint32_t>(timelineLayerId), snapshot);
+    if (result != IMM_AUTHORING_OK) return result;
+    ImmAuthoringTimelineClock value{};
+    value.timelineLayerId = snapshot.timelineLayerId;
+    value.parentTimelineLayerId = snapshot.parentTimelineLayerId;
+    value.rootReportedTicks = snapshot.rootReportedTicks;
+    value.rootEvaluatedTicks = snapshot.rootEvaluatedTicks;
+    value.elapsedTicks = snapshot.elapsedTicks;
+    value.localTicks = snapshot.localTicks;
+    value.durationTicks = snapshot.durationTicks;
+    value.cycleIndex = snapshot.cycleIndex;
+    value.canonicalRepeat = snapshot.canonicalRepeat;
+    value.effectiveRepeat = snapshot.effectiveRepeat;
+    value.flags = snapshot.flags;
+    value.evaluationRevision = snapshot.evaluationRevision;
+    value.presentedRevision = snapshot.presentedRevision;
+    value.requestedRevision = snapshot.requestedRevision;
+    *clockOut = value;
+    return IMM_AUTHORING_OK;
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetWorldTransform(
     int32_t docId, int32_t layerId, ImmAuthoringLayerPivot * transformOut)
 {
