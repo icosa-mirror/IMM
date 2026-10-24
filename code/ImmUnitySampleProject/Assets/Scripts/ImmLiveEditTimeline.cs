@@ -10,6 +10,8 @@ namespace ImmPlayer
     {
         private Rect timelineWindow, toolbarWindow;
         private Vector2 toolbarScroll, timelineToolbarScroll;
+        private float timelineHeightFraction = 0.4f, inspectorWidth = 440, timelineNamesWidth = 320;
+        private int workspaceResizeControl;
         private double timelineStart, timelineRange = 5, timelinePlayTime;
         private int scrubControl;
         private long? queuedTimelineSeekTicks;
@@ -26,11 +28,13 @@ namespace ImmPlayer
         {
             if (wrapped == null) wrapped = new GUIStyle(GUI.skin.label) { wordWrap = true };
             if (treeButton == null) treeButton = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleLeft };
-            float timelineHeight = Mathf.Min(Mathf.Clamp(Screen.height * 0.4f, 190, 400), Mathf.Max(90, Screen.height - 210));
+            float availableHeight = Mathf.Max(90, Screen.height - 210);
+            float timelineHeight = Mathf.Clamp(Screen.height * timelineHeightFraction, Mathf.Min(190, availableHeight), availableHeight);
             toolbarWindow = new Rect(12, 12, Screen.width - 24, Screen.width < 1050 ? 118 : 100);
             timelineWindow = new Rect(12, Screen.height - timelineHeight - 12, Screen.width - 24, timelineHeight);
             float inspectorTop = toolbarWindow.yMax + 8;
-            window = new Rect(12, inspectorTop, Mathf.Min(440, Screen.width - 24), Mathf.Max(60, timelineWindow.y - inspectorTop - 8));
+            window = new Rect(12, inspectorTop, Mathf.Clamp(inspectorWidth, Mathf.Min(200, Screen.width - 24), Screen.width - 24), Mathf.Max(60, timelineWindow.y - inspectorTop - 8));
+            DrawWorkspaceResize();
             Fill(toolbarWindow, new Color(0.11f, 0.12f, 0.14f));
             GUI.Box(toolbarWindow, GUIContent.none);
             GUILayout.BeginArea(new Rect(toolbarWindow.x + 8, toolbarWindow.y + 4, toolbarWindow.width - 16, toolbarWindow.height - 8));
@@ -43,6 +47,43 @@ namespace ImmPlayer
             Fill(window, new Color(0.13f, 0.14f, 0.16f));
             window = GUILayout.Window(GetEntityId().GetHashCode(), window, DrawPanel, "Layer inspector — memory only");
             DrawTimeline();
+            Fill(new Rect(timelineWindow.x + TimelineNamesWidth - 2, timelineWindow.y + 30, 3, timelineWindow.height - 52), new Color(0.3f, 0.36f, 0.42f));
+        }
+
+        private float TimelineNamesWidth => Mathf.Clamp(timelineNamesWidth, 160, Mathf.Max(160, Mathf.Min(600, timelineWindow.width * 0.55f)));
+
+        private void DrawWorkspaceResize()
+        {
+            ResizeWorkspaceHandle(new Rect(timelineWindow.x, timelineWindow.y - 6, timelineWindow.width, 6), 0,
+                "Drag to resize the timeline");
+            ResizeWorkspaceHandle(new Rect(window.xMax, window.y, 6, window.height), 1,
+                "Drag to resize the inspector");
+            ResizeWorkspaceHandle(new Rect(timelineWindow.x + TimelineNamesWidth - 3, timelineWindow.y + 30, 6, timelineWindow.height - 52), 2,
+                "Drag to resize layer names");
+        }
+
+        private void ResizeWorkspaceHandle(Rect handle, int axis, string tip)
+        {
+            int control = GUIUtility.GetControlID(173421 + axis, FocusType.Passive);
+            Event input = Event.current;
+#if UNITY_EDITOR
+            UnityEditor.EditorGUIUtility.AddCursorRect(handle, axis == 0 ? UnityEditor.MouseCursor.ResizeVertical : UnityEditor.MouseCursor.ResizeHorizontal);
+#endif
+            Fill(handle, handle.Contains(input.mousePosition) || workspaceResizeControl == control
+                ? new Color(0.4f, 0.55f, 0.7f) : new Color(0.2f, 0.23f, 0.27f));
+            GUI.Label(handle, new GUIContent("", tip));
+            if (input.type == EventType.MouseDown && input.button == 0 && GUIUtility.hotControl == 0 && handle.Contains(input.mousePosition))
+            { GUI.FocusControl(null); workspaceResizeControl = control; GUIUtility.hotControl = control; input.Use(); }
+            if (workspaceResizeControl != control || GUIUtility.hotControl != control) return;
+            if (input.type == EventType.MouseDrag)
+            {
+                if (axis == 0) timelineHeightFraction = Mathf.Clamp01((Screen.height - 12 - input.mousePosition.y) / Screen.height);
+                else if (axis == 1) inspectorWidth = Mathf.Clamp(input.mousePosition.x - window.x, Mathf.Min(200, Screen.width - 24), Screen.width - 24);
+                else timelineNamesWidth = Mathf.Clamp(input.mousePosition.x - timelineWindow.x, 160, Mathf.Max(160, Mathf.Min(600, timelineWindow.width * 0.55f)));
+                input.Use();
+            }
+            if (input.type == EventType.MouseUp && input.button == 0)
+            { GUIUtility.hotControl = 0; workspaceResizeControl = 0; input.Use(); }
         }
 
         private void DrawToolbar()
@@ -104,7 +145,7 @@ namespace ImmPlayer
             Fill(timelineWindow, new Color(0.11f, 0.12f, 0.14f));
             GUI.Box(timelineWindow, GUIContent.none);
             GUI.BeginGroup(timelineWindow);
-            float namesWidth = Mathf.Min(320, timelineWindow.width * 0.32f);
+            float namesWidth = TimelineNamesWidth;
             float tracksWidth = Mathf.Max(50, timelineWindow.width - namesWidth - 20);
             float headerExtra = timelineWindow.width < 1740 ? 20 : 0;
             timelineToolbarScroll = GUI.BeginScrollView(new Rect(0, 0, timelineWindow.width, 30 + headerExtra), timelineToolbarScroll,
@@ -244,9 +285,14 @@ namespace ImmPlayer
 
         private void ReleaseTimelineCapture()
         {
+            if (workspaceResizeControl != 0 && GUIUtility.hotControl == workspaceResizeControl) GUIUtility.hotControl = 0;
+            workspaceResizeControl = 0;
             if (scrubControl != 0 && GUIUtility.hotControl == scrubControl) GUIUtility.hotControl = 0;
             scrubControl = 0; draggingKey = false;
         }
+
+        private void OnApplicationFocus(bool focused)
+        { if (!focused) ReleaseTimelineCapture(); }
 
         private static void Fill(Rect rect, Color color)
         {

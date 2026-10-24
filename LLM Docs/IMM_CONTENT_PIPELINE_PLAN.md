@@ -4374,6 +4374,28 @@ the historical sizes/check counts below describe this earlier source only.
    Focused source rereview confirmed the exit/visibility/frame-publication fixes
    and found no further concrete blocker; whitespace checks pass.
 
+### 6.124. Workspace sizing and drawing-clock follow-up (in progress)
+
+1. Added drag splitters for timeline height, inspector width and layer-name width,
+   plus capture release on focus loss. Managed compilation and five live checks
+   pass: resize each dimension, capture another drag, release on focus loss.
+   Evidence: artifacts/timeline-workspace-resize-probe.json / .png and
+   timeline-resize-final-managed-build.log. Initial injected events missed the six-pixel handle
+   because Game-view event coordinates differed by four pixels; the diagnostic
+   records actual OnGUI positions before calibrating the probe. The probe also
+   waits for capture before testing its release. Temporary diagnostic logs are
+   removed and the final assembly compiled after stopping Play.
+2. Source review identifies the next functional drawing-track correction: resolve
+   paint Visibility start, Offset and Loop in the selected scope's local clock;
+   finite paint repeats hold their final slot. Non-timeline ancestor visibility
+   masks exposure without shifting the paint clock. Track drawing and click
+   selection must share the exact sampler. Current modulo click selection and
+   truncated finite-repeat lanes are incomplete.
+3. Projection must bound work by visible pixels/segments at dense zoom levels,
+   preserve distinct editable slots even when drawing handles repeat, and handle
+   key/frame boundaries exactly. This is an authored exposure schedule, not a
+   simulation of historical action holds. Implementation is still pending.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
