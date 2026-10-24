@@ -57,16 +57,16 @@ int alpha2coverage(float al, ivec2 p, uint frameID, uint primitiveID)
 	al = clamp( al + 0.99*(ran-0.5)/float(MSAASampleCount), 0.0, 1.0); // 0.99 is to make sure the dithering never makes the alpha leak to the previour or the next bucket
 
 	// compute sample mask from input alpha, like hardware is doing it
-	uint mask = (0xff00 >> uint(al*float(MSAASampleCount) + 0.5)) & 0xff;
+	uint mask = (0xff00u >> uint(al*float(MSAASampleCount) + 0.5)) & 0xffu;
 
 	// randomize mask per primitive ID and pixel
 	uint shift = uint(ran*7.0);
 	shift += primitiveID;
-	shift &= 7;
+	shift &= 7u;
 
 	// barrel Shift 8 Bit
 	uint b = (mask << 8) | mask;
-	mask = (b >> shift) & 0xff;
+	mask = (b >> shift) & 0xffu;
 
  	return int(mask);
 }

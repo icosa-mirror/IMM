@@ -102,12 +102,12 @@ out V2CData
 
 vec4 unpack4( uint d )
 {
-    return vec4( ivec4(d,d>>8u,d>>16u,d>>24u)&255u )/255.0;
+    return vec4( uvec4(d,d>>8u,d>>16u,d>>24u)&255u )/255.0;
 }
 
 vec3 unpack3( uint d )
 {
-    return vec3( ivec3(d,d>>8u,d>>16u)&255u )/255.0;
+    return vec3( uvec3(d,d>>8u,d>>16u)&255u )/255.0;
 }
 
 vec3 decodeUnitVector( uint data )
@@ -153,7 +153,7 @@ void main()
 	#else
      uint  inInfo     = vertex.mDirInf>>24u;
      vec3  inOri      = normalize( -1.0+2.0*unpack3( vertex.mDirInf ) );
-	 float inWid      = 1.7*chunk_data.mData[0].mBiggestStroke * float(vertex.mWid&0x7fff)/32767.0;
+	 float inWid      = 1.7*chunk_data.mData[0].mBiggestStroke * float(vertex.mWid&0x7fffu)/32767.0;
 	#endif
     vec4  inColAlpha = unpack4( vertex.mColAlp );
     vec3  inAxU      = decodeUnitVector( vertex.mAxUUn2 );

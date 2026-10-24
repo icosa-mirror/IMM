@@ -44,22 +44,23 @@ final behavior. These do not require expanding this evaluation into a production
 editor. Android draw-in device expansion remains parked by the user's scope
 correction (6.143).
 
-Latest pushed implementation source is `06a288aa51417c66cb347bcb8ebd68d944de26e4`.
-Replacement FULL[40091556175](https://github.com/icosa-mirror/IMM/actions/runs/40091556175)
-is active. Required acceptance includes the complete hosted gates, actual Mesa
-zero-diagnostic image validation and corrected macOS smoke exit/audio markers.
-The previous source-affected runs40078448726 and40080086930 are terminal Cancelled;
-all their jobs/license owners are terminal. The older runs described as pending
-in historical milestones are historical states, not current accepted evidence.
+Latest pushed implementation source06a288aa is not accepted. Its required FULL
+[40091556175](https://github.com/icosa-mirror/IMM/actions/runs/40091556175) found
+additional Mesa shader diagnostics after the first fragment-only correction.
+The run is terminal Cancelled with all jobs/license owners terminal; 31 successful
+jobs are preserved, while its failed/missing evidence is not acceptance. See6.152
+for the exact remaining shader sites, local Mesa reproduction and complete fix.
+The corrected source requires a replacement FULL. Required outstanding acceptance
+still includes all hosted gates and corrected macOS smoke exit/audio markers.
 
-The most recent CI source correction makes desktop paint coverage masks explicitly
-unsigned after Mesa reported implicit signed-to-unsigned bitwise diagnostics.
-All pixel checks in the failed artifact passed; strict diagnostic failure was
-retained. The corrected viewer passes all eight local image cases without
-renderer diagnostics, and regenerated Vulkan output is unchanged (6.151). Actual
-hosted Mesa acceptance remains pending. The earlier macOS native-log correction
-also retains its required audio markers (6.144). No renderer feature expansion
-or relaxed CI gate is part of either correction.
+The complete correction passes the same eight image cases under local Mesa with
+zero diagnostics and byte-identical images before/after, plus the local GPU path.
+It makes unsigned operations explicit across the shader paths actually compiled
+by the strict gate. Vulkan shaders regenerate and validate; the shared static
+vertex source updates its generated SPIR-V. No diagnostic filtering or gate
+weakening is included. These local receipts do not replace full hosted acceptance.
+Earlier runs described as pending in historical milestones are historical states,
+not current accepted evidence.
 
 The broader shared roadmap is also open: scene-wide Quill chapter/startup,
 timing/navigation/media/reverse fidelity, full runtime-authoring acceptance,
@@ -5290,6 +5291,40 @@ the historical sizes/check counts below describe this earlier source only.
    main. Replacement FULL[40091556175](https://github.com/icosa-mirror/IMM/actions/runs/40091556175)
    is queued on exact source06a288aa51417c66cb347bcb8ebd68d944de26e4. A queued run
    is not passing evidence; monitor the actual required jobs before acceptance.
+
+### 6.152. Complete the Mesa shader portability correction with local reproduction
+
+1. FULL40091556175/source06a288aa still fails Windows OpenGL despite all eight
+   DrawIn pixel cases passing. The first correction covered paint fragment masks
+   but missed paint vertex decoding and model/picture fragment shaders compiled
+   during initialization. The actual artifact12561561680 reports 960 diagnostics:
+   210 per static case and 30 per pretessellated case. Retained in ignored
+   artifacts/timeline-ci-06a-gl-evidence. This was an incomplete fix, not acceptance.
+2. Correct the three paint vertex operand-type mismatches and unsigned coverage
+   masks in model, 2D picture, cubemap and equirectangular fragment sources.
+   Signed-vector/unsigned-mask mixing becomes an unsigned-vector operation;
+   unsigned operands use unsigned constants. Numeric mask values and rendering
+   behavior are preserved. Regenerate/validate static, model and picture Vulkan
+   shaders; the static vertex SPIR-V changes with its shared source. The strict
+   zero-diagnostic gate is unchanged.
+3. Found the existing ignored Mesa26.1.8/LLVM22 reproduction bundle. Verify the
+   pinned Mesa archive SHA256 and extract its missing OpenGL runtime dependency
+   into an isolated viewer directory. Before the correction, all eight cases
+   reproduce the exact 960 hosted diagnostics. Final corrected standalone viewer
+   passes all eight with zero diagnostics; all eight PPM images are byte-identical
+   to that failing run. The local GPU also passes all eight final cases. Evidence:
+   artifacts/draw-in-mesa-mask-red, draw-in-mesa-mask-final,
+   draw-in-mask-final-local-gpu and mesa-mask-regression-proof.json. The sample
+   Editor/DLL and Snoopymove inspection view remain untouched.
+4. Cancelled the source-affected FULL after preserving evidence. All jobs and
+   license owners are terminal: 31 successful, 11 skipped, 15 cancelled and 5 failed. Inspected
+   all failed report logs: GPU cites the OpenGL failure; Device/Engine cite
+   cancelled or missing lane evidence; final Validation cites that incomplete
+   evidence. They remain failed, not passing independent acceptance. Receipts:
+   artifacts/timeline-ci-06a-cancelled-{run,jobs}.json and report job logs.
+5. Commit this complete correction with [CI VALIDATION], pull before pushing and
+   start a replacement FULL. Hosted Mesa acceptance, corrected macOS smoke and
+   full matrix acceptance remain required. Goal stays active.
 
 ## 7. Consolidated documents
 
