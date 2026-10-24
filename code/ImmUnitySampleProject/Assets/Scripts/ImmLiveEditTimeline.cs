@@ -10,6 +10,7 @@ namespace ImmPlayer
     {
         private Rect timelineWindow, toolbarWindow;
         private Vector2 toolbarScroll, timelineToolbarScroll;
+        private bool showAllTracks;
         private float timelineHeightFraction = 0.4f, inspectorWidth = 440, timelineNamesWidth = 320;
         private int workspaceResizeControl;
         private double timelineStart, timelineRange = 5, timelinePlayTime;
@@ -137,11 +138,36 @@ namespace ImmPlayer
             timelineRows.Add((node, depth, -1));
             if (InTimelineScope(node) && expandedKeyLayers.Contains(node.Info.Id) && timelineData.TryGetValue(node.Info.Id, out TimelineData data))
                 for (int i = 0; i < channelIds.Length; i++)
-                    if ((data.Keys.TryGetValue(channelIds[i], out N.Key[] keys) && keys.Length > 0) || (selected == node.Info.Id && keyChannel == i))
+                    if (ShowTimelineChannel(node.Info.Id, channelIds[i], data))
                         timelineRows.Add((node, depth + 1, channelIds[i]));
             if ((!node.Info.IsTimeline || node.Info.Id == timelineScope) &&
                 (!string.IsNullOrEmpty(filter) || !collapsedNodes.Contains(node.Info.Id)))
                 foreach (var child in node.Children) CollectTimelineRows(child, depth + 1);
+        }
+
+        private bool ShowTimelineChannel(int layer, int property, TimelineData data)
+        {
+            data.Keys.TryGetValue(property, out N.Key[] keys);
+            if (showAllTracks) return (keys != null && keys.Length > 0) || CanEditTimelineChannel(layer, property);
+            if (keys == null || keys.Length == 0) return false;
+            if (keys.Length != 1 || SequenceTick(keys[0].seconds) != 0) return true;
+            N.Key key = keys[0];
+            N.Properties baseline = data.Canonical;
+            // Only suppress an exact, trivial default. Timed keys and actions
+            // remain visible even when their numeric payload happens to be zero.
+            switch (property)
+            {
+                case 0: return key.boolean != baseline.visible;
+                case 1: return key.value != baseline.opacity;
+                case 5: return key.doubleValue != 1;
+                case 7: return key.boolean != 0 ? data.Repeat != 0 : data.Repeat != 1;
+                case 8: return key.ticks != 0;
+                case 9:
+                    return key.tx != baseline.tx || key.ty != baseline.ty || key.tz != baseline.tz ||
+                        key.qx != baseline.qx || key.qy != baseline.qy || key.qz != baseline.qz || key.qw != baseline.qw ||
+                        key.scale != baseline.scale || key.flip != baseline.flip;
+                default: return true;
+            }
         }
 
         private void DrawTimeline()
@@ -151,9 +177,10 @@ namespace ImmPlayer
             GUI.BeginGroup(timelineWindow);
             float namesWidth = TimelineNamesWidth;
             float tracksWidth = Mathf.Max(50, timelineWindow.width - namesWidth - 20);
-            float headerExtra = timelineWindow.width < 1740 ? 20 : 0;
+            float toolbarWidth = Mathf.Max(1740, namesWidth + 1490);
+            float headerExtra = timelineWindow.width < toolbarWidth ? 20 : 0;
             timelineToolbarScroll = GUI.BeginScrollView(new Rect(0, 0, timelineWindow.width, 30 + headerExtra), timelineToolbarScroll,
-                new Rect(0, 0, Math.Max(1740, timelineWindow.width - 1), 28), false, false);
+                new Rect(0, 0, Math.Max(toolbarWidth, timelineWindow.width - 1), 28), false, false);
             GUI.Label(new Rect(8, 4, 76, 22), "Timeline");
             GUI.enabled = attached && !loading;
             string nextFilter = GUI.TextField(new Rect(84, 4, Mathf.Max(80, namesWidth - 92), 22), filter);
@@ -188,6 +215,13 @@ namespace ImmPlayer
             GUI.enabled = true;
             DrawTimelineHistory(namesWidth + 972);
             DrawTimelineClipboard(namesWidth + 1144);
+            bool nextShowAll = GUI.Toggle(new Rect(namesWidth + 1344, 4, 140, 22), showAllTracks,
+                new GUIContent("Show all tracks", "Show empty channels and single time-zero keys matching the layer's defaults. No keys are removed."));
+            if (nextShowAll != showAllTracks)
+            {
+                showAllTracks = nextShowAll;
+                selectedTimelineKey = null;
+            }
             GUI.EndScrollView();
             GUI.BeginGroup(new Rect(0, headerExtra, timelineWindow.width, timelineWindow.height - headerExtra));
             GUI.Label(new Rect(8, 30, namesWidth - 12, 22), $"Layers ({layers.Length}) / drawing frames");

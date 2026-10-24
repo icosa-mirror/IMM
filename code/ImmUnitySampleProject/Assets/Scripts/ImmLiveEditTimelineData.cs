@@ -13,6 +13,7 @@ namespace ImmPlayer
             internal double Duration, Offset;
             internal uint FrameRate, Frames, Repeat;
             internal bool IsTimeline, CanonicalVisible;
+            internal N.Properties Canonical;
             internal readonly Dictionary<int, N.Key[]> Keys = new Dictionary<int, N.Key[]>();
             internal ulong[] Drawings = Array.Empty<ulong>();
         }
@@ -128,6 +129,7 @@ namespace ImmPlayer
                 result = N.ImmAuthoring_LayerGetProperties(Doc, layer.Id, ref baseProperties);
                 if (result != 0) { timelineReadError = $"Some base values unavailable: {N.Result(result)}"; continue; }
                 data.CanonicalVisible = baseProperties.visible != 0;
+                data.Canonical = baseProperties;
                 foreach (int property in channelIds)
                 {
                     result = N.ImmAuthoring_KeyGetCount(Doc, layer.Id, property, out uint count);
@@ -152,7 +154,9 @@ namespace ImmPlayer
             {
                 N.Key selectedKey = selectedTimelineKey.Value;
                 selectedTimelineKey = null;
-                if (timelineData.TryGetValue(selectedKeyLayer, out TimelineData selectedData) && selectedData.Keys.TryGetValue(selectedKey.property, out N.Key[] selectedKeys))
+                if (timelineData.TryGetValue(selectedKeyLayer, out TimelineData selectedData) &&
+                    ShowTimelineChannel(selectedKeyLayer, selectedKey.property, selectedData) &&
+                    selectedData.Keys.TryGetValue(selectedKey.property, out N.Key[] selectedKeys))
                     foreach (var key in selectedKeys)
                         if (Math.Abs(key.seconds - selectedKey.seconds) < 1.0 / 12600) selectedTimelineKey = key;
             }

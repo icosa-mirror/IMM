@@ -5147,6 +5147,33 @@ the historical sizes/check counts below describe this earlier source only.
    preview through this same realistic scene. These are evaluation/prototyping
    steps, not a request to expand backend coverage or build a production editor.
 
+### 6.147. Useful-track filtering agreed during editor prototyping
+
+1. User agreed to hide empty channels and single trivial time-zero defaults, keep
+   deliberately timed keys visible, and expose Show all tracks. Offset remains a
+   normal editable runtime track. Its future production-editor treatment has not
+   been decided; the earlier suggestion to move it out of the timeline was not an
+   accepted design change. This milestone changes presentation only.
+2. Implemented conservative filtering against already-read canonical layer values,
+   zero offset, canonical loop count and the runtime DrawIn default. Multiple keys,
+   later keys and Action keys remain visible. Show all reveals stored tracks and
+   supported empty channels on expanded layers, clearing hidden key selection.
+   Managed compilation passes (zero errors, two existing duplicate-type warnings).
+   Thirteen fresh-Editor Snoopy steps pass actual toggle/button behavior, stored
+   default preservation, multiple default keys, a single later zero-offset key,
+   Undo restoring the hidden original, and access through Show all. With playback
+   held, filtered/all/restored viewport images match exactly. Evidence:
+   artifacts/track-filter-ui-probe.json, track-filter-scene-comparison.json,
+   track-filter-default.png, track-filter-all.png and track-filter-restored.png.
+   A playing-scene pass is retained separately; image equivalence is claimed only
+   from the held pass. The owned Editor was restarted for the new UI.
+3. Before this change, twelve Snoopy key-editing steps passed actual key creation,
+   pointer dragging from0.5 to0.75s, Undo/Redo, deletion and restoration. Final scene
+   pixels exactly match the baseline. Evidence: artifacts/snoopy-key-edit-pass.json
+   and snoopy-key-restored.png. An initial probe lacked an explicit selected-layer
+   precondition and was undone; it is not counted as a runtime failure or accepted
+   result. The accepted pass records the selected layer throughout.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
