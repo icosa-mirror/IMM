@@ -580,14 +580,14 @@ namespace ImmPlayer
                         for (int corner = 0; corner < 8; corner++)
                             world.Encapsulate(matrix.MultiplyPoint3x4(local.center + Vector3.Scale(local.extents,
                                 new Vector3((corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1))));
-                        FrameBounds(world);
+                        FrameBounds(world, true);
                     });
                     return;
                 }
             Log("Select a layer with visible bounds first.");
         }
 
-        private void FrameBounds(Bounds bounds)
+        private void FrameBounds(Bounds bounds, bool clipForeground = false)
         {
             if (view == null) return;
             float radius = Mathf.Max(0.1f, bounds.extents.magnitude);
@@ -601,7 +601,10 @@ namespace ImmPlayer
             float y = 1 - area.center.y / Screen.height * 2;
             view.transform.position = bounds.center - view.transform.forward * distance -
                 (view.transform.right * x + view.transform.up * y) * distance * Mathf.Tan(halfFov);
-            view.nearClipPlane = Mathf.Max(0.01f, radius / 1000);
+            // Fitting a selection can move the camera behind other artwork.
+            // Keep every selected-bound corner beyond the near plane while
+            // clipping foreground geometry that would otherwise hide it.
+            view.nearClipPlane = Mathf.Max(0.01f, clipForeground ? distance - radius * 1.05f : radius / 1000);
             view.farClipPlane = Mathf.Max(1000, distance + radius * 4);
         }
 

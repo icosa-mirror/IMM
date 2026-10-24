@@ -23,8 +23,9 @@ and independent audio enable/mute with separate voices and main-cursor retention
 Audio feature source `1ddf8eff` passes native Release, CPU/loaded-C-ABI checks and
 nine actual Unity button/ruler steps; see 6.131 for evidence and its limits. This
 is a development test UI. Action controls and their native runtime support are now
-implemented and pass local live acceptance (6.136-6.137). GL/Android draw-in support, the main-scene
-Frame selected occlusion follow-up and audible Unity/device confirmation remain.
+implemented and pass local live acceptance (6.136-6.137). Selected-layer framing
+now clips foreground occluders and passes live Snoopy acceptance (6.138).
+GL/Android draw-in support and audible Unity/device confirmation remain.
 The timeline goal stays active, including the required missing runtime features.
 Later native Action publication (`29d72074`) and late finite-occurrence correction
 (`0f81d964`) pass local native/CPU/C-ABI checks; their FULL run 40066922009 is
@@ -4899,6 +4900,30 @@ the historical sizes/check counts below describe this earlier source only.
    not accepted. The independent native fixes are `8fb3de4c` and `42f36784`.
    Later healthy FULL CI runs still await serialized licensed engine jobs; the
    accepted exact-source baseline remains the receipt in the top checkpoint.
+
+### 6.138. Selected-layer framing through foreground artwork
+
+1. Reproduced the all-purple Snoopy result on layer30 at held main time2s.
+   Fitting its transformed bounds retreats the camera behind foreground artwork.
+   A camera-only experiment proves that clipping in front of the selected bounds
+   reveals the content; authored layer visibility and transforms need no changes.
+2. Frame selected now places the near clipping plane just ahead of the bounds'
+   enclosing sphere, with a five-percent margin. All selected bounds remain beyond
+   that plane. The toolbar tooltip explains foreground clipping; Frame scene and
+   Move to view restore broad/normal clipping. Other framing behavior is unchanged.
+3. Managed compilation passes. After a clean Editor restart, six actual-button
+   steps pass selection framing, repeat framing, held clock preservation, Frame
+   scene clipping reset, and Move to view restoring authored pose/normal clipping.
+   Evidence: artifacts/framing-ui-probe.json and framing-selected-fixed.png.
+   Visual inspection confirms Snoopy is visible. In the unchanged viewport crop,
+   the old frame has one flat color and no white selection pixels; the new frame
+   has 12,157 white pixels and 3,591 distinct colors. This is supporting image
+   evidence, not a general content classifier. Receipt:
+   artifacts/framing-visible-content.json. The earlier failure in 6.127 is closed.
+4. GL/Android draw-in remains in progress. Its packed GPU vertex layouts currently
+   omit point times, so merely enabling shader variants would be incorrect.
+   Required timing/variant changes are being prepared separately; no rendering
+   acceptance or full timeline completion is claimed by this framing milestone.
 
 ## 7. Consolidated documents
 

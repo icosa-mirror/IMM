@@ -104,7 +104,7 @@ namespace ImmPlayer
             if (GUILayout.Button("Unload", GUILayout.Width(60))) Unload();
             GUI.enabled = document != null && !loading && pending == 0 && !awaitingCommit;
             if (GUILayout.Button("Frame scene", GUILayout.Width(95))) FrameScene();
-            if (GUILayout.Button("Frame selected", GUILayout.Width(105))) FrameSelected();
+            if (GUILayout.Button(new GUIContent("Frame selected", "Fit the selected bounds and clip foreground artwork. Frame scene or Move to view restores normal clipping."), GUILayout.Width(105))) FrameSelected();
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal();
             GUI.enabled &= (IsRootScope || TimelinePreviewActive) && timelineClockValid;
