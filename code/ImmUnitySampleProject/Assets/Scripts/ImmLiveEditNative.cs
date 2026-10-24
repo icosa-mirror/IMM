@@ -106,6 +106,7 @@ namespace ImmPlayer
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerSetName(int doc, int layer, byte[] name, uint count);
         [DllImport(Library)] private static extern int ImmAuthoring_LayerGetName(int doc, int layer, [Out] byte[] name, uint capacity, out uint required);
         [DllImport(Library)] internal static extern int ImmAuthoring_KeySet(int doc, int layer, ref Key key);
+        [DllImport(Library)] internal static extern int ImmAuthoring_KeyGetEditability(int doc, int layer, int property);
         [DllImport(Library)] internal static extern int ImmAuthoring_KeyGetCount(int doc, int layer, int property, out uint count);
         [DllImport(Library)] internal static extern int ImmAuthoring_KeyGet(int doc, int layer, int property, uint index, ref Key key);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerGetTimeline(int doc, int layer, out int isTimeline,

@@ -307,7 +307,11 @@ namespace ImmPlayer
                 float x = namesWidth + (float)((playTime - timelineStart) / timelineRange) * tracksWidth;
                 Fill(new Rect(x, 30, 2, timelineWindow.height - headerExtra - 54), new Color(1, 0.36f, 0.25f));
             }
+            string editReason = TimelineReadOnlyReason(selected, channelIds[keyChannel]);
+            if (editReason.Length == 0 && selectedTimelineKey.HasValue && !CanEditTimelineKey(selectedKeyLayer, selectedTimelineKey.Value))
+                editReason = "This imported action is not editable on this layer.";
             GUI.Label(new Rect(8, timelineWindow.height - headerExtra - 22, timelineWindow.width - 16, 20),
+                editReason.Length > 0 ? $"Read-only: {editReason} Existing keys remain readable and copyable." :
                 $"Ruler: scrub · Squares: select/drag keys · Blue: authored drawing exposure (white: change; grey: dense summary) · Range {timelineStart:0.###}–{timelineStart + timelineRange:0.###} s. {timelineReadError}");
             var scrubArea = new Rect(namesWidth, 30, tracksWidth, timelineWindow.height - headerExtra - 54);
             int control = GUIUtility.GetControlID(FocusType.Passive);

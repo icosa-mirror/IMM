@@ -916,6 +916,15 @@ namespace ImmPlayer
         catch (const std::length_error &) { return -5; }
     }
 
+    int32_t Player::GetAnimationKeyEditability(int docId, uint32_t layerId, Layer::AnimProperty property)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId)) return -1;
+        auto * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded) return -4;
+        return doc->GetAnimationKeyEditability(layerId, property);
+    }
+
     int32_t Player::GetAnimationKeyCount(int docId, uint32_t layerId,
         Layer::AnimProperty property, uint32_t & count)
     {

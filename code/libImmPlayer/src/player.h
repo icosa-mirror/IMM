@@ -217,6 +217,7 @@ namespace ImmPlayer {
         };
         int32_t GetTimelineClock(int docId, uint32_t timelineLayerId, TimelineClock & clock);
         int32_t ControlTimelinePreview(int docId, int32_t timelineLayerId, int32_t action, int64_t ticks);
+        int32_t GetAnimationKeyEditability(int docId, uint32_t layerId, ImmImporter::Layer::AnimProperty property);
         int32_t GetAnimationKeyCount(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, uint32_t & count);
         int32_t GetAnimationKey(int docId, uint32_t layerId,

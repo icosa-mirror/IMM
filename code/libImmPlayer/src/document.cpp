@@ -452,6 +452,21 @@ namespace ImmPlayer
         return iCanRefreshStaticVisibility(layer) ? 0 : -3;
     }
 
+    static int32_t iValidateAnimationKeyTarget(Sequence * sequence, Layer * layer,
+        Layer::AnimProperty property)
+    {
+        if (layer == nullptr) return -1;
+        if (property == Layer::AnimProperty::Action)
+            return iValidateTimelineAction(layer, sequence->GetRoot(), nullptr);
+        if (property == Layer::AnimProperty::Visibility)
+            return iValidateStaticVisibility(sequence, layer);
+        if (property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset ||
+            property == Layer::AnimProperty::DrawInTime)
+            return layer->GetType() == Layer::Type::Paint &&
+                dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) != nullptr ? 0 : -3;
+        return property == Layer::AnimProperty::Opacity || property == Layer::AnimProperty::Transform ? 0 : -3;
+    }
+
     static void iRefreshStaticVisibility(Layer * layer, piTick now, piLog * log, Layer::EvaluationContext * context = nullptr)
     {
         if (layer->GetType() == Layer::Type::Paint)
@@ -2422,6 +2437,14 @@ namespace ImmPlayer
         return 0;
     }
 
+    int32_t Document::GetAnimationKeyEditability(uint32_t layerId, Layer::AnimProperty property)
+    {
+        if (!mEditing) return -4;
+        if (IsLoadingAsync(&mSequence)) return -7;
+        return iValidateAnimationKeyTarget(&mSequence,
+            iFindAuthoringLayerById(mSequence.GetRoot(), layerId), property);
+    }
+
     int32_t Document::QueueAnimationKey(uint32_t layerId, Layer::AnimProperty property,
         piTick time, const Layer::AnimValue & value, Layer::InterpolationType interpolation)
     {
@@ -2437,26 +2460,15 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
+        const int32_t targetResult = iValidateAnimationKeyTarget(&mSequence, layer, property);
+        if (targetResult != 0) return targetResult;
         const bool actionKey = property == Layer::AnimProperty::Action;
         if (actionKey)
         {
             const int32_t result = iValidateTimelineAction(layer, mSequence.GetRoot(), &value);
             if (result != 0) return result;
         }
-        if (property == Layer::AnimProperty::Visibility)
-        {
-            const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
-            if (visibilityResult != 0) return visibilityResult;
-        }
         const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
-        const bool paintOnlyKey = paintPlaybackKey || property == Layer::AnimProperty::DrawInTime;
-        if (paintOnlyKey && (layer->GetType() != Layer::Type::Paint ||
-            dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
-            return -3;
-        if (!paintOnlyKey && !actionKey && property != Layer::AnimProperty::Visibility &&
-            property != Layer::AnimProperty::Opacity &&
-            property != Layer::AnimProperty::Transform)
-            return -3;
         if (time < piTick(0))
             return -2;
         if (interpolation < Layer::InterpolationType::None ||
@@ -2510,26 +2522,8 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
-        const bool actionKey = property == Layer::AnimProperty::Action;
-        if (actionKey)
-        {
-            const int32_t result = iValidateTimelineAction(layer, mSequence.GetRoot(), nullptr);
-            if (result != 0) return result;
-        }
-        if (property == Layer::AnimProperty::Visibility)
-        {
-            const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
-            if (visibilityResult != 0) return visibilityResult;
-        }
-        const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
-        const bool paintOnlyKey = paintPlaybackKey || property == Layer::AnimProperty::DrawInTime;
-        if (paintOnlyKey && (layer->GetType() != Layer::Type::Paint ||
-            dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
-            return -3;
-        if (!paintOnlyKey && !actionKey && property != Layer::AnimProperty::Visibility &&
-            property != Layer::AnimProperty::Opacity &&
-            property != Layer::AnimProperty::Transform)
-            return -3;
+        const int32_t targetResult = iValidateAnimationKeyTarget(&mSequence, layer, property);
+        if (targetResult != 0) return targetResult;
         if (time < piTick(0))
             return -2;
         Layer::AnimValue value;
@@ -3490,20 +3484,13 @@ namespace ImmPlayer
                     { iRejectCommit(batch.mRevision, result != 0 ? result : -2, 0, edit.mLayerId); return; }
                 }
             }
-            if (edit.mProperty == Layer::AnimProperty::Visibility)
+            const int32_t targetResult = iValidateAnimationKeyTarget(&mSequence, layer, edit.mProperty);
+            if (targetResult != 0)
             {
-                const int32_t visibilityResult = iValidateStaticVisibility(&mSequence, layer);
-                if (visibilityResult != 0)
-                { iRejectCommit(batch.mRevision, visibilityResult, 0, edit.mLayerId); return; }
-            }
-            const bool paintPlaybackKey = edit.mProperty == Layer::AnimProperty::Loop || edit.mProperty == Layer::AnimProperty::Offset;
-            const bool paintOnlyKey = paintPlaybackKey || edit.mProperty == Layer::AnimProperty::DrawInTime;
-            if (paintOnlyKey && (layer->GetType() != Layer::Type::Paint ||
-                dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
-            {
-                iRejectCommit(batch.mRevision, -3, 0, edit.mLayerId);
+                iRejectCommit(batch.mRevision, targetResult, 0, edit.mLayerId);
                 return;
             }
+            const bool paintPlaybackKey = edit.mProperty == Layer::AnimProperty::Loop || edit.mProperty == Layer::AnimProperty::Offset;
             if (paintPlaybackKey && edit.mInterpolation != Layer::InterpolationType::None)
             {
                 iRejectCommit(batch.mRevision, -2, 0, edit.mLayerId);

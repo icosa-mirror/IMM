@@ -385,6 +385,11 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_TimelinePreviewCont
 // Preview descendants use the active composition boundary's coordinates.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetWorldTransform(int32_t docId,
     int32_t layerId, ImmAuthoringLayerPivot * transformOut);
+// Requires an attached editing session. Channel target eligibility only; key
+// values, preview scope and pending edits retain their normal validation.
+// Does not queue an edit or change revisions.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeyGetEditability(int32_t docId,
+    int32_t layerId, int32_t property);
 // Stored key times use the parent timeline's coordinates, before content Offset.
 // Keys are indexed in time order. The key output uses the existing 80-byte layout.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeyGetCount(int32_t docId,

@@ -9,7 +9,7 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
-Active goal (2026-10-24, revised by the user): use the test UI on realistic scenes
+Current goal (2026-10-24, revised and resumed by the user): use the test UI on realistic scenes
 such as Snoopy to evaluate existing runtime editing and prototype a future
 production editor, expose obvious gaps/bugs, and
 add only controls required for that evaluation. The chosen evaluation setup is the
@@ -18,16 +18,35 @@ parked; they are not prerequisites for this test UI goal. Full CI validation of
 committed changes remains required. Historical milestones below record their
 then-current scope; this paragraph and the latest relevant milestone govern work.
 
-Current checkpoint (2026-10-24): the latest accepted hosted baseline is FULL
-[40044825617](https://github.com/icosa-mirror/IMM/actions/runs/40044825617), source
-`0babd47acd7944b6939343e68c229ecc5196ae4c`: 49 jobs passed, 22 skipped, no failures.
-Actual final artifact 12543875599 passes all 20 required hosted rows; all 43
-preserved manifests identify that source. Receipt:
-artifacts/timeline-ci-agent-40044825617-acceptance-audit.json. Hardware-only Unity
-Windows Vulkan and deferred headset evidence remain outside hosted acceptance.
+Outstanding implementation tasks added by the user (6.153):
 
-Later source is not fully accepted yet. The local D3D12 Snoopy evaluation is
-complete: layer selection/framing, rename, visibility/opacity/transforms, key
+1. [x] Align test-UI key editing controls with native per-layer/subtree capabilities;
+   keep imported unsupported keys readable and explain why editing is unavailable.
+   Implemented and locally checked in6.155; fresh full CI acceptance is required.
+2. [ ] Close the identified playback-to-live-editing gaps: timeline Loop/Offset keys
+   and visibility changes involving nested timelines or media.
+
+The earlier Snoopy evaluation pass covers the operations exercised, not complete
+channel/type editing coverage. The current source has full hosted CI acceptance
+(6.154). These implementation tasks remain outstanding and require fresh full validation after their changes;
+the goal is not complete. The user has resumed implementation; native channel
+coverage remains the next task.
+
+Current checkpoint (2026-10-24): the latest accepted hosted baseline is FULL
+[40098186026](https://github.com/icosa-mirror/IMM/actions/runs/40098186026), source
+`1b9ed34c164cc4ac38a73d3e10aad89f0fbbc4aa`: 49 jobs passed, 22 skipped, no failed
+jobs or supporting steps. Actual final artifact12565070637 passes all 20 required
+hosted rows; all 43 preserved manifests identify that exact source, and all retained
+image links resolve. The OpenGL eight-case draw-in gate and macOS combined
+builder/Play smoke pass. Receipt:
+artifacts/timeline-ci-40098186026-acceptance-audit.json. Hardware-only Unity Windows
+Vulkan and deferred headset evidence remain outside hosted acceptance (6.154).
+
+Current source has full hosted acceptance. The previously agreed local D3D12
+Snoopy evaluation pass used the 79-layer baking-benchmark variant and is
+complete; it is not an official-export fidelity comparison. Newly identified
+coverage work remains open (6.153). That pass covers
+layer selection/framing, rename, visibility/opacity/transforms, key
 creation/retiming/removal and Undo/Redo, drawing/hold edits, temporary hierarchy
 creation/reparent/deletion, nested playback/scrubbing and return to the held main
 scene all have runtime and visible evidence (6.143-6.149). Independent audio has
@@ -44,23 +63,25 @@ final behavior. These do not require expanding this evaluation into a production
 editor. Android draw-in device expansion remains parked by the user's scope
 correction (6.143).
 
-Latest pushed implementation source06a288aa is not accepted. Its required FULL
+Earlier implementation source06a288aa was not accepted. Its required FULL
 [40091556175](https://github.com/icosa-mirror/IMM/actions/runs/40091556175) found
 additional Mesa shader diagnostics after the first fragment-only correction.
 The run is terminal Cancelled with all jobs/license owners terminal; 31 successful
 jobs are preserved, while its failed/missing evidence is not acceptance. See6.152
 for the exact remaining shader sites, local Mesa reproduction and complete fix.
-Complete correction `1b9ed34c164cc4ac38a73d3e10aad89f0fbbc4aa` is pushed with
-[CI VALIDATION]. Replacement FULL[40098186026](https://github.com/icosa-mirror/IMM/actions/runs/40098186026)
-is active. Required outstanding acceptance still includes all hosted gates, actual
-Mesa zero-diagnostic rendering and corrected macOS smoke exit/audio markers.
+Complete correction `1b9ed34c164cc4ac38a73d3e10aad89f0fbbc4aa` passed replacement
+FULL[40098186026](https://github.com/icosa-mirror/IMM/actions/runs/40098186026).
+The preserved report and critical job logs were reviewed at the user's request;
+full hosted acceptance is recorded in6.154. This closes the current source's CI
+acceptance work, not the newly added implementation tasks in6.153.
 
 The complete correction passes the same eight image cases under local Mesa with
 zero diagnostics and byte-identical images before/after, plus the local GPU path.
 It makes unsigned operations explicit across the shader paths actually compiled
 by the strict gate. Vulkan shaders regenerate and validate; the shared static
 vertex source updates its generated SPIR-V. No diagnostic filtering or gate
-weakening is included. These local receipts do not replace full hosted acceptance.
+weakening is included. These local receipts are complemented by the reviewed
+hosted acceptance in6.154.
 Earlier runs described as pending in historical milestones are historical states,
 not current accepted evidence.
 
@@ -5332,6 +5353,120 @@ the historical sizes/check counts below describe this earlier source only.
    active on exact source1b9ed34c164cc4ac38a73d3e10aad89f0fbbc4aa. No hosted pass
    is claimed yet. The tracked worktree is clean; unrelated ignored/untracked
    local material is preserved.
+
+### 6.153. Explicit channel-capability and live-editing coverage tasks
+
+1. User requested that the two gaps discovered during the layer/keyframe support
+   discussion become explicit tasks. Earlier milestones document restrictions;
+   they do not establish complete editing coverage. The previous statement that
+   only CI remained was too broad. These tasks are added to this goal; execution
+   remains paused. Timeline scope/navigation design remains separately provisional
+   in6.150 and is not silently implemented by this task-list update.
+2. [ ] Fix UI capability gating. Apply native-compatible per-layer/subtree rules to
+   key creation/replacement, removal, retiming, clipboard and history operations.
+   In particular, the UI currently enables Visibility for targets that native
+   iCanRefreshStaticVisibility rejects, including nested timeline groups and media
+   layers/subtrees. Keep existing unsupported keys visible/readable and give a
+   concise reason when editing is unavailable. Completion means an operation
+   offered as editable is accepted by the native API under the same conditions;
+   unsupported edits are clearly unavailable before submission.
+3. [ ] Extend live editing to the identified existing playback capabilities.
+   Support timeline-group Loop and Offset key edits, including applicable Root
+   behavior, and visibility edits on nested timelines, media layers and groups
+   containing them. Reconcile child clocks, finite/repeated playback, held/main
+   evaluation and sound start/stop/seek lifecycles so edits actually take effect.
+   Preserve the main clock when editing in local preview and resample retained
+   changes correctly on return. Extend the UI gating as each capability lands;
+   enabling buttons alone does not complete this task. The exact channel/type
+   matrix follows meaningful existing playback behavior, not every possible
+   combination merely expressible by the file format.
+4. Opacity and combined Transform are general key-edit channels. Draw-in remains
+   paint-specific; Action targets retain their explicit Root/timeline/viewpoint
+   rules. This task does not imply separate Position/Rotation/Scale tracks or
+   promise rendering implementations for every format-defined layer type.
+5. Keep changes small and the plan current. Exercise the affected operations in
+   the test UI on suitable real content, fix obvious regressions and complete the
+   required full CI acceptance before closing the goal. Do not introduce public
+   API versioning without the user's approval or evidence requiring compatibility.
+
+### 6.154. Full hosted CI acceptance of source1b9ed34c
+
+1. User requested review of the completed run's preserved evidence and recording
+   acceptance. FULL[40098186026](https://github.com/icosa-mirror/IMM/actions/runs/40098186026)
+   completed Success on exact source1b9ed34c164cc4ac38a73d3e10aad89f0fbbc4aa:
+   49 successful jobs, 22 skipped, no failed jobs and no failed supporting steps.
+   This supersedes the previously accepted source0babd47a/FULL40044825617.
+2. Downloaded final CIValidationEvidence artifact12565070637 and inspected its
+   actual VALIDATION_REPORT.md. All 20 required hosted rows are passed; all 43
+   retained manifests identify the exact tested source. All 765 retained image
+   links resolve (including repeated links to the same captures). No source
+   mismatch, missing required row or unresolved failure was found. Receipt:
+   artifacts/timeline-ci-40098186026-acceptance-audit.json; archive contents:
+   artifacts/timeline-ci-1b9-final-evidence.
+3. Windows OpenGL job120893209426 passes the strict timed draw-in gate. Its actual
+   log records [IMM_DRAW_IN_RENDER] passed=1 techniques=2 cases=8, with the unchanged
+   script requiring all image checks and zero renderer diagnostics. This is hosted
+   acceptance of the complete Mesa correction, beyond its local red/green proof.
+4. macOS Metal job120893210385 passes the combined player-build/Editor Play smoke
+   step and the capture check. The invoked source requires a fresh native log and
+   all three load/AVFoundation/Opus markers before its macOS success exit. This is
+   a successful marker-gated builder, not merely a capture/classifier pass with a
+   failed supporting step. Individual raw lane artifacts were cleaned by the
+   workflow; retained evidence includes the final report/manifests/captures and
+   downloaded job logs. Do not claim the literal raw native log is retained.
+5. Hosted acceptance does not include every supported hardware path. The report's
+   unity/windows/non-vr/vulkan row remains evidence_incomplete outside the hosted
+   requirement set; deferred headset evidence likewise is not claimed. All
+   required hosted rows pass under the existing scope; no gate was weakened.
+6. No current CI failure remains to fix. Implementation tasks6.153.2-3 remain open
+   and require their own full validation after changes. Scope/navigation remains
+   provisional in6.150. The overall goal remains paused and incomplete. This
+   acceptance update does not resume implementation or change the Editor.
+
+### 6.155. Native-driven test-UI channel eligibility (local milestone complete)
+
+1. User resumed the new implementation tasks. Keep the standalone text hierarchy
+   reference uncommitted. Source provenance was clarified during this work: the
+   79-layer original.imm is our modified-source baking-benchmark output, not the
+   official 52-layer Snoopy export. These are distinct inputs. The user deferred
+   the untouched-source converter comparison; no conversion-fidelity claim follows
+   from this editing evaluation.
+2. Add a read-only ImmAuthoring_KeyGetEditability query with no new structure or
+   API version. Query, key insertion/removal and preparation share one native
+   target-validation function. The query changes no keys or authoring revisions;
+   value, preview-scope and in-flight-edit validation remain separate.
+3. The lab reads channel eligibility with its existing timeline refresh, then uses
+   it in the existing create/delete/drag/cut/paste/history guards. Imported keys
+   remain readable/copyable. The inspector, key tooltips and timeline footer explain
+   read-only channels. Canonical visibility uses the same target restriction while
+   leaving supported opacity/transform controls enabled. No per-frame native query
+   or production-editor controls were added.
+4. Native Windows Release and managed compilation pass (zero managed errors;
+   two existing duplicate-type warnings). The existing native CPU authoring suite
+   passes. The restarted owned D3D12 Editor passes 20 target/channel cases on the
+   79-layer benchmark: root/nested-timeline/sound Visibility is read-only, eligible
+   paint/static-group/viewpoint Visibility and general channels remain editable.
+   An imported read-only visibility key stays shown/copyable with paste blocked;
+   the checks leave native revisions at0. Evidence:
+   artifacts/channel-capability-live-matrix.json and channel-capability-readonly.png.
+5. Seven actual button steps pass: disabled timeline Visibility Set key makes no
+   edit; supported paint Visibility hides the content; toolbar Undo restores it.
+   The held root remains at25200 ticks throughout. Scene-only images change8338
+   pixels when hidden and restore exactly (zero changed pixels after Undo).
+   Evidence: artifacts/channel-capability-live-buttons.json and
+   channel-capability-scene-comparison.json. CPU/compile/build logs use the same
+   channel-capability prefix. No new permanent test framework was introduced.
+6. Before restarting, confirmed no dirty scenes or native revisions, preserved the
+   selected file/view and merged only the upstream CI replacement-binary commit.
+   Dirty source/planning files and the local hierarchy reference retain identical
+   hashes through that pull. The existing Editor was restarted with the new native
+   plugin. After evaluation, restored the user's 52-layer export, Root scope,
+   selected layer8, held time1.125s, timeline view and authored camera.
+7. Implementation portion of6.153.2 is complete locally. Commit this contained
+   milestone with a fresh [CI VALIDATION] run; hosted acceptance remains pending
+   for this new source. Native timeline Loop/Offset and nested-timeline/media
+   Visibility work in6.153.3 remains open and is next. Previous source1b9ed34c's
+   hosted acceptance remains historical evidence, not validation of this change.
 
 ## 7. Consolidated documents
 

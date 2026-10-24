@@ -15,6 +15,7 @@ namespace ImmPlayer
             internal bool IsTimeline, CanonicalVisible;
             internal N.Properties Canonical;
             internal readonly Dictionary<int, N.Key[]> Keys = new Dictionary<int, N.Key[]>();
+            internal readonly Dictionary<int, int> Editability = new Dictionary<int, int>();
             internal ulong[] Drawings = Array.Empty<ulong>();
         }
 
@@ -132,6 +133,7 @@ namespace ImmPlayer
                 data.Canonical = baseProperties;
                 foreach (int property in channelIds)
                 {
+                    data.Editability[property] = N.ImmAuthoring_KeyGetEditability(Doc, layer.Id, property);
                     result = N.ImmAuthoring_KeyGetCount(Doc, layer.Id, property, out uint count);
                     if (result != 0) { timelineReadError = $"Some keys unavailable: {N.Result(result)}"; continue; }
                     var keys = new N.Key[checked((int)count)];
@@ -167,12 +169,20 @@ namespace ImmPlayer
 
         private bool CanEditTimelineChannel(int layer, int property)
         {
-            bool paintOnly = property == 5 || property == 7 || property == 8;
-            if (!paintOnly && property != 6) return true;
-            if (!treeNodes.TryGetValue(layer, out LayerNode node)) return false;
-            if (paintOnly) return node.Info.Type == ImmDocument.LayerType.Paint;
-            return node.Info.Type == ImmDocument.LayerType.SpawnArea ||
-                (node.Info.Type == ImmDocument.LayerType.Group && (node.Parent == null || node.Info.IsTimeline));
+            return timelineData.TryGetValue(layer, out TimelineData data) &&
+                data.Editability.TryGetValue(property, out int result) && result == 0;
+        }
+
+        private string TimelineReadOnlyReason(int layer, int property)
+        {
+            if (layer < 0) return "";
+            if (!timelineData.TryGetValue(layer, out TimelineData data) ||
+                !data.Editability.TryGetValue(property, out int result)) return "Track data is unavailable.";
+            if (result == 0) return "";
+            if (result != -3) return N.Result(result);
+            if (property == 0) return "Visibility editing is not supported for this layer or its contents yet.";
+            int channel = Array.IndexOf(channelIds, property);
+            return $"{(channel >= 0 ? channels[channel] : "Channel")} editing is not supported on this layer yet.";
         }
 
         private bool CanEditActionValue(int layer, uint value)
@@ -378,7 +388,11 @@ namespace ImmPlayer
                 Color color = chosen ? new Color(1, 0.73f, 0.25f) : new Color(0.75f, 0.85f, 0.95f);
                 Fill(new Rect(x - 3, y + 8, 7, 7), color);
                 string detail = property == 6 ? $"Action · {ActionName(key.ticks)}" : channels[Array.IndexOf(channelIds, property)];
-                if (!CanEditTimelineKey(node.Info.Id, key)) detail = $"{detail} · read-only";
+                if (!CanEditTimelineKey(node.Info.Id, key))
+                {
+                    string reason = TimelineReadOnlyReason(node.Info.Id, property);
+                    detail = $"{detail} · read-only: {(reason.Length > 0 ? reason : "This action is not editable on this layer.")}";
+                }
                 GUI.Label(hit, new GUIContent("", $"{key.seconds:0.######} s · {detail}"));
                 Event input = Event.current;
                 if (timelineBodyHasMouse && attached && pending == 0 && !awaitingCommit && input.type == EventType.MouseDown && input.button == 0 && hit.Contains(input.mousePosition))

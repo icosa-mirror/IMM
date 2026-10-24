@@ -26,8 +26,12 @@ save/publish or broader runtime-authoring roadmap below.
 Empty/trivial-default channel rows are hidden unless Show all tracks is enabled;
 layer nodes stay visible. Scope/local timing and navigation remain provisional
 production-editor design work (content pipeline6.150). Source06a288aa failed the OpenGL diagnostic gate in FULL40091556175. The complete
-correction1b9ed34c has local Mesa evidence and is under replacement FULL40098186026
-(pipeline6.152); hosted acceptance remains pending.
+correction1b9ed34c passed full hosted validation in FULL40098186026: 49 jobs
+successful, 22 skipped, with preserved evidence reviewed (pipeline6.154). The
+new UI capability and live-editing coverage tasks are tracked in pipeline6.153.
+The user resumed implementation: native-driven UI capability gating now passes
+local acceptance (pipeline6.155); broader live channel coverage and fresh hosted
+acceptance remain open.
 The content pipeline checkpoint owns the changing run status and final verdict.
 
 2026-10-21 incremental update: the offline graph/compiler supports immutable

@@ -2710,6 +2710,16 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     return IMM_AUTHORING_OK;
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyGetEditability(
+    int32_t docId, int32_t layerId, int32_t property)
+{
+    if (layerId < 0) return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (property < 0 || property >= static_cast<int32_t>(ImmImporter::Layer::AnimProperty::MAX))
+        return IMM_AUTHORING_UNSUPPORTED;
+    return iPlayer().GetAnimationKeyEditability(docId, static_cast<uint32_t>(layerId),
+        static_cast<ImmImporter::Layer::AnimProperty>(property));
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyGetCount(
     int32_t docId, int32_t layerId, int32_t property, uint32_t * countOut)
 {

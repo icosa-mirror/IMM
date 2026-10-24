@@ -276,6 +276,7 @@ namespace ImmPlayer {
             const ImmCore::trans3d & transform, bool setPaintRepeat = false,
             uint32_t paintRepeat = 0, const wchar_t * newName = nullptr,
             const ImmCore::trans3d * newPivot = nullptr);
+        int32_t GetAnimationKeyEditability(uint32_t layerId, ImmImporter::Layer::AnimProperty property);
         int32_t QueueAnimationKey(uint32_t layerId, ImmImporter::Layer::AnimProperty property,
             ImmCore::piTick time, const ImmImporter::Layer::AnimValue & value,
             ImmImporter::Layer::InterpolationType interpolation);

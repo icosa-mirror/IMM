@@ -169,8 +169,12 @@ namespace ImmPlayer
             layerName = GUILayout.TextField(layerName, GUILayout.Width(window.width - 50));
             if (GUILayout.Button("Rename")) RenameSelected();
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button(properties.visible != 0 ? "Canonical visible: on" : "Canonical visible: off"))
+            bool propertyEditingEnabled = GUI.enabled;
+            GUI.enabled &= CanEditTimelineChannel(selected, 0);
+            if (GUILayout.Button(new GUIContent(properties.visible != 0 ? "Canonical visible: on" : "Canonical visible: off",
+                TimelineReadOnlyReason(selected, 0))))
                 ChangeProperties("Visibility", 1, () => properties.visible = properties.visible == 0 ? 1 : 0);
+            GUI.enabled = propertyEditingEnabled;
             GUILayout.Label($"Opacity {properties.opacity:F2}", GUILayout.Width(94));
             float opacity = GUILayout.HorizontalSlider(properties.opacity, 0, 1);
             if (!Mathf.Approximately(opacity, properties.opacity)) properties.opacity = opacity;
@@ -225,9 +229,9 @@ namespace ImmPlayer
                 GUILayout.Label("Uses per-stroke timing.", wrapped);
             }
             if (keyChannel == 6) DrawActionKeyValue();
-            if ((keyChannel == 3 || keyChannel == 4 || keyChannel == 5) &&
-                !CanEditTimelineChannel(selected, channelIds[keyChannel]))
-                GUILayout.Label("This channel can be edited on paint layers only. Imported keys remain readable and copyable.", wrapped);
+            string editReason = TimelineReadOnlyReason(selected, channelIds[keyChannel]);
+            if (editReason.Length > 0)
+                GUILayout.Label($"Read-only: {editReason} Existing keys remain readable and copyable.", wrapped);
             GUI.enabled &= CanEditTimelineChannel(selected, channelIds[keyChannel]);
             GUILayout.BeginHorizontal();
             keyTime = GUILayout.TextField(keyTime, GUILayout.Width(65));
