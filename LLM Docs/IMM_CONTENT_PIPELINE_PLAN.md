@@ -9,6 +9,14 @@ construction and import round trips also exist. Quill source chapter/startup map
 broader playback/navigation, media, reverse conversion and live-authoring acceptance
 remain open; none of these initial slices closes the full roadmap.
 
+Active goal (2026-10-24, revised by the user): use the test UI on realistic scenes
+such as Snoopy to evaluate existing runtime editing, expose obvious gaps/bugs, and
+add only controls required for that evaluation. The chosen evaluation setup is the
+D3D12 Unity sample. Cross-renderer parity and new Android test infrastructure are
+parked; they are not prerequisites for this test UI goal. Full CI validation of
+committed changes remains required. Historical milestones below record their
+then-current scope; this paragraph and the latest relevant milestone govern work.
+
 Current checkpoint (2026-10-24): the latest accepted hosted baseline is FULL
 [40044825617](https://github.com/icosa-mirror/IMM/actions/runs/40044825617), source
 `0babd47acd7944b6939343e68c229ecc5196ae4c`: 49 jobs passed, 22 skipped, no failures.
@@ -5047,6 +5055,28 @@ the historical sizes/check counts below describe this earlier source only.
    physical speakers/headsets and human hearing are outside this measurement.
    Android draw-in device rendering and latest FULL CI acceptance remain open.
    The owned sample is left paused and quiet after the check.
+
+### 6.143. Refocused real-scene runtime-editing evaluation
+
+1. User replaced the earlier broad timeline completion goal with evaluation of
+   already implemented runtime editing through the test UI. Use Snoopy in the
+   existing D3D12 lab; add only controls that block evaluating an existing operation.
+   Fix obvious failures encountered during the pass and keep commits contained.
+2. Parked the unfinished Android fixture-generation extension. Its only dirty
+   source was draw_in_render_smoke.py; exact contents and diff are saved in ignored
+   artifacts/parked-android-draw-in-render-smoke.py and
+   parked-android-draw-in-extension.patch. Restored that file to its committed
+   strict desktop runner. No Android Java test, Gradle change or fixtures existed.
+3. Acceptance pass: inspect the tree and selected scene content; rename and restore
+   a real layer; change visibility/opacity and transforms; add/retime/remove a key
+   with Undo/Redo; change and restore a drawing/hold; create/reparent/delete temporary
+   content; scrub/play a nested timeline and return from preview. Use visible
+   results and runtime state together. Existing independent audio output evidence
+   is in6.142; no physical-listening handoff is required while the user is away.
+4. Current work starts with the Snoopy pass. The latest feature FULL run40075591630
+   (source66e5232e) remains required; do not equate queued or partially successful
+   runs with full acceptance. No further renderer features or Android validation
+   expansion are included in this evaluation goal.
 
 ## 7. Consolidated documents
 
