@@ -229,6 +229,9 @@ enum
 // world visibility. Inactive snapshots return elapsed/local/cycle zero; those
 // zeros are not a newly evaluated clock. Playing and Held may both be set.
 // These are observations of the current occurrence, not a root-seek mapping.
+// PREVIEW snapshots use the independent evaluation context; its boundary is
+// active even when its main-scene occurrence is inactive. Root time fields
+// retain the frozen main-scene clock until the session exits.
 typedef struct ImmAuthoringTimelineClock
 {
     int32_t timelineLayerId, parentTimelineLayerId;

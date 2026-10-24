@@ -4240,6 +4240,11 @@ the historical sizes/check counts below describe this earlier source only.
    Original Snoopy is restored after these checks. Scoped preview editing,
    audible preview, complex drawing-clock projections and remaining channels
    are still unfinished; the goal is active.
+8. Runtime capsule commit 7f0d07dd and session/UI commit e9b11bf1 are pushed after
+   pulling main. FULL [run 40050446726](https://github.com/icosa-mirror/IMM/actions/runs/40050446726)
+   targets e9b11bf1cd0fd3a772d3cc5caaa7fa919d5f55c4 and is queued. Receipt:
+   artifacts/live-timeline-preview-session-ci-runs.json. This new-source run is
+   separate from the one authorized iOS infrastructure retry for accf76e9.
 
 ### 6.120. Android system-crash attribution correction
 
