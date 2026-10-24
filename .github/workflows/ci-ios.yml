@@ -365,6 +365,10 @@ jobs:
           test "${{ steps.standalone_ios_package.outcome }}" = success
 
   unity-ios-player-build:
+    concurrency:
+      group: imm-shared-unity-license
+      queue: max
+      cancel-in-progress: false
     name: Unity iOS Metal Simulator Validation
     if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[CI IOS]') && !contains(github.event.head_commit.message, '[CI IOS GODOT]'))
     runs-on: macos-14

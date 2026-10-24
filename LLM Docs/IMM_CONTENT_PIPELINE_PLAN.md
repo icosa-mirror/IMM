@@ -4307,6 +4307,31 @@ the historical sizes/check counts below describe this earlier source only.
    are prepared but not yet supported by the current read-only session. These
    uncommitted tests are separate from the visibility regression milestone.
 
+### 6.122. Shared Unity licence ownership in CI (source correction)
+
+1. Additional evidence changes the earlier isolated-failure diagnosis. The failed
+   Mac job activated successfully, lost its entitlement while still running, and
+   returned its own licence only afterward. Another job returned the shared
+   entitlement 2.41 seconds before that loss. The iOS loss also followed returns
+   in other jobs. Shared-credential interference is strongly supported; an app
+   compiler/render failure is not supported by these logs.
+2. Nine actual licence-owner job definitions now share one repository-wide
+   non-cancelling queue, across platforms and reusable workflows. Parent callers,
+   runtime device jobs and native-only jobs do not hold that ownership slot.
+   Inspect-only diagnostics use a separate group. All required gates/matrix cells
+   remain. GitHub's documented [queue: max](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
+   preserves up to 100 pending jobs instead of replacing earlier pending work.
+3. Workflow YAML and the existing 53-job matrix verifier pass, including licence
+   ownership checks. Current actionlint 1.7.12 does not yet recognize the documented
+   queue property; compatibility lint of ignored copies checks the remaining
+   semantics without changing production YAML. Evidence:
+   artifacts/unity-license-serialization-matrix.log and the CI agent's preserved
+   activation/return chronology.
+4. The previously authorized old-source iOS retry is superseded by this source
+   coordination fix. Old uncoordinated active runs must finish/cancel before a
+   new full validation starts, so their cleanup cannot interfere with it.
+   Full acceptance of the serialization change remains pending.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

@@ -63,6 +63,10 @@ env:
 
 jobs:
   unity-android-player-build:
+    concurrency:
+      group: imm-shared-unity-license
+      queue: max
+      cancel-in-progress: false
     name: Unity Android ${{ matrix.variant }} Player Build
     if: >-
       (github.event_name != 'pull_request' ||

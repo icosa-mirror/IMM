@@ -18,6 +18,10 @@ permissions:
 
 jobs:
   startup:
+    concurrency:
+      group: ${{ inputs.profile == 'inspect' && format('imm-unity-inspect-{0}', github.run_id) || 'imm-shared-unity-license' }}
+      queue: max
+      cancel-in-progress: false
     name: Startup trial ${{ matrix.trial }}
     runs-on: ubuntu-latest
     timeout-minutes: 25

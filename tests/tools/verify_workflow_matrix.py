@@ -1083,6 +1083,43 @@ def verify_godot_vulkan_smoke_contract(root: Path, errors: list[str]) -> None:
             errors.append(f"{script_rel} missing composition smoke contract token: {token}")
 
 
+def verify_unity_license_ownership(root: Path, errors: list[str]) -> None:
+    """Serialize actual shared-license owners without locking reusable parents."""
+    group = "imm-shared-unity-license"
+    owner_count = 0
+    for path in (root / ".github/workflows").glob("*.yml"):
+        text = path.read_text(encoding="utf-8")
+        blocks = re.finditer(r"(?ms)^  ([\w-]+):\n(.*?)(?=^  [\w-]+:|\Z)", text)
+        for match in blocks:
+            job_name, block = match.groups()
+            owner = bool(re.search(
+                r"uses:\s*game-ci/unity-(?:builder|test-runner)@"
+                r"|python3?\s+tests/tools/run_unity_editor_native_tests\.py", block
+            ))
+            label = f"{path.name} job {job_name}"
+            if not owner:
+                if group in block:
+                    errors.append(f"{label} must not lock shared Unity license without owning it")
+                continue
+            owner_count += 1
+            concurrency = re.search(r"(?m)^    concurrency:\n((?:^      [^\n]*\n)+)", block)
+            settings = concurrency.group(1) if concurrency else ""
+            required = [f"'{group}'" if path.name == "ci-unity-startup-diagnostic.yml" else f"group: {group}",
+                        "queue: max", "cancel-in-progress: false"]
+            for token in required:
+                if token not in settings:
+                    errors.append(f"{label} missing shared-license ownership setting: {token}")
+            if path.name == "ci-unity-startup-diagnostic.yml":
+                if "inputs.profile == 'inspect'" not in settings or "github.run_id" not in settings:
+                    errors.append(f"{label} must avoid taking shared license for inspect-only diagnostics")
+            elif "${{" in settings:
+                errors.append(f"{label} must use repository-global Unity license group")
+            if re.search(r"^    uses:", block, re.M):
+                errors.append(f"{label} must not lock a reusable workflow caller")
+    if owner_count != 9:
+        errors.append(f"Expected 9 shared Unity license-owner job definitions, found {owner_count}; audit ownership changes")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -1181,6 +1218,7 @@ def main() -> int:
 
     verify_early_android_orchestration_contract(root / ".github/workflows/ci-validation.yml", ".github/workflows/ci-validation.yml", errors)
     verify_render_contract_references(root, errors)
+    verify_unity_license_ownership(root, errors)
 
     if errors:
         for error in errors:

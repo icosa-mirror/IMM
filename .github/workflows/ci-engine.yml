@@ -138,6 +138,10 @@ jobs:
           retention-days: 1
 
   unity-package-import:
+    concurrency:
+      group: imm-shared-unity-license
+      queue: max
+      cancel-in-progress: false
     name: Unity Package Import
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: ubuntu-latest
@@ -263,6 +267,10 @@ jobs:
           retention-days: 14
 
   unity-macos-metal-composition:
+    concurrency:
+      group: imm-shared-unity-license
+      queue: max
+      cancel-in-progress: false
     name: Unity macOS Metal Composition
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: macos-14
@@ -693,6 +701,10 @@ jobs:
           retention-days: 14
 
   unity-ios-player-build:
+    concurrency:
+      group: imm-shared-unity-license
+      queue: max
+      cancel-in-progress: false
     name: Unity iOS Player Build
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: macos-14
@@ -839,6 +851,10 @@ jobs:
           retention-days: 14
 
   unity-windows-directx-player-build:
+    concurrency:
+      group: imm-shared-unity-license
+      queue: max
+      cancel-in-progress: false
     name: Unity Windows DirectX Player Build
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: ubuntu-latest
@@ -1272,6 +1288,10 @@ jobs:
           retention-days: 14
 
   unity-windows-vulkan-player-build:
+    concurrency:
+      group: imm-shared-unity-license
+      queue: max
+      cancel-in-progress: false
     name: Unity Windows Vulkan Player Build
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: ubuntu-latest
@@ -2155,6 +2175,10 @@ jobs:
           retention-days: 14
 
   unity-android-quest-player-build:
+    concurrency:
+      group: imm-shared-unity-license
+      queue: max
+      cancel-in-progress: false
     name: Unity Android Quest Player Build
     if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: ubuntu-latest
