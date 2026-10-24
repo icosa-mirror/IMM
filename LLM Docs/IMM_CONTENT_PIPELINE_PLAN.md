@@ -5206,6 +5206,36 @@ the historical sizes/check counts below describe this earlier source only.
    acceptance, especially the corrected macOS Editor smoke. Remaining local pass:
    explicit visibility-key editing and existing-drawing replacement/reload.
 
+### 6.149. Local real-scene evaluation complete; FULL acceptance pending
+
+1. Five Snoopy visibility-key steps pass. A hidden key at the held local playhead
+   removes the intended paint (8,338changed viewport pixels); Undo restores the
+   original image exactly. Evidence: artifacts/snoopy-visibility-edit-pass.json and
+   snoopy-visibility-scene-comparison.json.
+2. Existing-drawing replacement passes on actual artist drawing handle217, not
+   only an empty new layer: the same handle and six-frame sequence survive while
+   total strokes change150→126. Isolated preview visibly shows the replacement
+   marker. Reload restores150strokes, all79artist layers and the original scene
+   image exactly. Evidence: artifacts/snoopy-existing-drawing-pass.json,
+   snoopy-existing-drawing-metadata.json, snoopy-restore-reload-pass.json and
+   snoopy-existing-drawing-scene-comparison.json.
+3. The bounded pass in6.143 is now complete locally: rename, visibility/opacity,
+   transform, key creation/dragging/history, drawing holds/replacement, temporary
+   hierarchy creation/reparent/deletion, and nested preview playback/scrubbing/
+   stepping/return. The camera/unload bug encountered was fixed; no further runtime
+   feature or renderer expansion was needed. Accepted Show all filtering is in5e34.
+4. Prototyping observations are recorded without expanding this goal: reparenting
+   currently uses numeric layer IDs; new marker placement at a group's local origin
+   may be occluded, with existing local preview sufficient for evaluation; geometry
+   replacement/deletion rely on Reload for restoration, while timeline keys and
+   frame sequences have Undo/Redo. These are known test-harness limitations, not
+   claims that a production editor or general undo system is complete.
+5. The sample is restored, paused at main2s with Snoopy selected and default tracks
+   filtered. Latest feature FULL40080086930/source5e34 remains required; corrected
+   smoke FULL40078448726/source567 is also active. Neither has complete acceptance
+   yet. The goal remains active solely for required CI results and any actual
+   failures they expose; do not invent further UI/backend tasks while waiting.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and
