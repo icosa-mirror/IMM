@@ -50,8 +50,10 @@ additional Mesa shader diagnostics after the first fragment-only correction.
 The run is terminal Cancelled with all jobs/license owners terminal; 31 successful
 jobs are preserved, while its failed/missing evidence is not acceptance. See6.152
 for the exact remaining shader sites, local Mesa reproduction and complete fix.
-The corrected source requires a replacement FULL. Required outstanding acceptance
-still includes all hosted gates and corrected macOS smoke exit/audio markers.
+Complete correction `1b9ed34c164cc4ac38a73d3e10aad89f0fbbc4aa` is pushed with
+[CI VALIDATION]. Replacement FULL[40098186026](https://github.com/icosa-mirror/IMM/actions/runs/40098186026)
+is active. Required outstanding acceptance still includes all hosted gates, actual
+Mesa zero-diagnostic rendering and corrected macOS smoke exit/audio markers.
 
 The complete correction passes the same eight image cases under local Mesa with
 zero diagnostics and byte-identical images before/after, plus the local GPU path.
@@ -5325,6 +5327,11 @@ the historical sizes/check counts below describe this earlier source only.
 5. Commit this complete correction with [CI VALIDATION], pull before pushing and
    start a replacement FULL. Hosted Mesa acceptance, corrected macOS smoke and
    full matrix acceptance remain required. Goal stays active.
+6. Correction1b9ed34c is committed/pushed after pulling main. Replacement FULL
+   [40098186026](https://github.com/icosa-mirror/IMM/actions/runs/40098186026) is
+   active on exact source1b9ed34c164cc4ac38a73d3e10aad89f0fbbc4aa. No hosted pass
+   is claimed yet. The tracked worktree is clean; unrelated ignored/untracked
+   local material is preserved.
 
 ## 7. Consolidated documents
 

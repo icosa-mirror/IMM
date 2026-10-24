@@ -26,7 +26,8 @@ save/publish or broader runtime-authoring roadmap below.
 Empty/trivial-default channel rows are hidden unless Show all tracks is enabled;
 layer nodes stay visible. Scope/local timing and navigation remain provisional
 production-editor design work (content pipeline6.150). Source06a288aa failed the OpenGL diagnostic gate in FULL40091556175. The complete
-correction has local Mesa evidence and requires a replacement FULL (pipeline6.152).
+correction1b9ed34c has local Mesa evidence and is under replacement FULL40098186026
+(pipeline6.152); hosted acceptance remains pending.
 The content pipeline checkpoint owns the changing run status and final verdict.
 
 2026-10-21 incremental update: the offline graph/compiler supports immutable
