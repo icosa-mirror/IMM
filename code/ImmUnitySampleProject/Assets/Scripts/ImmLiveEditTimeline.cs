@@ -178,9 +178,12 @@ namespace ImmPlayer
             GUI.Label(new Rect(namesWidth + 630, 4, 175, 22), timelineClockValid ? $"{playTime:F3} s / {timelineFrameRate} fps" : "Clock unavailable");
             GUI.enabled = attached && PreviewCanEditSelected && timelineClockValid && (timelineClock.flags & ClockActive) != 0 && pending == 0 && !awaitingCommit &&
                 treeNodes.TryGetValue(selected, out LayerNode selectedNode) && InTimelineScope(selectedNode) && CanEditTimelineChannel(selected, channelIds[keyChannel]);
+            bool canEditKey = GUI.enabled;
+            GUI.enabled &= channelIds[keyChannel] != 6 || CanReplaceTimelineKey(selected,
+                new N.Key { property = 6, interpolation = 0, seconds = SnapTime(playTime), ticks = keyAction });
             if (GUI.Button(new Rect(namesWidth + 810, 4, 70, 22), "Set key"))
             { keyTime = SnapTime(playTime).ToString("0.######", CultureInfo.InvariantCulture); Submit("Set key", SetKey); }
-            GUI.enabled &= selectedTimelineKey.HasValue;
+            GUI.enabled = canEditKey && selectedTimelineKey.HasValue && CanEditTimelineKey(selectedKeyLayer, selectedTimelineKey.Value);
             if (GUI.Button(new Rect(namesWidth + 884, 4, 80, 22), "Delete key")) DeleteTimelineKey();
             GUI.enabled = true;
             DrawTimelineHistory(namesWidth + 972);

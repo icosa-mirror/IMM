@@ -29,6 +29,11 @@ namespace ImmPlayer
         private string drawingIndex = "0";
         private string rotationX = "0", rotationY = "0", rotationZ = "0", transformScale = "1", keyOffset = "0";
         private string keyDrawIn = "1";
+        private uint keyAction;
+        private static readonly string[] actionNames = { "Stop", "Play", "Loop", "Make default" };
+        private static readonly string[] rootActionNames = { "Stop", "Play", "Loop" };
+        private static readonly string[] nestedActionNames = { "Stop" };
+        private static readonly string[] spawnActionNames = { "Make default" };
         private bool rotationEdited, keyLoop = true;
         private static readonly string[] ReflectionNames = { "None", "X", "Y", "Z" };
 
@@ -156,8 +161,77 @@ namespace ImmPlayer
         private double SnapTime(double seconds) => Math.Max(0,
             snapKeys ? Math.Round(seconds * timelineFrameRate) / timelineFrameRate : seconds);
 
-        private bool CanEditTimelineChannel(int layer, int property) =>
-            property != 5 || (treeNodes.TryGetValue(layer, out LayerNode node) && node.Info.Type == ImmDocument.LayerType.Paint);
+        private bool CanEditTimelineChannel(int layer, int property)
+        {
+            bool paintOnly = property == 5 || property == 7 || property == 8;
+            if (!paintOnly && property != 6) return true;
+            if (!treeNodes.TryGetValue(layer, out LayerNode node)) return false;
+            if (paintOnly) return node.Info.Type == ImmDocument.LayerType.Paint;
+            return node.Info.Type == ImmDocument.LayerType.SpawnArea ||
+                (node.Info.Type == ImmDocument.LayerType.Group && (node.Parent == null || node.Info.IsTimeline));
+        }
+
+        private bool CanEditActionValue(int layer, uint value)
+        {
+            if (!treeNodes.TryGetValue(layer, out LayerNode node)) return false;
+            if (node.Info.Type == ImmDocument.LayerType.SpawnArea) return value == 3;
+            return node.Info.Type == ImmDocument.LayerType.Group &&
+                (node.Parent == null ? value <= 2 : node.Info.IsTimeline && value == 0);
+        }
+
+        private bool CanEditTimelineKey(int layer, N.Key key) => CanEditTimelineChannel(layer, key.property) &&
+            (key.property != 6 || (key.boolean == 0 && key.interpolation == 0 && CanEditActionValue(layer, key.ticks)));
+
+        private bool CanReplaceTimelineKey(int layer, N.Key key)
+        {
+            if (!CanEditTimelineKey(layer, key)) return false;
+            if (key.property != 6) return true;
+            if (timelineData.TryGetValue(layer, out TimelineData data) && data.Keys.TryGetValue(6, out N.Key[] keys))
+                foreach (N.Key existing in keys)
+                    if (SequenceTick(existing.seconds) == SequenceTick(key.seconds)) return CanEditTimelineKey(layer, existing);
+            return true;
+        }
+
+        private static string ActionName(uint value) => value < actionNames.Length ? actionNames[(int)value] : $"Unknown action {value}";
+
+        private void DrawActionKeyValue()
+        {
+            if (!treeNodes.TryGetValue(selected, out LayerNode node)) return;
+            bool spawn = node.Info.Type == ImmDocument.LayerType.SpawnArea;
+            bool root = node.Info.Type == ImmDocument.LayerType.Group && node.Parent == null;
+            string[] options = spawn ? spawnActionNames : root ? rootActionNames : nestedActionNames;
+            if (!CanEditTimelineChannel(selected, 6))
+            { GUILayout.Label("Actions are available on timeline groups and spawn areas.", wrapped); return; }
+            int index = spawn ? (keyAction == 3 ? 0 : -1) : keyAction < options.Length ? (int)keyAction : -1;
+            if (index < 0) GUILayout.Label($"{ActionName(keyAction)} is read-only on this layer.", wrapped);
+            int chosen = GUILayout.SelectionGrid(index, options, options.Length);
+            if (chosen >= 0) keyAction = spawn ? 3u : (uint)chosen;
+            GUILayout.Label(spawn ? "Changes the preferred spawn when this action executes." :
+                root ? "Stop holds playback; Play marks a chapter; Loop rewinds." :
+                "Stops this child timeline. Seek past the Stop to preview beyond it.", wrapped);
+        }
+
+        private bool TryInspectorActionKey(out N.Key key)
+        {
+            key = default;
+            if (!double.TryParse(keyTime, NumberStyles.Float, CultureInfo.InvariantCulture, out double time) ||
+                double.IsNaN(time) || double.IsInfinity(time) || time < 0) return false;
+            key = new N.Key { property = 6, interpolation = 0, seconds = time, ticks = keyAction };
+            return true;
+        }
+
+        private bool CanSetInspectorTimelineKey() => channelIds[keyChannel] != 6 ||
+            (TryInspectorActionKey(out N.Key key) && CanReplaceTimelineKey(selected, key));
+
+        private bool CanRemoveInspectorTimelineKey()
+        {
+            if (channelIds[keyChannel] != 6) return true;
+            if (!TryInspectorActionKey(out N.Key key)) return false;
+            if (timelineData.TryGetValue(selected, out TimelineData data) && data.Keys.TryGetValue(6, out N.Key[] keys))
+                foreach (N.Key existing in keys)
+                    if (SequenceTick(existing.seconds) == SequenceTick(key.seconds)) return CanEditTimelineKey(selected, existing);
+            return false;
+        }
 
         private void SelectTimelineKey(int layerId, N.Key key)
         {
@@ -169,6 +243,7 @@ namespace ImmPlayer
             keyInterpolation = key.interpolation;
             keyTime = key.seconds.ToString("0.######", CultureInfo.InvariantCulture);
             if (key.property == 0) keyVisible = key.boolean != 0;
+            else if (key.property == 6) keyAction = key.ticks;
             else if (key.property == 5) keyDrawIn = key.doubleValue.ToString("R", CultureInfo.InvariantCulture);
             else if (key.property == 1) properties.opacity = key.value;
             else if (key.property == 7) keyLoop = key.boolean != 0;
@@ -186,7 +261,7 @@ namespace ImmPlayer
         {
             if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit) return;
             N.Key key = selectedTimelineKey.Value;
-            if (!CanEditTimelineChannel(selectedKeyLayer, key.property)) return;
+            if (!PreviewCanEditLayer(selectedKeyLayer) || !CanEditTimelineKey(selectedKeyLayer, key)) return;
             double original = key.seconds;
             key.seconds = SnapTime(seconds);
             if (Math.Abs(key.seconds - original) < 1.0 / 12600) return;
@@ -209,7 +284,7 @@ namespace ImmPlayer
         {
             if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit) return;
             N.Key key = selectedTimelineKey.Value;
-            if (!CanEditTimelineChannel(selectedKeyLayer, key.property)) return;
+            if (!PreviewCanEditLayer(selectedKeyLayer) || !CanEditTimelineKey(selectedKeyLayer, key)) return;
             selected = selectedKeyLayer;
             Submit("Delete key", () =>
             { RecordTimelineBefore(selectedKeyLayer, key.property); return N.ImmAuthoring_KeyRemove(Doc, selectedKeyLayer, key.property, key.seconds); });
@@ -219,14 +294,14 @@ namespace ImmPlayer
         private void CopyTimelineKey(bool cut)
         {
             if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit ||
-                (cut && (!PreviewCanEditLayer(selectedKeyLayer) || !CanEditTimelineChannel(selectedKeyLayer, selectedTimelineKey.Value.property)))) return;
+                (cut && (!PreviewCanEditLayer(selectedKeyLayer) || !CanEditTimelineKey(selectedKeyLayer, selectedTimelineKey.Value)))) return;
             clipboardTimelineKey = selectedTimelineKey.Value;
             if (cut) DeleteTimelineKey();
             else Log("Key copied. Select a layer and paste at the playhead.");
         }
 
         private bool CanPasteTimelineKey => attached && PreviewCanEditSelected && !loading && pending == 0 && !awaitingCommit &&
-            clipboardTimelineKey.HasValue && CanEditTimelineChannel(selected, clipboardTimelineKey.Value.property) && timelineClockValid && (timelineClock.flags & ClockActive) != 0 &&
+            clipboardTimelineKey.HasValue && CanEditTimelineKey(selected, clipboardTimelineKey.Value) && timelineClockValid && (timelineClock.flags & ClockActive) != 0 &&
             treeNodes.TryGetValue(selected, out LayerNode pasteNode) && InTimelineScope(pasteNode);
 
         private void PasteTimelineKey()
@@ -234,6 +309,7 @@ namespace ImmPlayer
             if (!CanPasteTimelineKey) return;
             N.Key key = clipboardTimelineKey.Value;
             key.seconds = SnapTime(timelinePlayTime);
+            if (!CanReplaceTimelineKey(selected, key)) { Log("This imported key is read-only on the selected layer."); return; }
             if (timelineData.TryGetValue(selected, out TimelineData data) && data.Keys.TryGetValue(key.property, out N.Key[] keys))
                 foreach (N.Key existing in keys)
                     if (Math.Abs(existing.seconds - key.seconds) < 0.5 / 12600)
@@ -257,7 +333,7 @@ namespace ImmPlayer
             GUI.enabled = attached && pending == 0 && !awaitingCommit && selectedTimelineKey.HasValue;
             if (GUI.Button(new Rect(x, 4, 60, 22), new GUIContent("Copy", "Copy selected key (Ctrl/Cmd+C)"))) Run(() => CopyTimelineKey(false));
             GUI.enabled &= PreviewCanEditLayer(selectedKeyLayer);
-            GUI.enabled &= selectedTimelineKey.HasValue && CanEditTimelineChannel(selectedKeyLayer, selectedTimelineKey.Value.property);
+            GUI.enabled &= selectedTimelineKey.HasValue && CanEditTimelineKey(selectedKeyLayer, selectedTimelineKey.Value);
             if (GUI.Button(new Rect(x + 64, 4, 60, 22), new GUIContent("Cut", "Cut selected key (Ctrl/Cmd+X)"))) Run(() => CopyTimelineKey(true));
             GUI.enabled = CanPasteTimelineKey;
             if (GUI.Button(new Rect(x + 128, 4, 60, 22), new GUIContent("Paste", "Paste at the playhead on the selected layer (Ctrl/Cmd+V)"))) Run(PasteTimelineKey);
@@ -297,13 +373,15 @@ namespace ImmPlayer
                 var hit = new Rect(x - 7, y + 3, 14, RowHeight - 6);
                 Color color = chosen ? new Color(1, 0.73f, 0.25f) : new Color(0.75f, 0.85f, 0.95f);
                 Fill(new Rect(x - 3, y + 8, 7, 7), color);
-                GUI.Label(hit, new GUIContent("", $"{key.seconds:0.######} s · {channels[Array.IndexOf(channelIds, property)]}"));
+                string detail = property == 6 ? $"Action · {ActionName(key.ticks)}" : channels[Array.IndexOf(channelIds, property)];
+                if (!CanEditTimelineKey(node.Info.Id, key)) detail = $"{detail} · read-only";
+                GUI.Label(hit, new GUIContent("", $"{key.seconds:0.######} s · {detail}"));
                 Event input = Event.current;
                 if (timelineBodyHasMouse && attached && pending == 0 && !awaitingCommit && input.type == EventType.MouseDown && input.button == 0 && hit.Contains(input.mousePosition))
                 {
                     GUI.FocusControl(null);
                     SelectTimelineKey(node.Info.Id, key);
-                    if (!PreviewCanEditLayer(node.Info.Id) || !CanEditTimelineChannel(node.Info.Id, property)) { input.Use(); continue; }
+                    if (!PreviewCanEditLayer(node.Info.Id) || !CanEditTimelineKey(node.Info.Id, key)) { input.Use(); continue; }
                     draggingKey = true; draggedKeyTime = key.seconds;
                     scrubControl = GUIUtility.GetControlID(FocusType.Passive); GUIUtility.hotControl = scrubControl;
                     if (TimelinePreviewActive) ControlTimelinePreview(3); else document.Pause();

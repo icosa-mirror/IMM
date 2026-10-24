@@ -152,12 +152,21 @@ namespace ImmPlayer
             for (int i = 0; i < a.Keys.Length; i++)
             {
                 N.Key x = a.Keys[i], y = b.Keys[i];
-                if (Math.Abs(x.seconds - y.seconds) > 0.5 / 12600 || x.property != y.property || x.interpolation != y.interpolation ||
-                    x.boolean != y.boolean || x.value != y.value || x.doubleValue != y.doubleValue || x.ticks != y.ticks || x.flip != y.flip ||
-                    x.tx != y.tx || x.ty != y.ty || x.tz != y.tz || x.qx != y.qx || x.qy != y.qy || x.qz != y.qz ||
-                    x.qw != y.qw || x.scale != y.scale) return false;
+                if (!SameTimelineKey(x, y)) return false;
             }
             return true;
+        }
+
+        private static bool SameTimelineKey(N.Key x, N.Key y) =>
+            Math.Abs(x.seconds - y.seconds) <= 0.5 / 12600 && x.property == y.property && x.interpolation == y.interpolation &&
+            x.boolean == y.boolean && x.value == y.value && x.doubleValue == y.doubleValue && x.ticks == y.ticks && x.flip == y.flip &&
+            x.tx == y.tx && x.ty == y.ty && x.tz == y.tz && x.qx == y.qx && x.qy == y.qy && x.qz == y.qz &&
+            x.qw == y.qw && x.scale == y.scale;
+
+        private static bool ContainsTimelineKey(N.Key[] keys, N.Key value)
+        {
+            foreach (N.Key key in keys) if (SameTimelineKey(key, value)) return true;
+            return false;
         }
 
         private void ReplayTimelineHistory(bool undo)
@@ -175,6 +184,21 @@ namespace ImmPlayer
             if (!SameTimelineState(current, undo ? entry.After : entry.Before))
             { ClearTimelineHistory("History cleared because this track changed elsewhere."); Run(Refresh); return; }
             TimelineState target = undo ? entry.Before : entry.After;
+            // Imported unsupported Action keys can remain unchanged on a track.
+            // Replay only changed identities/values, never remove/reinsert those keys.
+            var removeKeys = new List<N.Key>();
+            var setKeys = new List<N.Key>();
+            foreach (N.Key key in current.Keys)
+                if (entry.Property != 6 || !ContainsTimelineKey(target.Keys, key)) removeKeys.Add(key);
+            foreach (N.Key key in target.Keys)
+                if (entry.Property != 6 || !ContainsTimelineKey(current.Keys, key)) setKeys.Add(key);
+            if (entry.Property >= 0)
+            {
+                foreach (N.Key key in removeKeys)
+                    if (!CanEditTimelineKey(entry.Layer, key)) { Log("This imported key is read-only on this layer."); return; }
+                foreach (N.Key key in setKeys)
+                    if (!CanEditTimelineKey(entry.Layer, key)) { Log("This imported key is read-only on this layer."); return; }
+            }
             historyReplay = entry; replayIsUndo = undo;
             RevealTimelineLayer(entry.Layer);
             selected = entry.Layer;
@@ -183,9 +207,9 @@ namespace ImmPlayer
                 if (entry.Property == -1)
                     return N.ImmAuthoring_FrameSequenceSetHandles(Doc, entry.Layer, target.Frames, (uint)target.Frames.Length);
                 if (entry.Property == -2) return N.ImmAuthoring_PaintSetMaxRepeatCount(Doc, entry.Layer, target.Repeat);
-                foreach (var key in current.Keys)
+                foreach (var key in removeKeys)
                     N.Check(N.ImmAuthoring_KeyRemove(Doc, entry.Layer, entry.Property, key.seconds));
-                foreach (var value in target.Keys)
+                foreach (var value in setKeys)
                 {
                     N.Key key = value;
                     N.Check(N.ImmAuthoring_KeySet(Doc, entry.Layer, ref key));

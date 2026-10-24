@@ -22,15 +22,16 @@ preview, scoped edits, resizable panes, authored exposure projection, Draw-in ke
 and independent audio enable/mute with separate voices and main-cursor retention.
 Audio feature source `1ddf8eff` passes native Release, CPU/loaded-C-ABI checks and
 nine actual Unity button/ruler steps; see 6.131 for evidence and its limits. This
-is a development test UI. Action editing, GL/Android draw-in support, the main-scene
+is a development test UI. Action controls and their native runtime support are now
+implemented and pass local live acceptance (6.136-6.137). GL/Android draw-in support, the main-scene
 Frame selected occlusion follow-up and audible Unity/device confirmation remain.
 The timeline goal stays active, including the required missing runtime features.
 Later native Action publication (`29d72074`) and late finite-occurrence correction
 (`0f81d964`) pass local native/CPU/C-ABI checks; their FULL run 40066922009 is
 pending. MakeDefault execution provenance is implemented in local commit `8fb3de4c`
 with native/CPU/C-ABI checks (6.136). Action controls compile and pass 21 live
-button/command checks, but a reproduced held-root Stop Undo regression must be
-confirmed in the rebuilt Editor before UI acceptance (6.137).
+button/command checks. The held-root Stop Undo regression is fixed in `42f36784`;
+the rebuilt Editor passes the original four-step failure sequence (6.137).
 Latest pushed feature source `a702bd6a` also closes the finite-ancestor cascade and fixes main
 Play/Continue sound handling, with native/CPU/C-ABI checks and six actual Unity
 button steps. Its FULL run40068611847 is pending (6.134-6.135).
@@ -4855,7 +4856,7 @@ the historical sizes/check counts below describe this earlier source only.
    The native milestone is being committed separately with its matching Windows
    DLL. No new API/layout version was introduced. The timeline goal remains active.
 
-### 6.137. Action UI live acceptance in progress
+### 6.137. Action UI and root Stop Undo milestone
 
 1. Action controls provide root Stop/Play/Loop, nested timeline Stop and viewpoint
    MakeDefault. Values remain Step-only; imported unsupported combinations stay
@@ -4870,18 +4871,28 @@ the historical sizes/check counts below describe this earlier source only.
 3. Actual UI testing found a root Stop restoration regression: replace an already
    executed held Stop with Loop, Undo to restore Stop, then press Play once. The
    restored key executes again and holds at the same time. Red evidence:
-   artifacts/action-ui-root-stop-probe.json. The focused native correction marks
+   artifacts/action-ui-root-stop-before.json. The focused native correction marks
    only the Stop owning the current authored root hold as consumed when restored.
    CPU red/green checks at ticks 0, 1 and 12600 pass after the fix; future keys and
    ordinary user-pause controls remain armed. Native Release and loaded WARP C ABI
    checks pass. Evidence: artifacts/root-stop-undo-before.log,
    root-stop-undo-cpu-green.log, root-stop-undo-cpu-report.json and
    root-stop-undo-cabi/report.json. The owned Editor was closed cleanly before
-   rebuilding; rebuilt-Editor acceptance is pending. This is not yet a completed
-   Action UI milestone.
-4. Action editing and independent audio are explicitly included in this timeline
+   rebuilding. The rebuilt Editor passes all four original mouse-button steps,
+   including one Play continuing the restored Stop. Green evidence:
+   artifacts/action-ui-root-stop-probe.json. Both earlier Action UI probes were
+   repeated successfully against the rebuilt native DLL and final C# sources.
+4. Draw-in, Loop and Offset controls now share paint-only target gating with
+   clipboard, per-key mutations and history preflight. Imported unsupported keys
+   stay readable/copyable and show a read-only hint. All 18 live predicate checks
+   across this fixture's root/group/viewpoint layers pass; this fixture contains no
+   paint or sound layer. Evidence: artifacts/action-ui-channel-gating.json.
+   Managed compile passes with zero errors and two existing duplicate-type warnings
+   (artifacts/action-ui-managed-final-build.log). No API version was added.
+5. Action editing and independent audio are explicitly included in this timeline
    test UI goal. Independent voices are implemented, but audible confirmation,
    GL/Android draw-in rendering and main-scene selected-layer framing remain open.
+   The Action UI milestone is complete locally; its new FULL CI run is pending push.
    Later healthy FULL CI runs still await serialized licensed engine jobs; the
    accepted exact-source baseline remains the receipt in the top checkpoint.
 

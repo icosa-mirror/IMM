@@ -53,8 +53,8 @@ namespace ImmPlayer
         private Rect window;
         private Coroutine load;
         private Camera view;
-        private readonly string[] channels = { "Visibility", "Opacity", "Transform", "Loop", "Offset ticks", "Draw-in" };
-        private readonly int[] channelIds = { 0, 1, 9, 7, 8, 5 };
+        private readonly string[] channels = { "Visibility", "Opacity", "Transform", "Loop", "Offset ticks", "Draw-in", "Action" };
+        private readonly int[] channelIds = { 0, 1, 9, 7, 8, 5, 6 };
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -199,7 +199,7 @@ namespace ImmPlayer
             GUILayout.Label("Keys — uses current inspector values at the entered time", wrapped, GUILayout.Width(window.width - 50));
             keyChannel = GUILayout.SelectionGrid(keyChannel, channels, 3);
             bool keyInputsEnabled = GUI.enabled;
-            bool discreteKey = keyChannel == 0 || keyChannel == 3 || keyChannel == 4;
+            bool discreteKey = keyChannel == 0 || keyChannel == 3 || keyChannel == 4 || keyChannel == 6;
             if (discreteKey) keyInterpolation = 0;
             GUI.enabled &= !discreteKey;
             keyInterpolation = GUILayout.SelectionGrid(keyInterpolation, new[] { "Step", "Linear", "Smooth", "Ease in", "Ease out", "Spline", "Auto" }, 3);
@@ -224,15 +224,23 @@ namespace ImmPlayer
                     SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
                 GUILayout.Label(drawInPreview ? "Uses per-stroke timing." : "This preview cannot display the draw-in effect.", wrapped);
             }
+            if (keyChannel == 6) DrawActionKeyValue();
+            if ((keyChannel == 3 || keyChannel == 4 || keyChannel == 5) &&
+                !CanEditTimelineChannel(selected, channelIds[keyChannel]))
+                GUILayout.Label("This channel can be edited on paint layers only. Imported keys remain readable and copyable.", wrapped);
             GUI.enabled &= CanEditTimelineChannel(selected, channelIds[keyChannel]);
             GUILayout.BeginHorizontal();
             keyTime = GUILayout.TextField(keyTime, GUILayout.Width(65));
+            bool keyEditEnabled = GUI.enabled;
+            GUI.enabled &= CanSetInspectorTimelineKey();
             if (GUILayout.Button("Set key")) Submit("Set key", SetKey);
+            GUI.enabled = keyEditEnabled && CanRemoveInspectorTimelineKey();
             if (GUILayout.Button("Remove key")) Submit("Remove key", () =>
             { RecordTimelineBefore(selected, channelIds[keyChannel]); return N.ImmAuthoring_KeyRemove(Doc, selected, channelIds[keyChannel], Number(keyTime)); });
+            GUI.enabled = keyEditEnabled;
             GUILayout.EndHorizontal();
             bool canEditKey = GUI.enabled;
-            GUI.enabled &= selectedTimelineKey.HasValue;
+            GUI.enabled &= selectedTimelineKey.HasValue && CanEditTimelineKey(selectedKeyLayer, selectedTimelineKey.Value);
             if (GUILayout.Button("Move selected key to entered time")) Run(() => MoveTimelineKey(Number(keyTime)));
             GUI.enabled = canEditKey;
             GUI.enabled = inspectorEditable;
@@ -328,12 +336,13 @@ namespace ImmPlayer
             RecordTimelineBefore(selected, channelIds[keyChannel]);
             if (keyChannel == 2) ReadTransformFields();
             var key = new N.Key { size = 80, version = 1, property = channelIds[keyChannel], interpolation = keyInterpolation, seconds = Number(keyTime),
-                boolean = keyChannel == 3 ? (keyLoop ? 1 : 0) : (keyVisible ? 1 : 0),
+                boolean = keyChannel == 6 ? 0 : keyChannel == 3 ? (keyLoop ? 1 : 0) : (keyVisible ? 1 : 0),
                 value = properties.opacity, tx = properties.tx, ty = properties.ty, tz = properties.tz,
                 qx = properties.qx, qy = properties.qy, qz = properties.qz, qw = properties.qw,
-                scale = properties.scale, flip = properties.flip, ticks = keyChannel == 4 ? Unsigned(keyOffset) : 0 };
+                scale = properties.scale, flip = properties.flip, ticks = keyChannel == 6 ? keyAction : keyChannel == 4 ? Unsigned(keyOffset) : 0 };
             if (keyChannel == 5) key.doubleValue = Number(keyDrawIn);
-            if (keyChannel == 0 || keyChannel == 3 || keyChannel == 4) key.interpolation = 0;
+            if (keyChannel == 0 || keyChannel == 3 || keyChannel == 4 || keyChannel == 6) key.interpolation = 0;
+            if (!CanReplaceTimelineKey(selected, key)) return -3;
             return N.ImmAuthoring_KeySet(Doc, selected, ref key);
         }
 
