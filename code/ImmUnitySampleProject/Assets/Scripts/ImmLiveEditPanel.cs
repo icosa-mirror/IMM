@@ -222,9 +222,7 @@ namespace ImmPlayer
             {
                 GUILayout.Label("Draw-in progress (finite, non-negative)");
                 keyDrawIn = GUILayout.TextField(keyDrawIn);
-                bool drawInPreview = SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D11 ||
-                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
-                GUILayout.Label(drawInPreview ? "Uses per-stroke timing." : "This preview cannot display the draw-in effect.", wrapped);
+                GUILayout.Label("Uses per-stroke timing.", wrapped);
             }
             if (keyChannel == 6) DrawActionKeyValue();
             if ((keyChannel == 3 || keyChannel == 4 || keyChannel == 5) &&

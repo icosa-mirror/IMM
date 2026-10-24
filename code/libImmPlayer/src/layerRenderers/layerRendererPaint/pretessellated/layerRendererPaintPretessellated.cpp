@@ -2,7 +2,7 @@
 // TODO; can reduce index buffer switches IF we put all vertices of all brush types together --> need to change index buffers to 
 //       32 bit or need to user vertexBase -- I think it doesn't work in DX?
 // TODO: merge all chuns of all layers together. Need a buffer for LayerState
-// TODO: do 16 bit vertices, upload bbox corner to ChunkData buffer. CUrrently 20 bytes, could become 14 bytes
+// TODO: do 16 bit vertices, upload bbox corner to ChunkData buffer. Currently 24 bytes.
 // TODO: port to DX (shader mostly)
 
 
@@ -181,21 +181,12 @@ namespace ImmPlayer
 				else
 				{
 
-#if PT_VERTEX_FORMAT==1
-					const piRArrayLayout vf = { 20, 4, 0,{
-							{ 3, piRArrayDataType::piRArrayType_Float, false },
-							{ 4, piRArrayDataType::piRArrayType_UByte, true },
-							{ 3, piRArrayDataType::piRArrayType_UByte, false },
-							{ 1, piRArrayDataType::piRArrayType_UByte, false },
-							 } };
-#else
 					const piRArrayLayout vf = { 24, 5, 0,{
 							{ 3, piRArrayDataType::piRArrayType_Float, false },
 							{ 4, piRArrayDataType::piRArrayType_UByte, true },
 							{ 3, piRArrayDataType::piRArrayType_UByte, false },
 							{ 1, piRArrayDataType::piRArrayType_UByte, false },
 							{ 1, piRArrayDataType::piRArrayType_Float, false } } };
-#endif
 
 				
                     piRArrayLayout vulkanFormat = vf;
@@ -204,12 +195,8 @@ namespace ImmPlayer
                         // Direction and info occupy one packed RGBA8 integer attribute.
                         // Avoid relying on optional three-component byte vertex formats.
                         vulkanFormat.mEntry[2].mNumComponents = 4;
-#if PT_VERTEX_FORMAT==1
-                        vulkanFormat.mNumElements = 3;
-#else
                         vulkanFormat.mNumElements = 4;
                         vulkanFormat.mEntry[3] = vf.mEntry[4];
-#endif
                     }
                     const auto* format = renderer->GetAPI() == piRenderer::API::Vulkan ? &vulkanFormat : &vf;
                     dst->mVertexArray[0] = renderer->CreateVertexArray(1, dst->mVBO, format, nullptr, nullptr, dst->mIBO, piRenderer::IndexArrayFormat::UINT_16);
@@ -257,9 +244,6 @@ namespace ImmPlayer
 		for (int j = 0; j < 2; j++) // drawin
 		for (int i = 0; i < 3; i++) // stereo
 		{
-#if defined(ANDROID)
-		    if (j >= 1) continue; // skip drawin shaders
-#endif
             if (static_cast<StereoMode>(i) == StereoMode::Preferred)
             {
                 if (renderer->GetAPI() == piRenderer::API::GL &&
@@ -674,14 +658,8 @@ namespace ImmPlayer
             // set shader
             int shaderID = 0;
             shaderID += stereoModeInt;
-#if !defined(ANDROID)
             shaderID += (me->mDrawin == true) ? 3 : 0;
-#endif
-#if defined(ANDROID)
-            shaderID += (me->mWiggle == true) ? 3 : 0;
-#else
             shaderID += (me->mWiggle == true) ? 6 : 0;
-#endif
 
 #if defined(ANDROID)
 			shaderID += 3 * 2 * 0/*(mDebugRenderMode == Disabled ? 0 : mDebugRenderMode*/; // 4 x 6 shaders for 4 debug render modes

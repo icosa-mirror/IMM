@@ -58,6 +58,7 @@ struct vertex_format_t
     uint    mColAlp;
     uint    mAxUUn2;
     uint    mAxVUn3;
+    float   mTim;
 };
 
 #else
@@ -145,12 +146,12 @@ void main()
 
     vertex_format_t vertex = data[bid];
     vec3  inVertex   = vec3( vertex.mPosX, vertex.mPosY, vertex.mPosZ );
+    float inTime     = vertex.mTim;
     #if VERTEX_FORMAT==1
 	 float inWid      = 1.7*chunk_data.mData[0].mBiggestStroke * float(vertex.mWidInfo >> 8u)/32767.0;
      uint  inInfo     = uint(vertex.mWidInfo & 7u);
 	#else
      uint  inInfo     = vertex.mDirInf>>24u;
-     float inTime     = vertex.mTim;
      vec3  inOri      = normalize( -1.0+2.0*unpack3( vertex.mDirInf ) );
 	 float inWid      = 1.7*chunk_data.mData[0].mBiggestStroke * float(vertex.mWid&0x7fff)/32767.0;
 	#endif
@@ -211,10 +212,8 @@ void main()
     #endif
 
     #if DRAWIN==1
-        // this maps the first pt (tim=0) to 0 => 2 and last pt(tim=1) to -1,1
-        // so overall -1,2 but not all vertices reach those
-        //float drawingT = 2.0*layer.mDrawInTime-inTime;						
-        //vg.col_tra *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);		
+        float drawingT = 2.0*layer.mDrawInTime-inTime;
+        vg.col_tra.w *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);
     #endif
 
     //==================================================

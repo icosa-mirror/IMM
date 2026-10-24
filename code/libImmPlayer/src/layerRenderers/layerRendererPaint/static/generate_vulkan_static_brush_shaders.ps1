@@ -42,10 +42,6 @@ function Convert-VertexGlslForVulkan([string]$Source) {
         $source,
         '(?s)layout \(std140, row_major, binding=9\) uniform ChunkData\s*\{.*?\}chunk_data;',
         'layout (std140, row_major, binding=9) uniform ChunkData { ChunkDataEntry mData[128]; } chunk_data;')
-    $source = [regex]::Replace(
-        $source,
-        '(?s)// this maps the first pt \(tim=0\).*?//vg\.col_tra \*= smoothstep\(layer\.mAnimParams\.z, layer\.mAnimParams\.z \+ layer\.mAnimParams\.w, drawingT\);\s*',
-        "float drawingT = 2.0*layer.mDrawInTime-inTime;`n        vg.col_tra.w *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);`n    ")
     $source = $source.Replace('out V2CData', 'layout(location = 0) out V2CData')
     $source = $source.Replace('gl_VertexID', 'gl_VertexIndex')
     $source = $source.Replace('GL_ARB_shader_viewport_layer_array : enable', 'GL_EXT_multiview : require')
@@ -70,9 +66,8 @@ function Convert-FragmentGlslForVulkan([string]$Source) {
     # Vulkan pipeline interface invalid even though the fragment code ignores it.
     $source = $source.Replace('in vec4 mpos;', '')
     $source = $source.Replace('in V2CData', 'layout(location = 0) in V2CData')
-    $source = $source.Replace(
-        "#ifdef GL_OES_sample_variables`n    gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.xy), frame.mFrame, vf.mask );`n    #endif",
-        "gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.xy), uint(frame.mFrame), vf.mask );")
+    $source = $source.Replace('frame.mFrame, vf.mask', 'uint(frame.mFrame), vf.mask')
+    $source = $source.Replace('gl_NumSamples', 'int(immTargetSampleCount)')
     $source = Convert-VulkanSampleCoverage $source
     return "#version 460`n$source"
 }
@@ -124,8 +119,7 @@ for ($vertexFormat = 0; $vertexFormat -le 1; ++$vertexFormat) {
     for ($colorCompressed = 0; $colorCompressed -le 1; ++$colorCompressed) {
         for ($brush = 0; $brush -lt 5; ++$brush) {
             for ($wiggle = 0; $wiggle -lt 2; ++$wiggle) {
-                $drawinCount = if ($vertexFormat -eq 1) { 1 } else { 2 }
-                for ($drawin = 0; $drawin -lt $drawinCount; ++$drawin) {
+                for ($drawin = 0; $drawin -lt 2; ++$drawin) {
                     for ($stereo = 0; $stereo -lt 3; ++$stereo) {
                         $out = Join-Path $workDir "shader_static_brush_vs_v${vertexFormat}_c${colorCompressed}_b${brush}_w${wiggle}_d${drawin}_s${stereo}.spv"
                         & $glslang -V -S vert "-DCOLOR_COMPRESSED=$colorCompressed" "-DBRUSHTYPE=$brush" "-DWIGGLE=$wiggle" "-DDRAWIN=$drawin" "-DSTEREOMODE=$stereo" "-DVERTEX_FORMAT=$vertexFormat" -o $out $vsPath | Out-Null

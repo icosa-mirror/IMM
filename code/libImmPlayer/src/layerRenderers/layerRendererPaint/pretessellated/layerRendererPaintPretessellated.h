@@ -42,11 +42,7 @@ namespace ImmPlayer
 		ImmCore::piArray     mVisibleLayerInfos;
 
         ImmImporter::Drawing::ColorSpace mColorSpace;
-#if defined(ANDROID)
-		static const int kNumShaders = 3 * 2; // 3 stereo modes, 2 wiggle = 6
-#else
 		static const int kNumShaders = 3 * 2 * 2; // 3 stereo modes, 2 wiggle, 2 drawin = 12
-#endif
 		ImmCore::piShader mShader[kNumShaders];
 		ImmCore::piBuffer mChunkData;
 		ImmCore::piTexture mBlueNoise;

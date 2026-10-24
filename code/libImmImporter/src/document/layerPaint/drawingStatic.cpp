@@ -95,6 +95,7 @@ namespace ImmImporter
             piAssert(verts[j].mAxU  != verts[j].mAxV);
 #if ST_VERTEX_FORMAT == 1
             verts[j].mWidInfo = (p->mWid << 8u) | ((uint8_t) ((static_cast<uint32_t>(visibleMode) << 7u) + (strokeID & 127u)));
+            verts[j].mTim = p->mTim;
             verts[j].mAlp = p->mTra;
 #else
             verts[j].mWid = p->mWid;

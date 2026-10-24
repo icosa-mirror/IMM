@@ -57,11 +57,15 @@ void main( void )
 {
     vec3 col = vf.col_tra.xyz;
     float al = vf.col_tra.w;
-    //if(0.0001 > al) discard;
     outColor = vec4( col, 1.0 );
 
+    int coverage = alpha2coverage( al, ivec2(gl_FragCoord.x / dFdx(gl_FragCoord.x), gl_FragCoord.y / dFdy(gl_FragCoord.y)), uint(frame.mFrame), vf.mask );
     #ifdef GL_OES_sample_variables
-    gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.x / dFdx(gl_FragCoord.x), gl_FragCoord.y / dFdy(gl_FragCoord.y)), uint(frame.mFrame), vf.mask );
+    if (gl_NumSamples <= 1 && (coverage & 1) == 0) discard;
+    gl_SampleMask[0] = coverage;
+    #else
+    // Without sample-mask support, retain coverage through per-pixel dithering.
+    if ((coverage & 1) == 0) discard;
     #endif
 }
 

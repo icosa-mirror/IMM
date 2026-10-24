@@ -69,14 +69,14 @@ $vs = $vs.Replace('out V2CData', 'layout(location=0) out V2CData')
 $vs = $vs.Replace('gl_InstanceID', 'gl_ViewIndex').Replace('    gl_ViewportIndex = gl_ViewIndex;', '')
 # Vulkan integer attributes preserve the packed direction; decode as the HLSL route does.
 $vs = $vs.Replace('in vec3  inOri;', 'in uvec4 inOri;')
-$vs = $vs.Replace('layout (location=3) in uint  inInfo;', '#define inInfo inOri.w')
-# The existing draw-in body is inactive; both 20/24-byte formats omit an unused time input.
-$vs = $vs.Replace('layout (location=4) in float inTime;', '')
-$vs = $vs.Replace('vec3 ori = inOri;', 'vec3 ori = normalize(-1.0 + 2.0 * vec3(inOri.xyz) / 255.0);')
+$vs = $vs.Replace('layout (location=3) in float inInfoValue;', '#define inInfoValue inOri.w')
+# Direction/info share one Vulkan attribute, so time follows them at location3.
+$vs = $vs.Replace('layout (location=4) in float inTime;', 'layout (location=3) in float inTime;')
 $fs = Extract-GlslString (Join-Path $PSScriptRoot "shader_pretessellated_brush_fs.glsl")
 $fs = $fs.Replace('in vec4 mpos;', '').Replace('in V2CData', 'layout(location=0) in V2CData')
 $fs = $fs.Replace('ivec3(p,frameID)&63', 'ivec3(p, int(frameID) & 63)')
 $fs = $fs.Replace('frame.mFrame, vf.mask', 'uint(frame.mFrame), vf.mask')
+$fs = $fs.Replace('gl_NumSamples', 'int(immTargetSampleCount)')
 $fs = $fs.Replace("#ifdef GL_OES_sample_variables`n`t", "#if 1`n`t")
 $fs = Convert-VulkanSampleCoverage $fs
 $vsPath = Join-Path $work "pretessellated.vert"

@@ -51,6 +51,7 @@ struct vertex_format_t
     uint    mColAlp;
     uint    mAxUUn2;
     uint    mAxVUn3;
+    float   mTim;
 };
 
 layout(std430, binding = 8) readonly buffer VertexData
@@ -118,6 +119,7 @@ void main()
 
     vertex_format_t vertex = data[bid];
     vec3  inVertex   = vec3( vertex.mPosX, vertex.mPosY, vertex.mPosZ );
+    float inTime     = vertex.mTim;
     vec4  inColAlpha = unpack4( vertex.mColAlp );
     vec3  inAxU      = decodeUnitVector( vertex.mAxUUn2 );
     vec3  inAxV      = decodeUnitVector( vertex.mAxVUn3 );
@@ -159,6 +161,11 @@ void main()
     #endif
     #if COLOR_COMPRESSED==1
     vg.col_tra.xyz = inColAlpha.xyz;
+    #endif
+
+    #if DRAWIN==1
+        float drawingT = 2.0*layer.mDrawInTime-inTime;
+        vg.col_tra.w *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);
     #endif
 
     //==================================================

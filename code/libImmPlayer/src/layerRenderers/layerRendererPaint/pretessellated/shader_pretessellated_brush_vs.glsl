@@ -69,12 +69,14 @@ out V2CData
 layout (location=0) in vec3 inVertex;
 layout (location=1) in vec4  inColAlpha;
 layout (location=2) in vec3  inOri;
-layout (location=3) in uint  inInfo;
+layout (location=3) in float inInfoValue;
 layout (location=4) in float inTime;
 
 
 void main()
 {
+	// GL byte attributes use floating-point conversion, including this flag byte.
+	uint inInfo = uint(inInfoValue);
 	vec3 pos = inVertex;
 
 	
@@ -101,7 +103,7 @@ void main()
 
 	// directional stroke
     float f = 1.0;
-	vec3 ori = inOri;
+	vec3 ori = normalize(-1.0 + 2.0 * vec3(inOri.xyz) / 255.0);
 	if( ((inInfo>>7)&1u)==0u)
     {
         vec3 wori = normalize( (layer.mLayerToViewer * vec4(ori,0.0) ).xyz );
@@ -124,10 +126,8 @@ void main()
 	#endif
 
     #if DRAWIN==1
-		// this maps the first pt (tim=0) to 0 => 2 and last pt(tim=1) to -1,1
-		// so overall -1,2 but not all vertices reach those
-		//float drawingT = 2.0*layer.mDrawInTime-inTime;						
-		//vg.col_tra *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);		
+        float drawingT = 2.0*layer.mDrawInTime-inTime;
+        vg.col_tra.w *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);
 	#endif
 
 	//==================================================

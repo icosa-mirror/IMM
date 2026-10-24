@@ -547,6 +547,15 @@ jobs:
             --capture-output artifacts\windows-standalone-opengl\captures\face-orientation\opengl.png `
             --overlay-output artifacts\windows-standalone-opengl\captures\face-orientation\opengl-overlay.png
 
+      - name: Validate timed draw-in coverage in both OpenGL paint techniques
+        timeout-minutes: 5
+        shell: pwsh
+        run: >
+          python code\appImmUnity\tests\draw_in_render_smoke.py
+          --viewer code\appImmViewer\exe\appImmViewer_Release.exe
+          --plugin code\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-unity\Plugins\x86_64\ImmUnityPlugin.dll
+          --output-dir artifacts\windows-standalone-opengl\draw-in-render
+
       - name: Compare OpenGL render metrics against committed DirectX baseline
         shell: pwsh
         run: >

@@ -7,7 +7,7 @@
 #include "drawing.h"
 
 // 0: 36 bytes (PC/Windows)
-// 1: 28 bytes (Quest/Android)
+// 1: 32 bytes (Quest/Android, including draw-in time)
 #if defined(ANDROID)
 #define ST_VERTEX_FORMAT 1
 #else
@@ -49,7 +49,7 @@ namespace ImmImporter
 
         // GPU vertex format
 #if ST_VERTEX_FORMAT == 1
-        // 28 (27 really, 1 unused)
+        // 32 bytes: packed brush data plus unquantized draw-in time.
 		typedef struct
 		{
 			vec3      mPos;    // 12  ----> can be 6 bytes is we use "half[3]". chunk data then should have bbox corner
@@ -58,6 +58,7 @@ namespace ImmImporter
 			uint8_t   mAlp;    //  1
 			uint32_t  mAxU;    //  4
 			uint32_t  mAxV;    //  4
+			float     mTim;    //  4
 		}MyVertexFormat;
 #else
 		// 36 (34 really, 2 unused)
@@ -74,6 +75,8 @@ namespace ImmImporter
 			float    mTim;    //  4   ----> not needed, we can recover time from the chunk data and vertex id!
 		}MyVertexFormat;
 #endif
+        static_assert(sizeof(MyVertexFormat) == (ST_VERTEX_FORMAT == 1 ? 32 : 36),
+            "Static paint vertex stride must match shader storage layout");
 		struct Geometry
 		{
 			struct Chunk

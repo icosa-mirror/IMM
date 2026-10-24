@@ -9,7 +9,7 @@
 
 
 // 0: 24 bytes (PC/Windows)
-// 1: 20 bytes (Quest/Android)
+// 1: 24 bytes (Quest/Android, including draw-in time)
 #if defined(ANDROID)
 #define PT_VERTEX_FORMAT 1
 #else
@@ -44,7 +44,7 @@ namespace ImmImporter
         uint64_t GetFileOffset(void) const;
 
 		// GPU
-		// 24 / 20
+		// 24 bytes on all targets, including draw-in time.
 		typedef struct
 		{
             vec3    mPos;    // 12  ----> can be 6 bytes is we use "half[3]". chunk data then should have bbox corner
@@ -52,10 +52,9 @@ namespace ImmImporter
 			uint8_t mAlp;    //  1
 			uint8_t mDir[3]; //  3   ----> can do without in most strokes, split in 2 vertex formats? if not, also, it can be 2 bytes
 			uint8_t mInfo;   //  1
-#if PT_VERTEX_FORMAT==0
 			float   mTim;    //  4   ----> not needed, we can recover time from the chunk data and vertex id!
-#endif
 		}MyVertexFormat;
+        static_assert(sizeof(MyVertexFormat) == 24, "Pretessellated paint must retain its time vertex attribute");
 
 		struct Geometry
 		{

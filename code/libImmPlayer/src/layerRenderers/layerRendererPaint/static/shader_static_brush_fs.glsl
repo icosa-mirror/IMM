@@ -1,7 +1,5 @@
 static const char* shader_static_brush_fs = R"(
-#ifdef GL_OES_sample_variables
-#extension GL_OES_sample_variables : enable
-#endif
+
 
 layout (std140, row_major, binding=0) uniform FrameState
 {
@@ -70,15 +68,15 @@ void main( void )
     float al = vf.col_tra.w;
 
     #if RENDERMODE==1
-    #ifdef GL_OES_sample_variables
     if( bitCount(gl_SampleMaskIn[0]) < 8 ) col = vec3(0.0,0.0,0.0);
-    #endif
     #endif
 
     outColor = vec4( col, 1.0 );
 
-    #ifdef GL_OES_sample_variables
-    gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.xy), frame.mFrame, vf.mask );
-    #endif
+    int coverage = alpha2coverage( al, ivec2(gl_FragCoord.xy), frame.mFrame, vf.mask );
+    // Single-sample targets disable multisampling in the GL backend, so the
+    // sample-mask output alone cannot reject their uncovered fragments.
+    if (gl_NumSamples <= 1 && (coverage & 1) == 0) discard;
+    gl_SampleMask[0] = coverage;
 }
 )";

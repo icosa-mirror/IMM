@@ -88,9 +88,7 @@ namespace ImmImporter
 					verts[nv].mDir[1] = int(127.5f + 127.5f*dir.y);
 					verts[nv].mDir[2] = int(127.5f + 127.5f*dir.z);
 					verts[nv].mInfo = (static_cast<uint32_t>(visibleMode) << 7) + (strokeID & 127);
-#if PT_VERTEX_FORMAT==0
 					verts[nv].mTim = p->mTim;
-#endif
 					nv++;
 				}
 			}
@@ -109,9 +107,7 @@ namespace ImmImporter
 					verts[nv].mDir[1] = int(127.5f + 127.5f*dir.y);
 					verts[nv].mDir[2] = int(127.5f + 127.5f*dir.z);
 					verts[nv].mInfo = (static_cast<uint32_t>(visibleMode) << 7) + (strokeID & 127);
-#if PT_VERTEX_FORMAT==0
 					verts[nv].mTim = p->mTim;
-#endif
 					nv++;
 				}
 			}

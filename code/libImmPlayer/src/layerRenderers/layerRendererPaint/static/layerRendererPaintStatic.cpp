@@ -232,7 +232,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     {
         std::lock_guard<std::recursive_mutex> poolLock(mLayerInfoMutex);
 #if ST_VERTEX_FORMAT == 1
-        piAssert( sizeof(DrawingStatic::MyVertexFormat)==28 );
+        piAssert( sizeof(DrawingStatic::MyVertexFormat)==32 );
 #else
         piAssert( sizeof(DrawingStatic::MyVertexFormat)==36 );
 #endif
@@ -260,9 +260,6 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         for (int j = 0; j < 2; j++) // drawin
         for (int i = 0; i < 3; i++) // stereo
         {
-#if defined(ANDROID)
-            if (j == 1) continue; // skip the drawin shaders on Android
-#endif
             if (static_cast<StereoMode>(i) == StereoMode::Preferred)
             {
                 if (renderer->GetAPI() == piRenderer::API::GL &&
@@ -301,9 +298,10 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 #if defined(WINDOWS) || defined(ANDROID)
 #if ST_VERTEX_FORMAT == 1
                 const int vs_index = i +
-                    k * 3 +
-                    l * 3 * 2 +
-                    (static_cast<int>(colorSpace)) * 5 * 3 * 2 +
+                    j * 3 +
+                    k * 3 * 2 +
+                    l * 3 * 2 * 2 +
+                    (static_cast<int>(colorSpace)) * 5 * 3 * 2 * 2 +
                     2 * 5 * 3 * 2 * 2;
 #else
                 const int vs_index = i +
@@ -1039,14 +1037,8 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
             int tmpShaderId = 0;
             tmpShaderId += stereoModeInt;
-#if !defined(ANDROID)
             tmpShaderId += (me->mDrawin == true) ? 3 : 0;
-#endif
-#if defined(ANDROID)
-            tmpShaderId += (me->mWiggle == true) ? 3 : 0;
-#else
             tmpShaderId += (me->mWiggle == true) ? 6 : 0;
-#endif
 
             renderer->AttachTextures(1, &mBlueNoise, 7);
             
@@ -1062,11 +1054,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
                 const int stateID = ((chunkType == static_cast<int>(Element::BrushSectionType::Segment)) ? 0 : 1);
                 if (stateID != lastStateID) { lastStateID = stateID; renderer->SetRasterState(mRasterState[stateID]); }
 
-#if !defined(ANDROID)
                 int shaderID = tmpShaderId + 2 * 2 * 3 * chunkType;
-#else
-                int shaderID = tmpShaderId + 3 * 2 * chunkType;
-#endif
                 if (shaderID != lastShaderID)
                 {
                     lastShaderID = shaderID;

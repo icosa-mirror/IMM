@@ -60,11 +60,7 @@ namespace ImmPlayer
 
         ImmImporter::Drawing::ColorSpace mColorSpace;
 
-#if defined(ANDROID)
-		static const int kNumShaders = 5 * 3 * 2; // 5 brushes, 3 stereo modes, 2 wiggle = 30
-#else
 		static const int kNumShaders = 5 * 3 * 2 * 2; // 5 brushes, 3 stereo modes, 2 wiggle, 2 drawin = 60
-#endif
 		ImmCore::piShader mShader[kNumShaders];
 		ImmCore::piBuffer mChunkData;
 		ImmCore::piTexture mBlueNoise;

@@ -58,13 +58,13 @@ layout (location=0) in vec3 inVertex;
 layout (location=1) in vec4 inColAlpha;
 
 layout (location=2) in vec3  inOri;
-layout (location=3) in uint  inInfo;
-#if VERTEX_FORMAT==0
+layout (location=3) in float inInfoValue;
 layout (location=4) in float inTime;
-#endif
 
 void main()
 {
+    // GL byte attributes use floating-point conversion, including this flag byte.
+    uint inInfo = uint(inInfoValue);
     vec3 pos = inVertex;
 
     #if STEREOMODE==0
@@ -81,7 +81,7 @@ void main()
 
     // directional stroke
     float f = 1.0;
-    vec3 ori = inOri;
+    vec3 ori = normalize(-1.0 + 2.0 * vec3(inOri.xyz) / 255.0);
     if( ((inInfo>>7)&1u)==0u)
     {
         vec3 wori = normalize( (layer.mLayerToViewer * vec4(ori,0.0) ).xyz );
@@ -100,6 +100,11 @@ void main()
     #endif
     #if COLOR_COMPRESSED==1
     vg.col_tra.xyz = inColAlpha.xyz;
+    #endif
+
+    #if DRAWIN==1
+        float drawingT = 2.0*layer.mDrawInTime-inTime;
+        vg.col_tra.w *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);
     #endif
 
     gl_Position = display.mViewerToEye_Prj[iid] * vec4(cpos,1.0);

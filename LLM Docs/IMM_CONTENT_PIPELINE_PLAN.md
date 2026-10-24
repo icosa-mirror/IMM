@@ -25,7 +25,9 @@ nine actual Unity button/ruler steps; see 6.131 for evidence and its limits. Thi
 is a development test UI. Action controls and their native runtime support are now
 implemented and pass local live acceptance (6.136-6.137). Selected-layer framing
 now clips foreground occluders and passes live Snoopy acceptance (6.138).
-GL/Android draw-in support and audible Unity/device confirmation remain.
+GL/Android draw-in implementations now pass local build/shader checks, and both
+OpenGL paint techniques pass actual image acceptance (6.141). Android draw-in
+device evidence and audible Unity/device confirmation remain outstanding.
 The timeline goal stays active, including the required missing runtime features.
 Later native Action publication (`29d72074`) and late finite-occurrence correction
 (`0f81d964`) pass local native/CPU/C-ABI checks; their FULL run 40066922009 is
@@ -4968,6 +4970,48 @@ the historical sizes/check counts below describe this earlier source only.
    Coverage pixels still fail in the single-sample validation path, which disables
    multisampling and therefore needs explicit single-sample alpha coverage rather
    than relying solely on the shader sample mask. That work remains in progress.
+
+### 6.141. Draw-in rendering across GL and packed Android paths
+
+1. Static and pretessellated shaders now apply per-point DrawIn alpha. Android
+   packed vertices retain float point time (static offset28/stride32; pretess
+   stride24), with matching vertex declarations and shader variant indices.
+   Desktop format0 layouts are unchanged. Vulkan shader tables were regenerated
+   and validated; these internal GPU layouts introduce no file/API version.
+2. Desktop GL now uses core sample coverage, with explicit discard for uncovered
+   single-sample fragments. GLES uses its existing four-sample coverage mask with
+   single-sample/no-extension discard fallback. Opaque coverage remains exact.
+   Enabling coverage exposed a pretessellated flag-attribute type mismatch and
+   missing direction-byte decoding; GL input conversion now matches its declared
+   attribute type, with HLSL-equivalent directional decoding. Shared GL backend
+   behavior was not changed. Relevant semantics: [GLSL sample mask outputs](https://registry.khronos.org/OpenGL/specs/gl/GLSLangSpec.4.20.pdf).
+3. Actual old-viewer captures failed zero/partial behavior for both paint
+   techniques. Final new-viewer captures pass all eight cases with zero rendering
+   errors: red target pixels are 5,814 / 0 / 2,307 / 5,814 for keyless / zero /
+   partial / full. Full and keyless images match exactly; the independent blue
+   reference retains its exact 5,814 pixels in every case. Evidence:
+   artifacts/draw-in-gl-red2/report.json, draw-in-gl-green4/report.json.
+   Pretessellated face-orientation rendering also passes the existing classifier:
+   artifacts/draw-in-pt-face/status.json. The failed intermediate reports remain
+   preserved; they are not acceptance receipts.
+4. Windows Release, final CPU authoring and loaded WARP C ABI checks pass; their
+   plugin hashes match the current Windows DLL. Cached arm64 Android importer and
+   player builds pass, including the final GLES changes. Shader evidence includes
+   408 vertex variants, six desktop fragment variants, twelve GLES fragment
+   variants with/without the sample-variable extension, and regenerated SPIR-V
+   validation. Evidence: artifacts/draw-in-native-final-build.log,
+   draw-in-final-cpu-report.json, draw-in-final-cabi/report.json,
+   draw-in-android-{importer-build,player-final-build}.log and drawin-shader-check/.
+   These Android checks prove compilation/layouts, not device pixels.
+5. The strict eight-case image runner is now part of the FULL Windows OpenGL CI
+   job, retaining captures, shader/render errors and binary/fixture/settings/GPU
+   provenance under its existing artifact manifest. Workflow matrix and managed
+   compilation pass. The inspector no longer incorrectly labels GL previews as
+   incapable of showing draw-in. No validation gate was weakened.
+6. This source milestone is ready for its new FULL CI run. The timeline goal stays
+   active pending hosted acceptance, Android draw-in rendering evidence and actual
+   Unity audio-output confirmation. The latest accepted hosted baseline remains
+   the top checkpoint; queued/running later runs are not accepted results.
 
 ## 7. Consolidated documents
 
