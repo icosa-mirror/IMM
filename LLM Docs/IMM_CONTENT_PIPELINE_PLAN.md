@@ -27,17 +27,22 @@ implemented and pass local live acceptance (6.136-6.137). Selected-layer framing
 now clips foreground occluders and passes live Snoopy acceptance (6.138).
 GL/Android draw-in implementations now pass local build/shader checks, and both
 OpenGL paint techniques pass actual image acceptance (6.141). Android draw-in
-device evidence and audible Unity/device confirmation remain outstanding.
+device evidence remains outstanding. Windows Unity audio output now passes actual
+process-scoped Windows render-session measurement (6.142), including mute/pause
+and return to main. No physical speaker or human-listening result is claimed.
 The timeline goal stays active, including the required missing runtime features.
 Later native Action publication (`29d72074`) and late finite-occurrence correction
 (`0f81d964`) pass local native/CPU/C-ABI checks; their FULL run 40066922009 is
-pending. MakeDefault execution provenance is implemented in local commit `8fb3de4c`
+pending. MakeDefault execution provenance is implemented in pushed commit `8fb3de4c`
 with native/CPU/C-ABI checks (6.136). Action controls compile and pass 21 live
 button/command checks. The held-root Stop Undo regression is fixed in `42f36784`;
 the rebuilt Editor passes the original four-step failure sequence (6.137).
-Latest pushed feature source `a702bd6a` also closes the finite-ancestor cascade and fixes main
+Play/Continue source `a702bd6a` also closes the finite-ancestor cascade and fixes main
 Play/Continue sound handling, with native/CPU/C-ABI checks and six actual Unity
 button steps. Its FULL run40068611847 is pending (6.134-6.135).
+Latest pushed feature source `66e5232e` includes framing/navigation, GL resolve
+and GL/Android draw-in work. Its FULL run40075591630 is pending; strict local
+rendering, build and API receipts are recorded in 6.138-6.142.
 
 CI corrections since the accepted baseline retain serialized Unity licence
 ownership, preserve Android native inputs until their delayed consumers finish,
@@ -5016,6 +5021,32 @@ the historical sizes/check counts below describe this earlier source only.
    active pending hosted acceptance, Android draw-in rendering evidence and actual
    Unity audio-output confirmation. The latest accepted hosted baseline remains
    the top checkpoint; queued/running later runs are not accepted results.
+
+### 6.142. Actual Unity audio output measured without a listening handoff
+
+1. The user is away from the PC. No human-listening confirmation was obtained.
+   Instead, read the Windows render-session peak meter for the owned Unity Editor
+   process across active output endpoints, isolating it from other applications.
+   This uses local Windows SDK CoreAudio COM interfaces, with no microphone,
+   device-volume changes, capture-app setup or additional installed dependencies.
+2. Five controlled preview phases pass: paused, playing, muted, re-enabled and
+   paused again. Playing/re-enabled peak at0.03266941; the three silent windows
+   remain below6.33e-10. All five retain the identical main root clock. Windows
+   session output therefore follows independent preview transport/mute while main
+   remains held. Evidence: artifacts/audio-output-session-analysis.json,
+   audio-output-session-meter.json and audio-output-phases.json.
+3. Three return-to-main phases also pass: preview paused is effectively silent,
+   returning to main restores a0.06290478 peak and advances the main root clock,
+   then pausing main is effectively silent again. Evidence:
+   artifacts/audio-output-return-analysis.json, audio-output-return-meter.json and
+   audio-output-return-phases.json. Initial probe transport codes were corrected
+   before acceptance; wrong-transport artifacts are retained as invalid probe
+   evidence, not an application regression or accepted result.
+4. These results close the actual Windows Unity audio-output gap identified in
+   6.131/6.137. They prove signal delivery to the process's Windows output session;
+   physical speakers/headsets and human hearing are outside this measurement.
+   Android draw-in device rendering and latest FULL CI acceptance remain open.
+   The owned sample is left paused and quiet after the check.
 
 ## 7. Consolidated documents
 
