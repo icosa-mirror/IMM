@@ -5059,7 +5059,8 @@ the historical sizes/check counts below describe this earlier source only.
 ### 6.143. Refocused real-scene runtime-editing evaluation
 
 1. User replaced the earlier broad timeline completion goal with evaluation of
-   already implemented runtime editing through the test UI. Use Snoopy in the
+   already implemented runtime editing and prototype a future production editor
+   through the test timeline UI. Use Snoopy in the
    existing D3D12 lab; add only controls that block evaluating an existing operation.
    Fix obvious failures encountered during the pass and keep commits contained.
 2. Parked the unfinished Android fixture-generation extension. Its only dirty
@@ -5077,6 +5078,26 @@ the historical sizes/check counts below describe this earlier source only.
    (source66e5232e) remains required; do not equate queued or partially successful
    runs with full acceptance. No further renderer features or Android validation
    expansion are included in this evaluation goal.
+
+### 6.144. Required macOS Editor smoke native-log correction
+
+1. Auditing actual run7b9 artifacts found the combined builder exited2: an Editor
+   capture was written, but the smoke later timed out waiting for required native
+   audio evidence. A successful capture/classifier warning does not make that
+   supporting step failure disappear. The QuickSearch exception in the same log
+   is separate and was not established as its cause.
+2. Source cause: smoke expected temporaryCachePath/imm_player_log.txt while current
+   managed logging defaults off and resolves enabled files under the IMM child
+   directory. The CI-owned macOS smoke now explicitly opts in, resolves the actual
+   path, persists its opt-in across Play/domain reload before manager Awake, and
+   restores prior policy during cleanup. All three native audio markers remain
+   required. No native/rendering gate is relaxed.
+3. Existing entrypoint/composition contracts and standalone C# compilation against
+   installed Unity/project references pass (zero errors). Evidence:
+   artifacts/timeline-ci-agent-mac-smoke-compile/compile.log and agent Mac artifact
+   audit receipts. Hosted proof after the correction is still required in the next
+   FULL source run. The realistic-scene pass has separately found an empty-bounds
+   camera/unload blocker, being fixed in the lab.
 
 ## 7. Consolidated documents
 

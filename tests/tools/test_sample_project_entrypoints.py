@@ -274,6 +274,26 @@ def main() -> int:
     )
     assert "BuildMacOSMetalSmokePlayer();" in combined_smoke
     assert "RunMacOSEditorPlayModeSmoke();" in combined_smoke
+    editor_smoke = method_body(
+        unity_automation,
+        "private static void RunEditorPlayModeSmoke(string label, string scenePath, string defaultCapturePath, bool enableCompositionProbe, bool enableXrProbe)",
+    )
+    assert 'ImmNativeLogging.ResolveLogPath("imm_player_log.txt")' in editor_smoke
+    assert editor_smoke.index("ImmNativeLogging.EnableFileLogging = true") < editor_smoke.index("ImmNativeLogging.ResolveLogPath")
+    assert 'Path.Combine(Application.temporaryCachePath, "imm_player_log.txt")' not in editor_smoke
+    assert "SessionState.SetBool(EditorSmokePreviousFileLoggingKey, ImmNativeLogging.EnableFileLogging)" in editor_smoke
+    resume_smoke = method_body(unity_automation, "private static void ResumeEditorPlayModeSmokeAfterReload()")
+    assert "EnableOwnedEditorSmokeLogging();" in resume_smoke
+    assert "[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]\n        private static void EnableOwnedEditorSmokeLogging()" in unity_automation
+    enable_logging = method_body(unity_automation, "private static void EnableOwnedEditorSmokeLogging()")
+    assert "SessionState.GetBool(EditorSmokeActiveKey, false)" in enable_logging
+    assert "ImmNativeLogging.EnableFileLogging = true" in enable_logging
+    clear_smoke = method_body(unity_automation, "private static void ClearEditorPlayModeSmokeSession()")
+    assert "ImmNativeLogging.EnableFileLogging = SessionState.GetBool(EditorSmokePreviousFileLoggingKey, false)" in clear_smoke
+    native_audio_check = method_body(unity_automation, "private static bool EditorSmokeNativeLogPassed()")
+    for marker in ["Loaded in SPU!", "[IMM_AUDIO_PIPELINE_20260812] requested=AVFoundation active=AVFoundation",
+                   "Decoded Ogg Opus sound to PCM temp WAV for AVFoundation"]:
+        assert marker in native_audio_check
     ios_player_build = method_body(
         unity_automation,
         "public static void BuildIOSCIPlayer()",

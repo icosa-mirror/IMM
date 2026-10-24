@@ -33,6 +33,7 @@ namespace ImmPlayer.Editor
         private const string EditorSmokeCapturePathKey = "IMM_EDITOR_SMOKE_CAPTURE_PATH";
         private const string EditorSmokeCaptureRequestedKey = "IMM_EDITOR_SMOKE_CAPTURE_REQUESTED";
         private const string EditorSmokeNativeLogPathKey = "IMM_EDITOR_SMOKE_NATIVE_LOG_PATH";
+        private const string EditorSmokePreviousFileLoggingKey = "IMM_EDITOR_SMOKE_PREVIOUS_FILE_LOGGING";
         private const string EditorSmokeStartTicksKey = "IMM_EDITOR_SMOKE_START_TICKS";
         private const string EditorSmokeCapturePathArg = "-immSmokeCapturePath";
         private const string EditorSmokePlayerPathArg = "-immSmokePlayerPath";
@@ -581,15 +582,26 @@ namespace ImmPlayer.Editor
             Environment.SetEnvironmentVariable(RuntimeSmokeXrProbeEnv, enableXrProbe ? "1" : string.Empty);
             Environment.SetEnvironmentVariable(RuntimeSmokeDisabledEnv, "1");
 
-            string nativeLogPath = Path.Combine(Application.temporaryCachePath, "imm_player_log.txt");
-            if (File.Exists(nativeLogPath))
+            SessionState.SetBool(EditorSmokePreviousFileLoggingKey, ImmNativeLogging.EnableFileLogging);
+            if (Application.platform == RuntimePlatform.OSXEditor)
+            {
+                ImmNativeLogging.EnableFileLogging = true;
+            }
+            string nativeLogPath = ImmNativeLogging.ResolveLogPath("imm_player_log.txt");
+            if (Application.platform == RuntimePlatform.OSXEditor && string.IsNullOrEmpty(nativeLogPath))
+            {
+                ImmNativeLogging.EnableFileLogging = SessionState.GetBool(EditorSmokePreviousFileLoggingKey, false);
+                SessionState.EraseBool(EditorSmokePreviousFileLoggingKey);
+                throw new InvalidOperationException("CI Editor smoke could not prepare its required native audio log.");
+            }
+            if (!string.IsNullOrEmpty(nativeLogPath) && File.Exists(nativeLogPath))
             {
                 File.Delete(nativeLogPath);
             }
 
             SessionState.SetBool(EditorSmokeActiveKey, true);
             SessionState.SetString(EditorSmokeCapturePathKey, capturePath);
-            SessionState.SetString(EditorSmokeNativeLogPathKey, nativeLogPath);
+            SessionState.SetString(EditorSmokeNativeLogPathKey, nativeLogPath ?? string.Empty);
             SessionState.SetString(EditorSmokeStartTicksKey, DateTime.UtcNow.Ticks.ToString());
 
             // Retain the historical Built-in visual baseline as an explicit CI
@@ -638,6 +650,7 @@ namespace ImmPlayer.Editor
             if (!SessionState.GetBool(EditorSmokeActiveKey, false))
                 return;
 
+            EnableOwnedEditorSmokeLogging();
             s_EditorSmokeCapturePath = SessionState.GetString(EditorSmokeCapturePathKey, string.Empty);
             string ticksText = SessionState.GetString(EditorSmokeStartTicksKey, string.Empty);
             if (!long.TryParse(ticksText, out long ticks))
@@ -654,6 +667,18 @@ namespace ImmPlayer.Editor
             EditorApplication.update += UpdateEditorPlayModeSmoke;
             EditorApplication.playModeStateChanged -= OnEditorPlayModeSmokeStateChanged;
             EditorApplication.playModeStateChanged += OnEditorPlayModeSmokeStateChanged;
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void EnableOwnedEditorSmokeLogging()
+        {
+            // Play-mode domain reload resets static policy. Restore this owned
+            // opt-in before scene Awake initializes the native player.
+            if (Application.platform == RuntimePlatform.OSXEditor &&
+                SessionState.GetBool(EditorSmokeActiveKey, false))
+            {
+                ImmNativeLogging.EnableFileLogging = true;
+            }
         }
 
         private static void EnsureBuildTargetSupported(BuildTargetGroup group, BuildTarget target, string label)
@@ -862,6 +887,7 @@ namespace ImmPlayer.Editor
                             if (!TryCaptureEditorPlayScreenshot(s_EditorSmokeCapturePath))
                             {
                                 s_EditorSmokeRequestedExit = true;
+                                ClearEditorPlayModeSmokeSession();
                                 EditorApplication.Exit(2);
                                 return;
                             }
@@ -879,6 +905,7 @@ namespace ImmPlayer.Editor
             {
                 s_EditorSmokeRequestedExit = true;
                 UnityEngine.Debug.LogError($"[IMM_EDITOR_SMOKE] timed out waiting for capture: {s_EditorSmokeCapturePath}");
+                ClearEditorPlayModeSmokeSession();
                 EditorApplication.Exit(2);
             }
         }
@@ -1013,6 +1040,8 @@ namespace ImmPlayer.Editor
 
         private static void ClearEditorPlayModeSmokeSession()
         {
+            ImmNativeLogging.EnableFileLogging = SessionState.GetBool(EditorSmokePreviousFileLoggingKey, false);
+            SessionState.EraseBool(EditorSmokePreviousFileLoggingKey);
             SessionState.EraseBool(EditorSmokeActiveKey);
             SessionState.EraseString(EditorSmokeCapturePathKey);
             SessionState.EraseBool(EditorSmokeCaptureRequestedKey);
