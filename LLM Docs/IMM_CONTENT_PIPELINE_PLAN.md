@@ -26,41 +26,40 @@ preserved manifests identify that source. Receipt:
 artifacts/timeline-ci-agent-40044825617-acceptance-audit.json. Hardware-only Unity
 Windows Vulkan and deferred headset evidence remain outside hosted acceptance.
 
-Later source is not fully accepted yet. Timeline work now includes nested local
-preview, scoped edits, resizable panes, authored exposure projection, Draw-in keys,
-and independent audio enable/mute with separate voices and main-cursor retention.
-Audio feature source `1ddf8eff` passes native Release, CPU/loaded-C-ABI checks and
-nine actual Unity button/ruler steps; see 6.131 for evidence and its limits. This
-is a development test UI. Action controls and their native runtime support are now
-implemented and pass local live acceptance (6.136-6.137). Selected-layer framing
-now clips foreground occluders and passes live Snoopy acceptance (6.138).
-GL/Android draw-in implementations now pass local build/shader checks, and both
-OpenGL paint techniques pass actual image acceptance (6.141). Android draw-in
-device evidence remains outstanding. Windows Unity audio output now passes actual
-process-scoped Windows render-session measurement (6.142), including mute/pause
-and return to main. No physical speaker or human-listening result is claimed.
-The timeline goal stays active, including the required missing runtime features.
-Later native Action publication (`29d72074`) and late finite-occurrence correction
-(`0f81d964`) pass local native/CPU/C-ABI checks; their FULL run 40066922009 is
-pending. MakeDefault execution provenance is implemented in pushed commit `8fb3de4c`
-with native/CPU/C-ABI checks (6.136). Action controls compile and pass 21 live
-button/command checks. The held-root Stop Undo regression is fixed in `42f36784`;
-the rebuilt Editor passes the original four-step failure sequence (6.137).
-Play/Continue source `a702bd6a` also closes the finite-ancestor cascade and fixes main
-Play/Continue sound handling, with native/CPU/C-ABI checks and six actual Unity
-button steps. Its FULL run40068611847 is pending (6.134-6.135).
-Latest pushed feature source `66e5232e` includes framing/navigation, GL resolve
-and GL/Android draw-in work. Its FULL run40075591630 is pending; strict local
-rendering, build and API receipts are recorded in 6.138-6.142.
+Later source is not fully accepted yet. The local D3D12 Snoopy evaluation is
+complete: layer selection/framing, rename, visibility/opacity/transforms, key
+creation/retiming/removal and Undo/Redo, drawing/hold edits, temporary hierarchy
+creation/reparent/deletion, nested playback/scrubbing and return to the held main
+scene all have runtime and visible evidence (6.143-6.149). Independent audio has
+actual process-scoped Windows render-session evidence, including mute/pause and
+return to main; no physical speaker or human-listening result is claimed (6.142).
+Action editing and its required native support pass local live acceptance
+(6.136-6.137). Empty-scene framing no longer faults scene switching (6.145).
 
-CI corrections since the accepted baseline retain serialized Unity licence
-ownership, preserve Android native inputs until their delayed consumers finish,
-and attribute the observed foreign Android permission-controller Java crash
-without masking app/ambiguous/native or visual failures. Runs 40057279837,
-40058475651 and 40062003931 are terminal Cancelled for the classifier source fix;
-none counts as accepted. Strict successful device evidence is retained. Corrected
-full runs 40063347058, 40063894055 and 40065289529 remain active at the last recorded check;
-6.129-6.131 record their exact source heads and subsequent receipts.
+The prototype now hides empty or trivial-default channel rows, with Show all
+tracks retaining access; layer nodes remain visible and the scene image is
+unchanged (6.147). Scope/local-time semantics, repeated occurrences and navigation
+affordances remain open production-editor design questions (6.150); they are not
+final behavior. These do not require expanding this evaluation into a production
+editor. Android draw-in device expansion remains parked by the user's scope
+correction (6.143).
+
+Latest pushed implementation source is `06a288aa51417c66cb347bcb8ebd68d944de26e4`.
+Replacement FULL[40091556175](https://github.com/icosa-mirror/IMM/actions/runs/40091556175)
+is active. Required acceptance includes the complete hosted gates, actual Mesa
+zero-diagnostic image validation and corrected macOS smoke exit/audio markers.
+The previous source-affected runs40078448726 and40080086930 are terminal Cancelled;
+all their jobs/license owners are terminal. The older runs described as pending
+in historical milestones are historical states, not current accepted evidence.
+
+The most recent CI source correction makes desktop paint coverage masks explicitly
+unsigned after Mesa reported implicit signed-to-unsigned bitwise diagnostics.
+All pixel checks in the failed artifact passed; strict diagnostic failure was
+retained. The corrected viewer passes all eight local image cases without
+renderer diagnostics, and regenerated Vulkan output is unchanged (6.151). Actual
+hosted Mesa acceptance remains pending. The earlier macOS native-log correction
+also retains its required audio markers (6.144). No renderer feature expansion
+or relaxed CI gate is part of either correction.
 
 The broader shared roadmap is also open: scene-wide Quill chapter/startup,
 timing/navigation/media/reverse fidelity, full runtime-authoring acceptance,
