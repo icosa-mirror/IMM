@@ -4577,11 +4577,17 @@ the historical sizes/check counts below describe this earlier source only.
    with an explicit foreign-process warning:
    artifacts/timeline-ci-agent-723-godot-reclassified.json.
 3. The three active FULL runs 40057279837, 40058475651 and 40062003931 contain
-   the old classifier. Their remaining jobs are being cancelled for a corrected
-   full run; none is accepted. Preserve successful independent evidence, including
+   the old classifier. Cancellation was requested for their remaining jobs;
+   none is accepted. Preserve successful independent evidence, including
    the strict Unity Android audit in
    artifacts/timeline-ci-agent-40057279837-android-audit.json.
-4. Independent audio is in progress: separate renderer-owned preview voices and
+4. Fix `3feb1586` is pushed in integration tip `7b9a0c5f`, after merging CI
+   binary refresh `14c2816d`. Replacement FULL
+   [40063347058](https://github.com/icosa-mirror/IMM/actions/runs/40063347058)
+   is pending; the fix is not yet fully accepted. The archived reclassification
+   audit also records raw-log/classifier/APK/native hashes:
+   artifacts/timeline-ci-agent-723-godot-reclassification-audit.json.
+5. Independent audio is in progress: separate renderer-owned preview voices and
    full Sound runtime capture are the next contained foundation. Document routing,
    clock gating, UI controls and end-to-end preview acceptance remain outstanding.
 
