@@ -4416,6 +4416,13 @@ the historical sizes/check counts below describe this earlier source only.
    regions explicitly say Aggregate and selection remains exact at seek time.
    The timeline goal remains active: unsupported channels, audible local preview
    and their acceptance remain unfinished.
+6. Resize `604ff262` and exposure projection `0c1645cf` are pushed in integration
+   tip `1b946994`, after merging CI's generated-binary commit `5d8cda87`. The
+   owned sample was stopped/closed cleanly to release its DLL before the merge;
+   no unrelated changes were discarded. FULL
+   [40055763748](https://github.com/icosa-mirror/IMM/actions/runs/40055763748) is pending.
+   Earlier coordinated full runs remain active and unaccepted; no result is
+   inferred from local checks or a queued workflow.
 
 ## 7. Consolidated documents
 
