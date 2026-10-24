@@ -153,7 +153,7 @@ namespace ImmPlayer
             {
                 N.Key x = a.Keys[i], y = b.Keys[i];
                 if (Math.Abs(x.seconds - y.seconds) > 0.5 / 12600 || x.property != y.property || x.interpolation != y.interpolation ||
-                    x.boolean != y.boolean || x.value != y.value || x.ticks != y.ticks || x.flip != y.flip ||
+                    x.boolean != y.boolean || x.value != y.value || x.doubleValue != y.doubleValue || x.ticks != y.ticks || x.flip != y.flip ||
                     x.tx != y.tx || x.ty != y.ty || x.tz != y.tz || x.qx != y.qx || x.qy != y.qy || x.qz != y.qz ||
                     x.qw != y.qw || x.scale != y.scale) return false;
             }

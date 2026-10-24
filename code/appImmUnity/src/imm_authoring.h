@@ -72,6 +72,7 @@ typedef enum ImmAuthoringAnimProperty
 {
     IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY = 0,
     IMM_AUTHORING_ANIM_PROPERTY_OPACITY = 1,
+    IMM_AUTHORING_ANIM_PROPERTY_DRAW_IN_TIME = 5,
     IMM_AUTHORING_ANIM_PROPERTY_LOOP = 7,
     IMM_AUTHORING_ANIM_PROPERTY_OFFSET = 8,
     IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM = 9
@@ -205,7 +206,7 @@ typedef struct ImmAuthoringKey
     float scale;
     uint32_t uintValue; // Offset uses exact IMM ticks, never float seconds.
     int32_t transformFlip; // 0=None, 1=X, 2=Y, 3=Z.
-    uint32_t reserved[2];
+    double doubleValue; // DrawInTime preserves its native scalar precision.
 } ImmAuthoringKey;
 
 enum
@@ -298,6 +299,7 @@ static_assert(offsetof(ImmAuthoringTimelineClock, presentedRevision) == 80, "Tim
 static_assert(offsetof(ImmAuthoringTimelineClock, requestedRevision) == 88, "Timeline clock requested offset changed");
 static_assert(offsetof(ImmAuthoringKey, uintValue) == 64, "ImmAuthoringKey value offset changed");
 static_assert(offsetof(ImmAuthoringKey, transformFlip) == 68, "ImmAuthoringKey reflection offset changed");
+static_assert(offsetof(ImmAuthoringKey, doubleValue) == 72, "ImmAuthoringKey double value offset changed");
 static_assert(sizeof(ImmAuthoringSpawnArea) == 112, "ImmAuthoringSpawnArea ABI changed");
 #endif
 
@@ -336,6 +338,9 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetName(int32_
     int32_t layerId, char * nameUtf8, uint32_t capacity, uint32_t * requiredBytes);
 // Visibility keys refresh ordinary group/static-paint/spawn subtrees. Nonroot
 // timeline groups and media/instance/other-resource descendants are unsupported.
+// DrawInTime accepts finite nonnegative doubleValue on static paint. Publication
+// resamples a held pose; removing its final key restores the layer's base value.
+// Draw-in rendering availability is separate from canonical key authoring.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeySet(int32_t docId, int32_t layerId,
     const ImmAuthoringKey * key);
 // Canonical static-paint repeat count; zero repeats indefinitely. Publication

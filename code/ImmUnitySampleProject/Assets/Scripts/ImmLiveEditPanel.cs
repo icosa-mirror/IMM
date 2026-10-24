@@ -53,8 +53,8 @@ namespace ImmPlayer
         private Rect window;
         private Coroutine load;
         private Camera view;
-        private readonly string[] channels = { "Visibility", "Opacity", "Transform", "Loop", "Offset ticks" };
-        private readonly int[] channelIds = { 0, 1, 9, 7, 8 };
+        private readonly string[] channels = { "Visibility", "Opacity", "Transform", "Loop", "Offset ticks", "Draw-in" };
+        private readonly int[] channelIds = { 0, 1, 9, 7, 8, 5 };
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -216,6 +216,15 @@ namespace ImmPlayer
                 GUILayout.Label("Offset (ticks, 12600 per second)");
                 keyOffset = GUILayout.TextField(keyOffset);
             }
+            if (keyChannel == 5)
+            {
+                GUILayout.Label("Draw-in progress (finite, non-negative)");
+                keyDrawIn = GUILayout.TextField(keyDrawIn);
+                bool drawInPreview = SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D11 ||
+                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Direct3D12;
+                GUILayout.Label(drawInPreview ? "Uses per-stroke timing." : "This preview cannot display the draw-in effect.", wrapped);
+            }
+            GUI.enabled &= CanEditTimelineChannel(selected, channelIds[keyChannel]);
             GUILayout.BeginHorizontal();
             keyTime = GUILayout.TextField(keyTime, GUILayout.Width(65));
             if (GUILayout.Button("Set key")) Submit("Set key", SetKey);
@@ -323,6 +332,7 @@ namespace ImmPlayer
                 value = properties.opacity, tx = properties.tx, ty = properties.ty, tz = properties.tz,
                 qx = properties.qx, qy = properties.qy, qz = properties.qz, qw = properties.qw,
                 scale = properties.scale, flip = properties.flip, ticks = keyChannel == 4 ? Unsigned(keyOffset) : 0 };
+            if (keyChannel == 5) key.doubleValue = Number(keyDrawIn);
             if (keyChannel == 0 || keyChannel == 3 || keyChannel == 4) key.interpolation = 0;
             return N.ImmAuthoring_KeySet(Doc, selected, ref key);
         }

@@ -2754,7 +2754,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyGe
         value.floatValue = key.mValue.mFloat;
         break;
     case ImmImporter::Layer::AnimProperty::DrawInTime:
-        value.floatValue = static_cast<float>(key.mValue.mDouble);
+        value.doubleValue = key.mValue.mDouble;
         break;
     default:
         if (channel == ImmImporter::Layer::AnimProperty::Position || channel == ImmImporter::Layer::AnimProperty::Transform)
@@ -2803,9 +2803,13 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
         return IMM_AUTHORING_INVALID_ARGUMENT;
     if (key->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
         return IMM_AUTHORING_UNSUPPORTED;
+    if (key->structSize < sizeof(ImmAuthoringKey))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    uint64_t doublePayloadBits = 0;
+    memcpy(&doublePayloadBits, &key->doubleValue, sizeof(doublePayloadBits));
     ImmCore::piTick keyTime(0);
-    if (key->structSize < sizeof(ImmAuthoringKey) || !iAuthoringKeyTime(key->timeSeconds, keyTime) ||
-        key->reserved[0] != 0 || key->reserved[1] != 0 ||
+    if (!iAuthoringKeyTime(key->timeSeconds, keyTime) ||
+        (key->property != IMM_AUTHORING_ANIM_PROPERTY_DRAW_IN_TIME && doublePayloadBits != 0) ||
         key->transformFlip < 0 || key->transformFlip > 3)
         return IMM_AUTHORING_INVALID_ARGUMENT;
     if (key->interpolation < IMM_AUTHORING_INTERPOLATION_NONE ||
@@ -2830,6 +2834,12 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
             return IMM_AUTHORING_INVALID_ARGUMENT;
         property = ImmImporter::Layer::AnimProperty::Opacity;
         value.mFloat = key->floatValue;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_DRAW_IN_TIME:
+        if (!std::isfinite(key->doubleValue) || key->doubleValue < 0.0)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        property = ImmImporter::Layer::AnimProperty::DrawInTime;
+        value.mDouble = key->doubleValue;
         break;
     case IMM_AUTHORING_ANIM_PROPERTY_LOOP:
         if ((key->boolValue != 0 && key->boolValue != 1) ||
@@ -2898,6 +2908,9 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyRe
         break;
     case IMM_AUTHORING_ANIM_PROPERTY_OPACITY:
         property = ImmImporter::Layer::AnimProperty::Opacity;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_DRAW_IN_TIME:
+        property = ImmImporter::Layer::AnimProperty::DrawInTime;
         break;
     case IMM_AUTHORING_ANIM_PROPERTY_LOOP:
         property = ImmImporter::Layer::AnimProperty::Loop;

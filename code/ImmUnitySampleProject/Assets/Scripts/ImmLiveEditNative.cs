@@ -42,7 +42,7 @@ namespace ImmPlayer
             public float value, tx, ty, tz, qx, qy, qz, qw, scale;
             public uint ticks;
             public int flip;
-            public uint reserved0, reserved1;
+            public double doubleValue;
         }
         [StructLayout(LayoutKind.Sequential)]
         internal struct Status
@@ -183,6 +183,7 @@ namespace ImmPlayer
         {
             if (Marshal.SizeOf<Properties>() != 64 || Marshal.SizeOf<Pivot>() != 48 ||
                 Marshal.SizeOf<Key>() != 80 || Marshal.SizeOf<Status>() != 40 || Marshal.SizeOf<Point>() != 64 ||
+                Marshal.OffsetOf<Key>(nameof(Key.doubleValue)).ToInt32() != 72 ||
                 Marshal.SizeOf<LayerDiagnosticsNative>() != 44 || Marshal.SizeOf<TimelineClock>() != 96 ||
                 Marshal.OffsetOf<TimelineClock>(nameof(TimelineClock.local)).ToInt32() != 32 ||
                 Marshal.OffsetOf<TimelineClock>(nameof(TimelineClock.flags)).ToInt32() != 64 ||

@@ -95,6 +95,7 @@ namespace ImmImporter
         mStartOffset = 0;
 		mAssetID = assetID;
 		mDrawInTime = 1.0;
+        mCanonicalDrawInTime = 1.0;
 		mAnimParams[0] = 0.0;
 		mAnimParams[1] = 0.7;
 		mAnimParams[2] = 0.3;
@@ -374,7 +375,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 }
 
 
-	void Layer::SetDrawInTime(double v) { mDrawInTime = v; }
+	void Layer::SetDrawInTime(double v) { mCanonicalDrawInTime = v; mDrawInTime = v; }
 	double Layer::GetDrawInTime(void) const { return mDrawInTime; }
 
 
@@ -862,7 +863,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         mVisible = mCanonicalVisible;
         mOpacity = mCanonicalOpacity;
         mTransform = mCanonicalTransform;
-        mDrawInTime = 1.0;
+        mDrawInTime = mCanonicalDrawInTime;
         mAnimParams[0] = 0.0; mAnimParams[1] = 0.7;
         mAnimParams[2] = 0.3; mAnimParams[3] = 0.7;
         mEvaluatedMaxRepeatCount = mMaxRepeatCount;
@@ -925,6 +926,13 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         else SetStateAtImpl(now, log, false, AnimProperty::Opacity, context);
         if (mType == Type::Sound)
             static_cast<LayerSound *>(GetImplementation())->SetVolume(GetWorldOpacity(context));
+    }
+
+    void Layer::ReevaluateDrawInTimeAt(piTick now, piLog * log, EvaluationContext * context)
+    {
+        if (!CanEvaluateInContext(context)) return;
+        if (GetNumAnimKeys(AnimProperty::DrawInTime) == 0) mDrawInTime = mCanonicalDrawInTime;
+        else SetStateAtImpl(now, log, false, AnimProperty::DrawInTime, context);
     }
 
     void Layer::SetStateAtImpl(piTick now, piLog * log, bool reevaluatePaint,

@@ -548,6 +548,44 @@ int wmain(int argc, wchar_t ** argv)
         heldTransform.isVisible == heldTransform.canonicalVisible &&
         player.GetLayerDiagnostics(doc, target, heldTransform) && heldTransform.isWorldVisible == 1,
         "group key removal restores canonical held subtree visibility");
+    ImmAuthoringKey drawInKey{};
+    drawInKey.structSize = sizeof(drawInKey); drawInKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    drawInKey.property = IMM_AUTHORING_ANIM_PROPERTY_DRAW_IN_TIME;
+    drawInKey.doubleValue = 1234567890123456.0;
+    requireRepeat(static_cast<double>(static_cast<float>(drawInKey.doubleValue)) != drawInKey.doubleValue,
+        "DrawInTime precision fixture cannot fit in float");
+    uint32_t drawInCount = 99;
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, target, drawInKey.property, &drawInCount) == IMM_AUTHORING_OK && drawInCount == 0,
+        "DrawInTime fixture starts with no keys");
+    int64_t drawInStart = 0, drawInStop = 0;
+    ::GetTime(doc, &drawInStart, &drawInStop);
+    requireRepeat(ImmAuthoring_KeySet(doc, target, &drawInKey) == IMM_AUTHORING_OK, "queue paused DrawInTime double key");
+    presentHierarchyEdit();
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, drawInKey.property, 0, &readKey) == IMM_AUTHORING_OK &&
+        readKey.doubleValue == drawInKey.doubleValue && readKey.timeSeconds == 0,
+        "published DrawInTime preserves full double precision through C ABI");
+    for (double invalid : {-1.0, std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()})
+    {
+        drawInKey.doubleValue = invalid;
+        requireRepeat(ImmAuthoring_KeySet(doc, target, &drawInKey) == IMM_AUTHORING_INVALID_ARGUMENT,
+            "DrawInTime rejects negative and nonfinite values");
+    }
+    requireRepeat(ImmAuthoring_KeyGet(doc, target, drawInKey.property, 0, &readKey) == IMM_AUTHORING_OK &&
+        readKey.doubleValue == 1234567890123456.0, "invalid DrawInTime requests preserve published key");
+    requireRepeat(ImmAuthoring_KeyRemove(doc, target, drawInKey.property, 0) == IMM_AUTHORING_OK,
+        "remove paused DrawInTime key");
+    presentHierarchyEdit();
+    int64_t drawInAfterStart = 0, drawInAfterStop = 0;
+    ::GetTime(doc, &drawInAfterStart, &drawInAfterStop);
+    Player::DocumentState drawInDocumentState{};
+    player.GetDocumentState(drawInDocumentState, doc);
+    uint64_t drawInDrawing = 0;
+    requireRepeat(ImmAuthoring_KeyGetCount(doc, target, drawInKey.property, &drawInCount) == IMM_AUTHORING_OK && drawInCount == 0 &&
+        drawInDocumentState.mPlaybackState == Player::PlaybackState::Paused &&
+        drawInStart == drawInAfterStart && drawInStop > 0 && drawInAfterStop >= drawInStop &&
+        player.GetDrawingHandle(doc, target, 0, drawInDrawing) && drawInDrawing == drawingBefore,
+        "DrawInTime publication/removal preserves paused clock and drawing identity");
+    std::puts("[IMM_DRAW_IN_TIME_CABI_TEST] pass=1 property5=1 doublePrecision=1 invalidRejected=1 pausedPublicationAndRemoval=1 stableDrawing=1");
     ImmAuthoringKey movedKey{};
     movedKey.structSize = sizeof(movedKey); movedKey.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
     movedKey.property = IMM_AUTHORING_ANIM_PROPERTY_OPACITY;

@@ -28,7 +28,7 @@ namespace ImmPlayer
     enum PreviewEditFields : uint32_t
     {
         PreviewTransform = 1, PreviewOpacity = 2, PreviewVisibility = 4,
-        PreviewPaintPlayback = 8, PreviewNavigation = 16
+        PreviewPaintPlayback = 8, PreviewNavigation = 16, PreviewDrawInTime = 32
     };
     struct Document::TimelinePreviewSession
     {
@@ -307,6 +307,7 @@ namespace ImmPlayer
             if (fields & PreviewOpacity) layer->ReevaluateOpacityAt(now, log, context);
         }
         if (fields & PreviewPaintPlayback) layer->ReevaluatePaintPlaybackAt(now, log, context);
+        if (fields & PreviewDrawInTime) layer->ReevaluateDrawInTimeAt(now, log, context);
         if (context == nullptr && (fields & (PreviewTransform | PreviewVisibility | PreviewNavigation)) &&
             iSubtreeHasSpawnArea(layer)) mSequence.SetSpawnAreaNeedsUpdate(true);
         iMarkTimelinePreviewEdit(layer, fields);
@@ -1350,6 +1351,11 @@ namespace ImmPlayer
                         iRefreshTimelineEdit(layer, PreviewOpacity, mLastCPUTime, log);
                         ++mEvaluationRevision;
                     }
+                    if (property == Layer::AnimProperty::DrawInTime)
+                    {
+                        iRefreshTimelineEdit(layer, PreviewDrawInTime, mLastCPUTime, log);
+                        ++mEvaluationRevision;
+                    }
                     if (property == Layer::AnimProperty::Visibility)
                     {
                         iRefreshTimelineEdit(layer, PreviewVisibility, mLastCPUTime, log);
@@ -2192,10 +2198,11 @@ namespace ImmPlayer
             if (visibilityResult != 0) return visibilityResult;
         }
         const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
-        if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||
+        const bool paintOnlyKey = paintPlaybackKey || property == Layer::AnimProperty::DrawInTime;
+        if (paintOnlyKey && (layer->GetType() != Layer::Type::Paint ||
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
             return -3;
-        if (!paintPlaybackKey && property != Layer::AnimProperty::Visibility &&
+        if (!paintOnlyKey && property != Layer::AnimProperty::Visibility &&
             property != Layer::AnimProperty::Opacity &&
             property != Layer::AnimProperty::Transform)
             return -3;
@@ -2208,6 +2215,9 @@ namespace ImmPlayer
             return -2;
         if (property == Layer::AnimProperty::Opacity &&
             (!std::isfinite(value.mFloat) || value.mFloat < 0.0f || value.mFloat > 1.0f))
+            return -2;
+        if (property == Layer::AnimProperty::DrawInTime &&
+            (!std::isfinite(value.mDouble) || value.mDouble < 0.0))
             return -2;
         if (property == Layer::AnimProperty::Transform)
         {
@@ -2255,10 +2265,11 @@ namespace ImmPlayer
             if (visibilityResult != 0) return visibilityResult;
         }
         const bool paintPlaybackKey = property == Layer::AnimProperty::Loop || property == Layer::AnimProperty::Offset;
-        if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||
+        const bool paintOnlyKey = paintPlaybackKey || property == Layer::AnimProperty::DrawInTime;
+        if (paintOnlyKey && (layer->GetType() != Layer::Type::Paint ||
             dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
             return -3;
-        if (!paintPlaybackKey && property != Layer::AnimProperty::Visibility &&
+        if (!paintOnlyKey && property != Layer::AnimProperty::Visibility &&
             property != Layer::AnimProperty::Opacity &&
             property != Layer::AnimProperty::Transform)
             return -3;
@@ -3222,7 +3233,8 @@ namespace ImmPlayer
                 { iRejectCommit(batch.mRevision, visibilityResult, 0, edit.mLayerId); return; }
             }
             const bool paintPlaybackKey = edit.mProperty == Layer::AnimProperty::Loop || edit.mProperty == Layer::AnimProperty::Offset;
-            if (paintPlaybackKey && (layer->GetType() != Layer::Type::Paint ||
+            const bool paintOnlyKey = paintPlaybackKey || edit.mProperty == Layer::AnimProperty::DrawInTime;
+            if (paintOnlyKey && (layer->GetType() != Layer::Type::Paint ||
                 dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr))
             {
                 iRejectCommit(batch.mRevision, -3, 0, edit.mLayerId);

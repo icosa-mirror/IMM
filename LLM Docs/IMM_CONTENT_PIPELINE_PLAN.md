@@ -87,7 +87,7 @@ These are source-level assessments, not new platform or visual acceptance result
 | Groups and hierarchy | Existing | Authoring reader exposes hierarchy; legacy adapter flattens, opt-in hierarchy mode retains local groups/pivots | Existing group/paint graph | Group hierarchy operations within limits | Map local structure without flattening |
 | Static properties and pivots | Existing, including flip | Local/world properties exposed | Pivots and explicit X/Y/Z flips implemented with additive offline APIs; native platform acceptance pending | Canonical properties within existing live ABI limits | Static layer/pivot flip mapping implemented and tested locally |
 | Drawings, held frames and repeats | Existing | Frame buffers/rates/repeats exposed; adapter consumes them | Existing drawings/frame references; one document frame rate | Stable-handle drawing/frame edits, atomic whole tables and static-paint Loop/Offset keys pass local Windows checks; canonical repeat property editing remains open | Preserve reuse; resolve mixed source rates explicitly |
-| Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform keys plus static-paint stepped Loop/Offset keys; no new live flip contract | Map offsets, duration, repeats and interpolation against references |
+| Layer animation and nested timing | Keys/timing parsed | Legacy adapter omits keys; hierarchy mode copies verified visibility/opacity/offset/transform channels | Supported keys/timeline properties; offline key flip preservation implemented | Visibility/opacity/transform keys plus static-paint DrawInTime and stepped Loop/Offset keys; no new live flip contract | Map offsets, duration, repeats and interpolation against references; draw-in rendering gaps remain on GL/Android |
 | Root actions, chapters and startup | Source actions and nullable startup metadata parsed | Root keys/properties exposed and supported keys imported; Windows local round trips pass; cross-platform CI pending | Root keys and comic export with action markers implemented; stored chapter count round-trips; native root-stop/seek controls locally checked, Quill semantics remain open | No complete chapter authoring claim | Quill root-action/startup mapping still needs paired reference and playback evidence |
 | Viewpoints / spawn areas | Tracking defaults and preview offsets parsed; project reader/writer retains raw RGB/RGBA previews | Spawn metadata, encoded previews and on-demand pixels exposed; hierarchy adapter maps spheres, previews and unique default paths, legacy flat mode skips them | Spawn graph/import/export/default selection and immutable preview assets; full common-property constructor with hidden startup visibility encoded as a key | Spawn edits within limits | Stored preview conversion implemented both directions; generated previews, exact JPEG parity and broader navigation acceptance open |
 | Pictures and panoramas | Stored 2D and full-sphere equirectangular mono/stereo RGB/RGBA pictures mapped structurally; explicit panorama FOV and depth remain unsupported | Decoded pixels and original encoded picture assets exposed; optional adapter layers | Offline picture construction/import with shared immutable assets, projection and viewer locking | Outside live scope | 19 isolated 2D reference pictures match pixels/metadata; real stereo panorama pixels/metadata match source qbin; orientation, eye order and playback acceptance remain open |
@@ -4475,6 +4475,48 @@ the historical sizes/check counts below describe this earlier source only.
    retrying a deleted input. Its evidence is preserved before cancellation. New
    full validation will follow actual Unity-owner cleanup. Draw-in code/test work
    is currently uncommitted and paused while this CI regression is corrected.
+
+### 6.127. Draw-in timeline key editing
+
+1. Added static-paint DrawInTime set/remove/retime with interpolation, paused
+   scalar reevaluation and last-key fallback to the layer's base value. Independent
+   preview marks this channel dirty and resamples it at the restored main clock.
+   The sample exposes a Draw-in lane/input and preserves it through clipboard and
+   history. Non-paint targets are excluded; native checks also require static paint.
+2. Key values preserve native double precision in the former trailing payload
+   space: descriptor size stays 80 bytes, double offset 72. No API version was
+   introduced. Dynamic-DLL testing caught a subnormal unused-payload comparison
+   regression; a bitwise guard restores exact zero-payload validation for other
+   channels and checks size before reading that payload.
+3. Native Release, the CPU suite, final loaded WARP C ABI suite, managed compile
+   and all 24 dynamic-DLL ABI checks pass. Cases cover exact double readback,
+   negative/NaN/infinite rejection, held/context sampling, unchanged clocks/actions,
+   default/nondefault base restoration, stable drawings and final-key removal.
+   Evidence: artifacts/draw-in-cpu-run.log, draw-in-cabi-final/report.json,
+   draw-in-managed-build.log and draw-in-dynamic-abi-fixed-report.json.
+4. Twenty-two live Snoopy steps pass actual timeline-button key editing, scalar
+   replacement, removal, undo/redo and return from preview with the main held.
+   D3D12 scene-only image comparisons show 10,913 pixels change for draw-in zero;
+   undo, draw-in one and last-key removal restore the original exactly. The
+   restored authored main view shows the retained edited value; changing it back
+   changes 16,583 pixels, and undo restores that exit image exactly. Evidence:
+   artifacts/draw-in-ui-probe.json and draw-in-render-comparison.json / PNGs.
+5. A main-scene Frame selected call on the Snoopy body yielded a fully occluded
+   purple view, making the first added image comparison inconclusive. Repeating
+   from the restored authored view passes. Main-scene selected-layer framing
+   around authored background geometry needs follow-up; do not record that blank
+   view as visual proof of draw-in behavior.
+6. Rendering proof is D3D12 only. Existing GL/Android draw-in gaps remain as in
+   6.125. Action editing still needs consumption-state/preview-sidecar reconciliation
+   and root chapter-cache updates. Audible preview requires separate sound voices
+   with pause/resume acknowledgement and teardown before shared audio data unload;
+   source voices must retain their playback cursors. The timeline goal stays active.
+7. The separate CI lifetime correction is pushed as `72355b64`; replacement FULL
+   [40057279837](https://github.com/icosa-mirror/IMM/actions/runs/40057279837) is active.
+   Its packaging completed and the Android raw artifact remains present afterward
+   with seven-day retention. Actual delayed Android downloads/builds, device
+   verdicts, macOS and final acceptance remain pending. These draw-in edits are
+   not part of that run and require their own validation push.
 
 ## 7. Consolidated documents
 

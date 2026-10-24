@@ -173,7 +173,7 @@ namespace ImmPlayer
             snapKeys = GUI.Toggle(new Rect(namesWidth + 560, 4, 70, 22), snapKeys, "Snap");
             GUI.Label(new Rect(namesWidth + 630, 4, 175, 22), timelineClockValid ? $"{playTime:F3} s / {timelineFrameRate} fps" : "Clock unavailable");
             GUI.enabled = attached && PreviewCanEditSelected && timelineClockValid && (timelineClock.flags & ClockActive) != 0 && pending == 0 && !awaitingCommit &&
-                treeNodes.TryGetValue(selected, out LayerNode selectedNode) && InTimelineScope(selectedNode);
+                treeNodes.TryGetValue(selected, out LayerNode selectedNode) && InTimelineScope(selectedNode) && CanEditTimelineChannel(selected, channelIds[keyChannel]);
             if (GUI.Button(new Rect(namesWidth + 810, 4, 70, 22), "Set key"))
             { keyTime = SnapTime(playTime).ToString("0.######", CultureInfo.InvariantCulture); Submit("Set key", SetKey); }
             GUI.enabled &= selectedTimelineKey.HasValue;

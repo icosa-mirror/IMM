@@ -28,6 +28,7 @@ namespace ImmPlayer
         private string timelineReadError = "";
         private string drawingIndex = "0";
         private string rotationX = "0", rotationY = "0", rotationZ = "0", transformScale = "1", keyOffset = "0";
+        private string keyDrawIn = "1";
         private bool rotationEdited, keyLoop = true;
         private static readonly string[] ReflectionNames = { "None", "X", "Y", "Z" };
 
@@ -155,6 +156,9 @@ namespace ImmPlayer
         private double SnapTime(double seconds) => Math.Max(0,
             snapKeys ? Math.Round(seconds * timelineFrameRate) / timelineFrameRate : seconds);
 
+        private bool CanEditTimelineChannel(int layer, int property) =>
+            property != 5 || (treeNodes.TryGetValue(layer, out LayerNode node) && node.Info.Type == ImmDocument.LayerType.Paint);
+
         private void SelectTimelineKey(int layerId, N.Key key)
         {
             selected = layerId;
@@ -165,6 +169,7 @@ namespace ImmPlayer
             keyInterpolation = key.interpolation;
             keyTime = key.seconds.ToString("0.######", CultureInfo.InvariantCulture);
             if (key.property == 0) keyVisible = key.boolean != 0;
+            else if (key.property == 5) keyDrawIn = key.doubleValue.ToString("R", CultureInfo.InvariantCulture);
             else if (key.property == 1) properties.opacity = key.value;
             else if (key.property == 7) keyLoop = key.boolean != 0;
             else if (key.property == 8) keyOffset = key.ticks.ToString(CultureInfo.InvariantCulture);
@@ -181,6 +186,7 @@ namespace ImmPlayer
         {
             if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit) return;
             N.Key key = selectedTimelineKey.Value;
+            if (!CanEditTimelineChannel(selectedKeyLayer, key.property)) return;
             double original = key.seconds;
             key.seconds = SnapTime(seconds);
             if (Math.Abs(key.seconds - original) < 1.0 / 12600) return;
@@ -203,6 +209,7 @@ namespace ImmPlayer
         {
             if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit) return;
             N.Key key = selectedTimelineKey.Value;
+            if (!CanEditTimelineChannel(selectedKeyLayer, key.property)) return;
             selected = selectedKeyLayer;
             Submit("Delete key", () =>
             { RecordTimelineBefore(selectedKeyLayer, key.property); return N.ImmAuthoring_KeyRemove(Doc, selectedKeyLayer, key.property, key.seconds); });
@@ -211,14 +218,15 @@ namespace ImmPlayer
 
         private void CopyTimelineKey(bool cut)
         {
-            if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit || (cut && !PreviewCanEditLayer(selectedKeyLayer))) return;
+            if (!selectedTimelineKey.HasValue || pending != 0 || awaitingCommit ||
+                (cut && (!PreviewCanEditLayer(selectedKeyLayer) || !CanEditTimelineChannel(selectedKeyLayer, selectedTimelineKey.Value.property)))) return;
             clipboardTimelineKey = selectedTimelineKey.Value;
             if (cut) DeleteTimelineKey();
             else Log("Key copied. Select a layer and paste at the playhead.");
         }
 
         private bool CanPasteTimelineKey => attached && PreviewCanEditSelected && !loading && pending == 0 && !awaitingCommit &&
-            clipboardTimelineKey.HasValue && timelineClockValid && (timelineClock.flags & ClockActive) != 0 &&
+            clipboardTimelineKey.HasValue && CanEditTimelineChannel(selected, clipboardTimelineKey.Value.property) && timelineClockValid && (timelineClock.flags & ClockActive) != 0 &&
             treeNodes.TryGetValue(selected, out LayerNode pasteNode) && InTimelineScope(pasteNode);
 
         private void PasteTimelineKey()
@@ -249,6 +257,7 @@ namespace ImmPlayer
             GUI.enabled = attached && pending == 0 && !awaitingCommit && selectedTimelineKey.HasValue;
             if (GUI.Button(new Rect(x, 4, 60, 22), new GUIContent("Copy", "Copy selected key (Ctrl/Cmd+C)"))) Run(() => CopyTimelineKey(false));
             GUI.enabled &= PreviewCanEditLayer(selectedKeyLayer);
+            GUI.enabled &= selectedTimelineKey.HasValue && CanEditTimelineChannel(selectedKeyLayer, selectedTimelineKey.Value.property);
             if (GUI.Button(new Rect(x + 64, 4, 60, 22), new GUIContent("Cut", "Cut selected key (Ctrl/Cmd+X)"))) Run(() => CopyTimelineKey(true));
             GUI.enabled = CanPasteTimelineKey;
             if (GUI.Button(new Rect(x + 128, 4, 60, 22), new GUIContent("Paste", "Paste at the playhead on the selected layer (Ctrl/Cmd+V)"))) Run(PasteTimelineKey);
@@ -294,7 +303,7 @@ namespace ImmPlayer
                 {
                     GUI.FocusControl(null);
                     SelectTimelineKey(node.Info.Id, key);
-                    if (!PreviewCanEditLayer(node.Info.Id)) { input.Use(); continue; }
+                    if (!PreviewCanEditLayer(node.Info.Id) || !CanEditTimelineChannel(node.Info.Id, property)) { input.Use(); continue; }
                     draggingKey = true; draggedKeyTime = key.seconds;
                     scrubControl = GUIUtility.GetControlID(FocusType.Passive); GUIUtility.hotControl = scrubControl;
                     if (TimelinePreviewActive) ControlTimelinePreview(3); else document.Pause();

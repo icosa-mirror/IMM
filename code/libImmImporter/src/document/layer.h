@@ -272,6 +272,7 @@ namespace ImmImporter
         void ReevaluatePaintPlaybackAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
         void ReevaluateTransformAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
         void ReevaluateOpacityAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
+        void ReevaluateDrawInTimeAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
         void ReevaluateVisibilityAt(ImmCore::piTick time, ImmCore::piLog * log, EvaluationContext * context = nullptr);
 
         // sets default pass through visiblity of groups without animation keys, hides all layers that have keys
@@ -320,6 +321,7 @@ namespace ImmImporter
         ImmCore::trans3d mPivotTransform;
 
 		double mDrawInTime;
+        double mCanonicalDrawInTime;
 		double mAnimParams[4];
         void SetStateAtImpl(ImmCore::piTick time, ImmCore::piLog * log, bool reevaluatePaint,
             AnimProperty onlyProperty = AnimProperty::MAX, EvaluationContext * context = nullptr);

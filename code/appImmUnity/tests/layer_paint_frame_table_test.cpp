@@ -336,6 +336,35 @@ static void CheckIndependentEvaluationContext()
     root->ReevaluateVisibilityAt(wallTime, &log, &context);
     requireFrames(!root->GetVisible() && root->GetStopTime() == piTick(2) && root->IsStoppedByAction() &&
         !root->GetWorldVisible(&context), "outside state and main root hold stay unchanged");
+    const auto drawRootState = root->CapturePlaybackState();
+    const auto drawPaintState = paint->CapturePlaybackState();
+    const size_t drawConsumedActions = context.mConsumedActions.size();
+    value.init(); value.mDouble = 0.2;
+    add(paintLayer, Layer::AnimProperty::DrawInTime, piTick(0), value);
+    value.mDouble = 0.6;
+    add(paintLayer, Layer::AnimProperty::DrawInTime, piTick(4), value);
+    paintLayer->ReevaluateDrawInTimeAt(wallTime, &log);
+    requireFrames(paintLayer->GetDrawInTime() == 0.2, "held main DrawInTime uses parent clock2 rather than wall time");
+    paintLayer->ReevaluateDrawInTimeAt(wallTime, &log, &context);
+    requireFrames(paintLayer->GetDrawInTime() == 0.6 && root->GetStopTime() == drawRootState.mStopTime &&
+        root->GetStartTime() == drawRootState.mStartTime && root->GetPlaying() == drawRootState.mIsPlaying &&
+        root->IsStoppedByAction() == drawRootState.mStoppedByAction &&
+        paint->CapturePlaybackState().mTime == drawPaintState.mTime && paint->GetPlaying() == drawPaintState.mIsPlaying &&
+        context.mConsumedActions.size() == drawConsumedActions &&
+        inner->GetAnimKey(Layer::AnimProperty::Action, 0)->mValue.mBool == sourceStopConsumed,
+        "context DrawInTime resamples scalar without changing clocks, paint intent or action consumption");
+    paintLayer->ReplaceAnimKeys(Layer::AnimProperty::DrawInTime, {});
+    paintLayer->ReevaluateDrawInTimeAt(wallTime, &log, &context);
+    requireFrames(paintLayer->GetDrawInTime() == 1.0, "last DrawInTime removal restores default base");
+    paintLayer->SetDrawInTime(0.8);
+    value.mDouble = 0.3;
+    add(paintLayer, Layer::AnimProperty::DrawInTime, piTick(0), value);
+    paintLayer->ReevaluateDrawInTimeAt(wallTime, &log, &context);
+    requireFrames(paintLayer->GetDrawInTime() == 0.3, "DrawInTime key overrides nondefault base");
+    paintLayer->ReplaceAnimKeys(Layer::AnimProperty::DrawInTime, {});
+    paintLayer->ReevaluateDrawInTimeAt(wallTime, &log);
+    requireFrames(paintLayer->GetDrawInTime() == 0.8, "last DrawInTime removal preserves nondefault authored base");
+    std::puts("[IMM_DRAW_IN_TIME_CPU_TEST] heldMain=1 independentContext=1 clocksAndActionsPreserved=1 defaultAndNondefaultBaseRestored=1");
     inner->SetVisibilityOverride(true, false);
     inner->SetOpacityOverride(true, 0.3f);
     inner->SetTransformOverride(true, placement);

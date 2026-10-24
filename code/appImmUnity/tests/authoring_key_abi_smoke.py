@@ -23,7 +23,7 @@ class Key(c.Structure):
                 ('property', c.c_int32), ('interpolation', c.c_int32), ('timeSeconds', c.c_double),
                 ('boolValue', c.c_int32), ('floatValue', c.c_float),
                 *[(name, c.c_float) for name in ('tx', 'ty', 'tz', 'qx', 'qy', 'qz', 'qw', 'scale')],
-                ('uintValue', c.c_uint32), ('transformFlip', c.c_int32), ('reserved', c.c_uint32 * 2)]
+                ('uintValue', c.c_uint32), ('transformFlip', c.c_int32), ('doubleValue', c.c_double)]
 
 
 def main():
@@ -32,13 +32,14 @@ def main():
     args = parser.parse_args()
     if os.name != 'nt':
         parser.error('Windows native plugin required')
-    assert c.sizeof(Key) == 80 and Key.uintValue.offset == 64 and Key.transformFlip.offset == 68
+    assert c.sizeof(Key) == 80 and Key.uintValue.offset == 64 and Key.transformFlip.offset == 68 and Key.doubleValue.offset == 72
     output = ROOT / 'artifacts/authoring-key-abi'
     output.mkdir(parents=True, exist_ok=True)
     report_path = output / 'report.json'
     results = []
     report = {'passed': False, 'pluginSha256': hashlib.sha256(args.plugin.read_bytes()).hexdigest(),
               'keySize': c.sizeof(Key), 'uintValueOffset': Key.uintValue.offset,
+              'doubleValueOffset': Key.doubleValue.offset,
               'scope': 'ABI layout and pre-player validation only', 'cases': results}
     report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
     staging = Path(tempfile.mkdtemp(prefix='imm-authoring-key-abi-'))
@@ -84,8 +85,12 @@ def main():
     check('invalid transform reflection', key, -2)
     for index in range(2):
         key = descriptor(8)
-        key.reserved[index] = 1
-        check(f'reserved slot {index}', key, -2)
+        c.c_uint32.from_buffer(key, Key.doubleValue.offset + index * 4).value = 1
+        check(f'non-DrawIn double payload word {index}', key, -2)
+    for value in (-1.0, float('nan'), float('inf')):
+        key = descriptor(5)
+        key.doubleValue = value
+        check(f'invalid DrawIn value {value}', key, -2)
     repeat_set = plugin.ImmAuthoring_PaintSetMaxRepeatCount
     repeat_set.argtypes = [c.c_int32, c.c_int32, c.c_uint32]
     repeat_set.restype = c.c_int32
