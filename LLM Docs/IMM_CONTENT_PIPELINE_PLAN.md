@@ -25,6 +25,9 @@ nine actual Unity button/ruler steps; see 6.131 for evidence and its limits. Thi
 is a development test UI. Action editing, GL/Android draw-in support, the main-scene
 Frame selected occlusion follow-up and audible Unity/device confirmation remain.
 The timeline goal stays active, including the required missing runtime features.
+Later native Action publication (`29d72074`) and late finite-occurrence correction
+(`0f81d964`) pass local native/CPU/C-ABI checks; their FULL run 40066922009 is
+pending. MakeDefault provenance and Action UI integration remain open (6.132-6.133).
 
 CI corrections since the accepted baseline retain serialized Unity licence
 ownership, preserve Android native inputs until their delayed consumers finish,
@@ -4728,6 +4731,17 @@ the historical sizes/check counts below describe this earlier source only.
    can continue past a finite ancestor. This targeted occurrence fix does not
    claim that behavior is solved. MakeDefault effect provenance/undo and Action
    UI controls also remain required before closing the timeline goal.
+   Source audit also found that the sample's main Play button only calls Resume,
+   which cannot Continue an authored Stop when the manager is not user-paused.
+   Use the existing Continue transport for root ActionHeld (including final Stop,
+   which can be reported Finished). Independent child Stops currently require an
+   explicit seek past the key; a nested Continue must not call main transport.
+5. Both focused milestones are pushed in tip `0f81d964`. FULL
+   [40066922009](https://github.com/icosa-mirror/IMM/actions/runs/40066922009)
+   is pending. Earlier independent full runs remain active without reported
+   failures at their last cadence checks; none replaces the accepted baseline
+   until its actual final evidence is audited. No healthy run was cancelled for
+   these feature/new-coverage milestones.
 
 ## 7. Consolidated documents
 
