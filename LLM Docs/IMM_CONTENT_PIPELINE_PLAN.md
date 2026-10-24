@@ -4743,6 +4743,36 @@ the historical sizes/check counts below describe this earlier source only.
    until its actual final evidence is audited. No healthy run was cancelled for
    these feature/new-coverage milestones.
 
+### 6.134. Finite ancestor clocks through unheld timeline chains
+
+1. The broader cascade noted in 6.133 is now corrected. Descendant elapsed time
+   projects its parent's clock, capped to that parent's full finite repeat window.
+   Root/boundary raw time remains unchanged. Own Stop timestamps, evaluated repeat
+   controls, virtual preview boundaries and unrestricted negative preroll retain
+   their contracts. No persistent timing cache was added; projection follows the
+   ancestor chain.
+2. Normal evaluation propagates final-span alignment through duration-zero
+   intermediate timelines when a finite ancestor's final cycle was skipped.
+   GetTimelineElapsed itself remains read-only. This does not authorize expired
+   sound restarts. Clock queries now report inherited Stop/finite-end holds, and
+   inherited Action holds, using the existing descriptor flags.
+3. Red evidence: fresh samples180/250/350 through two duration-zero descendants
+   previously produced child/grandchild clocks80/80,150/250,250/350. All eight
+   main/context skipped/natural-cycle cases now give80/80 or100/100 at the finite
+   end, retaining raw root samples. Restricted negative time clamps to zero;
+   unrestricted preroll remains negative.
+4. Native Release, CPU authoring suite and loaded WARP C ABI suite pass. One
+   existing oracle expected an infinite child to outlive a finite root; it now
+   uses the root's full1000-tick window. The independent Stop test now explicitly
+   advances its virtual boundary snapshot for its pre-action query instead of
+   implicitly expecting wall time to outrun that snapshot. Its40→39 Stop
+   assertions are unchanged. C ABI coverage verifies a grandchild inherits its
+   parent's2519-tick Stop and Held/ActionHeld flags.
+5. Evidence: artifacts/finite-ancestor-clock-{before,after}.log,
+   finite-cascade-clock-native-build.log, finite-cascade-clock-cpu-report.json,
+   finite-cascade-clock-cabi/report.json. The separate Continue/media and Play
+   button correction is still in progress; MakeDefault and Action UI remain open.
+
 ## 7. Consolidated documents
 
 The following obsolete documents were removed after their useful scope and

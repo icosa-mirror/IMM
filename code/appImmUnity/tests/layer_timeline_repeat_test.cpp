@@ -75,6 +75,9 @@ namespace
         };
         const int64_t phase = laterCycle ? 200 : 0;
         update(phase + 20); update(phase + 49);
+        // The independent boundary is an explicit clock snapshot. Advance that
+        // snapshot for the pre-action query without evaluating the Stop yet.
+        if (independent) context.mBoundaryElapsed = piTick(phase + 50);
         const piTick before = child->GetTimelineElapsed(epoch + piTick(phase + 50), independent ? &context : nullptr);
         update(phase + 50);
         const piTick held = child->GetTimelineElapsed(epoch + piTick(phase + 50), independent ? &context : nullptr);
@@ -218,8 +221,16 @@ namespace
             const int64_t parentTime = keyed ? tick % 1000 : tick;
             const uint32_t effective = !keyed ? repeats : parentTime < 50 ? repeats :
                 parentTime < 150 ? 1 : parentTime < 250 ? 0 : 1;
-            const int64_t localTime = effective == 0 || parentTime / 100 < effective ? parentTime % 100 : 100;
+            // An infinite child still stops receiving time when its finite root
+            // reaches the end of its full window. Root diagnostics stay raw.
+            const int64_t effectiveTime = nested && !keyed ? std::min(parentTime, int64_t(1000)) : parentTime;
+            const int64_t localTime = effective == 0 || effectiveTime / 100 < effective ? effectiveTime % 100 : 100;
             const float expected = localTime < 50 ? 0.1f : 0.9f;
+            if (timeline->GetMaxRepeatCount() != repeats || timeline->GetEvaluatedMaxRepeatCount() != effective ||
+                std::fabs(child->GetOpacity() - expected) >= 0.000001f)
+                std::fprintf(stderr, "[IMM_FINITE_CLOCK_DIAGNOSTIC] repeats=%u nested=%d keyed=%d parent=%lld effective=%u expectedEffective=%u opacity=%f expected=%f\n",
+                    repeats, nested, keyed, static_cast<long long>(parentTime), timeline->GetEvaluatedMaxRepeatCount(), effective,
+                    child->GetOpacity(), expected);
             RequireTimeline(timeline->GetMaxRepeatCount() == repeats && timeline->GetEvaluatedMaxRepeatCount() == effective &&
                 std::fabs(child->GetOpacity() - expected) < 0.000001f, "authored finite/infinite boundaries retain effective child evaluation");
         }

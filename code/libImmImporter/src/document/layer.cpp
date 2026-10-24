@@ -656,18 +656,33 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
         }
         const Layer * root = context != nullptr ? context->mBoundary : mSequence->GetRoot();
         const bool rootHeld = context != nullptr ? (context->mHeld || context->mActionHeld) : root->HasStopTime();
-        if (!mHasStopTime && !rootHeld) return now - mStartTime;
+        bool restricted = mHasStopTime || rootHeld;
         piTick clock = mHasStopTime ? mStopTime : now;
-        if (this != root && rootHeld)
+        if (this != root)
         {
             Layer * timeline = GetTimeline(context);
             const piTick timelineStart = context != nullptr && timeline == root ?
                 context->mBoundaryStartTime : timeline->GetStartTime();
-            const piTick parentClock = timelineStart + timeline->GetTimelineElapsed(now, context);
-            if (clock > parentClock) clock = parentClock;
+            piTick parentElapsed = timeline->GetTimelineElapsed(now, context);
+            const piTick duration = context != nullptr && timeline == root ?
+                context->mBoundaryDuration : timeline->GetDuration();
+            const uint32_t repeat = context != nullptr && timeline == root ?
+                context->mBoundaryRepeatCount : timeline->GetEvaluatedMaxRepeatCount();
+            // Keep root diagnostics unwrapped, but descendants cannot advance
+            // beyond their parent's full finite repeat window. The quotient
+            // guard guarantees the product fits within positive parentElapsed.
+            if (duration > piTick(0) && repeat != 0 &&
+                piTick::CastInt(parentElapsed) / piTick::CastInt(duration) >= repeat)
+                parentElapsed = piTick(piTick::CastInt(duration) * static_cast<int64_t>(repeat));
+            const piTick parentClock = timelineStart + parentElapsed;
+            if (clock > parentClock)
+            {
+                clock = parentClock;
+                restricted = true;
+            }
         }
         const piTick elapsed = clock - mStartTime;
-        return elapsed < piTick(0) ? piTick(0) : elapsed;
+        return restricted && elapsed < piTick(0) ? piTick(0) : elapsed;
     }
 
 	piTick Layer::GetDuration() const
@@ -1230,8 +1245,25 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
                     // A sample can skip the entire final cycle. Align a child
                     // timeline once to that stable occurrence; do not relax the
                     // expired repeat window for sound restart decisions.
-                    const bool finalTimelineAlignment = !isRoot && isTimeline && timelineClamped &&
-                        timelineRepeat > 1 && hasRestarted;
+                    bool finalTimelineAlignment = false;
+                    if (!isRoot && isTimeline && hasRestarted)
+                    {
+                        // A final-cycle alignment also propagates through
+                        // duration-zero timelines. This does not authorize a
+                        // sound restart after an ancestor's repeat window ends.
+                        for (Layer * ancestor = timeline; ancestor != nullptr; ancestor = ancestor->GetParent())
+                        {
+                            const piTick duration = durationFor(ancestor);
+                            const uint32_t repeat = repeatFor(ancestor);
+                            if ((ancestor == root || ancestor->GetIsTimeline()) && duration > piTick(0) && repeat > 1 &&
+                                piTick::CastInt(ancestor->GetTimelineElapsed(now, context)) / piTick::CastInt(duration) >= repeat)
+                            {
+                                finalTimelineAlignment = true;
+                                break;
+                            }
+                            if (ancestor == root) break;
+                        }
+                    }
                    
                     if (isTimeline && ( (!mIsPlaying && !isRoot) || clipRestartedAndParentLooping || finalTimelineAlignment))
                     {

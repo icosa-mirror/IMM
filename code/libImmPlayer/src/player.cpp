@@ -856,8 +856,20 @@ namespace ImmPlayer
         value.durationTicks = piTick::CastInt(boundary ? context->mBoundaryDuration : layer->GetDuration());
         value.canonicalRepeat = layer->GetMaxRepeatCount();
         value.effectiveRepeat = boundary ? context->mBoundaryRepeatCount : layer->GetEvaluatedMaxRepeatCount();
-        const bool held = preview ? context->mHeld || context->mActionHeld : root->HasStopTime();
-        const bool actionHeld = preview ? context->mActionHeld : root->IsStoppedByAction();
+        bool held = preview ? context->mHeld || context->mActionHeld : root->HasStopTime();
+        bool actionHeld = preview ? context->mActionHeld : root->IsStoppedByAction();
+        if (!isRoot && !boundary)
+            for (Layer * ancestor = layer->GetTimeline(context); ancestor != nullptr; ancestor = ancestor->GetTimeline(context))
+            {
+                const bool atBoundary = preview && ancestor == context->mBoundary;
+                const piTick duration = atBoundary ? context->mBoundaryDuration : ancestor->GetDuration();
+                const uint32_t repeat = atBoundary ? context->mBoundaryRepeatCount : ancestor->GetEvaluatedMaxRepeatCount();
+                const piTick elapsed = ancestor->GetTimelineElapsed(now, context);
+                held |= (!atBoundary && ancestor->HasStopTime()) ||
+                    (duration > piTick(0) && repeat && piTick::CastInt(elapsed) / piTick::CastInt(duration) >= repeat);
+                actionHeld |= !atBoundary && ancestor->IsStoppedByAction();
+                if (ancestor == root || atBoundary) break;
+            }
         value.flags = (isRoot ? TimelineClockRoot : 0u) |
             ((boundary ? !held : layer->GetPlaying()) ? TimelineClockPlaying : 0u) |
             (worldVisible ? TimelineClockWorldVisible : 0u) |

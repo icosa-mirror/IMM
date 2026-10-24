@@ -215,7 +215,7 @@ enum
     IMM_AUTHORING_TIMELINE_ROOT = 1u << 0,
     IMM_AUTHORING_TIMELINE_PLAYING = 1u << 1, // Logical intent, not proof that the clock advances.
     IMM_AUTHORING_TIMELINE_WORLD_VISIBLE = 1u << 2,
-    IMM_AUTHORING_TIMELINE_HELD = 1u << 3, // This timeline or the root has a stop time.
+    IMM_AUTHORING_TIMELINE_HELD = 1u << 3, // Own/ancestor hold, including a finite ancestor's end.
     IMM_AUTHORING_TIMELINE_ACTION_HELD = 1u << 4, // This timeline/root is held by an authored action.
     IMM_AUTHORING_TIMELINE_CLAMPED = 1u << 5, // Native finite-repeat end branch is selected.
     IMM_AUTHORING_TIMELINE_ACTIVE_SPAN = 1u << 6,

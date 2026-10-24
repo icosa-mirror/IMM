@@ -704,6 +704,10 @@ int wmain(int argc, wchar_t ** argv)
         &identity, &identity, 1, 0, 1);
     requireRepeat(actionChild && ImmExporter_LayerAddAnimationKey(actionChild, 0, 0, 0, 1, 0, 0, 0, &identity),
         "preview Action fixture timeline");
+    void * actionGrandchild = ImmExporter_CreateGroupLayer(clockSequence, actionChild, "ActionGrandchild", 1, 1.0f,
+        &identity, &identity, 1, 0, 1);
+    requireRepeat(actionGrandchild && ImmExporter_LayerAddAnimationKey(actionGrandchild, 0, 0, 0, 1, 0, 0, 0, &identity),
+        "inherited Action clock fixture");
     ImmExporterTransformC laterPlacement = identity;
     laterPlacement.tx = 9;
     requireRepeat(ImmExporter_LayerAddAnimationKey(previewChild, 1, 0, 0, 0, 0, 1.0f, 0, &identity) &&
@@ -748,7 +752,7 @@ int wmain(int argc, wchar_t ** argv)
         player.GetDocumentState(state, clockDoc);
         return state.mLoadingState == Player::LoadingState::Loaded;
     }), "load timeline clock fixture");
-    int clockRootId = -1, finiteId = -1, infiniteId = -1, inactiveId = -1, previewChildId = -1, previewPaintId = -1, actionChildId = -1, actionBoundaryId = -1;
+    int clockRootId = -1, finiteId = -1, infiniteId = -1, inactiveId = -1, previewChildId = -1, previewPaintId = -1, actionChildId = -1, actionBoundaryId = -1, actionGrandchildId = -1;
     for (int index = 0; index < player.GetLayerCount(clockDoc); ++index)
     {
         Player::LayerInfo info{};
@@ -761,6 +765,7 @@ int wmain(int argc, wchar_t ** argv)
         if (std::wcscmp(info.name, L"PreviewPaint") == 0) previewPaintId = info.id;
         if (std::wcscmp(info.name, L"ActionChild") == 0) actionChildId = info.id;
         if (std::wcscmp(info.name, L"ActionBoundary") == 0) actionBoundaryId = info.id;
+        if (std::wcscmp(info.name, L"ActionGrandchild") == 0) actionGrandchildId = info.id;
     }
     requireRepeat(clockRootId >= 0 && finiteId >= 0 && infiniteId >= 0 && inactiveId >= 0 && previewChildId >= 0 && previewPaintId >= 0,
         "clock fixture layer IDs");
@@ -1074,6 +1079,10 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(futureActionStopped && readClock(actionChildId).elapsedTicks == 2519 &&
         readClock(clockRootId).elapsedTicks == heldMainActionClock.elapsedTicks,
         "retimed future Action arms independent sidecar and preserves main");
+    requireRepeat(actionGrandchildId >= 0 && readClock(actionGrandchildId).elapsedTicks == 2519 &&
+        (readClock(actionGrandchildId).flags & IMM_AUTHORING_TIMELINE_HELD) &&
+        (readClock(actionGrandchildId).flags & IMM_AUTHORING_TIMELINE_ACTION_HELD),
+        "descendant clock and flags inherit the parent Action hold");
     requireRepeat(ImmAuthoring_TimelinePreviewControl(clockDoc, actionBoundaryId, 3, 0) == IMM_AUTHORING_OK, "pause held Action preview");
     removeAction(actionChildId, 2520); presentPreviewEdit();
     requireRepeat(readClock(actionChildId).elapsedTicks == 2519 &&

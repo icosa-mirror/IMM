@@ -532,6 +532,73 @@ static void CheckFiniteFinalActionOccurrence()
     requireFrames(allPassed, "finite final occurrence must not drift or skip final child alignment");
 }
 
+static void CheckFiniteAncestorClockCascade()
+{
+    using namespace ImmCore;
+    using namespace ImmImporter;
+    piLog log;
+    requireFrames(log.Init(L"artifacts/finite-ancestor-clock.log", PILOG_TXT), "finite ancestor clock log");
+    bool allPassed = true;
+    for (bool independent : { false, true })
+    for (bool sawFinalCycle : { false, true })
+    for (int sample : { 180, 250, 350 })
+    {
+        if (sawFinalCycle && sample != 250) continue;
+        Sequence sequence;
+        requireFrames(sequence.Init(Sequence::Type::Animated, 0, vec3(0.0f)), "finite ancestor sequence");
+        Layer * root = sequence.GetRoot();
+        const piTick epoch(1000000);
+        requireFrames(root->Init(Layer::Type::Group, L"Root", true, trans3d::identity(), trans3d::identity(),
+            1.0f, true, piTick(100), 2, UINT32_MAX, &log), "finite ancestor root");
+        root->SetStartTime(epoch); root->SetPlaying(true);
+        const auto createChild = [&](Layer * parent) {
+            Layer * layer = sequence.CreateLayer(parent);
+            requireFrames(layer && layer->Init(Layer::Type::Group, L"Unheld", true, trans3d::identity(),
+                trans3d::identity(), 1.0f, true, piTick(0), 1, UINT32_MAX, &log), "unheld duration-zero timeline");
+            Layer::AnimValue visible{}; visible.mBool = true;
+            requireFrames(layer->AddKey(piTick(0), Layer::AnimProperty::Visibility, visible, Layer::InterpolationType::None),
+                "unheld timeline visibility");
+            return layer;
+        };
+        Layer * child = createChild(root), * grandchild = createChild(child);
+        Layer::EvaluationContext context;
+        context.mBoundary = root; context.mBoundaryStartTime = epoch;
+        context.mBoundaryDuration = piTick(100); context.mBoundaryRepeatCount = 2;
+        auto * scope = independent ? &context : nullptr;
+        const auto evaluate = [&](int tick) {
+            context.mBoundaryElapsed = piTick(tick);
+            for (Layer * layer : { root, child, grandchild }) layer->SetStateAt(epoch + piTick(tick), &log, scope);
+        };
+        evaluate(20);
+        if (sawFinalCycle) evaluate(180);
+        evaluate(sample);
+        const piTick childStart = child->GetStartTime(), grandchildStart = grandchild->GetStartTime();
+        const piTick childTime = child->GetTimelineElapsed(epoch + piTick(sample), scope);
+        const piTick grandchildTime = grandchild->GetTimelineElapsed(epoch + piTick(sample), scope);
+        const piTick expected(sample == 180 ? 80 : 100);
+        const bool correct = childStart == epoch + piTick(100) && grandchildStart == epoch + piTick(100) &&
+            childTime == expected && grandchildTime == expected && root->GetTimelineElapsed(epoch + piTick(sample), scope) == piTick(sample) &&
+            child->GetStartTime() == childStart && grandchild->GetStartTime() == grandchildStart &&
+            !child->HasStopTime() && !grandchild->HasStopTime();
+        std::printf("[IMM_FINITE_ANCESTOR_CLOCK] independent=%d sawFinalCycle=%d sample=%d child=%lld grandchild=%lld raw=%lld correct=%d\n",
+            independent ? 1 : 0, sawFinalCycle ? 1 : 0, sample, static_cast<long long>(piTick::CastInt(childTime)),
+            static_cast<long long>(piTick::CastInt(grandchildTime)),
+            static_cast<long long>(piTick::CastInt(root->GetTimelineElapsed(epoch + piTick(sample), scope))), correct ? 1 : 0);
+        allPassed &= correct;
+        if (sample >= 250)
+        {
+            child->SetStartTime(epoch + piTick(400));
+            allPassed &= child->GetTimelineElapsed(epoch + piTick(sample), scope) == piTick(0);
+        }
+        root->SetMaxRepeatCount(0); context.mBoundaryRepeatCount = 0;
+        child->SetStartTime(epoch + piTick(sample + 20));
+        allPassed &= child->GetTimelineElapsed(epoch + piTick(sample), scope) == piTick(-20);
+        sequence.Deinit(&log);
+    }
+    log.End();
+    requireFrames(allPassed, "unheld descendants must inherit a finite ancestor's final clock without capping root diagnostics");
+}
+
 void CheckPaintFrameTables()
 {
     using namespace ImmCore;
@@ -617,5 +684,6 @@ void CheckPaintFrameTables()
     CheckIndependentEvaluationContext();
     CheckHiddenLayerRenderEligibility();
     CheckFiniteFinalActionOccurrence();
+    CheckFiniteAncestorClockCascade();
     std::puts("[IMM_PAINT_FRAME_TABLE_TEST] detached publication, held selection, zero frames, repeat/offset, append and compaction passed");
 }
