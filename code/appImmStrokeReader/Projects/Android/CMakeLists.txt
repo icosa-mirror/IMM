@@ -10,6 +10,10 @@ add_library(
     ${appImmStrokeReader-dir}/src/strokeStore.cpp
 )
 
+# Support Android devices with 16 KB memory pages, including with NDK r26.
+set_property(TARGET ImmStrokeReader APPEND_STRING PROPERTY LINK_FLAGS
+    " -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384")
+
 include_directories(
     ${CODE_DIR}
     ${CODE_DIR}/libImmCore/src/libBasics
