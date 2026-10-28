@@ -857,7 +857,7 @@ jobs:
   build-macos:
     name: macOS
     if: inputs.mode == 'build'
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       GODOT_CPP_REF: godot-4.5-stable
       GODOT_VERSION: 4.7.2-stable
@@ -1118,7 +1118,7 @@ jobs:
   build-ios:
     name: iOS
     if: inputs.mode == 'build'
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
     - name: Checkout repository
