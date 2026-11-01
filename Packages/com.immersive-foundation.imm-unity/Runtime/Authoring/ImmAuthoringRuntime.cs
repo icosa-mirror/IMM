@@ -203,9 +203,22 @@ namespace ImmPlayer.Authoring
             long strokes = 0;
             long points = 0;
             long frames = 0;
-            long keys = 0;
+            long keys = snapshot.RootAnimationKeys.Count;
+            long assetBytes = 0;
             foreach (ImmAuthoringLayerSnapshot layer in snapshot.Layers)
             {
+                if (layer.Type == ImmAuthoringLayerType.Sound && layer.Properties.SoundAudio != null)
+                    assetBytes += layer.Properties.SoundAudio.ByteCount;
+                if (layer.Type == ImmAuthoringLayerType.Picture && layer.Properties.PictureImage != null)
+                {
+                    var image = layer.Properties.PictureImage;
+                    assetBytes += Math.Max(image.ByteCount, (long)image.Width * image.Height * image.Channels);
+                }
+                if (layer.Type == ImmAuthoringLayerType.SpawnArea && layer.Properties.SpawnAreaPreview != null)
+                {
+                    var image = layer.Properties.SpawnAreaPreview;
+                    assetBytes += Math.Max(image.ByteCount, (long)image.Width * image.Height * image.Channels);
+                }
                 if (layer.Properties.Name != null && layer.Properties.Name.Length > limits.MaxLayerNameCharacters)
                     return Exceeded("layer-name characters", layer.Properties.Name.Length, limits.MaxLayerNameCharacters, layer.Id);
                 int depth = layer.ParentId == 0 ? 1 : (depths.TryGetValue(layer.ParentId, out int parentDepth) ? parentDepth + 1 : limits.MaxHierarchyDepth + 1);
@@ -233,6 +246,7 @@ namespace ImmPlayer.Authoring
             if (points > limits.MaxTotalPoints) return Exceeded("total points", points, limits.MaxTotalPoints);
             if (frames > limits.MaxFrames) return Exceeded("frames", frames, limits.MaxFrames);
             if (keys > limits.MaxAnimationKeys) return Exceeded("animation keys", keys, limits.MaxAnimationKeys);
+            if (assetBytes > limits.MaxInputBytes) return Exceeded("asset bytes", assetBytes, limits.MaxInputBytes);
             return ImmAuthoringResult.Success();
         }
 

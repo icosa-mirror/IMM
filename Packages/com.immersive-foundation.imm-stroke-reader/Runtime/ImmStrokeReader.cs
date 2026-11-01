@@ -140,7 +140,7 @@ namespace ImmPlayer
         private static extern IntPtr StrokeReader_GetBuildId();
 
         /// <summary>
-        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5"),
+        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-10-21-ROOT-PROPERTIES"),
         /// the intended way to confirm which stroke reader library a player actually loaded.
         /// </summary>
         /// <returns>The native build id string, or null when the plugin reports none.</returns>
@@ -261,6 +261,19 @@ namespace ImmPlayer
         public static extern bool StrokeReader_GetDocumentInfo(int docId, out StrokeDocumentInfo info);
 
         /// <summary>
+        /// Query the root keys counted by StrokeDocumentInfo.rootAnimationKeyCount.
+        /// The implicit default visibility key is excluded, matching that count.
+        /// </summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetRootAnimationKey(int docId, int keyIdx, out StrokeAnimationKey key);
+
+        /// <summary>Root metadata, separate from the indexed child-layer view. Transform fields use the existing float ABI.</summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetRootLayerProperties(int docId, out StrokeAuthoringLayerInfo info, out StrokeLayerTransform transform);
+
+        /// <summary>
         /// Get information about a layer.
         /// </summary>
         /// <param name="docId">Document ID</param>
@@ -331,6 +344,34 @@ namespace ImmPlayer
         public static extern bool StrokeReader_GetLayerSpawnAreaInfo(
             int docId, int layerIdx, out StrokeSpawnAreaInfo info);
 
+        /// <summary>Original encoded preview; index belongs to the authoring-layer array. False means no declared preview.</summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetSpawnAreaPreviewInfo(int docId, int layerIdx, out StrokeImageAssetInfo info);
+
+        /// <summary>Copy the complete encoded preview; returns zero for missing data or an undersized buffer.</summary>
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetSpawnAreaPreviewData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
+
+        /// <summary>Offline decode of the declared PNG/JPEG preview. Complete RGB/RGBA copy or zero; dimensions/channels come from GetSpawnAreaPreviewInfo.</summary>
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetSpawnAreaPreviewPixels(int docId, int layerIdx, [Out] byte[] pixels, int maxBytes);
+
+        /// <summary>Original encoded picture asset, indexed by authoring layer; independent of the legacy decoded-pixel array.</summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetPictureAssetInfo(int docId, int layerIdx, out StrokePictureAssetInfo info);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetPictureAssetData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetSoundAssetInfo(int docId, int layerIdx, out StrokeSoundAssetInfo info);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetSoundAssetData(int docId, int layerIdx, [Out] byte[] bytes, int maxBytes);
+
         /// <summary>
         /// Largest single-element bounding-box extent in a drawing, in document units.
         /// </summary>
@@ -397,6 +438,17 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int StrokeReader_GetPicturePixelData(
             int docId, int layerIdx, IntPtr pixels, int maxBytes);
+
+        /// <summary>Offline decode. Positive owned lease; -1 invalid, -2 PCM byte limit, -3 allocation failure, -4 unsupported format.</summary>
+        [DllImport(DllName)]
+        public static extern long StrokeReader_DecodeSoundPcm16(int docId, int layerIdx, int maxPcmBytes, out StrokeSoundPcmInfo info);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_CopyDecodedSoundPcm16(long lease, [Out] byte[] bytes, int maxBytes);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_ReleaseDecodedSoundPcm16(long lease);
 
         #endregion
     }
@@ -656,6 +708,13 @@ namespace ImmPlayer
         public StrokeLayerTransform transformValue;
     }
 
+    /// <summary>Encoded preview metadata: encoding PNG=2/JPEG=3; version 1=BGR, 2=RGB.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeImageAssetInfo
+    {
+        public int width, height, channels, encoding, sourceVersion, byteCount;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct StrokePictureInfo
     {
@@ -666,6 +725,42 @@ namespace ImmPlayer
         public int height;
         public int hasAlpha;
         public int dataSize;
+    }
+
+    /// <summary>Encoded PNG/JPEG picture metadata; source image version is zero.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokePictureAssetInfo
+    {
+        public int contentType, isViewerLocked;
+        public StrokeImageAssetInfo image;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeSoundProperties
+    {
+        public int spatialType;
+        public float gain;
+        public int loop, attenuation;
+        public float distanceMin, distanceMax;
+        public int modifier;
+        public float angleInX, angleInY, angleBand, attenuationOutside;
+    }
+
+    /// <summary>Authoring-indexed encoded sound. Sample rate is zero for unsupported/malformed framing; Opus uses its 48 kHz decode rate.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeSoundAssetInfo
+    {
+        public StrokeSoundProperties properties;
+        public int encoding, sampleRate, channels, byteCount;
+        public float sourceDuration;
+        public int initiallyPlaying;
+    }
+
+    /// <summary>Owned decoded PCM16 info. Counts are per-channel frames and total interleaved bytes.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeSoundPcmInfo
+    {
+        public int sampleRate, channels, frameCount, byteCount;
     }
 
     #endregion
@@ -793,6 +888,13 @@ namespace ImmPlayer
             return _docId > 0 && ImmStrokeReader.StrokeReader_GetDocumentInfo(_docId, out info);
         }
 
+        public bool GetRootLayerProperties(out StrokeAuthoringLayerInfo info, out StrokeLayerTransform transform)
+        {
+            info = default;
+            transform = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetRootLayerProperties(_docId, out info, out transform);
+        }
+
         public int ChapterCount => _docId > 0 ? ImmStrokeReader.StrokeReader_GetChapterCount(_docId) : 0;
 
         public int CurrentChapter => _docId > 0 ? ImmStrokeReader.StrokeReader_GetCurrentChapter(_docId) : 0;
@@ -841,6 +943,43 @@ namespace ImmPlayer
         {
             info = default;
             return _docId > 0 && ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>Original encoded preview metadata, indexed by authoring layer.</summary>
+        public bool GetSpawnAreaPreviewInfo(int layerIdx, out StrokeImageAssetInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>Copy a complete encoded preview into a caller-owned buffer; returns zero on failure.</summary>
+        public int GetSpawnAreaPreviewData(int layerIdx, byte[] bytes)
+        {
+            return _docId > 0 && bytes != null
+                ? ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewData(_docId, layerIdx, bytes, bytes.Length) : 0;
+        }
+
+        public bool GetPictureAssetInfo(int layerIdx, out StrokePictureAssetInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetPictureAssetInfo(_docId, layerIdx, out info);
+        }
+
+        public int GetPictureAssetData(int layerIdx, byte[] bytes)
+        {
+            return _docId > 0 && bytes != null
+                ? ImmStrokeReader.StrokeReader_GetPictureAssetData(_docId, layerIdx, bytes, bytes.Length) : 0;
+        }
+
+        public bool GetSoundAssetInfo(int layerIdx, out StrokeSoundAssetInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetSoundAssetInfo(_docId, layerIdx, out info);
+        }
+
+        public int GetSoundAssetData(int layerIdx, byte[] bytes)
+        {
+            return _docId > 0 && bytes != null ? ImmStrokeReader.StrokeReader_GetSoundAssetData(_docId, layerIdx, bytes, bytes.Length) : 0;
         }
 
         /// <summary>

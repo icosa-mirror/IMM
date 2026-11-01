@@ -7,6 +7,8 @@ namespace ImmPlayer.Authoring
     internal sealed class ImmAuthoringState
     {
         internal long NextObjectId = 1;
+        internal ImmAuthoringLayerProperties? RootProperties;
+        internal LayerNode RootAnimationLayer = new LayerNode();
         internal readonly List<long> RootLayerIds = new List<long>();
         internal readonly Dictionary<long, LayerNode> Layers = new Dictionary<long, LayerNode>();
         internal readonly Dictionary<long, DrawingNode> Drawings = new Dictionary<long, DrawingNode>();
@@ -17,8 +19,9 @@ namespace ImmPlayer.Authoring
 
         internal ImmAuthoringState Clone()
         {
-            ImmAuthoringState clone = new ImmAuthoringState { NextObjectId = NextObjectId };
+            ImmAuthoringState clone = new ImmAuthoringState { NextObjectId = NextObjectId, RootProperties = RootProperties };
             clone.RootLayerIds.AddRange(RootLayerIds);
+            clone.RootAnimationLayer = RootAnimationLayer.Clone();
 
             foreach (KeyValuePair<long, LayerNode> item in Layers)
             {
@@ -64,7 +67,7 @@ namespace ImmPlayer.Authoring
                 backgroundColor,
                 requirements,
                 RootLayerIds.ToArray(),
-                layers.ToArray());
+                layers.ToArray(), RootProperties, CreateAnimationKeySnapshots(RootAnimationLayer));
         }
 
         private void AppendLayerSnapshot(long layerId, int order, List<ImmAuthoringLayerSnapshot> output)
@@ -88,19 +91,7 @@ namespace ImmPlayer.Authoring
                 drawings[drawingIndex] = new ImmAuthoringDrawingSnapshot(drawing.Id, drawing.PaintLayerId, strokes);
             }
 
-            ImmAuthoringAnimationKeySnapshot[] animationKeys =
-                new ImmAuthoringAnimationKeySnapshot[layer.AnimationKeyIds.Count];
-            for (int keyIndex = 0; keyIndex < layer.AnimationKeyIds.Count; keyIndex++)
-            {
-                AnimationKeyNode key = AnimationKeys[layer.AnimationKeyIds[keyIndex]];
-                animationKeys[keyIndex] = new ImmAuthoringAnimationKeySnapshot(
-                    key.Id,
-                    key.LayerId,
-                    key.Property,
-                    key.TimeTicks,
-                    key.Interpolation,
-                    key.Value);
-            }
+            ImmAuthoringAnimationKeySnapshot[] animationKeys = CreateAnimationKeySnapshots(layer);
 
             output.Add(new ImmAuthoringLayerSnapshot(
                 layer.Id,
@@ -116,6 +107,25 @@ namespace ImmPlayer.Authoring
 
             for (int childOrder = 0; childOrder < layer.ChildIds.Count; childOrder++)
                 AppendLayerSnapshot(layer.ChildIds[childOrder], childOrder, output);
+        }
+
+        private ImmAuthoringAnimationKeySnapshot[] CreateAnimationKeySnapshots(LayerNode layer)
+        {
+            ImmAuthoringAnimationKeySnapshot[] animationKeys =
+                new ImmAuthoringAnimationKeySnapshot[layer.AnimationKeyIds.Count];
+            for (int keyIndex = 0; keyIndex < layer.AnimationKeyIds.Count; keyIndex++)
+            {
+                AnimationKeyNode key = AnimationKeys[layer.AnimationKeyIds[keyIndex]];
+                animationKeys[keyIndex] = new ImmAuthoringAnimationKeySnapshot(
+                    key.Id,
+                    key.LayerId,
+                    key.Property,
+                    key.TimeTicks,
+                    key.Interpolation,
+                    key.Value);
+            }
+
+            return animationKeys;
         }
     }
 

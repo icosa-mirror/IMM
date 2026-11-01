@@ -7,7 +7,7 @@ namespace SharpQuill
   public class Keyframe<T>
   {
     /// <summary>
-    /// Time of the keyframe in milliseconds relative to the parent sequence.
+    /// Time of the keyframe in Quill timeline ticks (12600 per second), relative to the parent sequence.
     /// </summary>
     public int Time { get; set; }
 

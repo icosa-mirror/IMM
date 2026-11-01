@@ -1,0 +1,8 @@
+{
+  "name": "ImmUnity.Editor",
+  "rootNamespace": "ImmPlayer.Editor",
+  "references": ["ImmUnity.Runtime"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": true,
+  "allowUnsafeCode": false
+}

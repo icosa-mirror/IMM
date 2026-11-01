@@ -24,7 +24,9 @@ namespace ImmPlayer.Authoring
         UnsupportedAnimationProperty,
         InvalidSourceValue,
         ReparentedLayer,
-        FrameRateChanged
+        FrameRateChanged,
+        UnsupportedRootProperties,
+        UnsupportedSoundAsset
     }
 
     public sealed class ImmAuthoringImportIssue
@@ -87,6 +89,8 @@ namespace ImmPlayer.Authoring
     {
         private const int SourceGroupLayerType = 0;
         private const int SourcePaintLayerType = 1;
+        private const int SourcePictureLayerType = 4;
+        private const int SourceSoundLayerType = 5;
         private const int SourceSpawnAreaLayerType = 8;
 
         public static ImmAuthoringImportResult ImportFromFile(string filePath, string nativeLogPath = null)
@@ -217,13 +221,6 @@ namespace ImmPlayer.Authoring
                     ImmAuthoringImportIssueCode.UnsupportedCapabilities,
                     $"Source capability bits 0x{documentInfo.capabilities:X} are not represented by the paint authoring model."));
             }
-            if (documentInfo.rootAnimationKeyCount != 0)
-            {
-                issues.Add(new ImmAuthoringImportIssue(
-                    ImmAuthoringImportIssueCode.UnsupportedRootAnimation,
-                    $"The source root contains {documentInfo.rootAnimationKeyCount} animation keys; root/comic animation is outside the supported paint subset."));
-            }
-
             try
             {
                 ImmAuthoringResult<ImmAuthoringTransaction> begin = document.BeginEdit(document.Revision);
@@ -232,6 +229,29 @@ namespace ImmPlayer.Authoring
                 using (ImmAuthoringTransaction transaction = begin.Value)
                 {
                     ImmAuthoringDocument editable = transaction.EditableDocument;
+                    if (!source.GetRootLayerProperties(out StrokeAuthoringLayerInfo rootInfo, out StrokeLayerTransform rootTransform))
+                        return DisposeAndFail(document, ImmAuthoringErrorCode.CorruptInput, "Source root properties could not be read.", statistics);
+                    if (rootInfo.type != SourceGroupLayerType)
+                        return DisposeAndFail(document, ImmAuthoringErrorCode.Unsupported, "The authoring model requires a group root.", statistics);
+                    var rootProperties = ConvertLayerProperties(source, new SourceLayer(-1, rootInfo, rootTransform), issues);
+                    if (rootProperties.Name != "Root")
+                    {
+                        issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedRootProperties,
+                            $"Root name '{rootProperties.Name}' is normalized to the canonical Root name."));
+                        rootProperties.Name = "Root";
+                    }
+                    ImmAuthoringResult setRoot = editable.SetRootProperties(rootProperties);
+                    if (!setRoot.Succeeded) return DisposeAndFail(document, setRoot.ErrorCode, setRoot.Message, statistics);
+                    var rootKeys = new List<StrokeAnimationKey>(documentInfo.rootAnimationKeyCount);
+                    for (int index = 0; index < documentInfo.rootAnimationKeyCount; index++)
+                    {
+                        if (!ImmStrokeReader.StrokeReader_GetRootAnimationKey(source.DocId, index, out StrokeAnimationKey key))
+                            return DisposeAndFail(document, ImmAuthoringErrorCode.CorruptInput, "Source root key could not be read.", statistics);
+                        rootKeys.Add(key);
+                    }
+                    ImmAuthoringResult importRootKeys = ImportAnimationKeys(source, new SourceLayer(-1, rootInfo, rootTransform),
+                        editable, 0, issues, statistics, options, rootKeys.ToArray());
+                    if (!importRootKeys.Succeeded) return DisposeAndFail(document, importRootKeys.ErrorCode, importRootKeys.Message, statistics);
                     Dictionary<int, long> importedLayers = new Dictionary<int, long>();
                     Dictionary<int, SourceLayer> layersBySourceId = new Dictionary<int, SourceLayer>();
                     foreach (SourceLayer layer in sourceLayers)
@@ -242,7 +262,9 @@ namespace ImmPlayer.Authoring
                         options.CancellationToken.ThrowIfCancellationRequested();
                         if (sourceLayer.Info.type != SourceGroupLayerType &&
                             sourceLayer.Info.type != SourcePaintLayerType &&
-                            sourceLayer.Info.type != SourceSpawnAreaLayerType)
+                            sourceLayer.Info.type != SourceSpawnAreaLayerType &&
+                            sourceLayer.Info.type != SourcePictureLayerType &&
+                            sourceLayer.Info.type != SourceSoundLayerType)
                         {
                             issues.Add(new ImmAuthoringImportIssue(
                                 ImmAuthoringImportIssueCode.UnsupportedLayerType,
@@ -251,21 +273,54 @@ namespace ImmPlayer.Authoring
                             continue;
                         }
 
+                        ImmAuthoringAudio soundAudio = null;
+                        if (sourceLayer.Info.type == SourceSoundLayerType)
+                        {
+                            if (!source.GetSoundAssetInfo(sourceLayer.Index, out var sound) || sound.byteCount <= 0 || sound.sampleRate <= 0)
+                            {
+                                issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedSoundAsset,
+                                    $"Sound '{sourceLayer.Info.name}' has missing, malformed or unsupported encoded audio and was omitted.", sourceLayer.Info.id));
+                                continue;
+                            }
+                            byte[] bytes = new byte[sound.byteCount];
+                            if (source.GetSoundAssetData(sourceLayer.Index, bytes) != bytes.Length)
+                                throw new InvalidDataException($"Sound '{sourceLayer.Info.name}' asset bytes could not be read.");
+                            var audio = ImmAuthoringAudio.CreateEncoded(sound.sampleRate, sound.channels, (ImmAuthoringAudioEncoding)sound.encoding, bytes);
+                            if (!audio.Succeeded)
+                            {
+                                issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedSoundAsset, audio.Message, sourceLayer.Info.id));
+                                continue;
+                            }
+                            soundAudio = audio.Value;
+                        }
                         long parentId = ResolveImportedParent(
                             sourceLayer,
                             layersBySourceId,
                             importedLayers,
                             issues);
                         ImmAuthoringLayerProperties properties = ConvertLayerProperties(source, sourceLayer, issues);
+                        properties.SoundAudio = soundAudio;
                         ImmAuthoringResult<long> addLayer;
                         if (sourceLayer.Info.type == SourceGroupLayerType)
                             addLayer = editable.CreateGroupLayer(parentId, properties, sourceLayer.Info.childIndex);
                         else if (sourceLayer.Info.type == SourcePaintLayerType)
                             addLayer = editable.CreatePaintLayer(parentId, properties, sourceLayer.Info.childIndex);
+                        else if (sourceLayer.Info.type == SourcePictureLayerType)
+                            addLayer = editable.CreatePictureLayer(parentId, properties, sourceLayer.Info.childIndex);
+                        else if (sourceLayer.Info.type == SourceSoundLayerType)
+                            addLayer = editable.CreateSoundLayer(parentId, properties, sourceLayer.Info.childIndex);
                         else
                             addLayer = editable.CreateSpawnAreaLayer(parentId, properties, sourceLayer.Info.childIndex);
                         if (!addLayer.Succeeded)
+                        {
+                            if (sourceLayer.Info.type == SourceSoundLayerType && addLayer.ErrorCode == ImmAuthoringErrorCode.InvalidArgument)
+                            {
+                                issues.Add(new ImmAuthoringImportIssue(ImmAuthoringImportIssueCode.UnsupportedSoundAsset,
+                                    $"Sound '{sourceLayer.Info.name}' settings are unsupported: {addLayer.Message}", sourceLayer.Info.id));
+                                continue;
+                            }
                             return DisposeAndFail(document, addLayer.ErrorCode, addLayer.Message, statistics, transaction);
+                        }
 
                         long importedLayerId = addLayer.Value;
                         importedLayers[sourceLayer.Info.id] = importedLayerId;
@@ -413,7 +468,7 @@ namespace ImmPlayer.Authoring
                             SanitizeUnitValue(ref green, 1f) |
                             SanitizeUnitValue(ref blue, 1f)) adjustedPointMetadata |= PointAdjustment.Color;
                         if (SanitizeUnitValue(ref alpha, 1f)) adjustedPointMetadata |= PointAdjustment.Alpha;
-                        if (SanitizePositive(ref width, 0.000001f)) adjustedPointMetadata |= PointAdjustment.Width;
+                        if (SanitizeNonNegative(ref width, 0.000001f)) adjustedPointMetadata |= PointAdjustment.Width;
                         if (SanitizeFinite(ref length, 0f)) adjustedPointMetadata |= PointAdjustment.Length;
                         if (SanitizeFinite(ref time, 0f)) adjustedPointMetadata |= PointAdjustment.Time;
 
@@ -511,10 +566,11 @@ namespace ImmPlayer.Authoring
             long importedLayerId,
             List<ImmAuthoringImportIssue> issues,
             ImmAuthoringImportStatistics statistics,
-            ImmAuthoringOperationOptions options)
+            ImmAuthoringOperationOptions options,
+            StrokeAnimationKey[] suppliedKeys = null)
         {
             options.CancellationToken.ThrowIfCancellationRequested();
-            StrokeAnimationKey[] keys = source.GetLayerAnimationKeys(sourceLayer.Index);
+            StrokeAnimationKey[] keys = suppliedKeys ?? source.GetLayerAnimationKeys(sourceLayer.Index);
             if (keys == null)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer animation keys could not be read.", importedLayerId);
             if ((long)statistics.ImportedAnimationKeyCount + keys.LongLength > options.Limits.MaxAnimationKeys)
@@ -532,7 +588,7 @@ namespace ImmPlayer.Authoring
                     sourceKey.property == (int)ImmAuthoringAnimationProperty.Visibility &&
                     sourceKey.timeTicks == 0 &&
                     sourceKey.interpolation == (int)ImmAuthoringInterpolation.None &&
-                    sourceKey.boolValue != 0)
+                    (sourceKey.boolValue != 0 || importedLayerId == 0))
                 {
                     continue;
                 }
@@ -620,8 +676,50 @@ namespace ImmPlayer.Authoring
             properties.DurationTicks = Math.Max(0, sourceLayer.Info.durationTicks);
             properties.MaxRepeatCount = sourceLayer.Info.maxRepeatCount;
 
+            if (sourceLayer.Info.type == SourceSoundLayerType)
+            {
+                if (!source.GetSoundAssetInfo(sourceLayer.Index, out var sound))
+                    throw new InvalidDataException($"Sound '{properties.Name}' metadata could not be read.");
+                var settings = sound.properties;
+                properties.Sound = new ExportSoundProperties
+                {
+                    SpatialType = (ExportSoundSpatialType)settings.spatialType, Gain = settings.gain, Loop = settings.loop,
+                    Attenuation = (ExportSoundAttenuationType)settings.attenuation, DistanceMin = settings.distanceMin, DistanceMax = settings.distanceMax,
+                    Modifier = (ExportSoundModifierType)settings.modifier, AngleInX = settings.angleInX, AngleInY = settings.angleInY,
+                    AngleBand = settings.angleBand, AttenuationOutside = settings.attenuationOutside
+                };
+                properties.SoundSourceDuration = sound.sourceDuration;
+                properties.SoundInitiallyPlaying = sound.initiallyPlaying != 0;
+            }
+            if (sourceLayer.Info.type == SourcePictureLayerType)
+            {
+                if (!ImmStrokeReader.StrokeReader_GetPictureAssetInfo(source.DocId, sourceLayer.Index, out StrokePictureAssetInfo picture) ||
+                    picture.image.byteCount <= 0 || picture.image.sourceVersion != 0)
+                    throw new InvalidOperationException($"Picture '{properties.Name}' encoded asset metadata could not be read.");
+                byte[] bytes = new byte[picture.image.byteCount];
+                if (ImmStrokeReader.StrokeReader_GetPictureAssetData(source.DocId, sourceLayer.Index, bytes, bytes.Length) != bytes.Length)
+                    throw new InvalidOperationException($"Picture '{properties.Name}' encoded asset bytes could not be read.");
+                var image = ImmAuthoringImage.Create(picture.image.width, picture.image.height, picture.image.channels,
+                    (ImmAuthoringImageEncoding)picture.image.encoding, bytes);
+                if (!image.Succeeded) throw new InvalidOperationException(image.Message);
+                properties.PictureType = (ExportPictureType)picture.contentType;
+                properties.PictureViewerLocked = picture.isViewerLocked != 0;
+                properties.PictureImage = image.Value;
+            }
             if (sourceLayer.Info.type == SourceSpawnAreaLayerType)
             {
+                if (ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewInfo(source.DocId, sourceLayer.Index, out StrokeImageAssetInfo preview))
+                {
+                    if (preview.byteCount <= 0 || (preview.sourceVersion != 1 && preview.sourceVersion != 2))
+                        throw new InvalidOperationException($"Spawn area '{properties.Name}' has invalid preview metadata.");
+                    byte[] bytes = new byte[preview.byteCount];
+                    if (ImmStrokeReader.StrokeReader_GetSpawnAreaPreviewData(source.DocId, sourceLayer.Index, bytes, bytes.Length) != bytes.Length)
+                        throw new InvalidOperationException($"Spawn area '{properties.Name}' preview bytes could not be read.");
+                    var image = ImmAuthoringImage.Create(preview.width, preview.height, preview.channels,
+                        (ImmAuthoringImageEncoding)preview.encoding, bytes, preview.sourceVersion == 1);
+                    if (!image.Succeeded) throw new InvalidOperationException(image.Message);
+                    properties.SpawnAreaPreview = image.Value;
+                }
                 properties.SpawnAreaIsDefault = sourceLayer.Info.isDefaultSpawn != 0;
                 if (ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(
                         source.DocId,
@@ -679,13 +777,15 @@ namespace ImmPlayer.Authoring
             string description,
             List<ImmAuthoringImportIssue> issues)
         {
-            if (source.flip != 0)
+            ImmAuthoringFlip flip = ImmAuthoringFlip.None;
+            if ((uint)source.flip > (uint)ImmAuthoringFlip.Z)
             {
                 issues.Add(new ImmAuthoringImportIssue(
                     ImmAuthoringImportIssueCode.UnsupportedFlip,
-                    $"Layer {sourceLayerId} uses a flipped {description}; flip state is not represented by the current authoring transform.",
+                    $"Layer {sourceLayerId} has an unknown {description} flip {source.flip}; no reflection was substituted.",
                     sourceLayerId));
             }
+            else flip = (ImmAuthoringFlip)source.flip;
             Quaternion rotation = new Quaternion(source.rotX, source.rotY, source.rotZ, source.rotW);
             float rotationMagnitudeSquared =
                 rotation.x * rotation.x + rotation.y * rotation.y +
@@ -720,7 +820,8 @@ namespace ImmPlayer.Authoring
             {
                 Position = new Vector3(source.transX, source.transY, source.transZ),
                 Rotation = rotation,
-                Scale = scale
+                Scale = scale,
+                Flip = flip
             };
         }
 
@@ -759,9 +860,11 @@ namespace ImmPlayer.Authoring
                 return ExportSequenceType.Still;
             if (sourceType == (int)ExportSequenceType.Animated)
                 return ExportSequenceType.Animated;
+            if (sourceType == (int)ExportSequenceType.Comic)
+                return ExportSequenceType.Comic;
             issues.Add(new ImmAuthoringImportIssue(
                 ImmAuthoringImportIssueCode.UnsupportedSequenceType,
-                $"Sequence type {sourceType} is outside the supported still/animated paint subset and was converted to Animated."));
+                $"Sequence type {sourceType} is outside the supported still/animated/comic paint subset and was converted to Animated."));
             return ExportSequenceType.Animated;
         }
 
@@ -838,9 +941,9 @@ namespace ImmPlayer.Authoring
             return true;
         }
 
-        private static bool SanitizePositive(ref float value, float fallback)
+        private static bool SanitizeNonNegative(ref float value, float fallback)
         {
-            if (IsFinite(value) && value > 0f)
+            if (IsFinite(value) && value >= 0f)
                 return false;
             value = fallback;
             return true;

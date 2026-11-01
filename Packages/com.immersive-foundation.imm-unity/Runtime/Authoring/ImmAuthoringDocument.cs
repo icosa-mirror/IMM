@@ -108,6 +108,24 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
+        /// <summary>Configure the canonical Root group for offline export; child layer IDs and live mutation APIs are unchanged.</summary>
+        public ImmAuthoringResult SetRootProperties(ImmAuthoringLayerProperties properties)
+        {
+            ImmAuthoringResult validation = ValidateLayerProperties(properties, ImmAuthoringLayerType.Group);
+            if (!validation.Succeeded) return validation;
+            if (properties.Name != "Root")
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.Unsupported, "The offline root name must be Root.");
+            ImmAuthoringChange change;
+            lock (_gate)
+            {
+                if (_disposed) return Disposed();
+                _state.RootProperties = properties;
+                change = AdvanceRevision(Array.Empty<long>());
+            }
+            Publish(change);
+            return ImmAuthoringResult.Success();
+        }
+
         public ImmAuthoringResult<long> CreateGroupLayer(
             long parentId,
             ImmAuthoringLayerProperties properties,
@@ -125,6 +143,13 @@ namespace ImmPlayer.Authoring
             long parentId,
             ImmAuthoringLayerProperties properties,
             int siblingIndex = -1) => CreateLayer(ImmAuthoringLayerType.SpawnArea, parentId, properties, siblingIndex);
+
+        /// <summary>Create an offline picture layer with a required immutable image asset.</summary>
+        public ImmAuthoringResult<long> CreatePictureLayer(long parentId, ImmAuthoringLayerProperties properties, int siblingIndex = -1)
+            => CreateLayer(ImmAuthoringLayerType.Picture, parentId, properties, siblingIndex);
+
+        public ImmAuthoringResult<long> CreateSoundLayer(long parentId, ImmAuthoringLayerProperties properties, int siblingIndex = -1)
+            => CreateLayer(ImmAuthoringLayerType.Sound, parentId, properties, siblingIndex);
 
         public ImmAuthoringResult SetLayerProperties(long layerId, ImmAuthoringLayerProperties properties)
         {
@@ -145,6 +170,7 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
+        /// <summary>Create a key on a child layer, or on the document root when layerId is zero.</summary>
         public ImmAuthoringResult<long> CreateAnimationKey(
             long layerId,
             ImmAuthoringAnimationProperty property,
@@ -159,7 +185,8 @@ namespace ImmPlayer.Authoring
             return ApplyMutation(
                 state =>
                 {
-                    if (!state.Layers.TryGetValue(layerId, out LayerNode layer))
+                    LayerNode layer = FindAnimationLayer(state, layerId);
+                    if (layer == null)
                         return ImmAuthoringResult<long>.Failure(ImmAuthoringErrorCode.NotFound, "Layer was not found.", layerId);
                     if (FindAnimationKey(state, layer, property, timeTicks, 0) != null)
                         return ImmAuthoringResult<long>.Failure(
@@ -203,7 +230,7 @@ namespace ImmPlayer.Authoring
                     return Disposed();
                 if (!_state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key))
                     return NotFound("Animation key", keyId);
-                LayerNode layer = _state.Layers[key.LayerId];
+                LayerNode layer = FindAnimationLayer(_state, key.LayerId);
                 if (FindAnimationKey(_state, layer, property, timeTicks, keyId) != null)
                     return ImmAuthoringResult.Failure(
                         ImmAuthoringErrorCode.InvalidArgument,
@@ -231,7 +258,7 @@ namespace ImmPlayer.Authoring
                     return Disposed();
                 if (!_state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key))
                     return NotFound("Animation key", keyId);
-                _state.Layers[key.LayerId].AnimationKeyIds.Remove(keyId);
+                FindAnimationLayer(_state, key.LayerId).AnimationKeyIds.Remove(keyId);
                 _state.AnimationKeys.Remove(keyId);
                 change = AdvanceRevision(new[] { keyId, key.LayerId });
             }
@@ -955,6 +982,38 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer transform and pivot must be finite with positive scale.", objectId);
             if (properties.DurationTicks < 0)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer duration cannot be negative.", objectId);
+            if (type == ImmAuthoringLayerType.Sound)
+            {
+                var sound = properties.Sound;
+                if (properties.SoundAudio == null || !IsFinite(properties.SoundSourceDuration) || properties.SoundSourceDuration < 0 ||
+                    !Enum.IsDefined(typeof(ExportSoundSpatialType), sound.SpatialType) ||
+                    !Enum.IsDefined(typeof(ExportSoundAttenuationType), sound.Attenuation) ||
+                    !Enum.IsDefined(typeof(ExportSoundModifierType), sound.Modifier) || (sound.Loop != 0 && sound.Loop != 1) ||
+                    !IsFinite(sound.Gain) || sound.Gain < 0 || !IsFinite(sound.DistanceMin) || !IsFinite(sound.DistanceMax) ||
+                    sound.DistanceMin < 0 || sound.DistanceMax < sound.DistanceMin || !IsFinite(sound.AngleInX) ||
+                    !IsFinite(sound.AngleInY) || !IsFinite(sound.AngleBand) || !IsFinite(sound.AttenuationOutside) ||
+                    sound.AngleInX < 0 || sound.AngleInY < 0 || sound.AngleBand < 0 || sound.AttenuationOutside < 0 ||
+                    (sound.Modifier != ExportSoundModifierType.None && sound.SpatialType != ExportSoundSpatialType.Positional) ||
+                    (sound.Modifier == ExportSoundModifierType.None &&
+                        (sound.AngleInX != 0 || sound.AngleInY != 0 || sound.AngleBand != 0 || sound.AttenuationOutside != 0)) ||
+                    (sound.Modifier == ExportSoundModifierType.DirectionalCone && sound.AngleInY != 0) ||
+                    ((sound.SpatialType == ExportSoundSpatialType.Ambisonic) != (properties.SoundAudio.Channels == 4)))
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Sound asset, spatial settings or channel layout are invalid.", objectId);
+            }
+            else if (properties.SoundAudio != null)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only sound layers can own audio.", objectId);
+            if (properties.SpawnAreaPreview != null && type != ImmAuthoringLayerType.SpawnArea)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only spawn-area layers can own a viewpoint preview.", objectId);
+            if (properties.SpawnAreaPreview != null && properties.SpawnAreaPreview.Channels == 1)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Viewpoint previews require RGB or RGBA channels.", objectId);
+            if (type == ImmAuthoringLayerType.Picture)
+            {
+                if (properties.PictureImage == null || properties.PictureImage.EncodedBgr ||
+                    !Enum.IsDefined(typeof(ExportPictureType), properties.PictureType))
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Picture layers require an RGB image asset and a supported projection.", objectId);
+            }
+            else if (properties.PictureImage != null)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Only picture layers can own a picture image.", objectId);
             // The spawn-volume fields exist on every layer because the properties struct is
             // shared, so their rules are checked only for the layer type that owns them.
             // Applying them to paint, group or viewpoint layers would report a spawn-area
@@ -987,17 +1046,22 @@ namespace ImmPlayer.Authoring
             }
             if (points == null || points.Length < 2)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must contain at least two points.", objectId);
+            bool hasBounds = false;
             for (int i = 0; i < points.Length; i++)
             {
                 PaintPoint point = points[i];
                 if (!IsFinite(point.Position) || !IsFinite(point.Normal) || !IsFinite(point.Direction) ||
                     !IsFinite(point.Color.r) || !IsFinite(point.Color.g) || !IsFinite(point.Color.b) ||
                     !IsFinite(point.Alpha) || !IsFinite(point.Width) || !IsFinite(point.Length) || !IsFinite(point.Time) ||
-                    point.Alpha < 0f || point.Alpha > 1f || point.Width <= 0f)
+                    point.Alpha < 0f || point.Alpha > 1f || point.Width < 0f)
                 {
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, $"Stroke point {i} contains invalid values.", objectId);
                 }
+                hasBounds |= point.Width > 0f || point.Position.x != points[0].Position.x ||
+                    point.Position.y != points[0].Position.y || point.Position.z != points[0].Position.z;
             }
+            if (!hasBounds)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must have nonzero spatial or width extent.", objectId);
             return ImmAuthoringResult.Success();
         }
 
@@ -1048,6 +1112,11 @@ namespace ImmPlayer.Authoring
 
         private static ImmAuthoringResult ValidateState(ImmAuthoringState state)
         {
+            if (state.RootProperties.HasValue)
+            {
+                ImmAuthoringResult root = ValidateLayerProperties(state.RootProperties.Value, ImmAuthoringLayerType.Group);
+                if (!root.Succeeded) return root;
+            }
             HashSet<long> visited = new HashSet<long>();
             foreach (long rootId in state.RootLayerIds)
             {
@@ -1117,17 +1186,11 @@ namespace ImmPlayer.Authoring
                     "One or more strokes are unreachable from their drawing.");
             foreach (LayerNode layer in state.Layers.Values)
             {
-                foreach (long keyId in layer.AnimationKeyIds)
-                {
-                    if (!state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key) || key.LayerId != layer.Id)
-                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer contains an invalid animation key.", keyId);
-                    if (!reachableAnimationKeys.Add(keyId))
-                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Animation key appears more than once in the document.", keyId);
-                    ImmAuthoringResult keyResult = ValidateAnimationKey(key.Property, key.TimeTicks, key.Value, key.Interpolation, keyId);
-                    if (!keyResult.Succeeded)
-                        return keyResult;
-                }
+                ImmAuthoringResult keys = ValidateAnimationLayer(state, layer, reachableAnimationKeys);
+                if (!keys.Succeeded) return keys;
             }
+            ImmAuthoringResult rootKeys = ValidateAnimationLayer(state, state.RootAnimationLayer, reachableAnimationKeys);
+            if (!rootKeys.Succeeded) return rootKeys;
             if (reachableAnimationKeys.Count != state.AnimationKeys.Count)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "One or more animation keys are unreachable from their layer.");
             return ImmAuthoringResult.Success();
@@ -1150,6 +1213,12 @@ namespace ImmPlayer.Authoring
             if (layer.Type == ImmAuthoringLayerType.SpawnArea &&
                 (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Spawn-area layer contains paint data.", layerId);
+            if (layer.Type == ImmAuthoringLayerType.Picture &&
+                (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Picture layer contains paint data.", layerId);
+            if (layer.Type == ImmAuthoringLayerType.Sound &&
+                (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Sound layer contains paint data.", layerId);
             if (layer.Type == ImmAuthoringLayerType.Paint)
             {
                 foreach (long drawingId in layer.DrawingIds)
@@ -1183,6 +1252,23 @@ namespace ImmPlayer.Authoring
         private static bool IsFinite(Vector3 value) => IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static LayerNode FindAnimationLayer(ImmAuthoringState state, long layerId) =>
+            layerId == 0 ? state.RootAnimationLayer : (state.Layers.TryGetValue(layerId, out LayerNode layer) ? layer : null);
+
+        private static ImmAuthoringResult ValidateAnimationLayer(ImmAuthoringState state, LayerNode layer, HashSet<long> reachable)
+        {
+            foreach (long keyId in layer.AnimationKeyIds)
+            {
+                if (!state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key) || key.LayerId != layer.Id)
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer contains an invalid animation key.", keyId);
+                if (!reachable.Add(keyId))
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Animation key appears more than once in the document.", keyId);
+                ImmAuthoringResult result = ValidateAnimationKey(key.Property, key.TimeTicks, key.Value, key.Interpolation, keyId);
+                if (!result.Succeeded) return result;
+            }
+            return ImmAuthoringResult.Success();
+        }
 
         private static AnimationKeyNode FindAnimationKey(
             ImmAuthoringState state,

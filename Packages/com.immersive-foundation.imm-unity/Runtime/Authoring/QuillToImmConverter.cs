@@ -1,0 +1,639 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Globalization;
+using System.Linq;
+using ImmPlayer.Exporter;
+using Newtonsoft.Json.Linq;
+using SharpQuill;
+using UnityEngine;
+
+namespace ImmPlayer.Authoring
+{
+    public enum QuillToImmIssueSeverity { Information, Warning, Error }
+
+    public sealed class QuillToImmIssue
+    {
+        public QuillToImmIssueSeverity Severity { get; }
+        public string Code { get; }
+        public string SourcePath { get; }
+        public string Message { get; }
+
+        internal QuillToImmIssue(QuillToImmIssueSeverity severity, string code, string path, string message)
+        {
+            Severity = severity;
+            Code = code;
+            SourcePath = path;
+            Message = message;
+        }
+    }
+
+    public sealed class QuillToImmConversionResult
+    {
+        public bool Succeeded => Export != null && Export.Succeeded;
+        public bool IsPartial => Issues.Any(x => x.Code == "OmittedLayer" || x.Code == "OmittedStartupMetadata" ||
+            x.Code == "OmittedDefaultViewpoint");
+        public IReadOnlyList<QuillToImmIssue> Issues { get; }
+        public ImmAuthoringExportResult Export { get; }
+
+        internal QuillToImmConversionResult(List<QuillToImmIssue> issues, ImmAuthoringExportResult export = null)
+        {
+            Issues = Array.AsReadOnly(issues.ToArray());
+            Export = export;
+        }
+    }
+
+    /// <summary>
+    /// Offline static and animated paint profiles. The static entry rejects animation;
+    /// layer/pivot/key reflections use the additive offline exporter APIs.
+    /// The project entry maps exported viewpoints and 2D pictures; paint entries retain their
+    /// subset contract. Unsupported content requires explicit omission permission
+    /// and produces partial-output diagnostics. Existing output is preserved on failure.
+    /// </summary>
+    public static class QuillToImmConverter
+    {
+        public static QuillToImmConversionResult ConvertStaticPaintProject(
+            string projectFolder, string outputPath, bool allowOmittedLayers = false)
+            => ConvertProjectCore(projectFolder, outputPath, allowOmittedLayers, animated: false, includeProjectContent: false);
+
+        /// <summary>Converts paint drawings, layer animation and supported root defaults; source root actions remain unsupported.</summary>
+        public static QuillToImmConversionResult ConvertAnimatedPaintProject(
+            string projectFolder, string outputPath, bool allowOmittedLayers = false)
+            => ConvertProjectCore(projectFolder, outputPath, allowOmittedLayers, animated: true, includeProjectContent: false);
+
+        /// <summary>Convert supported paint, animation, exported viewpoints, 2D pictures and PCM16 sounds. Unsupported content requires explicit omission permission.</summary>
+        public static QuillToImmConversionResult ConvertProject(string projectFolder, string outputPath, bool allowOmittedContent = false)
+            => ConvertProjectCore(projectFolder, outputPath, allowOmittedContent, animated: true, includeProjectContent: true);
+
+        public static QuillToImmConversionResult ConvertProject(string projectFolder, string outputPath,
+            bool allowOmittedContent, ImmAuthoringOperationOptions options)
+            => ConvertProjectCore(projectFolder, outputPath, allowOmittedContent, animated: true, includeProjectContent: true, options: options);
+
+        private static QuillToImmConversionResult ConvertProjectCore(
+            string projectFolder, string outputPath, bool allowOmittedLayers, bool animated, bool includeProjectContent,
+            ImmAuthoringOperationOptions options = null)
+        {
+            options = options ?? ImmAuthoringOperationOptions.Default;
+            var issues = new List<QuillToImmIssue>();
+            try
+            {
+                options.CancellationToken.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(projectFolder) || string.IsNullOrWhiteSpace(outputPath))
+                    throw new ArgumentException("Project folder and output path are required.");
+                string sourceJson = Path.Combine(projectFolder, "Quill.json");
+                string sourceBinary = Path.Combine(projectFolder, "Quill.qbin");
+                string fullOutput = Path.GetFullPath(outputPath);
+                if (string.Equals(fullOutput, Path.GetFullPath(sourceJson), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(fullOutput, Path.GetFullPath(sourceBinary), StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Output must not replace either source project file.");
+                if (!File.Exists(sourceJson) || !File.Exists(sourceBinary))
+                    throw new FileNotFoundException("Both Quill.json and Quill.qbin are required.");
+                if (new FileInfo(sourceJson).Length + new FileInfo(sourceBinary).Length > options.Limits.MaxInputBytes)
+                    throw new InvalidDataException($"Project exceeds the configured input byte limit ({options.Limits.MaxInputBytes:N0} bytes).");
+
+                var json = JObject.Parse(File.ReadAllText(sourceJson));
+                if ((int?)json["Version"] != 1 || !(json["Sequence"] is JObject settings) ||
+                    !(settings["RootLayer"] is JObject root) || (string)root["Type"] != "Group")
+                    throw new InvalidDataException("Expected a Version 1 Quill project with a Group root.");
+                Preflight(root, "", true, true, issues, allowOmittedLayers, animated, includeProjectContent);
+                if (settings["AnimateOnStart"] != null || settings["TrackingOrigin"] != null)
+                    Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
+                        "OmittedStartupMetadata", "/", "Startup/tracking metadata is outside the paint profiles.");
+                if (issues.Any(x => x.Severity == QuillToImmIssueSeverity.Error))
+                    return new QuillToImmConversionResult(issues);
+
+                Sequence sequence = QuillSequenceReader.ReadMetadata(projectFolder);
+                if (sequence?.RootLayer == null)
+                    throw new InvalidDataException("Quill hierarchy could not be parsed.");
+                options.CancellationToken.ThrowIfCancellationRequested();
+                var projectMapping = includeProjectContent ? new ProjectMapping(sequence.DefaultViewpoint, options) : null;
+                if (!animated) CheckRoot(sequence.RootLayer);
+                var created = ImmAuthoringDocument.Create(animated ? ExportSequenceType.Animated : ExportSequenceType.Still, checked((uint)sequence.Framerate),
+                    new UnityEngine.Color(sequence.BackgroundColor.R, sequence.BackgroundColor.G, sequence.BackgroundColor.B, 1f));
+                using (ImmAuthoringDocument document = Require(created, "/"))
+                {
+                    if (animated)
+                    {
+                        var rootProperties = ImmAuthoringLayerProperties.Default(sequence.RootLayer.Name);
+                        rootProperties.Visible = sequence.RootLayer.Visible;
+                        rootProperties.Opacity = sequence.RootLayer.Opacity;
+                        rootProperties.Transform = Transform(sequence.RootLayer.Transform);
+                        rootProperties.Pivot = Transform(sequence.RootLayer.Pivot);
+                        rootProperties.IsTimeline = sequence.RootLayer.Animation.Timeline;
+                        rootProperties.DurationTicks = ExactNonNegativeInteger(sequence.RootLayer.Animation.Duration, "/");
+                        if (rootProperties.DurationTicks == 0 && (bool?)root["Animation"]?["Timeline"] == false)
+                        {
+                            // The paired legacy Fishgym export normalizes its false/zero
+                            // root to Quill's usual one-hour root sequence.
+                            rootProperties.DurationTicks = (long)LayerGroup.CreateDefault().Animation.Duration;
+                            Issue(issues, QuillToImmIssueSeverity.Information, "NormalizedRootTimeline", "/",
+                                "Legacy zero-duration root uses Quill's default root timeline, matching the inspected export.");
+                        }
+                        rootProperties.MaxRepeatCount = checked((uint)ExactNonNegativeInteger(sequence.RootLayer.Animation.MaxRepeatCount, "/"));
+                        Require(document.SetRootProperties(rootProperties), "/");
+                        MapAnimation(document, 0, sequence.RootLayer.Animation.Keys, root, "/");
+                    }
+                    using (var stream = File.OpenRead(sourceBinary))
+                    using (var reader = new QBinReader(stream))
+                    {
+                        MapChildren(document, sequence.RootLayer, root, 0, $"/{sequence.RootLayer.Name}", true, reader, animated, projectMapping);
+                    }
+                    if (projectMapping != null && projectMapping.DefaultPath.Length != 0 && projectMapping.DefaultMatches != 1)
+                    {
+                        Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
+                            "OmittedDefaultViewpoint", "/", "The declared default viewpoint is not uniquely exported; native fallback selection applies.");
+                        if (!allowOmittedLayers) return new QuillToImmConversionResult(issues);
+                    }
+                    var snapshot = Require(document.CreateSnapshot(), "/");
+                    if (!snapshot.Layers.Any(x => (x.Type == ImmAuthoringLayerType.Paint && x.Drawings.Any(d => d.Strokes.Count > 0)) ||
+                        (includeProjectContent && (x.Type == ImmAuthoringLayerType.SpawnArea || x.Type == ImmAuthoringLayerType.Picture || x.Type == ImmAuthoringLayerType.Sound))))
+                        throw new InvalidDataException("The selected mapping contains no exportable content.");
+                    ImmAuthoringExportResult exported = ImmAuthoringCompiler.ExportToFile(snapshot, fullOutput, options);
+                    if (!exported.Succeeded)
+                        Issue(issues, QuillToImmIssueSeverity.Error, "ExportFailed", "/", exported.Message);
+                    return new QuillToImmConversionResult(issues, exported);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Issue(issues, QuillToImmIssueSeverity.Error, "Cancelled", "/", "Conversion was cancelled.");
+                return new QuillToImmConversionResult(issues);
+            }
+            catch (Exception exception) when (exception is IOException || exception is InvalidDataException || exception is ArgumentException ||
+                exception is Newtonsoft.Json.JsonException || exception is InvalidOperationException ||
+                exception is NotSupportedException || exception is OverflowException || exception is UnauthorizedAccessException ||
+                exception is FormatException || exception is InvalidCastException)
+            {
+                Issue(issues, QuillToImmIssueSeverity.Error, "ConversionFailed", "/", exception.Message);
+                return new QuillToImmConversionResult(issues);
+            }
+        }
+
+        private static void Preflight(JObject layer, string parentPath, bool parentVisible, bool isRoot,
+            List<QuillToImmIssue> issues, bool allowOmittedLayers, bool animated, bool includeProjectContent)
+        {
+            string path = $"{parentPath}/{(string)layer["Name"]}";
+            string type = (string)layer["Type"];
+            bool visible = parentVisible && PotentiallyVisible(layer, animated);
+            if (!IsMappedType(type, includeProjectContent))
+            {
+                Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
+                    "OmittedLayer", path, $"{type ?? "Unknown"} is outside the selected mapping.");
+                return;
+            }
+            if (type == "Viewpoint")
+            {
+                var viewSettings = layer["Implementation"] as JObject ?? throw new InvalidDataException($"Missing viewpoint settings at {path}.");
+                if ((bool?)viewSettings["Exporting"] == false)
+                {
+                    Issue(issues, QuillToImmIssueSeverity.Information, "ViewpointNotExported", path, "Source Exporting=false excludes this viewpoint.");
+                    return;
+                }
+                if (viewSettings["DataFileOffset"] != null && viewSettings["DataFileOffset"].Type != JTokenType.Null)
+                {
+                    string offset = ((string)viewSettings["DataFileOffset"]).Trim();
+                    if (offset.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) offset = offset.Substring(2);
+                    if (!ulong.TryParse(offset, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ulong value) || value > long.MaxValue)
+                        throw new InvalidDataException($"Invalid viewpoint preview offset at {path}.");
+                }
+            }
+            if ((type == "Paint" || type == "Picture") && !visible)
+            {
+                Issue(issues, QuillToImmIssueSeverity.Information, type == "Paint" ? "HiddenPaintExcluded" : "HiddenPictureExcluded", path,
+                    "Statically hidden content is excluded, matching the inspected Quill exports.");
+                return;
+            }
+            if (type == "Picture" && !TryPictureType(layer["Implementation"]?["Type"], out _))
+            {
+                Issue(issues, allowOmittedLayers ? QuillToImmIssueSeverity.Warning : QuillToImmIssueSeverity.Error,
+                    "OmittedLayer", path, "Picture projection has no supported source mapping.");
+                return;
+            }
+            if (type == "Picture" && TryPictureType(layer["Implementation"]?["Type"], out var projection) &&
+                projection != ExportPictureType.Image2D)
+            {
+                var metadata = layer["Implementation"]?["Metadata"];
+                if (metadata?["HorizontalFOV"] != null || metadata?["VerticalFOV"] != null)
+                    Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedPictureFov", path,
+                        "Explicit panorama field-of-view metadata has no verified native mapping.");
+                Issue(issues, QuillToImmIssueSeverity.Information, "PanoramaLayoutUnverified", path,
+                    "Equirectangular projection and stored pixels are transferred without rearrangement; Quill orientation and stereo eye order still require reference or application validation.");
+            }
+            if (type == "Sound") SoundSettings((JObject)layer["Implementation"], path);
+            string keepAlive = (string)layer["KeepAlive"]?["Type"];
+            if (keepAlive != null && keepAlive != "None")
+                Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedKeepAlive", path,
+                    $"KeepAlive {keepAlive} is outside the static profile.");
+            foreach (string property in new[] { "Transform", "Pivot" })
+            {
+                string flip = (string)layer[property]?["Flip"];
+                if (flip != null && flip != "N" && flip != "X" && flip != "Y" && flip != "Z")
+                    Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedReflection", path,
+                        $"Unknown {property} flip {flip}.");
+            }
+            var animation = layer["Animation"];
+            if (animation != null)
+            {
+                if (animated)
+                {
+                    foreach (string field in new[] { "Duration", "MaxRepeatCount", "StartOffset" })
+                    {
+                        double value = (double?)animation[field] ?? 0;
+                        ExactNonNegativeInteger(value, path);
+                        if (value != (double)(float)value)
+                            throw new NotSupportedException($"{field} cannot be represented exactly by the source reader at {path}.");
+                    }
+                }
+                bool dynamicTiming = (double?)animation["StartOffset"] != null && (double)animation["StartOffset"] != 0;
+                if (!isRoot) dynamicTiming |= ((bool?)animation["Timeline"] ?? false) ||
+                    ((double?)animation["Duration"] ?? 0) != 0 || ((double?)animation["MaxRepeatCount"] ?? 0) != 0;
+                if (dynamicTiming && (!animated || isRoot))
+                    Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedAnimation", path,
+                        "Timeline timing is outside the static profile.");
+                if (animation["Keys"] is JObject keys)
+                    foreach (JProperty channel in keys.Properties())
+                    {
+                        if (!(channel.Value is JArray values))
+                            throw new InvalidDataException($"Invalid key channel at {path}.");
+                        bool defaults = values.Count == 0 || (values.Count == 1 && (double?)values[0]["Time"] == 0 &&
+                            ((channel.Name == "Visibility" && (bool?)values[0]["Value"] == true) ||
+                             (channel.Name == "Offset" && (double?)values[0]["Value"] == 0))) ||
+                            (isRoot && channel.Name == "Opacity" && IsIdentityRootOpacity(values, layer));
+                        bool supported = animated && !isRoot &&
+                            (channel.Name == "Visibility" || channel.Name == "Opacity" || channel.Name == "Transform" || channel.Name == "Offset");
+                        if (supported)
+                            foreach (JToken key in values)
+                            {
+                                long time = ExactNonNegativeInteger((double)key["Time"], path);
+                                if (time > int.MaxValue) throw new NotSupportedException($"Key time exceeds source reader range at {path}.");
+                                if (channel.Name == "Offset" && ExactNonNegativeInteger((double)key["Value"], path) > int.MaxValue)
+                                    throw new NotSupportedException($"Offset exceeds source reader range at {path}.");
+                            }
+                        if (!defaults && !supported)
+                            Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedAnimation", path,
+                                $"{channel.Name} keys are outside the {(animated && isRoot ? "verified root mapping" : "static profile")}.");
+                    }
+            }
+            if (!(layer["Implementation"] is JObject implementation))
+                throw new InvalidDataException($"Missing layer implementation at {path}.");
+            if (type == "Group")
+            {
+                if (!(implementation["Children"] is JArray children))
+                    throw new InvalidDataException($"Missing group children at {path}.");
+                foreach (JObject child in children) Preflight(child, path, visible, false, issues, allowOmittedLayers, animated, includeProjectContent);
+            }
+            else if (type == "Paint" && implementation["Drawings"] is JArray drawings)
+            {
+                if (animated && (!(implementation["Frames"] is JArray frameMap) ||
+                    frameMap.Count == 0 || frameMap.Any(x => !IsDrawingIndex(x, drawings.Count))))
+                    throw new InvalidDataException($"Invalid animated frame map at {path}.");
+                if (!animated && (drawings.Count != 1 || !(implementation["Frames"] is JArray frames) ||
+                    frames.Count == 0 || frames.Any(x => !IsZeroFrame(x))))
+                    Issue(issues, QuillToImmIssueSeverity.Error, "UnsupportedAnimation", path,
+                        "Static paint requires one drawing and frame references to drawing zero.");
+            }
+            else if (type == "Paint" && implementation["DataFileOffset"] == null)
+                throw new InvalidDataException($"Missing paint data declaration at {path}.");
+        }
+
+        private static void CheckRoot(LayerGroup root)
+        {
+            if (!root.Visible || root.Opacity != 1f || !IsIdentity(root.Transform) || !IsIdentity(root.Pivot))
+                throw new NotSupportedException("Nonidentity root properties are outside the initial static profile.");
+        }
+
+        private static bool IsZeroFrame(JToken value) =>
+            ((value.Type == JTokenType.Integer || value.Type == JTokenType.Float) && (double)value == 0) ||
+            (value.Type == JTokenType.String && int.TryParse((string)value, NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out int index) && index == 0);
+
+        private static bool IsDrawingIndex(JToken value, int count)
+        {
+            if (value.Type == JTokenType.String)
+                return int.TryParse((string)value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int index) && index >= 0 && index < count;
+            if (value.Type != JTokenType.Integer && value.Type != JTokenType.Float) return false;
+            double number = (double)value;
+            return number >= 0 && number < count && number == Math.Truncate(number);
+        }
+
+        private static bool IsIdentity(SharpQuill.Transform t) => t.Scale == 1f && t.Flip == "N" &&
+            t.Translation.X == 0f && t.Translation.Y == 0f && t.Translation.Z == 0f &&
+            t.Rotation.X == 0f && t.Rotation.Y == 0f && t.Rotation.Z == 0f && Math.Abs(t.Rotation.W) == 1f;
+
+        private static bool PotentiallyVisible(JObject source, bool animated)
+        {
+            if ((bool?)source["Visible"] ?? true) return true;
+            if (!animated || !(source["Animation"]?["Keys"]?["Visibility"] is JArray keys)) return false;
+            // A default channel is not evidence that a statically hidden branch
+            // becomes visible. Quill omits those paint branches from export.
+            bool defaultChannel = keys.Count == 1 && (double?)keys[0]["Time"] == 0 &&
+                (string)keys[0]["Interpolation"] == "None" && (bool?)keys[0]["Value"] == true;
+            return !defaultChannel && keys.Any(x => (bool?)x["Value"] == true);
+        }
+
+        private sealed class ProjectMapping
+        {
+            internal readonly string DefaultPath;
+            internal readonly ImmAuthoringOperationOptions Options;
+            internal int DefaultMatches;
+            internal ProjectMapping(string path, ImmAuthoringOperationOptions options)
+            { DefaultPath = (path ?? "").Replace('\\', '/').Trim('/'); Options = options; }
+        }
+
+        private static bool IsMappedType(string type, bool includeProjectContent) =>
+            type == "Group" || type == "Paint" || (includeProjectContent && (type == "Viewpoint" || type == "Picture" || type == "Sound"));
+
+        private static bool TryPictureType(JToken type, out ExportPictureType projection)
+        {
+            switch (((string)type ?? "").ToLowerInvariant())
+            {
+                case "2d": case "twod": projection = ExportPictureType.Image2D; return true;
+                case "360_equirect_mono": case "360 equirectangular mono":
+                    projection = ExportPictureType.Image360EquirectMono; return true;
+                case "360_equirect_stereo": case "360 equirectangular stereo":
+                    projection = ExportPictureType.Image360EquirectStereo; return true;
+                default: projection = default; return false;
+            }
+        }
+
+        private static void MapChildren(ImmAuthoringDocument document, LayerGroup group, JObject source, long parentId,
+            string path, bool visible, QBinReader reader, bool animated, ProjectMapping projectMapping)
+        {
+            var layers = group.Children.Where(x => x is LayerGroup || x is LayerPaint ||
+                (projectMapping != null && (x is LayerViewpoint || x is LayerPicture || x is LayerSound))).ToArray();
+            var declarations = ((JArray)source["Implementation"]["Children"]).OfType<JObject>()
+                .Where(x => IsMappedType((string)x["Type"], projectMapping != null)).ToArray();
+            if (layers.Length != declarations.Length) throw new InvalidDataException($"Parsed hierarchy differs at {path}.");
+            for (int i = 0; i < layers.Length; i++)
+                MapLayer(document, layers[i], declarations[i], parentId, path, visible, reader, animated, projectMapping);
+        }
+
+        private static void MapLayer(ImmAuthoringDocument document, Layer layer, JObject source, long parentId,
+            string parentPath, bool parentVisible, QBinReader reader, bool animated, ProjectMapping projectMapping)
+        {
+            string path = $"{parentPath}/{layer.Name}";
+            projectMapping?.Options.CancellationToken.ThrowIfCancellationRequested();
+            bool visible = parentVisible && PotentiallyVisible(source, animated);
+            if (layer is LayerViewpoint excluded && !excluded.Exporting) return;
+            if ((layer is LayerPaint || layer is LayerPicture) && !visible) return;
+            if (layer is LayerPicture && !TryPictureType(source["Implementation"]?["Type"], out _)) return;
+            var properties = ImmAuthoringLayerProperties.Default(layer.Name);
+            properties.Visible = layer.Visible;
+            properties.Opacity = layer.Opacity;
+            properties.Transform = Transform(layer.Transform);
+            properties.Pivot = Transform(layer.Pivot);
+            if (animated)
+            {
+                properties.IsTimeline = layer.Animation.Timeline;
+                properties.DurationTicks = ExactNonNegativeInteger(layer.Animation.Duration, path);
+                properties.MaxRepeatCount = checked((uint)ExactNonNegativeInteger(layer.Animation.MaxRepeatCount, path));
+                if (layer.Animation.StartOffset != 0 && !layer.Animation.Keys.Offset.Any(x => x.Value == layer.Animation.StartOffset))
+                    throw new NotSupportedException($"StartOffset without a matching offset key is unsupported at {path}.");
+            }
+            if (layer is LayerGroup group)
+            {
+                long groupId = Require(document.CreateGroupLayer(parentId, properties), path);
+                if (animated) MapAnimation(document, groupId, layer.Animation.Keys, source, path);
+                MapChildren(document, group, source, groupId, path, visible, reader, animated, projectMapping);
+                return;
+            }
+            if (layer is LayerViewpoint viewpoint)
+            {
+                if (!IsIdentity(layer.Pivot) || layer.Opacity != 1 || properties.IsTimeline || properties.DurationTicks != 0 || properties.MaxRepeatCount != 0)
+                    throw new NotSupportedException($"Nondefault viewpoint pivot/opacity/timeline properties need shared exporter support at {path}.");
+                if (viewpoint.TypeStr != "FloorLevel" && viewpoint.TypeStr != "EyeLevel")
+                    throw new NotSupportedException($"Unknown viewpoint tracking level {viewpoint.TypeStr} at {path}.");
+                properties.Visible = true; // Viewpoint Visible controls the source gizmo; Exporting controls inclusion.
+                properties.SpawnAreaFloorLevel = viewpoint.TypeStr == "FloorLevel";
+                properties.SpawnAreaVolume = ExportSpawnAreaVolume.Sphere;
+                properties.SpawnAreaVolumeOffset = new UnityEngine.Vector3(viewpoint.Sphere.X, viewpoint.Sphere.Y, viewpoint.Sphere.Z);
+                properties.SpawnAreaVolumeExtent = new UnityEngine.Vector3(viewpoint.Sphere.W, viewpoint.Sphere.W, viewpoint.Sphere.W);
+                properties.SpawnAreaAllowTranslationX = viewpoint.AllowTranslationX;
+                properties.SpawnAreaAllowTranslationY = viewpoint.AllowTranslationY;
+                properties.SpawnAreaAllowTranslationZ = viewpoint.AllowTranslationZ;
+                properties.SpawnAreaPreview = ReadViewpointPreview(reader, viewpoint.DataFileOffset, path);
+                properties.SpawnAreaIsDefault = path.Trim('/') == projectMapping.DefaultPath;
+                if (properties.SpawnAreaIsDefault) projectMapping.DefaultMatches++;
+                long viewpointId = Require(document.CreateSpawnAreaLayer(parentId, properties), path);
+                MapAnimation(document, viewpointId, layer.Animation.Keys, source, path);
+                return;
+            }
+            if (layer is LayerPicture picture)
+            {
+                if (!TryPictureType(source["Implementation"]?["Type"], out var pictureType))
+                    throw new NotSupportedException($"Unsupported picture projection at {path}.");
+                properties.PictureType = pictureType;
+                properties.PictureViewerLocked = picture.ViewerLocked;
+                properties.PictureImage = ReadQbinImage(reader, picture.DataFileOffset, path, required: true);
+                long pictureId = Require(document.CreatePictureLayer(parentId, properties), path);
+                MapAnimation(document, pictureId, layer.Animation.Keys, source, path);
+                return;
+            }
+            if (layer is LayerSound sound)
+            {
+                properties.Sound = SoundSettings((JObject)source["Implementation"], path);
+                properties.SoundAudio = ReadQbinSound(reader, sound.DataFileOffset, path);
+                long soundId = Require(document.CreateSoundLayer(parentId, properties), path);
+                MapAnimation(document, soundId, layer.Animation.Keys, source, path);
+                return;
+            }
+            var paint = (LayerPaint)layer;
+            properties.PaintMaxRepeatCount = checked((uint)paint.MaxRepeatCount);
+            long paintId = Require(document.CreatePaintLayer(parentId, properties), path);
+            if (animated) MapAnimation(document, paintId, layer.Animation.Keys, source, path);
+            var drawingIds = new List<long>();
+            foreach (var drawing in paint.Drawings)
+            {
+                if (drawing.DataFileOffset < 4 || drawing.DataFileOffset > reader.BaseStream.Length - 4)
+                    throw new InvalidDataException($"Drawing offset is outside qbin at {path}.");
+                reader.BaseStream.Position = drawing.DataFileOffset;
+                DrawingData data = reader.ReadDrawingData(rejectUnknownBrushes: true);
+                long drawingId = Require(document.CreateDrawing(paintId), path);
+                drawingIds.Add(drawingId);
+                foreach (Stroke stroke in data.Strokes)
+                {
+                    if (stroke.Vertices.Count > 8192)
+                        throw new NotSupportedException($"Stroke {stroke.Id} at {path} exceeds the IMM writer's 8192-point limit.");
+                    var points = new PaintPoint[stroke.Vertices.Count];
+                    for (int i = 0; i < points.Length; i++)
+                    {
+                        Vertex vertex = stroke.Vertices[i];
+                        points[i] = new PaintPoint
+                        {
+                            Position = Vector(vertex.Position), Normal = Vector(vertex.Normal), Direction = Vector(vertex.Tangent),
+                            Color = new UnityEngine.Color(vertex.Color.R, vertex.Color.G, vertex.Color.B, 1f),
+                            Alpha = vertex.Opacity, Width = vertex.Width
+                        };
+                    }
+                    Require(document.CreateStroke(drawingId, Brush(stroke.BrushType),
+                        stroke.DisableRotationalOpacity ? VisibilityType.Always : VisibilityType.FadePow2, points), path);
+                }
+            }
+            foreach (int frame in paint.Frames)
+            {
+                if (frame < 0 || frame >= drawingIds.Count)
+                    throw new InvalidDataException($"Frame references an invalid drawing at {path}.");
+                Require(document.AppendFrame(paintId, drawingIds[frame]), path);
+            }
+        }
+
+        private static long ExactNonNegativeInteger(double value, string path)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0 || value != Math.Truncate(value))
+                throw new InvalidDataException($"Expected nonnegative integer timing at {path}.");
+            return checked((long)value);
+        }
+
+        private static ExportSoundProperties SoundSettings(JObject source, string path)
+        {
+            if (source == null) throw new InvalidDataException($"Missing sound settings at {path}.");
+            string type = (string)source["Type"], attenuation = (string)source["Attenuation"]?["Mode"];
+            if ((type != "Flat" && type != "Positional") ||
+                (attenuation != "None" && attenuation != "Linear" && attenuation != "Logarithmic"))
+                throw new NotSupportedException($"Unsupported sound spatial type or attenuation at {path}.");
+            var modifiers = source["Modifiers"] as JArray;
+            if (modifiers == null || modifiers.Count != 1 ||
+                ((string)modifiers[0]["Type"] != "None" && (string)modifiers[0]["Type"] != "Cone"))
+                throw new NotSupportedException($"Expected one None or Cone sound modifier at {path}.");
+            bool cone = (string)modifiers[0]["Type"] == "Cone";
+            return new ExportSoundProperties
+            {
+                SpatialType = type == "Flat" ? ExportSoundSpatialType.Flat : ExportSoundSpatialType.Positional,
+                Gain = (float)source["Gain"], Loop = (bool)source["Loop"] ? 1 : 0,
+                Attenuation = attenuation == "None" ? ExportSoundAttenuationType.None :
+                    attenuation == "Linear" ? ExportSoundAttenuationType.Linear : ExportSoundAttenuationType.Logarithmic,
+                DistanceMin = (float)source["Attenuation"]["Minimum"], DistanceMax = (float)source["Attenuation"]["Maximum"],
+                Modifier = cone ? ExportSoundModifierType.DirectionalCone : ExportSoundModifierType.None,
+                AngleInX = cone ? (float)modifiers[0]["AngleIn"] : 0,
+                AngleBand = cone ? (float)modifiers[0]["AngleBand"] : 0,
+                AttenuationOutside = cone ? (float)modifiers[0]["AttenOut"] : 0
+            };
+        }
+
+        private static ImmAuthoringAudio ReadQbinSound(QBinReader reader, long offset, string path)
+        {
+            if (offset < 4 || offset > reader.BaseStream.Length - 20)
+                throw new InvalidDataException($"Sound offset is outside qbin at {path}.");
+            reader.BaseStream.Position = offset;
+            byte[] header = reader.ReadBytes(20);
+            int channels = header[6];
+            uint rate = BitConverter.ToUInt32(header, 8), frames = BitConverter.ToUInt32(header, 12);
+            if (header[5] != 0 || header[7] != 16 || (channels != 1 && channels != 2) ||
+                rate < 8000 || rate > 192000 || frames == 0)
+                throw new NotSupportedException($"Expected nonempty mono/stereo PCM16 sound at {path}.");
+            long count = (long)frames * channels * 2;
+            if (count > int.MaxValue || count > reader.BaseStream.Length - reader.BaseStream.Position)
+                throw new InvalidDataException($"Truncated or oversized sound samples at {path}.");
+            return Require(ImmAuthoringAudio.CreatePcm16((int)rate, channels, reader.ReadBytes((int)count)), path);
+        }
+
+        private static ImmAuthoringImage ReadViewpointPreview(QBinReader reader, long offset, string path)
+            => ReadQbinImage(reader, offset, path, required: false);
+
+        private static ImmAuthoringImage ReadQbinImage(QBinReader reader, long offset, string path, bool required)
+        {
+            if (offset == 0 && !required) return null;
+            if (offset < 4 || offset > reader.BaseStream.Length - 20)
+                throw new InvalidDataException($"Image offset is outside qbin at {path}.");
+            reader.BaseStream.Position = offset;
+            byte[] header = reader.ReadBytes(20);
+            int channels = header[5] == 6 ? 3 : header[5] == 7 ? 4 : 0;
+            uint width = BitConverter.ToUInt32(header, 8), height = BitConverter.ToUInt32(header, 12);
+            if (channels == 0 || width == 0 || height == 0 || width > int.MaxValue || height > int.MaxValue ||
+                (long)width * height > int.MaxValue / channels)
+                throw new InvalidDataException($"Unsupported image format or dimensions at {path}.");
+            int count = checked((int)((long)width * height * channels));
+            if (count > reader.BaseStream.Length - reader.BaseStream.Position)
+                throw new InvalidDataException($"Truncated image pixels at {path}.");
+            return Require(ImmAuthoringImage.Create((int)width, (int)height, channels,
+                channels == 3 ? ImmAuthoringImageEncoding.Rgb8 : ImmAuthoringImageEncoding.Rgba8, reader.ReadBytes(count)), path);
+        }
+
+        private static bool IsStaticSoundOpacity(JArray values, JObject source) =>
+            values != null && values.Count == 1 && (double?)values[0]["Time"] == 0 &&
+            (double?)values[0]["Value"] == ((double?)source["Opacity"] ?? 1) &&
+            (string)values[0]["Interpolation"] == "None";
+
+        private static bool IsIdentityRootOpacity(JArray values, JObject source) =>
+            values != null && values.Count == 1 && (double?)values[0]["Time"] == 0 &&
+            (double?)values[0]["Value"] == 1 && (string)values[0]["Interpolation"] == "None" &&
+            ((double?)source["Opacity"] ?? 1) == 1;
+
+        private static void MapAnimation(ImmAuthoringDocument document, long layerId, Keyframes keys, JObject source, string path)
+        {
+            var channels = source["Animation"]?["Keys"];
+            if (channels?["Visibility"] != null)
+                foreach (var key in keys.Visibility)
+                    Add(ImmAuthoringAnimationProperty.Visibility, key.Time, ImmAuthoringAnimationValue.FromBool(key.Value), key.Interpolation);
+            if (channels?["Opacity"] != null &&
+                !(layerId == 0 && IsIdentityRootOpacity(channels["Opacity"] as JArray, source)) &&
+                !((string)source["Type"] == "Sound" && IsStaticSoundOpacity(channels["Opacity"] as JArray, source)))
+                foreach (var key in keys.Opacity)
+                    Add(ImmAuthoringAnimationProperty.Opacity, key.Time, ImmAuthoringAnimationValue.FromFloat(key.Value), key.Interpolation);
+            if (channels?["Transform"] != null)
+                foreach (var key in keys.Transform)
+                    Add(ImmAuthoringAnimationProperty.Transform, key.Time, ImmAuthoringAnimationValue.FromTransform(Transform(key.Value)), key.Interpolation);
+            // Inspected Quill exports retain paint's default zero offset even when
+            // the JSON omits that channel. Groups need no implicit offset key.
+            if (channels?["Offset"] != null || (string)source["Type"] == "Paint")
+                foreach (var key in keys.Offset)
+                    Add(ImmAuthoringAnimationProperty.Offset, key.Time, ImmAuthoringAnimationValue.FromUInt(checked((uint)key.Value)), key.Interpolation);
+
+            void Add(ImmAuthoringAnimationProperty property, long time, ImmAuthoringAnimationValue value, Interpolation interpolation)
+            {
+                ImmAuthoringInterpolation mapped;
+                switch (interpolation)
+                {
+                    case Interpolation.None: mapped = ImmAuthoringInterpolation.None; break;
+                    case Interpolation.Linear: mapped = ImmAuthoringInterpolation.Linear; break;
+                    case Interpolation.Smoothstep: mapped = ImmAuthoringInterpolation.Smoothstep; break;
+                    case Interpolation.EaseIn: mapped = ImmAuthoringInterpolation.EaseIn; break;
+                    case Interpolation.EaseOut: mapped = ImmAuthoringInterpolation.EaseOut; break;
+                    default: throw new NotSupportedException($"Unknown interpolation at {path}.");
+                }
+                Require(document.CreateAnimationKey(layerId, property, time, value, mapped), path);
+            }
+        }
+
+        private static BrushSectionType Brush(BrushType brush)
+        {
+            switch (brush)
+            {
+                case BrushType.Ribbon: return BrushSectionType.Segment;
+                case BrushType.Cylinder: return BrushSectionType.Circle;
+                case BrushType.Ellipse: return BrushSectionType.Ellipse;
+                case BrushType.Cube: return BrushSectionType.Square;
+                default: throw new NotSupportedException($"Unsupported brush {brush}.");
+            }
+        }
+
+        private static ImmAuthoringTransform Transform(SharpQuill.Transform t) => new ImmAuthoringTransform
+        {
+            Position = Vector(t.Translation), Rotation = new UnityEngine.Quaternion(t.Rotation.X, t.Rotation.Y, t.Rotation.Z, t.Rotation.W),
+            Scale = t.Scale, Flip = Flip(t.Flip)
+        };
+        private static ImmAuthoringFlip Flip(string flip)
+        {
+            switch (flip)
+            {
+                case "N": return ImmAuthoringFlip.None;
+                case "X": return ImmAuthoringFlip.X;
+                case "Y": return ImmAuthoringFlip.Y;
+                case "Z": return ImmAuthoringFlip.Z;
+                default: throw new InvalidDataException($"Unknown transform flip {flip}.");
+            }
+        }
+        private static UnityEngine.Vector3 Vector(SharpQuill.Vector3 v) => new UnityEngine.Vector3(v.X, v.Y, v.Z);
+        private static T Require<T>(ImmAuthoringResult<T> result, string path)
+        {
+            if (!result.Succeeded) throw new InvalidDataException($"{path}: {result.Message}");
+            return result.Value;
+        }
+        private static void Require(ImmAuthoringResult result, string path)
+        {
+            if (!result.Succeeded) throw new InvalidDataException($"{path}: {result.Message}");
+        }
+        private static void Issue(List<QuillToImmIssue> issues, QuillToImmIssueSeverity severity, string code, string path, string message) =>
+            issues.Add(new QuillToImmIssue(severity, code, path, message));
+    }
+}

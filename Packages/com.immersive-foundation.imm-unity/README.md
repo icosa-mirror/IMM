@@ -2,6 +2,22 @@
 
 Local UPM package for the IMM Unity runtime, editor tools, and samples.
 
+## Convert a Quill project
+
+1. Open **IMM > Convert Quill Project...** outside Play mode.
+2. Choose the project folder containing `Quill.json` and `Quill.qbin`, then an
+   `.imm` output inside this project's `Assets` folder.
+3. Select **Convert and import**. Inspect the reported issues, then use
+   **Select converted asset** to find the imported IMM.
+
+Conversion uses the package's shared Quill converter and native IMM compiler.
+Unsupported content rejects conversion by default; enabling partial conversion
+explicitly permits omissions and labels the result. Replacement is also opt-in.
+Existing output is replaced only after successful conversion, retaining its Unity
+asset GUID. Cancellation is cooperative through the progress dialog. The Editor
+stays occupied during conversion; large unattended batches can use the standalone
+`imm-convert` command instead. Ship native plugins matching the managed package.
+
 ## Experimental URP RenderGraph sample
 
 The repository sample project includes `Assets/Scenes/SampleSceneURP.unity` for
@@ -420,3 +436,20 @@ and timeline changes. It suppresses every non-flat picture type (mono/stereo
 panoramas and cubemaps), regardless of viewer locking. Flat pictures, including
 viewer-locked flat pictures, remain available. It does not edit layer visibility or
 the IMM file. Options require matching native binaries from the same UPM release.
+
+Encoded sound authoring/import supports WAV, Ogg Vorbis and Ogg Opus assets.
+The reader exposes authoring-indexed sound metadata and copied encoded bytes.
+Import/export preserves these bytes, spatial settings and legacy duration/playing
+fields. Encoded frame count is -1; Opus sample rate is its 48 kHz decode rate.
+Container validation does not establish packet decoding or audible playback.
+See content pipeline section 6.25 for validation scope and remaining source mapping.
+
+On Windows, the required stroke-reader package owns shared decoder DLLs including
+`opus.dll`; this package owns `opusenc.dll` and `vorbisenc.dll`. The native loader
+preloads shared dependencies from the reader package before loading encoders.
+
+Offline spawn compilation uses `ImmExporter_CreateSpawnAreaLayerWithProperties`
+to retain pivot and common opacity/timeline/duration/repeat properties. Hidden
+startup is represented by a false time-zero visibility key, replaceable by explicit
+keys at zero. Reader base visibility can remain true with that key present. The
+original native constructor retains its prior defaults (content pipeline 6.42).

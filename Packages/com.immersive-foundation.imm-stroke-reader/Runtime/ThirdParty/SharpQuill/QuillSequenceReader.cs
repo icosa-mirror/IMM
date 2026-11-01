@@ -18,6 +18,28 @@ namespace SharpQuill
     /// </summary>
     public static Sequence Read(string path)
     {
+      Sequence seq = ReadMetadata(path);
+      if (seq == null)
+        return null;
+
+      using (Stream stream = File.OpenRead(Path.Combine(path, "Quill.qbin")))
+      {
+        QBinReader qbinReader = new QBinReader(stream);
+        seq.LastStrokeId = qbinReader.ReadUInt32();
+        ReadLayerData(seq.RootLayer, qbinReader);
+      }
+      return seq;
+    }
+
+    /// <summary>
+    /// Reads the project hierarchy and attached-data declarations without opening
+    /// Quill.qbin. Drawing, picture, sound and viewpoint preview payloads remain unloaded. Like Read,
+    /// this requires both project files and returns null when JSON parsing fails.
+    /// Unsupported layer types are still skipped; callers needing strict coverage
+    /// must inspect the source JSON before conversion.
+    /// </summary>
+    public static Sequence ReadMetadata(string path)
+    {
       if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
         return null;
 
@@ -42,17 +64,6 @@ namespace SharpQuill
       catch(Exception e)
       {
         Console.WriteLine("Error during the parsing of the Quill.json document: {0}", e.Message);
-      }
-
-      if (seq == null)
-        return null;
-
-      // Now that we have loaded the scene hierarchy, read the actual attached data from the qbin.
-      using (Stream stream = File.OpenRead(paintDataFilename))
-      {
-        QBinReader qbinReader = new QBinReader(stream);
-        seq.LastStrokeId = qbinReader.ReadUInt32();
-        ReadLayerData(seq.RootLayer, qbinReader);
       }
 
       return seq;
@@ -136,6 +147,8 @@ namespace SharpQuill
       string value = v.Type == JTokenType.String ? v.ToObject<string>() : v.ToString();
       if (string.IsNullOrEmpty(value))
         return def;
+      if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        value = value.Substring(2);
 
       long parsed;
       return long.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out parsed) ? parsed : def;
@@ -472,7 +485,11 @@ namespace SharpQuill
             lv.AllowTranslationZ = ParseBool(impl["AllowTranslationZ"], lv.AllowTranslationZ);
             lv.Exporting = ParseBool(impl["Exporting"], lv.Exporting);
             lv.ShowingVolume = ParseBool(impl["ShowingVolume"], lv.ShowingVolume);
-            lv.TypeStr = impl["TypeStr"]?.ToObject<string>() ?? lv.TypeStr;
+            lv.DataFileOffset = impl["DataFileOffset"] == null || impl["DataFileOffset"].Type == JTokenType.Null
+              ? 0 : ParseHexLong(impl["DataFileOffset"], -1);
+            // Legacy colour-only viewpoints export at eye level (Fishgym pair).
+            // Versioned viewpoints retain the newer floor-level default.
+            lv.TypeStr = impl["TypeStr"]?.ToObject<string>() ?? (impl["Version"] == null ? "EyeLevel" : lv.TypeStr);
             break;
           }
         case LayerType.Camera:
@@ -587,6 +604,25 @@ namespace SharpQuill
           qbinReader.BaseStream.Seek(picture.DataFileOffset, SeekOrigin.Begin);
           picture.Data = qbinReader.ReadPictureData();
         }
+      }
+      else if (layer is LayerViewpoint viewpoint)
+      {
+        viewpoint.PreviewData = null;
+        long offset = viewpoint.DataFileOffset;
+        if (offset == 0) return;
+        if (offset < 8 || offset > qbinReader.BaseStream.Length - 20)
+          throw new InvalidDataException("Viewpoint preview offset is outside Quill.qbin.");
+        qbinReader.BaseStream.Position = offset + 5;
+        byte format = qbinReader.ReadByte();
+        qbinReader.BaseStream.Position = offset + 8;
+        uint width = qbinReader.ReadUInt32(), height = qbinReader.ReadUInt32();
+        int channels = format == 7 ? 4 : 3;
+        if ((format != 6 && format != 7) || width == 0 || height == 0 || width > int.MaxValue || height > int.MaxValue ||
+            (long)width * height > int.MaxValue / channels ||
+            (long)width * height * channels > qbinReader.BaseStream.Length - offset - 20)
+          throw new InvalidDataException("Viewpoint preview dimensions, format or pixels are invalid.");
+        qbinReader.BaseStream.Position = offset;
+        viewpoint.PreviewData = qbinReader.ReadPictureData();
       }
       else if (layer.Type == LayerType.Sound)
       {

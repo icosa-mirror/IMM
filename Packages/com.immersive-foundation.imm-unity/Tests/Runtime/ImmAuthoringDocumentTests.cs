@@ -16,6 +16,44 @@ namespace ImmPlayer.Tests
         private const long MaxRetainedManagedBytes = 8L * 1024L * 1024L;
         private const long MaxRetainedWorkingSetBytes = 64L * 1024L * 1024L;
         [Test]
+        public void TransformReflectionsAreValidatedAndCompared()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                var properties = ImmAuthoringLayerProperties.Default("Mirrored");
+                properties.Transform.Flip = ImmAuthoringFlip.X;
+                properties.Pivot.Flip = ImmAuthoringFlip.Z;
+                long layer = Require(document.CreateGroupLayer(0, properties));
+                ImmAuthoringSnapshot before = Require(document.CreateSnapshot());
+                Assert.That(before.Layers[0].Properties.Transform.Flip, Is.EqualTo(ImmAuthoringFlip.X));
+                Assert.That(before.Layers[0].Properties.Pivot.Flip, Is.EqualTo(ImmAuthoringFlip.Z));
+                properties.Transform.Flip = ImmAuthoringFlip.None;
+                Require(document.SetLayerProperties(layer, properties));
+                var comparison = ImmAuthoringStructuralComparer.Compare(before, Require(document.CreateSnapshot()));
+                Assert.That(comparison.Equivalent, Is.False);
+                Assert.That(comparison.Differences, Has.Some.Property("Path").EqualTo("layers[0].transform.flip"));
+                properties.Transform.Flip = (ImmAuthoringFlip)4;
+                Assert.That(document.SetLayerProperties(layer, properties).Succeeded, Is.False);
+            }
+        }
+
+        [Test]
+        public void ZeroWidthTipsAreSupportedWithoutAllowingDegenerateStrokes()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                long layer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
+                long drawing = Require(document.CreateDrawing(layer));
+                PaintPoint tip = Point(0f);
+                tip.Width = 0f;
+                Require(document.CreateStroke(drawing, BrushSectionType.Circle, VisibilityType.Always, new[] { tip, Point(1f), tip }));
+                Assert.That(document.CreateStroke(drawing, BrushSectionType.Circle, VisibilityType.Always,
+                    new[] { tip, tip }).Succeeded, Is.False);
+                Assert.That(Require(document.CreateSnapshot()).Layers[0].Drawings[0].Strokes[0].Points[0].Width, Is.Zero);
+            }
+        }
+
+        [Test]
         public void LayerHierarchyUsesStableIdsAndRejectsCycles()
         {
             using (ImmAuthoringDocument document = CreateDocument())
@@ -167,7 +205,7 @@ namespace ImmPlayer.Tests
                 long validLayer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
                 long drawing = Require(document.CreateDrawing(validLayer));
                 PaintPoint invalidPoint = Point(0f);
-                invalidPoint.Width = 0f;
+                invalidPoint.Width = -0.01f;
                 ImmAuthoringResult<long> stroke = document.CreateStroke(
                     drawing,
                     BrushSectionType.Circle,

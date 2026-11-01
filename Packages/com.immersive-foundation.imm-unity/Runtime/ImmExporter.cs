@@ -32,6 +32,31 @@ namespace ImmPlayer.Exporter
         Always = 1
     }
 
+    public enum ExportSoundSpatialType { Flat = 0, Ambisonic = 1, Positional = 2 }
+    public enum ExportSoundAttenuationType { None = 0, Linear = 1, Logarithmic = 2 }
+    public enum ExportSoundModifierType { None = 0, DirectionalCone = 1, DirectionalFrustum = 2 }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ExportSoundProperties
+    {
+        public ExportSoundSpatialType SpatialType;
+        public float Gain;
+        public int Loop;
+        public ExportSoundAttenuationType Attenuation;
+        public float DistanceMin, DistanceMax;
+        public ExportSoundModifierType Modifier;
+        public float AngleInX, AngleInY, AngleBand, AttenuationOutside;
+    }
+
+    public enum ExportPictureType
+    {
+        Image2D = 0,
+        Image360EquirectMono = 1,
+        Image360EquirectStereo = 2,
+        Image360CubemapCrossMono = 3,
+        Image360CubemapVstripMono = 4
+    }
+
     public enum ExportSpawnAreaVolume
     {
         Sphere = 0,
@@ -646,6 +671,22 @@ namespace ImmPlayer.Exporter
             long durationTicks,
             uint maxRepeatCount);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SetRootLayerProperties(
+            IntPtr sequenceHandle, int visible, float opacity,
+            ref TransformNative transform, ref TransformNative pivot,
+            int transformFlip, int pivotFlip, int isTimeline, long durationTicks, uint maxRepeatCount);
+
+        /// <summary>Borrow the sequence-owned root handle for offline key authoring. Do not destroy it separately.</summary>
+        [DllImport(DllName)]
+        public static extern IntPtr ImmExporter_GetRootLayer(IntPtr sequenceHandle);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SpawnAreaSetPreview(IntPtr layerHandle, int width, int height, int channels,
+            int encoding, int version, [In] byte[] bytes, ulong size);
+
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr ImmExporter_CreateGroupLayer(
             IntPtr sequenceHandle,
@@ -660,12 +701,47 @@ namespace ImmPlayer.Exporter
             uint maxRepeatCount);
 
         [DllImport(DllName, CharSet = CharSet.Ansi)]
+        public static extern IntPtr ImmExporter_CreatePictureLayer(
+            IntPtr sequenceHandle, IntPtr parentLayerHandle, string name, int visible, float opacity,
+            ref TransformNative transform, ref TransformNative pivot, int isTimeline, long durationTicks,
+            uint maxRepeatCount, int pictureType, int viewerLocked);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_PictureSetImage(IntPtr layerHandle, int width, int height, int channels,
+            int encoding, [In] byte[] bytes, ulong size);
+
+        [DllImport(DllName, CharSet = CharSet.Ansi)]
+        public static extern IntPtr ImmExporter_CreateSoundLayer(IntPtr sequenceHandle, IntPtr parentLayerHandle,
+            string name, int visible, float opacity, ref TransformNative transform, ref TransformNative pivot,
+            int isTimeline, long durationTicks, uint maxRepeatCount, ref ExportSoundProperties properties);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SoundSetPcm16(IntPtr layerHandle, int sampleRate, int channels, [In] byte[] bytes, ulong size);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SoundSetEncoded(IntPtr layerHandle, int format, int sampleRate, int channels, [In] byte[] bytes, ulong size);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SoundSetSourceMetadata(IntPtr layerHandle, float duration, int playing);
+
+        [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern IntPtr ImmExporter_CreateSpawnAreaLayer(
             IntPtr sequenceHandle,
             IntPtr parentLayerHandle,
             string name,
             ref TransformNative transform,
             int floorLevel);
+
+        /// <summary>Full offline common properties. Hidden startup visibility is a time-zero key, replaceable by explicit keys. The original constructor retains its defaults.</summary>
+        [DllImport(DllName, CharSet = CharSet.Ansi)]
+        public static extern IntPtr ImmExporter_CreateSpawnAreaLayerWithProperties(
+            IntPtr sequenceHandle, IntPtr parentLayerHandle, string name,
+            int visible, float opacity, ref TransformNative transform, ref TransformNative pivot,
+            int isTimeline, long durationTicks, uint maxRepeatCount, int floorLevel);
 
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -696,6 +772,18 @@ namespace ImmPlayer.Exporter
             float floatValue,
             double doubleValue,
             ref TransformNative transformValue);
+
+        // Additive reflection APIs leave the legacy 32-byte transform ABI unchanged.
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_LayerSetTransformFlips(IntPtr layerHandle, int transformFlip, int pivotFlip);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_LayerAddAnimationKeyWithFlip(
+            IntPtr layerHandle, int property, long timeTicks, int interpolation,
+            int boolValue, uint intValue, float floatValue, double doubleValue,
+            ref TransformNative transformValue, int transformFlip);
 
         [DllImport(DllName)]
         public static extern IntPtr ImmExporter_CreateDrawing(IntPtr paintLayerHandle);

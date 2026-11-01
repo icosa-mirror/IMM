@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ImmPlayer.Exporter;
 using UnityEngine;
 
@@ -51,6 +52,9 @@ namespace ImmPlayer.Authoring
             Equal(differences, "document.sequenceType", expected.SequenceType, actual.SequenceType);
             Equal(differences, "document.frameRate", expected.FrameRate, actual.FrameRate);
             Near(differences, "document.backgroundColor", expected.BackgroundColor, actual.BackgroundColor, tolerance);
+            CompareLayerProperties(differences, "document.root",
+                EffectiveRootProperties(expected), EffectiveRootProperties(actual), tolerance);
+            CompareAnimationKeys(differences, "document.root", ComparableRootKeys(expected), ComparableRootKeys(actual), tolerance);
             if (expected.Layers.Count != actual.Layers.Count)
             {
                 Difference(differences, "document.layers", $"Expected {expected.Layers.Count}, actual {actual.Layers.Count}.");
@@ -72,6 +76,33 @@ namespace ImmPlayer.Authoring
                 CompareDrawings(differences, path, expectedLayer, actualLayer, tolerance);
             }
             return new ImmAuthoringStructuralComparison(differences);
+        }
+
+        private static ImmAuthoringLayerProperties EffectiveRootProperties(ImmAuthoringSnapshot snapshot)
+        {
+            var properties = snapshot.RootProperties ?? ImmAuthoringLayerProperties.Default("Root");
+            int count = 0;
+            ImmAuthoringAnimationKeySnapshot visibility = null;
+            foreach (var key in snapshot.RootAnimationKeys)
+                if (key.Property == ImmAuthoringAnimationProperty.Visibility) { count++; visibility = key; }
+            if (count == 1 && visibility.TimeTicks == 0 && visibility.Interpolation == ImmAuthoringInterpolation.None)
+                properties.Visible = visibility.Value.BoolValue;
+            else if (count != 0)
+                properties.Visible = true; // The file has no independent base visibility field for a keyed root.
+            return properties;
+        }
+
+        private static IReadOnlyList<ImmAuthoringAnimationKeySnapshot> ComparableRootKeys(ImmAuthoringSnapshot snapshot)
+        {
+            int visibilityCount = 0;
+            foreach (var key in snapshot.RootAnimationKeys)
+                if (key.Property == ImmAuthoringAnimationProperty.Visibility) visibilityCount++;
+            var keys = new List<ImmAuthoringAnimationKeySnapshot>();
+            foreach (var key in snapshot.RootAnimationKeys)
+                if (!(visibilityCount == 1 && key.Property == ImmAuthoringAnimationProperty.Visibility &&
+                    key.TimeTicks == 0 && key.Interpolation == ImmAuthoringInterpolation.None))
+                    keys.Add(key);
+            return keys;
         }
 
         private static void CompareLayerProperties(
@@ -102,6 +133,38 @@ namespace ImmPlayer.Authoring
             Equal(differences, $"{path}.spawnAreaAllowTranslationX", expected.SpawnAreaAllowTranslationX, actual.SpawnAreaAllowTranslationX);
             Equal(differences, $"{path}.spawnAreaAllowTranslationY", expected.SpawnAreaAllowTranslationY, actual.SpawnAreaAllowTranslationY);
             Equal(differences, $"{path}.spawnAreaAllowTranslationZ", expected.SpawnAreaAllowTranslationZ, actual.SpawnAreaAllowTranslationZ);
+            CompareImage(differences, $"{path}.spawnAreaPreview", expected.SpawnAreaPreview, actual.SpawnAreaPreview);
+            Equal(differences, $"{path}.pictureType", expected.PictureType, actual.PictureType);
+            Equal(differences, $"{path}.pictureViewerLocked", expected.PictureViewerLocked, actual.PictureViewerLocked);
+            CompareImage(differences, $"{path}.pictureImage", expected.PictureImage, actual.PictureImage);
+            if (expected.SoundAudio != null || actual.SoundAudio != null)
+            {
+                Equal(differences, $"{path}.sound", expected.Sound, actual.Sound);
+                Equal(differences, $"{path}.soundSourceDuration", expected.SoundSourceDuration, actual.SoundSourceDuration);
+                Equal(differences, $"{path}.soundInitiallyPlaying", expected.SoundInitiallyPlaying, actual.SoundInitiallyPlaying);
+                var a = expected.SoundAudio;
+                var b = actual.SoundAudio;
+                if (a == null || b == null)
+                {
+                    if (a != b) Difference(differences, $"{path}.soundAudio", "Audio presence differs.");
+                }
+                else if (a.Encoding != b.Encoding || a.SampleRate != b.SampleRate || a.Channels != b.Channels || !a.CopyData().SequenceEqual(b.CopyData()))
+                    Difference(differences, $"{path}.soundAudio", "Audio format or sample bytes differ.");
+            }
+        }
+
+        private static void CompareImage(List<ImmAuthoringStructuralDifference> differences, string path,
+            ImmAuthoringImage expected, ImmAuthoringImage actual)
+        {
+            if (expected == null || actual == null)
+            {
+                if (expected != actual)
+                    Difference(differences, path, "Image presence differs.");
+            }
+            else if (expected.Width != actual.Width || expected.Height != actual.Height ||
+                expected.Channels != actual.Channels || expected.Encoding != actual.Encoding ||
+                expected.EncodedBgr != actual.EncodedBgr || !expected.CopyData().SequenceEqual(actual.CopyData()))
+                Difference(differences, path, "Image dimensions, encoding, color order or bytes differ.");
         }
 
         private static void CompareAnimationKeys(
@@ -235,6 +298,8 @@ namespace ImmPlayer.Authoring
             if (1f - rotationDot > tolerance)
                 Difference(differences, $"{path}.rotation", $"Quaternion dot was {rotationDot}.");
             Near(differences, $"{path}.scale", expected.Scale, actual.Scale, tolerance);
+            if (expected.Flip != actual.Flip)
+                Difference(differences, $"{path}.flip", $"Expected {expected.Flip}, got {actual.Flip}.");
         }
 
         private static Dictionary<long, int> IndexLayers(ImmAuthoringSnapshot snapshot)

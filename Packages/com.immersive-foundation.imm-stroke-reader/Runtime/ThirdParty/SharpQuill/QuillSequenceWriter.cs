@@ -19,6 +19,12 @@ namespace SharpQuill
       if (string.IsNullOrEmpty(path))
         throw new InvalidOperationException();
 
+      if (seq == null || seq.RootLayer == null)
+        throw new InvalidDataException("A Quill project requires a root layer.");
+      if (seq.Gallery != null && seq.Gallery.Pictures.Count != 0)
+        throw new NotSupportedException("Writing Gallery pictures is not supported.");
+      ValidateLayerData(seq.RootLayer);
+
       if (!Directory.Exists(path))
         Directory.CreateDirectory(path);
 
@@ -31,7 +37,7 @@ namespace SharpQuill
       {
         QBinWriter qbinWriter = new QBinWriter(qbinStream);
         WriteLastStrokeId(seq, qbinWriter);
-        WriteDrawingData(seq.RootLayer, qbinWriter);
+        WriteLayerData(seq.RootLayer, qbinWriter);
         qbinWriter.Flush();
       }
 
@@ -134,12 +140,16 @@ namespace SharpQuill
         case LayerType.Camera:
           return WriteLayerImplementationCamera(layer as LayerCamera);
 
-        case LayerType.Model:
-        case LayerType.Sound:
         case LayerType.Picture:
+          return WriteLayerImplementationPicture(layer as LayerPicture);
+
+        case LayerType.Sound:
+          return WriteLayerImplementationSound(layer as LayerSound);
+
+        case LayerType.Model:
         case LayerType.Unknown:
         default:
-          return null;
+          throw new NotSupportedException($"Writing layer type {layer.Type} is not supported.");
       }
     }
 
@@ -151,7 +161,9 @@ namespace SharpQuill
       return layer.Type == LayerType.Group ||
              layer.Type == LayerType.Paint ||
              layer.Type == LayerType.Camera ||
-             layer.Type == LayerType.Viewpoint;
+             layer.Type == LayerType.Viewpoint ||
+             layer.Type == LayerType.Picture ||
+             layer.Type == LayerType.Sound;
     }
 
     private static JObject WriteLayerImplementationGroup(LayerGroup layer)
@@ -161,8 +173,7 @@ namespace SharpQuill
 
       foreach (Layer child in layer.Children)
       {
-        if (IsSupported(child))
-          jChildren.Add(WriteLayer(child));
+        jChildren.Add(WriteLayer(child));
       }
 
       jLayer.Add(new JProperty("Children", jChildren));
@@ -192,6 +203,86 @@ namespace SharpQuill
       return jLayer;
     }
 
+    private static string WritePictureType(PictureType type)
+    {
+      switch (type)
+      {
+        case PictureType.TwoD: return "2D";
+        case PictureType.ThreeSixty_Equirect_Mono: return "360_Equirect_Mono";
+        case PictureType.ThreeSixty_Equirect_Stereo: return "360_Equirect_Stereo";
+        default: throw new NotSupportedException($"Writing picture projection {type} is not supported.");
+      }
+    }
+
+    private static JObject WriteLayerImplementationPicture(LayerPicture layer)
+    {
+      return new JObject
+      {
+        ["Type"] = WritePictureType(layer.PictureType),
+        ["ViewerLocked"] = layer.ViewerLocked,
+        ["DataFileOffset"] = layer.DataFileOffset.ToString("X"),
+        ["ImportFilePath"] = layer.ImportFilePath ?? ""
+      };
+    }
+
+    private static JObject WriteLayerImplementationSound(LayerSound layer)
+    {
+      var modifier = layer.Modifiers[0];
+      var settings = new JObject { ["Type"] = modifier.Type.ToString() };
+      if (modifier.Type == SoundModifierType.Cone)
+      {
+        settings["AngleIn"] = modifier.AngleIn;
+        settings["AngleBand"] = modifier.AngleBand;
+        settings["AttenOut"] = modifier.AttenOut;
+      }
+      return new JObject
+      {
+        ["DataFileOffset"] = layer.DataFileOffset.ToString("X"),
+        ["ImportFilePath"] = layer.ImportFilePath ?? "",
+        ["Type"] = layer.SoundType.ToString(), ["Gain"] = layer.Gain, ["Loop"] = layer.Loop,
+        ["Attenuation"] = new JObject { ["Mode"] = layer.Attenuation.Mode.ToString(), ["Minimum"] = layer.Attenuation.Minimum, ["Maximum"] = layer.Attenuation.Maximum },
+        ["Modifiers"] = new JArray(settings)
+      };
+    }
+
+    private static bool IsNonnegativeFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0;
+
+    private static void ValidateSound(LayerSound layer)
+    {
+      if (!Enum.IsDefined(typeof(SoundType), layer.SoundType) || layer.Attenuation == null ||
+          !Enum.IsDefined(typeof(SoundAttenuationMode), layer.Attenuation.Mode) ||
+          layer.Modifiers == null || layer.Modifiers.Count != 1 || layer.Modifiers[0] == null ||
+          !Enum.IsDefined(typeof(SoundModifierType), layer.Modifiers[0].Type))
+        throw new NotSupportedException("Sound spatial type, attenuation and one None/Cone modifier are required.");
+      var modifier = layer.Modifiers[0];
+      if (!IsNonnegativeFinite(layer.Gain) || !IsNonnegativeFinite(layer.Attenuation.Minimum) ||
+          !IsNonnegativeFinite(layer.Attenuation.Maximum) || layer.Attenuation.Maximum < layer.Attenuation.Minimum ||
+          !IsNonnegativeFinite(modifier.AngleIn) || !IsNonnegativeFinite(modifier.AngleBand) || !IsNonnegativeFinite(modifier.AttenOut) ||
+          (modifier.Type == SoundModifierType.Cone && layer.SoundType != SoundType.Positional) ||
+          (modifier.Type == SoundModifierType.None && (modifier.AngleIn != 0 || modifier.AngleBand != 0 || modifier.AttenOut != 0)))
+        throw new InvalidDataException("Sound gain, attenuation or modifier values are invalid.");
+      QBinWriter.InspectSoundData(layer.Data);
+    }
+
+    private static void ValidateLayerData(Layer layer)
+    {
+      if (!IsSupported(layer))
+        throw new NotSupportedException($"Writing layer type {layer?.Type.ToString() ?? "null"} is not supported.");
+      if (layer is LayerGroup group)
+      {
+        foreach (Layer child in group.Children) ValidateLayerData(child);
+      }
+      else if (layer is LayerPicture picture)
+      {
+        WritePictureType(picture.PictureType);
+        QBinWriter.ValidatePictureData(picture.Data);
+      }
+      else if (layer is LayerSound sound)
+        ValidateSound(sound);
+      else if (layer is LayerViewpoint viewpoint && viewpoint.PreviewData != null)
+        QBinWriter.ValidatePictureData(viewpoint.PreviewData);
+    }
+
     private static JObject WriteLayerImplementationCamera(LayerCamera layer)
     {
       JObject jLayer = new JObject();
@@ -211,6 +302,8 @@ namespace SharpQuill
       jLayer.Add(new JProperty("Exporting", layer.Exporting));
       jLayer.Add(new JProperty("ShowingVolume", layer.ShowingVolume));
       jLayer.Add(new JProperty("TypeStr", layer.TypeStr));
+      if (layer.PreviewData != null)
+        jLayer.Add(new JProperty("DataFileOffset", layer.DataFileOffset.ToString("X")));
       return jLayer;
     }
 
@@ -367,17 +460,36 @@ namespace SharpQuill
     }
 
     /// <summary>
-    /// Recursive function to write the paint data to file and update the layers offsets.
+    /// Recursive function to write paint/picture/sound/preview data and update the layers offsets.
     /// This is called with the root layer and will write all the data for the sequence.
     /// </summary>
-    private static void WriteDrawingData(Layer layer, QBinWriter qbinWriter)
+    private static void WriteLayerData(Layer layer, QBinWriter qbinWriter)
     {
       if (layer.Type == LayerType.Group)
       {
         foreach (Layer l in ((LayerGroup)layer).Children)
         {
           if (l != null)
-            WriteDrawingData(l, qbinWriter);
+            WriteLayerData(l, qbinWriter);
+        }
+      }
+      else if (layer is LayerPicture picture)
+      {
+        picture.DataFileOffset = qbinWriter.BaseStream.Position;
+        qbinWriter.Write(picture.Data);
+      }
+      else if (layer is LayerSound sound)
+      {
+        sound.DataFileOffset = qbinWriter.BaseStream.Position;
+        qbinWriter.Write(sound.Data);
+      }
+      else if (layer is LayerViewpoint viewpoint)
+      {
+        viewpoint.DataFileOffset = 0;
+        if (viewpoint.PreviewData != null)
+        {
+          viewpoint.DataFileOffset = qbinWriter.BaseStream.Position;
+          qbinWriter.Write(viewpoint.PreviewData);
         }
       }
       else if (layer.Type == LayerType.Paint)

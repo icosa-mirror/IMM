@@ -1,0 +1,10 @@
+{
+  "name": "ImmUnity.Editor.Tests",
+  "rootNamespace": "ImmPlayer.Editor.Tests",
+  "references": ["ImmUnity.Editor", "ImmUnity.Runtime", "ImmStrokeReader.Runtime"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": ["Editor"],
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "autoReferenced": false,
+  "allowUnsafeCode": false
+}

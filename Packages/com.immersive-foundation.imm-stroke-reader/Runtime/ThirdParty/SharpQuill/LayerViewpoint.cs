@@ -20,6 +20,10 @@ namespace SharpQuill
     public bool AllowTranslationZ { get; set; }
     public bool Exporting { get; set; }
     public bool ShowingVolume { get; set; }
+    /// <summary>Optional raw preview image offset in Quill.qbin; zero means absent.</summary>
+    public long DataFileOffset { get; set; }
+    /// <summary>Optional decoded RGB/RGBA preview. Writers regenerate its binary offset.</summary>
+    public PictureData PreviewData { get; set; }
 
     /// <summary>
     /// The type of viewpoint. Possible values are "FloorLevel" and "EyeLevel".

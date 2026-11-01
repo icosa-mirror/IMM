@@ -83,7 +83,9 @@ namespace ImmPlayer.Authoring
         Group = 0,
         Paint = 1,
         /// <summary>A viewpoint: tracking level plus a locomotion volume. Carries no paint data.</summary>
-        SpawnArea = 2
+        SpawnArea = 2,
+        Picture = 3,
+        Sound = 4
     }
 
     public enum ImmAuthoringAnimationProperty
@@ -160,12 +162,16 @@ namespace ImmPlayer.Authoring
         };
     }
 
+    /// <summary>Local reflection applied before scale and rotation, matching native flip3.</summary>
+    public enum ImmAuthoringFlip { None = 0, X = 1, Y = 2, Z = 3 }
+
     [Serializable]
     public struct ImmAuthoringTransform
     {
         public Vector3 Position;
         public Quaternion Rotation;
         public float Scale;
+        public ImmAuthoringFlip Flip;
 
         public static ImmAuthoringTransform Identity => new ImmAuthoringTransform
         {
@@ -178,7 +184,7 @@ namespace ImmPlayer.Authoring
         {
             return IsFinite(Position.x) && IsFinite(Position.y) && IsFinite(Position.z) &&
                    IsFinite(Rotation.x) && IsFinite(Rotation.y) && IsFinite(Rotation.z) && IsFinite(Rotation.w) &&
-                   IsFinite(Scale) && Scale > 0f;
+                   IsFinite(Scale) && Scale > 0f && (uint)Flip <= (uint)ImmAuthoringFlip.Z;
         }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
@@ -210,6 +216,14 @@ namespace ImmPlayer.Authoring
         public bool SpawnAreaAllowTranslationX;
         public bool SpawnAreaAllowTranslationY;
         public bool SpawnAreaAllowTranslationZ;
+        public ImmAuthoringImage SpawnAreaPreview;
+        public ExportPictureType PictureType;
+        public bool PictureViewerLocked;
+        public ImmAuthoringImage PictureImage;
+        public ExportSoundProperties Sound;
+        public ImmAuthoringAudio SoundAudio;
+        public float SoundSourceDuration;
+        public bool SoundInitiallyPlaying;
 
         public static ImmAuthoringLayerProperties Default(string name) => new ImmAuthoringLayerProperties
         {
@@ -222,6 +236,7 @@ namespace ImmPlayer.Authoring
             DurationTicks = 0,
             MaxRepeatCount = 0,
             PaintMaxRepeatCount = 1,
+            Sound = new ExportSoundProperties { Gain = 1, DistanceMin = 1, DistanceMax = 10 },
             SpawnAreaIsDefault = false,
             SpawnAreaFloorLevel = false,
             SpawnAreaVolume = ExportSpawnAreaVolume.Sphere,
@@ -384,6 +399,7 @@ namespace ImmPlayer.Authoring
     public sealed class ImmAuthoringSnapshot
     {
         private readonly ImmAuthoringLayerSnapshot[] _layers;
+        private readonly ImmAuthoringAnimationKeySnapshot[] _rootAnimationKeys;
         private readonly long[] _rootLayerIds;
         private readonly Dictionary<long, ImmAuthoringLayerSnapshot> _layersById;
         private readonly Dictionary<long, ImmAuthoringDrawingSnapshot> _drawingsById;
@@ -397,6 +413,9 @@ namespace ImmPlayer.Authoring
         public uint FrameRate { get; }
         public Color BackgroundColor { get; }
         public ExportRequirements Requirements { get; }
+        /// <summary>Optional offline root properties. Null retains the native sequence's legacy defaults.</summary>
+        public ImmAuthoringLayerProperties? RootProperties { get; }
+        public IReadOnlyList<ImmAuthoringAnimationKeySnapshot> RootAnimationKeys => Array.AsReadOnly(_rootAnimationKeys);
         public IReadOnlyList<long> RootLayerIds => Array.AsReadOnly(_rootLayerIds);
         public IReadOnlyList<ImmAuthoringLayerSnapshot> Layers => Array.AsReadOnly(_layers);
 
@@ -408,7 +427,9 @@ namespace ImmPlayer.Authoring
             Color backgroundColor,
             ExportRequirements requirements,
             long[] rootLayerIds,
-            ImmAuthoringLayerSnapshot[] layers)
+            ImmAuthoringLayerSnapshot[] layers,
+            ImmAuthoringLayerProperties? rootProperties = null,
+            ImmAuthoringAnimationKeySnapshot[] rootAnimationKeys = null)
         {
             DocumentId = documentId;
             Revision = revision;
@@ -416,6 +437,8 @@ namespace ImmPlayer.Authoring
             FrameRate = frameRate;
             BackgroundColor = backgroundColor;
             Requirements = requirements;
+            RootProperties = rootProperties;
+            _rootAnimationKeys = rootAnimationKeys ?? Array.Empty<ImmAuthoringAnimationKeySnapshot>();
             _rootLayerIds = rootLayerIds ?? Array.Empty<long>();
             _layers = layers ?? Array.Empty<ImmAuthoringLayerSnapshot>();
             _layersById = new Dictionary<long, ImmAuthoringLayerSnapshot>(_layers.Length);
@@ -423,6 +446,8 @@ namespace ImmPlayer.Authoring
             _framesById = new Dictionary<long, ImmAuthoringFrameSnapshot>();
             _strokesById = new Dictionary<long, ImmAuthoringStrokeSnapshot>();
             _animationKeysById = new Dictionary<long, ImmAuthoringAnimationKeySnapshot>();
+            foreach (ImmAuthoringAnimationKeySnapshot key in _rootAnimationKeys)
+                _animationKeysById.Add(key.Id, key);
             foreach (ImmAuthoringLayerSnapshot layer in _layers)
             {
                 _layersById.Add(layer.Id, layer);
