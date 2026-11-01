@@ -84,8 +84,8 @@ REQUIRED_JOBS = {
 
 REQUIRED_RUNS_ON = {
     ".github/workflows/ci-ios.yml": {
-        "standalone-ios-metal": {"macos-14"},
-        "unity-ios-player-build": {"macos-14"},
+        "standalone-ios-metal": {"macos-15"},
+        "unity-ios-player-build": {"macos-15"},
         "godot-ios-package": {"macos-26"},
     },
     ".github/workflows/ci-device.yml": {
@@ -94,13 +94,13 @@ REQUIRED_RUNS_ON = {
         "android-openxr-probe": {"self-hosted", "quest", "openxr"},
         "android-godot-vulkan": {"ubuntu-latest"},
         "android-quest-vr": {"self-hosted", "quest", "vr"},
-        "ios-device-smoke": {"macos-14"},
+        "ios-device-smoke": {"macos-15"},
     },
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": {"windows-latest"},
         "unity-package-import": {"ubuntu-latest"},
-        "unity-macos-metal-composition": {"macos-14"},
-        "unity-ios-player-build": {"macos-14"},
+        "unity-macos-metal-composition": {"macos-15"},
+        "unity-ios-player-build": {"macos-15"},
         "unity-windows-directx-player-build": {"ubuntu-latest"},
         "unity-windows-directx-composition": {"windows-latest"},
         "unity-windows-vulkan-player-build": {"ubuntu-latest"},
@@ -118,7 +118,7 @@ REQUIRED_RUNS_ON = {
         "windows-standalone-opengl-vr": {"self-hosted", "windows", "gpu", "vr", "opengl"},
         "windows-godot-vulkan": {"windows-latest"},
         "windows-godot-openxr-vr": {"self-hosted", "windows", "gpu", "godot", "vr", "openxr"},
-        "macos-standalone-metal": {"macos-14"},
+        "macos-standalone-metal": {"macos-15"},
         "macos-godot-metal": {"macos-15"},
     },
     ".github/workflows/ci-engine-android.yml": {
