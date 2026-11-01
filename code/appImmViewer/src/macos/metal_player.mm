@@ -2832,6 +2832,22 @@ static uint64_t iCountNonZeroPixels(const uint32_t *pixels, size_t pixelCount)
 {
     [self applyValidationResizeIfRequested];
 
+    if (_validationEnabled)
+    {
+        // AppKit can shrink the drawable while attaching the view to a screen-sized window.
+        // Restore the requested validation size before acquiring this frame's drawable, including
+        // explicit resize cases, so capture resolution does not depend on the runner's display.
+        const int width = _validationResizeDone ? _validationResizeWidth : _settings.mWindow.mWidth;
+        const int height = _validationResizeDone ? _validationResizeHeight : _settings.mWindow.mHeight;
+        const CGSize requestedSize = CGSizeMake(width > 0 ? width : 1, height > 0 ? height : 1);
+        if (!CGSizeEqualToSize(view.drawableSize, requestedSize))
+        {
+            NSLog(@"[IMM_METAL_CAPTURE_SIZE_20261101] restoring drawable %.0fx%.0f -> %.0fx%.0f",
+                  view.drawableSize.width, view.drawableSize.height, requestedSize.width, requestedSize.height);
+            view.drawableSize = requestedSize;
+        }
+    }
+
     if (_validationForceNativeFrameFailure)
     {
         [self handleNativeFrameFailure:"forced native frame setup failure"];
