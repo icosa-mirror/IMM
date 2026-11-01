@@ -495,8 +495,57 @@ void CheckDocumentPreviewAudio(const wchar_t * fixturePath)
     RequireSound(engine.voices[17].plays == 1 && engine.voices[17].stops == 0 && engine.voices[17].resumes == 1,
         "document exit resumes original cursor without replay or stop");
     engine.state = piSoundEngine::PlaybackState::Playing;
+    const auto beforeHide = mainSound->CaptureRuntimePlaybackState();
+    const int playsBeforeHide = engine.voices[17].plays;
+    const int stopsBeforeHide = engine.voices[17].stops;
+    const int pausesBeforeHide = engine.pauseCalls;
+    Document::Command hide{}; hide.mType = Document::Command::Type::Hide;
+    Document::Command show{}; show.mType = Document::Command::Type::Show;
+    engine.failPauses = 1;
+    cpu(&hide);
+    RequireSound(doc.GetPlaybackState() == Document::PlaybackState::PausedAndHidden &&
+        engine.pauseCalls == pausesBeforeHide + 1 && engine.state == piSoundEngine::PlaybackState::Playing,
+        "hidden document attempts to pause its active voice even without visible GlobalWork");
+    cpu();
+    RequireSound(engine.state == piSoundEngine::PlaybackState::PausingStarted,
+        "hidden document retries a rejected pause");
+    engine.state = piSoundEngine::PlaybackState::Paused; cpu();
+    const auto whileHidden = mainSound->CaptureRuntimePlaybackState();
+    RequireSound(whileHidden.playing == beforeHide.playing && whileHidden.paused &&
+        whileHidden.offset == beforeHide.offset && whileHidden.forceRestart == beforeHide.forceRestart &&
+        whileHidden.volume == beforeHide.volume, "hide preserves authored sound intent and cursor");
+    cpu(&show);
+    renderer.GlobalWork(nullptr, &engine, &log, mainLayer, 1.0f);
+    RequireSound(engine.state == piSoundEngine::PlaybackState::PlayingStarting &&
+        engine.voices[17].plays == playsBeforeHide && engine.voices[17].stops == stopsBeforeHide,
+        "show resumes the hidden voice without replaying or stopping it");
+
+    engine.state = piSoundEngine::PlaybackState::PlayingStarting;
+    const int startingPauseCalls = engine.pauseCalls;
+    cpu(&hide);
+    RequireSound(engine.pauseCalls == startingPauseCalls, "hide waits for startup to acknowledge Playing");
+    engine.state = piSoundEngine::PlaybackState::Playing; cpu();
+    RequireSound(engine.state == piSoundEngine::PlaybackState::PausingStarted,
+        "hidden document pauses a voice that finishes starting later");
+    engine.state = piSoundEngine::PlaybackState::Paused; cpu(); cpu(&show);
+    renderer.GlobalWork(nullptr, &engine, &log, mainLayer, 1.0f);
+    RequireSound(engine.state == piSoundEngine::PlaybackState::PlayingStarting &&
+        engine.voices[17].plays == playsBeforeHide && engine.voices[17].stops == stopsBeforeHide,
+        "startup hide/show retains the same voice");
+    std::puts("[IMM_DOCUMENT_HIDDEN_AUDIO_TEST] pass=1 pauseRetry=1 pendingStart=1 intentPreserved=1 resumeWithoutReplay=1 noAudibleClaim=1");
+
+    engine.state = piSoundEngine::PlaybackState::Playing;
     RequireSound(control(0) == 0 && control(5) == 0, "begin audio session before unload");
     const int unloadClone = engine.nextVoice - 2;
+    engine.state = piSoundEngine::PlaybackState::Paused;
+    audio();
+    engine.StateFor(unloadClone) = piSoundEngine::PlaybackState::Playing;
+    engine.StateFor(unloadClone + 1) = piSoundEngine::PlaybackState::Playing;
+    cpu(&hide);
+    RequireSound(!doc.GetTimelinePreviewBoundary() &&
+        engine.voices[unloadClone].deletions == 1 && engine.voices[unloadClone + 1].deletions == 1,
+        "hide exits timeline preview and releases its independent voices");
+    std::puts("[IMM_DOCUMENT_HIDDEN_PREVIEW_AUDIO_TEST] pass=1 previewVoicesReleased=1 noAudibleClaim=1");
     doc.UnloadSync(&renderer, nullptr, nullptr, nullptr, Drawing::ColorSpace::Linear,
         Drawing::PaintRenderingTechnique::Static, &engine, nullptr, &log, now);
     RequireSound(doc.GetLoadingState() == Document::LoadingState::UnloadingCompleted &&

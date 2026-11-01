@@ -1317,6 +1317,18 @@ namespace ImmPlayer
                 PlaybackRequestStatus::Rejected;
         }
 
+        if (!shouldRender && mState.mLoadingState == LoadingState::Loaded && layerRenderSound && soundEngine)
+        {
+            // Hidden references stay loaded for undo, but no longer reach visible GlobalWork.
+            // Reconcile their voices here on every CPU tick, including pending/rejected pauses,
+            // without changing authored sound intent or restarting the cursor when shown again.
+            mSequence.Recurse([&](Layer * layer, int, int, bool) {
+                if (layer->GetType() == Layer::Type::Sound)
+                    layerRenderSound->PauseMainVoice(soundEngine, layer);
+                return true;
+            }, false, false, false, false);
+        }
+
         // should we animate+render?
         return shouldRender;
     }
