@@ -50,7 +50,7 @@ jobs:
   standalone-ios-metal:
     name: Standalone iOS Metal Validation
     if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS STANDALONE]')
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -371,7 +371,7 @@ jobs:
       cancel-in-progress: false
     name: Unity iOS Metal Simulator Validation
     if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[CI IOS]') && !contains(github.event.head_commit.message, '[CI IOS GODOT]'))
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

@@ -729,7 +729,7 @@ jobs:
   ios-device-smoke:
     name: iOS Device Smoke
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

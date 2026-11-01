@@ -1245,7 +1245,7 @@ jobs:
   macos-standalone-metal:
     name: macOS Standalone Metal
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 35
     steps:
       - name: Checkout repository
