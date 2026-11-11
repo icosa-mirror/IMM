@@ -566,7 +566,7 @@ namespace ImmPlayer
         }
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential)]
     public struct EditableLayerState
     {
         public int id, drawing, visible;
@@ -576,7 +576,7 @@ namespace ImmPlayer
         public float transX, transY, transZ;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct LayerInfoNative
     {
         public int id;
