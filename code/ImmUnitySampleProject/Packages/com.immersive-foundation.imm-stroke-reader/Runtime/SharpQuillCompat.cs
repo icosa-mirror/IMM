@@ -45,6 +45,21 @@ namespace ImmStrokeReader
     {
         private const string LogPrefix = "[IMM2QUILL_20260209A] ";
 
+        /// <summary>Evaluated layer state captured by the native player, in IMM coordinates.</summary>
+        public sealed class FrameLayerState
+        {
+            public int Drawing;
+            public bool Visible;
+            public float Opacity;
+            public StrokeLayerTransform Transform;
+        }
+
+        public static Sequence ReadImmFrame(string path, IReadOnlyDictionary<int, FrameLayerState> frame)
+        {
+            if (frame == null) throw new ArgumentNullException(nameof(frame));
+            return ReadImmAsSequenceCore(path, true, -1, null, frame: frame);
+        }
+
         public static Sequence ReadImmAsSequence(string path, bool includePictures = false, int chapterIndex = -1)
             => ReadImmAsSequenceCore(path, includePictures, chapterIndex, null);
 
@@ -89,7 +104,7 @@ namespace ImmStrokeReader
         }
 
         private static Sequence ReadImmAsSequenceCore(string path, bool includePictures, int chapterIndex,
-            List<SharpQuillConversionIssue> issues, bool preserveHierarchy = false, int maxDecodedSoundBytes = 0, int maxDecodedPreviewBytes = 0)
+            List<SharpQuillConversionIssue> issues, bool preserveHierarchy = false, int maxDecodedSoundBytes = 0, int maxDecodedPreviewBytes = 0, IReadOnlyDictionary<int, FrameLayerState> frame = null)
         {
             if (string.IsNullOrEmpty(path))
             {
@@ -123,7 +138,7 @@ namespace ImmStrokeReader
                 }
                 if (preserveHierarchy) return ConvertHierarchyDocument(docId, includePictures, issues, maxDecodedSoundBytes, maxDecodedPreviewBytes);
                 if (issues != null) CaptureLossReport(docId, includePictures, chapterIndex, issues);
-                return ConvertDocument(docId, includePictures, chapterIndex, issues);
+                return ConvertDocument(docId, includePictures, chapterIndex, issues, frame);
             }
             finally
             {
@@ -634,7 +649,7 @@ namespace ImmStrokeReader
         }
 
         private static Sequence ConvertDocument(int docId, bool includePictures, int chapterIndex = -1,
-            List<SharpQuillConversionIssue> issues = null)
+            List<SharpQuillConversionIssue> issues = null, IReadOnlyDictionary<int, FrameLayerState> frame = null)
         {
             Sequence sequence = Sequence.CreateDefault();
             if (sequence.RootLayer == null)
@@ -666,12 +681,29 @@ namespace ImmStrokeReader
                     continue;
                 }
 
+                FrameLayerState evaluated = null;
+                if (frame != null && (!frame.TryGetValue(info.id, out evaluated) ||
+                    !evaluated.Visible || evaluated.Opacity <= 0 || !isPicture && evaluated.Drawing < 0)) continue;
+
                 Layer layer = isPicture
                     ? ConvertPictureLayer(docId, layerIdx, info, issues)
                     : ConvertPaintLayer(docId, layerIdx, info, ref maxStrokeId, chapterIndex, issues);
 
                 if (layer != null)
                 {
+                    if (evaluated != null)
+                    {
+                        layer.Visible = true;
+                        layer.Opacity = evaluated.Opacity;
+                        layer.Transform = ConvertTransform(evaluated.Transform);
+                        if (layer is LayerPaint paint)
+                        {
+                            if (evaluated.Drawing >= paint.Drawings.Count)
+                                throw new InvalidDataException($"Drawing {evaluated.Drawing} is unavailable for '{info.name}'.");
+                            paint.Frames.Clear();
+                            paint.Frames.Add(evaluated.Drawing);
+                        }
+                    }
                     sequence.RootLayer.Children.Add(layer);
                 }
                 else

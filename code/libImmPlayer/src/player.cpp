@@ -423,6 +423,53 @@ namespace ImmPlayer
         return count;
     }
 
+    int Player::GetEditableLayerStates(int docId, EditableLayerState * states, int capacity) const
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        if (docId < 0 || static_cast<uint64_t>(docId) >= mDocuments.GetMaxLength() || !mDocuments.IsUsed(docId))
+            return -1;
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc || doc->GetLoadingState() != Document::LoadingState::Loaded) return -1;
+        Sequence * sequence = doc->GetSequence();
+        if (!sequence) return -1;
+        int count = 0;
+        bool ready = true;
+        sequence->Recurse([&](Layer * layer, int, int, bool instance) {
+            if (layer->GetType() != Layer::Type::Paint && layer->GetType() != Layer::Type::Picture) return true;
+            // The reader addresses canonical layers by ID. Reject instances until their
+            // independently evaluated transforms can be represented without ambiguity.
+            if (instance) { ready = false; return false; }
+            EditableLayerState state{};
+            state.id = static_cast<int>(layer->GetID());
+            state.visible = layer->GetWorldVisible() ? 1 : 0;
+            state.opacity = static_cast<float>(layer->GetWorldOpacity());
+            state.drawing = -1;
+            if (state.visible && state.opacity > 0 && !layer->GetLoaded()) { ready = false; return false; }
+            if (layer->GetType() == Layer::Type::Paint && layer->GetLoaded())
+            {
+                const LayerPaint * paint = (LayerPaint *)layer->GetImplementation();
+                const Drawing * current = paint->GetCurrentDrawing();
+                for (unsigned int i = 0; i < paint->GetNumDrawings(); ++i)
+                    if (paint->GetDrawing(i) == current) { state.drawing = static_cast<int>(i); break; }
+                if (state.visible && state.opacity > 0 && current && !current->GetLoaded()) { ready = false; return false; }
+            }
+            const auto transform = layer->GetTransformToWorld();
+            state.rotX = static_cast<float>(transform.mRotation.x);
+            state.rotY = static_cast<float>(transform.mRotation.y);
+            state.rotZ = static_cast<float>(transform.mRotation.z);
+            state.rotW = static_cast<float>(transform.mRotation.w);
+            state.scale = static_cast<float>(transform.mScale);
+            state.flip = static_cast<int>(transform.mFlip);
+            state.transX = static_cast<float>(transform.mTranslation.x);
+            state.transY = static_cast<float>(transform.mTranslation.y);
+            state.transZ = static_cast<float>(transform.mTranslation.z);
+            if (states && count < capacity) states[count] = state;
+            ++count;
+            return true;
+        }, false, false, false, false);
+        return ready ? count : -1;
+    }
+
     bool Player::GetLayerInfoByIndex(int docId, int index, LayerInfo & info) const
     {
         std::lock_guard<std::mutex> guard(mMutex);

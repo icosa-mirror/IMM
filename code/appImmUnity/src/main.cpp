@@ -3580,6 +3580,11 @@ extern "C" int UNITY_INTERFACE_EXPORT GetLayerCount(int docId)
     return iPlayer().GetLayerCount(docId);
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT GetEditableLayerStates(int docId, Player::EditableLayerState * states, int capacity)
+{
+    return iPlayer().GetEditableLayerStates(docId, states, capacity);
+}
+
 struct UnityLayerInfo
 {
     int id;

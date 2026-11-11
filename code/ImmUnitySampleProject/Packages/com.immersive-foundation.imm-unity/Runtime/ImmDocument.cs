@@ -915,6 +915,18 @@ namespace ImmPlayer
 
         #endregion
 
+        /// <summary>Copies one evaluated frame atomically. Invisible layers are retained as metadata.</summary>
+        public EditableLayerState[] GetEditableLayerStates()
+        {
+            if (!IsLoaded) throw new InvalidOperationException("IMM document is not ready.");
+            int count = ImmNativePlugin.GetEditableLayerStates(DocumentId, null, 0);
+            if (count < 0) throw new InvalidOperationException("IMM frame is not ready or contains unsupported instances.");
+            var states = new EditableLayerState[count];
+            int copied = ImmNativePlugin.GetEditableLayerStates(DocumentId, states, states.Length);
+            if (copied != count) throw new InvalidOperationException("IMM frame changed during capture.");
+            return states;
+        }
+
         #region Layers
 
         /// <summary>

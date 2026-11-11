@@ -399,6 +399,16 @@ namespace ImmPlayer {
         void CancelLoading(int id);
         int GetLayerCount(int docId) const;
         bool GetLayerInfoByIndex(int docId, int index, LayerInfo & info) const;
+        // A single evaluated frame, in document coordinates. No canonical state changes.
+        struct EditableLayerState
+        {
+            int id, drawing, visible;
+            float opacity;
+            float rotX, rotY, rotZ, rotW, scale;
+            int flip;
+            float transX, transY, transZ;
+        };
+        int GetEditableLayerStates(int docId, EditableLayerState * states, int capacity) const;
         bool IsSequenceReady(int docId) const;
 
         void EnablePerformanceMeasurement(bool enabled) { mEnablePerformanceMeasurement = enabled; }
