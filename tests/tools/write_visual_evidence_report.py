@@ -10,6 +10,8 @@ import re
 import shutil
 from pathlib import Path
 
+from verify_matrix_evidence import is_release_optional
+
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 NON_AUTHORITATIVE_IMAGE_NAME_PARTS = {
@@ -392,8 +394,10 @@ def matrix_coverage_rows(matrix_status: Path | None, input_root: Path, reports: 
 def row_required_for_scope(row: dict, scope: str) -> bool:
     if scope == "all":
         return True
-    if scope == "hosted":
-        return bool(row.get("hosted_gate"))
+    if scope in {"hosted", "release"}:
+        return bool(row.get("hosted_gate")) and (
+            scope != "release" or not is_release_optional(row.get("matrix", row))
+        )
     return False
 
 
@@ -1063,7 +1067,7 @@ def main() -> int:
     parser.add_argument("--matrix-status", type=Path)
     parser.add_argument(
         "--required-evidence-scope",
-        choices=["none", "hosted", "all"],
+        choices=["none", "hosted", "all", "release"],
         default="none",
         help="Fail when supported rows in the selected scope have no evidence.",
     )
@@ -1078,6 +1082,10 @@ def main() -> int:
 
     reports = discover_reports(input_root)
     coverage = matrix_coverage_rows(args.matrix_status, input_root, reports)
+    if args.required_evidence_scope == "release":
+        for row in coverage:
+            if is_release_optional(row["matrix"]):
+                row["reason"] = f"{row['reason']} Release scope requires basic Godot Metal render/audio in Build / macOS; separate extended GPU comparisons are not required."
 
     lines = [
         "# IMM CI Validation Evidence",

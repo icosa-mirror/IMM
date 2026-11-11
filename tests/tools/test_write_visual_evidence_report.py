@@ -17,6 +17,15 @@ PNG_1X1 = bytes.fromhex(
 
 
 def main() -> int:
+    from write_visual_evidence_report import row_required_for_scope
+
+    macos_godot = {"product": "godot", "platform": "macos", "mode": "non-vr", "renderer": "metal", "hosted_gate": "CI GPU Matrix / macOS Godot Metal"}
+    assert row_required_for_scope(macos_godot, "hosted")
+    assert not row_required_for_scope(macos_godot, "release")
+    for platform in ("android", "windows"):
+        assert row_required_for_scope({**macos_godot, "platform": platform}, "release"), "Release must retain other hosted runtime gates"
+    assert row_required_for_scope({**macos_godot, "product": "standalone"}, "release")
+
     from write_visual_evidence_report import (
         VISUAL_MATRIX_TARGETS,
         VISUAL_MATRIX_SYMBOLS,

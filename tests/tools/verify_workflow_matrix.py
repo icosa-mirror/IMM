@@ -66,7 +66,7 @@ REQUIRED_JOBS = {
         "windows-standalone-opengl-vr": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-vulkan": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Set up MSYS2 Vulkan tools", "Install pinned Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Run Godot Vulkan render-only baseline smoke", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Classify Windows Godot Vulkan evidence", "Write Godot Vulkan render report", "Write Godot Vulkan render baseline report", "Write Godot Vulkan ordered overlay report", "Write Godot Vulkan ordered overlay baseline report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Preflight Godot OpenXR VR runner", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "macos-standalone-metal": ["Download macOS viewer build artifact", "Preflight macOS Metal runner", "Verify macOS Metal build artifact", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
+        "macos-standalone-metal": ["Download macOS viewer build artifact", "Retain the actual macOS render runner preflight", "Verify macOS Metal build artifact", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Download macOS Godot extension build artifact", "Stage macOS Godot extension build artifact", "Run Godot Metal visual smoke", "Verify Godot Metal audio pipeline", "Record Godot Metal render metrics", "Classify Godot Metal visual evidence", "Write Godot Metal render report", "Write Godot Metal composition report", "Write CI manifest", "Collect artifact summary"],
         "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report"],
     },
@@ -118,7 +118,7 @@ REQUIRED_RUNS_ON = {
         "windows-standalone-opengl-vr": {"self-hosted", "windows", "gpu", "vr", "opengl"},
         "windows-godot-vulkan": {"windows-latest"},
         "windows-godot-openxr-vr": {"self-hosted", "windows", "gpu", "godot", "vr", "openxr"},
-        "macos-standalone-metal": {"macos-15"},
+        "macos-standalone-metal": {"ubuntu-latest"},
         "macos-godot-metal": {"macos-15"},
     },
     ".github/workflows/ci-engine-android.yml": {
@@ -434,7 +434,7 @@ def verify_consolidated_workflow(path: Path, workflow_rel: str, workflow_files: 
             "inputs.mode == 'hardware'",
             "inputs.mode == 'release'",
             "hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}",
-            "evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}",
+            ("evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || (((github.event_name == 'workflow_dispatch' && inputs.mode == 'release') || contains(github.event.head_commit.message, '[RELEASE]')) && 'release') || 'hosted' }}" if job_name == "gpu" else "evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}"),
             "contains(github.event.head_commit.message, '[CI VALIDATION]')",
             "contains(github.event.head_commit.message, '[RELEASE]')",
             f"contains(github.event.pull_request.labels.*.name, '{VALIDATION_JOB_LABELS[job_name]}')",
@@ -1136,6 +1136,23 @@ def verify_unity_license_ownership(root: Path, errors: list[str]) -> None:
         errors.append(f"Expected 9 shared Unity license-owner job definitions, found {owner_count}; audit ownership changes")
 
 
+def verify_release_macos_policy(root: Path, errors: list[str]) -> None:
+    build = (root / ".github/workflows/build.yml").read_text(encoding="utf-8")
+    smoke = re.search(r"(?ms)^    - name: Smoke macOS Godot Metal visual playback\n(.*?)(?=^    - name:|\Z)", build).group(1)
+    if "if: inputs.release || env.IMM_CI_ENABLE_GPU_SMOKE == '1'" not in smoke:
+        errors.append("Release macOS builds must require the Godot Metal playback/audio smoke")
+    for token in ("IMM Godot Metal visual smoke passed", "requested=AVFoundation active=AVFoundation", "test -s artifacts/godot-smoke-macos-metal/metal_visual_smoke.png"):
+        if token not in smoke:
+            errors.append(f"Release macOS Godot smoke is missing required proof: {token}")
+    gpu = (root / ".github/workflows/ci-gpu.yml").read_text(encoding="utf-8")
+    extended = re.search(r"(?ms)^  macos-godot-metal:\n(.*?)(?=^  [\w-]+:|\Z)", gpu).group(1)
+    if "inputs.evidence_scope != 'release'" not in extended:
+        errors.append("Extended macOS Godot GPU checks must stay separate from release smoke")
+    retained = re.search(r"(?ms)^  macos-standalone-metal:\n(.*?)(?=^  [\w-]+:|\Z)", gpu).group(1)
+    if "cp artifacts/prebuilt-macos-viewer/validation/preflight.json" not in retained:
+        errors.append("Artifact verification must retain preflight evidence from the actual Mac renderer")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -1144,6 +1161,7 @@ def main() -> int:
     root = args.repo_root.resolve()
     errors: list[str] = []
 
+    verify_release_macos_policy(root, errors)
     verify_godot_vulkan_smoke_contract(root, errors)
     for workflow_rel, jobs in REQUIRED_JOBS.items():
         workflow_path = root / workflow_rel

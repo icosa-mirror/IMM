@@ -871,6 +871,9 @@ jobs:
     - name: Install CMake
       run: brew install cmake
 
+    - name: Record macOS Metal build runner preflight
+      run: python3 tests/tools/preflight_runner.py --profile macos-standalone-metal --output build/macos/runner-preflight.json --require-command git
+
     - name: Configure macOS build
       run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
 
@@ -987,7 +990,7 @@ jobs:
         echo "GODOT_EXE=$PWD/$godot_exe" >> "$GITHUB_ENV"
 
     - name: Smoke macOS Godot Metal visual playback
-      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      if: inputs.release || env.IMM_CI_ENABLE_GPU_SMOKE == '1'
       run: |
         set -euo pipefail
         mkdir -p artifacts/godot-smoke-macos-metal
@@ -999,9 +1002,11 @@ jobs:
         grep -q "IMM Godot Metal visual smoke passed" artifacts/godot-smoke-macos-metal/godot-metal-smoke.log
         grep -q "\[IMM_AUDIO_PIPELINE_20260812\] requested=AVFoundation active=AVFoundation" artifacts/godot-smoke-macos-metal/imm-godot-native.log
         grep -q "Decoded Ogg Opus sound to PCM temp WAV for AVFoundation" artifacts/godot-smoke-macos-metal/imm-godot-native.log
+        test -s artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
+        python3 tests/tools/write_ci_manifest.py --status success --failure-class visual --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
 
     - name: Upload macOS Godot smoke logs
-      if: failure()
+      if: always() && (inputs.release || env.IMM_CI_ENABLE_GPU_SMOKE == '1')
       uses: actions/upload-artifact@v4
       with:
         name: ImmGodotSmokeLogs-macOS
@@ -1044,6 +1049,7 @@ jobs:
         test -d "$app"
         ditto "$app" "$staging/appImmViewerMetal.app"
         mkdir -p "$staging/validation"
+        cp build/macos/runner-preflight.json "$staging/validation/preflight.json"
         cp build/macos/metal-validation-captures/static.ppm "$staging/validation/macos-metal-static.ppm"
         cp -R build/macos/performance "$staging/validation/performance"
         cp build/macos/face-orientation-captures/face-orientation-status.json "$staging/validation/face-orientation-status.json"

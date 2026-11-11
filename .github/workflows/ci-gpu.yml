@@ -1245,7 +1245,9 @@ jobs:
   macos-standalone-metal:
     name: macOS Standalone Metal
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
-    runs-on: macos-15
+    # Rendering already happened in Build / macOS. Verify its artifacts without
+    # allocating another Mac or claiming this Ubuntu job performed a Metal render.
+    runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - name: Checkout repository
@@ -1259,8 +1261,10 @@ jobs:
           name: ImmViewer-macOS
           path: artifacts/prebuilt-macos-viewer
 
-      - name: Preflight macOS Metal runner
-        run: python3 tests/tools/preflight_runner.py --profile macos-standalone-metal --output artifacts/macos-standalone-metal/preflight.json --require-command git
+      - name: Retain the actual macOS render runner preflight
+        run: |
+          mkdir -p artifacts/macos-standalone-metal
+          cp artifacts/prebuilt-macos-viewer/validation/preflight.json artifacts/macos-standalone-metal/preflight.json
 
       - name: Verify macOS Metal build artifact
         timeout-minutes: 8
@@ -1312,7 +1316,9 @@ jobs:
 
   macos-godot-metal:
     name: macOS Godot Metal
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    # Releases require the basic render/audio smoke in the existing macOS build.
+    # Full/nightly validation retains these additional composition/metrics checks.
+    if: inputs.evidence_scope != 'release' && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci'))
     runs-on: macos-15
     timeout-minutes: 45
     steps:

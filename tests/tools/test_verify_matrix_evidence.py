@@ -170,6 +170,19 @@ def run_verify(matrix: Path, summary: Path, output_dir: Path, *extra_args: str) 
 
 
 def main() -> int:
+    from verify_matrix_evidence import selected_rows
+
+    policy_rows = [
+        {"product": product, "platform": platform, "mode": "non-vr", "renderer": renderer,
+         "status": "supported", "hosted_gate": "CI GPU Matrix / test"}
+        for product, platform, renderer in [
+            ("godot", "macos", "metal"), ("standalone", "macos", "metal"),
+            ("godot", "windows", "vulkan"), ("unity", "android", "vulkan"),
+        ]
+    ]
+    assert len(selected_rows(policy_rows, "hosted", "")) == 4
+    assert selected_rows(policy_rows, "release", "") == policy_rows[1:], "Release scope must relax only the additional macOS Godot GPU lane"
+
     from verify_matrix_evidence import is_visual_row
 
     assert not is_visual_row(

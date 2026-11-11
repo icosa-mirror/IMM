@@ -50,6 +50,7 @@ jobs:
       contents: write
     with:
       mode: build
+      release: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'release') || contains(github.event.head_commit.message, '[RELEASE]') }}
       # Match the Engine gate exactly; quick/build-only calls must not acquire
       # Firebase/Unity work, while every full validation keeps Android required.
       validate_android_runtime: >-
@@ -134,7 +135,7 @@ jobs:
     uses: ./.github/workflows/ci-gpu.yml
     with:
       hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}
-      evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}
+      evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || (((github.event_name == 'workflow_dispatch' && inputs.mode == 'release') || contains(github.event.head_commit.message, '[RELEASE]')) && 'release') || 'hosted' }}
     secrets: inherit
 
   ios:
@@ -231,12 +232,21 @@ jobs:
           name: GodotIOSMetal
           path: artifacts/validation-evidence/input/GodotIOSMetal
 
+      - name: Download release macOS Godot smoke evidence
+        if: >-
+          needs.build.result != 'skipped' && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'release') || contains(github.event.head_commit.message, '[RELEASE]'))
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmGodotSmokeLogs-macOS
+          path: artifacts/validation-evidence/input/ImmGodotSmokeLogs-macOS
+
       - name: Write validation visual evidence report
         if: always()
         env:
           VALIDATION_EVIDENCE_SCOPE: >-
             ${{
               (github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all') ||
+              (((github.event_name == 'workflow_dispatch' && inputs.mode == 'release') || contains(github.event.head_commit.message, '[RELEASE]')) && 'release') ||
               (
                 (
                   github.event_name == 'schedule' ||

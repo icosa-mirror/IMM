@@ -9,7 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 
 
-VALID_SCOPES = {"hardware", "hosted", "all-supported"}
+VALID_SCOPES = {"hardware", "hosted", "all-supported", "release"}
 
 
 def row_key(row: dict) -> tuple[str, str, str, str]:
@@ -19,6 +19,12 @@ def row_key(row: dict) -> tuple[str, str, str, str]:
         str(row.get("mode", "")),
         str(row.get("renderer", "")),
     )
+
+
+def is_release_optional(row: dict) -> bool:
+    # The macOS build must pass basic Godot Metal playback/audio for a release.
+    # Only its separate, deeper GPU comparison lane is outside release scope.
+    return row_key(row) == ("godot", "macos", "non-vr", "metal")
 
 
 def display_key(key: tuple[str, str, str, str]) -> str:
@@ -152,7 +158,9 @@ def selected_rows(rows: list[dict], scope: str, gate_prefix: str) -> list[dict]:
             continue
         if scope == "hardware" and not row.get("hardware_gate"):
             continue
-        if scope == "hosted" and not row.get("hosted_gate"):
+        if scope in {"hosted", "release"} and not row.get("hosted_gate"):
+            continue
+        if scope == "release" and is_release_optional(row):
             continue
         if gate_prefix:
             gates = [str(row.get("hosted_gate") or ""), str(row.get("hardware_gate") or "")]
