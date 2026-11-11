@@ -21,6 +21,9 @@ namespace ImmPlayer
         internal static void InitializeDiagnostics() { }
 
         [DllImport(DllName)]
+        public static extern int GetEditableLayerStates(int docId, [Out] EditableLayerState[] states, int capacity);
+
+        [DllImport(DllName)]
         private static extern int GetNativeLogMessage([Out] byte[] buffer, int capacity, out int severity);
 
         #region Unity Plugin Callbacks
@@ -561,6 +564,16 @@ namespace ImmPlayer
             Vector3 size = max - min;
             return new UnityEngine.Bounds(center, size);
         }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct EditableLayerState
+    {
+        public int id, drawing, visible;
+        public float opacity;
+        public float rotX, rotY, rotZ, rotW, scale;
+        public int flip;
+        public float transX, transY, transZ;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
