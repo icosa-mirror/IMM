@@ -43,24 +43,27 @@ namespace ImmPlayer
                 Require(target.Create(), "Could not create stereo target.");
                 Require(target.antiAliasing == samples, "Stereo target silently downgraded MSAA.");
                 Require(resolved == null || resolved.Create(), "Could not create stereo resolve target.");
-                for (int scenario = 0; scenario < 3; ++scenario)
+                for (int scenario = 0; scenario < 6; ++scenario)
                 {
                     commands.Clear();
                     var attachment = new RenderTargetIdentifier(target, 0, CubemapFace.Unknown, -1);
                     commands.SetRenderTarget(attachment);
                     commands.ClearRenderTarget(true, true, Color.black);
-                    commands.SetViewport(new Rect(0, 0, 128, 128));
+                    // Exercise smaller regions in retained full-size attachments, then
+                    // return to full size. This runs in the existing stereo CI probe.
+                    int viewportSize = scenario == 3 ? 64 : scenario == 4 ? 96 : 128;
+                    commands.SetViewport(new Rect(0, 0, viewportSize, viewportSize));
                     var view = camera.worldToCameraMatrix;
                     // The smoke scene is centred three radii ahead of this camera.
                     // Move it six radii sideways in view space, outside the head frustum.
-                    if (scenario != 0) view.m03 += radius * 6;
+                    if (scenario == 1 || scenario == 2) view.m03 += radius * 6;
                     var left = view;
                     var right = view;
                     left.m03 -= radius * 0.1f;
                     right.m03 += radius * 0.1f;
                     var projection = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true);
                     var eyeProjection = projection;
-                    if (scenario != 0) eyeProjection.m02 += projection.m00 * 2;
+                    if (scenario == 1 || scenario == 2) eyeProjection.m02 += projection.m00 * 2;
                     var cullingProjection = projection;
                     if (scenario == 2)
                     {
@@ -72,7 +75,7 @@ namespace ImmPlayer
                     int previousCompleted = completedStereo;
                     int submittedFrame = Time.frameCount;
                     transport.QueueRender(commands, 250, target.colorBuffer.GetNativeRenderBufferPtr(),
-                        target.depthBuffer.GetNativeRenderBufferPtr(), 28, 40, new RectInt(0, 0, 128, 128),
+                        target.depthBuffer.GetNativeRenderBufferPtr(), 28, 40, new RectInt(0, 0, viewportSize, viewportSize),
                         view, cullingProjection, left, eyeProjection, right, eyeProjection,
                         frameIndex: submittedFrame);
                     // Resolve the complete layered surface with one Unity command.
@@ -110,6 +113,7 @@ namespace ImmPlayer
                 }
                 Debug.Log("[IMM_URP_READBACK] PASS managed stereo packet renders distinct eye slices and retains peripheral content.");
                 Debug.Log("[IMM_URP_READBACK] PASS attributed stereo native event.");
+                Debug.Log("[IMM_URP_READBACK] PASS changing stereo viewports in retained attachments.");
                 Debug.Log($"[IMM_URP_READBACK] PASS stereo packet and layered resolve at {samples} samples.");
             }
             finally

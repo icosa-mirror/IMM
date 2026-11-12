@@ -142,19 +142,22 @@ namespace ImmPlayer
             var d = depth.rt;
             var dimension = data.Stereo ? TextureDimension.Tex2DArray : TextureDimension.Tex2D;
             int slices = data.Stereo ? 2 : 1;
+            // Vulkan borrows Unity's current raster pass and already accepts a
+            // viewport smaller than its attachments. XR supplies the active eye
+            // region; allowDynamicResolution alone is not an invalid attachment.
+            bool scaledXr = data.Stereo && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan;
+            bool activeScaling = data.DynamicResolution ||
+                ((c.useDynamicScale || d.useDynamicScale) &&
+                    (ScalableBufferManager.widthScaleFactor != 1f || ScalableBufferManager.heightScaleFactor != 1f));
             if (c.dimension != dimension || d.dimension != dimension ||
                 c.volumeDepth != slices || d.volumeDepth != slices || c.width != d.width || c.height != d.height ||
                 c.antiAliasing != d.antiAliasing ||
                 (c.antiAliasing != 1 && c.antiAliasing != 2 && c.antiAliasing != 4 && c.antiAliasing != 8) ||
-                data.DynamicResolution ||
-                ((c.useDynamicScale || d.useDynamicScale) &&
-                    (ScalableBufferManager.widthScaleFactor != 1f || ScalableBufferManager.heightScaleFactor != 1f)))
+                (!scaledXr && activeScaling))
             {
-                data.Owner.Report("IMM requires matching mono 2D or stereo two-slice attachments with 1, 2, 4 or 8 samples without dynamic resolution.");
+                data.Owner.Report($"IMM attachment validation failed: stereo={data.Stereo} color={c.width}x{c.height}/{c.volumeDepth}/{c.dimension}/{c.antiAliasing} depth={d.width}x{d.height}/{d.volumeDepth}/{d.dimension}/{d.antiAliasing} dynamicResolution={data.DynamicResolution} scale={ScalableBufferManager.widthScaleFactor},{ScalableBufferManager.heightScaleFactor}. Dynamic resolution is supported only for Vulkan XR.");
                 return;
             }
-            // URP marks XR intermediate textures as dynamic-scale capable even for
-            // fixed-resolution cameras. Reject enabled/active scaling, not that capability.
             uint colorFormat = AttachmentFormat(c.graphicsFormat);
             uint depthFormat = AttachmentFormat(d.depthStencilFormat);
             if (colorFormat == 0 || depthFormat == 0)
@@ -171,17 +174,13 @@ namespace ImmPlayer
             var depthSize = depth.useScaling
                 ? depth.GetScaledSize(depth.rtHandleProperties.currentViewportSize)
                 : new Vector2Int(d.width, d.height);
-            if (size != depthSize || size.x <= 0 || size.y <= 0 || size.x > c.width || size.y > c.height)
+            if (size.x > c.width || size.y > c.height || depthSize.x > d.width || depthSize.y > d.height ||
+                !TryResolveViewport(data.Stereo, scaledXr, data.XrViewport, size, depthSize, out var viewport))
             {
-                data.Owner.Report("IMM colour and depth viewport sizes must match and fit their attachments.");
+                data.Owner.Report($"IMM viewport validation failed: xr={data.XrViewport} colorViewport={size} depthViewport={depthSize} colorAttachment={c.width}x{c.height} depthAttachment={d.width}x{d.height} scaledXr={scaledXr}.");
                 return;
             }
-            var viewport = new RectInt(0, 0, size.x, size.y);
-            if (data.Stereo && data.XrViewport != new Rect(0, 0, size.x, size.y))
-            {
-                data.Owner.Report("IMM D3D12 XR requires full-size eye viewports.");
-                return;
-            }
+            size = viewport.size;
             var colorTarget = new RenderTargetIdentifier(color.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
             var depthTarget = new RenderTargetIdentifier(depth.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
             if (commands != null)
@@ -232,6 +231,27 @@ namespace ImmPlayer
                 commands.SetViewport(new Rect(0, 0, size.x, size.y));
             }
             else rasterCommands.SetViewport(new Rect(0, 0, size.x, size.y));
+        }
+
+        // XR's render parameter is the authoritative active eye region. RTHandles
+        // can retain a larger allocation/reference size across quality transitions.
+        internal static bool TryResolveViewport(bool stereo, bool scaledXr, Rect xrViewport,
+            Vector2Int colorSize, Vector2Int depthSize, out RectInt viewport)
+        {
+            viewport = default;
+            if (colorSize != depthSize || colorSize.x <= 0 || colorSize.y <= 0) return false;
+            var size = colorSize;
+            if (stereo)
+            {
+                if (!(xrViewport.width > 0) || !(xrViewport.height > 0) ||
+                    xrViewport.width > size.x || xrViewport.height > size.y) return false;
+                var eyeSize = new Vector2Int(Mathf.RoundToInt(xrViewport.width), Mathf.RoundToInt(xrViewport.height));
+                if (xrViewport != new Rect(0, 0, eyeSize.x, eyeSize.y) ||
+                    (!scaledXr && eyeSize != size)) return false;
+                size = eyeSize;
+            }
+            viewport = new RectInt(0, 0, size.x, size.y);
+            return true;
         }
 
         private void Report(string message)
