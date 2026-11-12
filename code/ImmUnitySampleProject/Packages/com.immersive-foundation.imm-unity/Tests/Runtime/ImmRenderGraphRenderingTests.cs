@@ -14,6 +14,37 @@ namespace ImmPlayer.Tests
 {
     public sealed class ImmRenderGraphRenderingTests
     {
+        [TestCase(128, 128)]
+        [TestCase(96, 80)]
+        [TestCase(64, 64)]
+        public void VulkanXrUsesActiveEyeViewport(int width, int height)
+        {
+            var method = typeof(ImmRendererFeature).Assembly.GetType("ImmPlayer.ImmRenderPass")
+                .GetMethod("TryResolveViewport", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            // Reuse a full allocation while shrinking, growing and returning to full size.
+            foreach (var eye in new[] { new Rect(0, 0, width, height), new Rect(0, 0, 128, 128) })
+            {
+                object[] arguments = { true, true, eye, new Vector2Int(128, 128), new Vector2Int(128, 128), null };
+                Assert.IsTrue((bool)method.Invoke(null, arguments));
+                Assert.AreEqual(new RectInt(0, 0, (int)eye.width, (int)eye.height), arguments[5]);
+            }
+        }
+
+        [TestCase(false, 0, 0, 64, 64, 128, 128)] // Other backends retain full-eye restriction.
+        [TestCase(true, 1, 0, 64, 64, 128, 128)] // Native Vulkan requires zero origin.
+        [TestCase(true, 0, 0, 129, 128, 128, 128)] // Outside attachment.
+        [TestCase(true, 0, 0, 0, 64, 128, 128)] // Empty eye.
+        [TestCase(true, 0, 0, 64, 64, 64, 128)] // Mismatched colour/depth viewport.
+        public void InvalidXrViewportsAreRejected(bool scaledXr, int x, int y, int width, int height,
+            int depthWidth, int depthHeight)
+        {
+            var method = typeof(ImmRendererFeature).Assembly.GetType("ImmPlayer.ImmRenderPass")
+                .GetMethod("TryResolveViewport", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            object[] arguments = { true, scaledXr, new Rect(x, y, width, height),
+                new Vector2Int(128, 128), new Vector2Int(depthWidth, depthHeight), null };
+            Assert.IsFalse((bool)method.Invoke(null, arguments));
+        }
+
         [UnityTest]
         public IEnumerator D3D12ConfiguredSampleRendersDocument()
         {
