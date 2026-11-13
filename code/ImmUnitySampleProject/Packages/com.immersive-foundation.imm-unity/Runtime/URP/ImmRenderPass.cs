@@ -174,21 +174,34 @@ namespace ImmPlayer
             var depthSize = depth.useScaling
                 ? depth.GetScaledSize(depth.rtHandleProperties.currentViewportSize)
                 : new Vector2Int(d.width, d.height);
+            // Unity scales SetViewport's logical coordinates for dynamic render
+            // targets. Native Vulkan commands need physical pixel coordinates instead.
+            var unityViewport = new Rect(0, 0, size.x, size.y);
+            var colorPhysical = new Vector2Int(c.width, c.height);
+            var depthPhysical = new Vector2Int(d.width, d.height);
+            if (scaledXr)
+            {
+                colorPhysical = new Vector2Int(XRSystem.ScaleTextureWidthForXR(c), XRSystem.ScaleTextureHeightForXR(c));
+                depthPhysical = new Vector2Int(XRSystem.ScaleTextureWidthForXR(d), XRSystem.ScaleTextureHeightForXR(d));
+                size = GetPhysicalViewportSize(size, new Vector2Int(c.width, c.height), colorPhysical);
+                depthSize = GetPhysicalViewportSize(depthSize, new Vector2Int(d.width, d.height), depthPhysical);
+            }
             if (size.x > c.width || size.y > c.height || depthSize.x > d.width || depthSize.y > d.height ||
                 !TryResolveViewport(data.Stereo, scaledXr, data.XrViewport, size, depthSize, out var viewport))
             {
-                data.Owner.Report($"IMM viewport validation failed: xr={data.XrViewport} colorViewport={size} depthViewport={depthSize} colorAttachment={c.width}x{c.height} depthAttachment={d.width}x{d.height} scaledXr={scaledXr}.");
+                data.Owner.Report($"IMM intermediate viewport validation failed: display=({data.XrViewport.x:R},{data.XrViewport.y:R},{data.XrViewport.width:R},{data.XrViewport.height:R}) logical={unityViewport} colorViewport={size} depthViewport={depthSize} colorPhysical={colorPhysical} depthPhysical={depthPhysical} scale={ScalableBufferManager.widthScaleFactor:R},{ScalableBufferManager.heightScaleFactor:R} scaledXr={scaledXr}.");
                 return;
             }
+            if (!scaledXr) unityViewport = new Rect(viewport.x, viewport.y, viewport.width, viewport.height);
             var colorTarget = new RenderTargetIdentifier(color.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
             var depthTarget = new RenderTargetIdentifier(depth.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
             if (commands != null)
             {
                 commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
                     depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-                commands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
+                commands.SetViewport(unityViewport);
             }
-            else rasterCommands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
+            else rasterCommands.SetViewport(unityViewport);
             IntPtr colorBuffer = c.colorBuffer.GetNativeRenderBufferPtr();
             IntPtr depthBuffer = d.depthBuffer.GetNativeRenderBufferPtr();
             // iOS MSAA depth can have a texture without a Unity RenderBuffer wrapper.
@@ -227,33 +240,36 @@ namespace ImmPlayer
             {
                 commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
                     depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-                commands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
+                commands.SetViewport(unityViewport);
             }
-            else rasterCommands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
+            else rasterCommands.SetViewport(unityViewport);
         }
 
-        // XR's render parameter is the authoritative active eye region. RTHandles
-        // can retain a larger allocation/reference size across quality transitions.
+        internal static Vector2Int GetPhysicalViewportSize(Vector2Int logicalViewport,
+            Vector2Int logicalAllocation, Vector2Int physicalAllocation)
+        {
+            if (logicalViewport.x <= 0 || logicalViewport.y <= 0 ||
+                logicalAllocation.x <= 0 || logicalAllocation.y <= 0 ||
+                physicalAllocation.x <= 0 || physicalAllocation.y <= 0 ||
+                logicalViewport.x > logicalAllocation.x || logicalViewport.y > logicalAllocation.y)
+                return Vector2Int.zero;
+            // Round up pixel boundaries as Unity's dynamic-resolution sizing does.
+            // Use integer arithmetic so normalized XR floats never decide validity.
+            return new Vector2Int(
+                (int)(((long)logicalViewport.x * physicalAllocation.x + logicalAllocation.x - 1) / logicalAllocation.x),
+                (int)(((long)logicalViewport.y * physicalAllocation.y + logicalAllocation.y - 1) / logicalAllocation.y));
+        }
+
         internal static bool TryResolveViewport(bool stereo, bool scaledXr, Rect xrViewport,
             Vector2Int colorSize, Vector2Int depthSize, out RectInt viewport)
         {
             viewport = default;
             if (colorSize != depthSize || colorSize.x <= 0 || colorSize.y <= 0) return false;
             viewport = new RectInt(0, 0, colorSize.x, colorSize.y);
-            if (stereo)
-            {
-                // XR may anchor a reduced eye region away from (0,0), e.g. Quest
-                // reports (0,176,1512,1584) in a 1680x1760 attachment.
-                if (!(xrViewport.width > 0) || !(xrViewport.height > 0) ||
-                    !(xrViewport.x >= 0) || !(xrViewport.y >= 0) ||
-                    !(xrViewport.xMax <= colorSize.x) || !(xrViewport.yMax <= colorSize.y)) return false;
-                var eye = new RectInt(Mathf.RoundToInt(xrViewport.x), Mathf.RoundToInt(xrViewport.y),
-                    Mathf.RoundToInt(xrViewport.width), Mathf.RoundToInt(xrViewport.height));
-                if (xrViewport != new Rect(eye.x, eye.y, eye.width, eye.height) ||
-                    (!scaledXr && eye != viewport)) return false;
-                viewport = eye;
-            }
-            return true;
+            // URP applies xr.GetViewport only to its backbuffer. This pass requires
+            // intermediate attachments, whose physical region starts at (0,0).
+            // Keep the existing full-eye contract for the other graphics backends.
+            return !stereo || scaledXr || xrViewport == new Rect(0, 0, colorSize.x, colorSize.y);
         }
 
         private void Report(string message)

@@ -14,51 +14,52 @@ namespace ImmPlayer.Tests
 {
     public sealed class ImmRenderGraphRenderingTests
     {
-        [TestCase(128, 128)]
-        [TestCase(96, 80)]
-        [TestCase(64, 64)]
-        public void VulkanXrUsesActiveEyeViewport(int width, int height)
+        private static object ViewportMethod(string name, params object[] arguments) =>
+            typeof(ImmRendererFeature).Assembly.GetType("ImmPlayer.ImmRenderPass")
+                .GetMethod(name, System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+                .Invoke(null, arguments);
+
+        [TestCase(1680, 1760)]
+        [TestCase(1512, 1584)]
+        [TestCase(1344, 1408)]
+        public void VulkanIntermediateUsesPhysicalAttachmentDimensions(int width, int height)
         {
-            var method = typeof(ImmRendererFeature).Assembly.GetType("ImmPlayer.ImmRenderPass")
-                .GetMethod("TryResolveViewport", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
-            // Reuse a full allocation while shrinking, growing and returning to full size.
-            foreach (var eye in new[] { new Rect(0, 0, width, height), new Rect(0, 0, 128, 128) })
+            var allocation = new Vector2Int(1680, 1760);
+            var physical = new Vector2Int(width, height);
+            var size = (Vector2Int)ViewportMethod("GetPhysicalViewportSize", allocation, allocation, physical);
+            Assert.AreEqual(physical, size);
+            // Display rectangles can be fractional, flipped or outside the
+            // intermediate allocation; they do not describe this attachment.
+            foreach (float y in new[] { 0f, 176f, 352f, 1232f, 176.000045776367f })
             {
-                object[] arguments = { true, true, eye, new Vector2Int(128, 128), new Vector2Int(128, 128), null };
-                Assert.IsTrue((bool)method.Invoke(null, arguments));
-                Assert.AreEqual(new RectInt(0, 0, (int)eye.width, (int)eye.height), arguments[5]);
+                object[] arguments = { true, true, new Rect(0, y, 1512, 1584), size, size, null };
+                Assert.IsTrue((bool)ViewportMethod("TryResolveViewport", arguments));
+                Assert.AreEqual(new RectInt(0, 0, width, height), arguments[5]);
             }
         }
 
-        [TestCase(0, 176, 1512, 1584, 1680, 1760)] // Captured Quest quality transition.
-        [TestCase(16, 32, 96, 64, 128, 128)]
-        public void VulkanXrPreservesOffsetEyeViewport(int x, int y, int width, int height,
-            int attachmentWidth, int attachmentHeight)
+        [Test]
+        public void PhysicalViewportRespectsRtHandleSubregionsAndRoundsUp()
         {
-            var method = typeof(ImmRendererFeature).Assembly.GetType("ImmPlayer.ImmRenderPass")
-                .GetMethod("TryResolveViewport", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
-            var extent = new Vector2Int(attachmentWidth, attachmentHeight);
-            object[] arguments = { true, true, new Rect(x, y, width, height), extent, extent, null };
-            Assert.IsTrue((bool)method.Invoke(null, arguments));
-            Assert.AreEqual(new RectInt(x, y, width, height), arguments[5]);
+            Assert.AreEqual(new Vector2Int(32, 24), ViewportMethod("GetPhysicalViewportSize",
+                new Vector2Int(63, 47), new Vector2Int(128, 128), new Vector2Int(64, 64)));
+            Assert.AreEqual(Vector2Int.zero, ViewportMethod("GetPhysicalViewportSize",
+                new Vector2Int(129, 128), new Vector2Int(128, 128), new Vector2Int(64, 64)));
+            Assert.AreEqual(Vector2Int.zero, ViewportMethod("GetPhysicalViewportSize",
+                new Vector2Int(128, 128), new Vector2Int(128, 128), Vector2Int.zero));
         }
 
-        [TestCase(false, 0, 0, 64, 64, 128, 128)] // Other backends retain full-eye restriction.
-        [TestCase(true, -1, 0, 64, 64, 128, 128)] // Negative origin.
-        [TestCase(true, 65, 0, 64, 64, 128, 128)] // Origin plus size exceeds attachment.
-        [TestCase(true, 0, 65, 64, 64, 128, 128)]
-        [TestCase(false, 0, 1, 128, 127, 128, 128)] // Other backends reject offset regions.
-        [TestCase(true, 0, 0, 129, 128, 128, 128)] // Outside attachment.
-        [TestCase(true, 0, 0, 0, 64, 128, 128)] // Empty eye.
-        [TestCase(true, 0, 0, 64, 64, 64, 128)] // Mismatched colour/depth viewport.
-        public void InvalidXrViewportsAreRejected(bool scaledXr, int x, int y, int width, int height,
-            int depthWidth, int depthHeight)
+        [Test]
+        public void InvalidIntermediateAttachmentsAndOtherBackendViewportsAreRejected()
         {
-            var method = typeof(ImmRendererFeature).Assembly.GetType("ImmPlayer.ImmRenderPass")
-                .GetMethod("TryResolveViewport", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
-            object[] arguments = { true, scaledXr, new Rect(x, y, width, height),
-                new Vector2Int(128, 128), new Vector2Int(depthWidth, depthHeight), null };
-            Assert.IsFalse((bool)method.Invoke(null, arguments));
+            object[] mismatched = { true, true, new Rect(0, 0, 128, 128),
+                new Vector2Int(128, 128), new Vector2Int(64, 128), null };
+            Assert.IsFalse((bool)ViewportMethod("TryResolveViewport", mismatched));
+            object[] empty = { true, true, new Rect(0, 0, 128, 128), Vector2Int.zero, Vector2Int.zero, null };
+            Assert.IsFalse((bool)ViewportMethod("TryResolveViewport", empty));
+            object[] otherBackend = { true, false, new Rect(0, 1, 128, 127),
+                new Vector2Int(128, 128), new Vector2Int(128, 128), null };
+            Assert.IsFalse((bool)ViewportMethod("TryResolveViewport", otherBackend));
         }
 
         [UnityTest]
