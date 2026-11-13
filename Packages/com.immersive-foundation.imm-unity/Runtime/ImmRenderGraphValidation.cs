@@ -52,7 +52,12 @@ namespace ImmPlayer
                     // Exercise smaller regions in retained full-size attachments, then
                     // return to full size. This runs in the existing stereo CI probe.
                     int viewportSize = scenario == 3 ? 64 : scenario == 4 ? 96 : 128;
-                    commands.SetViewport(new Rect(0, 0, viewportSize, viewportSize));
+                    // Vulkan XR can return offset eye regions. Exercise those in
+                    // the GPU readback probe; other backends keep zero-origin coverage.
+                    int viewportOrigin = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan
+                        ? (128 - viewportSize) / 2 : 0;
+                    var viewport = new RectInt(viewportOrigin, viewportOrigin, viewportSize, viewportSize);
+                    commands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
                     var view = camera.worldToCameraMatrix;
                     // The smoke scene is centred three radii ahead of this camera.
                     // Move it six radii sideways in view space, outside the head frustum.
@@ -75,7 +80,7 @@ namespace ImmPlayer
                     int previousCompleted = completedStereo;
                     int submittedFrame = Time.frameCount;
                     transport.QueueRender(commands, 250, target.colorBuffer.GetNativeRenderBufferPtr(),
-                        target.depthBuffer.GetNativeRenderBufferPtr(), 28, 40, new RectInt(0, 0, viewportSize, viewportSize),
+                        target.depthBuffer.GetNativeRenderBufferPtr(), 28, 40, viewport,
                         view, cullingProjection, left, eyeProjection, right, eyeProjection,
                         frameIndex: submittedFrame);
                     // Resolve the complete layered surface with one Unity command.
@@ -109,6 +114,19 @@ namespace ImmPlayer
                     Require(leftVisible > 100, "Left stereo slice has no scene.");
                     Require(rightVisible > 100, "Right stereo slice has no scene.");
                     Require(different > 100, "Stereo eye transforms produced identical images.");
+                    if (viewportOrigin > 0)
+                    {
+                        var pixels = readback.GetData<Color32>();
+                        for (int slice = 0; slice < 2; ++slice)
+                            for (int y = 0; y < 128; ++y)
+                                for (int x = 0; x < 128; ++x)
+                                {
+                                    if (viewport.Contains(new Vector2Int(x, y))) continue;
+                                    var pixel = pixels[slice * 128 * 128 + y * 128 + x];
+                                    Require(pixel.r == 0 && pixel.g == 0 && pixel.b == 0,
+                                        "Vulkan stereo draw escaped its offset eye viewport.");
+                                }
+                    }
 
                 }
                 Debug.Log("[IMM_URP_READBACK] PASS managed stereo packet renders distinct eye slices and retains peripheral content.");
