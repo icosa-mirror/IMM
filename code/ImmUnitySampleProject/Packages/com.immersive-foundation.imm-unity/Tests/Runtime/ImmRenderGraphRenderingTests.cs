@@ -30,8 +30,24 @@ namespace ImmPlayer.Tests
             }
         }
 
+        [TestCase(0, 176, 1512, 1584, 1680, 1760)] // Captured Quest quality transition.
+        [TestCase(16, 32, 96, 64, 128, 128)]
+        public void VulkanXrPreservesOffsetEyeViewport(int x, int y, int width, int height,
+            int attachmentWidth, int attachmentHeight)
+        {
+            var method = typeof(ImmRendererFeature).Assembly.GetType("ImmPlayer.ImmRenderPass")
+                .GetMethod("TryResolveViewport", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var extent = new Vector2Int(attachmentWidth, attachmentHeight);
+            object[] arguments = { true, true, new Rect(x, y, width, height), extent, extent, null };
+            Assert.IsTrue((bool)method.Invoke(null, arguments));
+            Assert.AreEqual(new RectInt(x, y, width, height), arguments[5]);
+        }
+
         [TestCase(false, 0, 0, 64, 64, 128, 128)] // Other backends retain full-eye restriction.
-        [TestCase(true, 1, 0, 64, 64, 128, 128)] // Native Vulkan requires zero origin.
+        [TestCase(true, -1, 0, 64, 64, 128, 128)] // Negative origin.
+        [TestCase(true, 65, 0, 64, 64, 128, 128)] // Origin plus size exceeds attachment.
+        [TestCase(true, 0, 65, 64, 64, 128, 128)]
+        [TestCase(false, 0, 1, 128, 127, 128, 128)] // Other backends reject offset regions.
         [TestCase(true, 0, 0, 129, 128, 128, 128)] // Outside attachment.
         [TestCase(true, 0, 0, 0, 64, 128, 128)] // Empty eye.
         [TestCase(true, 0, 0, 64, 64, 64, 128)] // Mismatched colour/depth viewport.

@@ -50,7 +50,7 @@ public:
     bool BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height);
     // For two views, the host must supply a subpass with viewMask=3 and matching
     // two-layer attachments. IMM borrows an already active render pass.
-    bool BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber, bool unityProjectionAdjusted = false, uint32_t viewCount = 1);
+    bool BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height, uint64_t currentFrameNumber, uint64_t safeFrameNumber, bool unityProjectionAdjusted = false, uint32_t viewCount = 1, int viewportX = 0, int viewportY = 0);
     bool HostFrameResourcesValid(void) const;
     bool DebugClearHostRenderPassColor(float red, float green, float blue, float alpha);
     void EndExternalImageFrame(void);

@@ -180,16 +180,15 @@ namespace ImmPlayer
                 data.Owner.Report($"IMM viewport validation failed: xr={data.XrViewport} colorViewport={size} depthViewport={depthSize} colorAttachment={c.width}x{c.height} depthAttachment={d.width}x{d.height} scaledXr={scaledXr}.");
                 return;
             }
-            size = viewport.size;
             var colorTarget = new RenderTargetIdentifier(color.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
             var depthTarget = new RenderTargetIdentifier(depth.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
             if (commands != null)
             {
                 commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
                     depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-                commands.SetViewport(new Rect(0, 0, size.x, size.y));
+                commands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
             }
-            else rasterCommands.SetViewport(new Rect(0, 0, size.x, size.y));
+            else rasterCommands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
             IntPtr colorBuffer = c.colorBuffer.GetNativeRenderBufferPtr();
             IntPtr depthBuffer = d.depthBuffer.GetNativeRenderBufferPtr();
             // iOS MSAA depth can have a texture without a Unity RenderBuffer wrapper.
@@ -228,9 +227,9 @@ namespace ImmPlayer
             {
                 commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
                     depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-                commands.SetViewport(new Rect(0, 0, size.x, size.y));
+                commands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
             }
-            else rasterCommands.SetViewport(new Rect(0, 0, size.x, size.y));
+            else rasterCommands.SetViewport(new Rect(viewport.x, viewport.y, viewport.width, viewport.height));
         }
 
         // XR's render parameter is the authoritative active eye region. RTHandles
@@ -240,17 +239,20 @@ namespace ImmPlayer
         {
             viewport = default;
             if (colorSize != depthSize || colorSize.x <= 0 || colorSize.y <= 0) return false;
-            var size = colorSize;
+            viewport = new RectInt(0, 0, colorSize.x, colorSize.y);
             if (stereo)
             {
+                // XR may anchor a reduced eye region away from (0,0), e.g. Quest
+                // reports (0,176,1512,1584) in a 1680x1760 attachment.
                 if (!(xrViewport.width > 0) || !(xrViewport.height > 0) ||
-                    xrViewport.width > size.x || xrViewport.height > size.y) return false;
-                var eyeSize = new Vector2Int(Mathf.RoundToInt(xrViewport.width), Mathf.RoundToInt(xrViewport.height));
-                if (xrViewport != new Rect(0, 0, eyeSize.x, eyeSize.y) ||
-                    (!scaledXr && eyeSize != size)) return false;
-                size = eyeSize;
+                    !(xrViewport.x >= 0) || !(xrViewport.y >= 0) ||
+                    !(xrViewport.xMax <= colorSize.x) || !(xrViewport.yMax <= colorSize.y)) return false;
+                var eye = new RectInt(Mathf.RoundToInt(xrViewport.x), Mathf.RoundToInt(xrViewport.y),
+                    Mathf.RoundToInt(xrViewport.width), Mathf.RoundToInt(xrViewport.height));
+                if (xrViewport != new Rect(eye.x, eye.y, eye.width, eye.height) ||
+                    (!scaledXr && eye != viewport)) return false;
+                viewport = eye;
             }
-            viewport = new RectInt(0, 0, size.x, size.y);
             return true;
         }
 

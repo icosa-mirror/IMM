@@ -169,7 +169,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         return 0;
     }
     if (packet.camera < 0 || packet.camera >= ImmShared::ImmEngineBridge::kMaxCameras ||
-        packet.width <= 0 || packet.height <= 0 || packet.x != 0 || packet.y != 0 ||
+        packet.width <= 0 || packet.height <= 0 || packet.x < 0 || packet.y < 0 ||
         !packet.colorBuffer || !packet.depthBuffer) return preparation ? finishPreparation(reject("camera or viewport", invalid)) : reject("camera or viewport", invalid);
     if (preparation)
     {
@@ -207,7 +207,9 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
     if (!color.image || !depth.image || !colorFormat || !depthFormat ||
         !ImmVulkanColorFormatCompatible(color.format, colorFormat) || depth.format != depthFormat ||
         color.extent.width != depth.extent.width || color.extent.height != depth.extent.height ||
-        color.extent.width < static_cast<uint32_t>(packet.width) || color.extent.height < static_cast<uint32_t>(packet.height) ||
+        static_cast<uint32_t>(packet.x) > color.extent.width || static_cast<uint32_t>(packet.y) > color.extent.height ||
+        static_cast<uint32_t>(packet.width) > color.extent.width - static_cast<uint32_t>(packet.x) ||
+        static_cast<uint32_t>(packet.height) > color.extent.height - static_cast<uint32_t>(packet.y) ||
         color.layers != static_cast<int>(packet.viewCount) || depth.layers != static_cast<int>(packet.viewCount) || color.samples != depth.samples ||
         (color.samples != 1 && color.samples != 2 && color.samples != 4 && color.samples != 8))
     {
@@ -228,7 +230,7 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         reinterpret_cast<void*>(recording.renderPass), reinterpret_cast<void*>(recording.framebuffer),
         colorFormat, color.samples, true, true,
         static_cast<uint32_t>(recording.subPassIndex), packet.width, packet.height,
-        recording.currentFrameNumber, recording.safeFrameNumber, true, packet.viewCount))
+        recording.currentFrameNumber, recording.safeFrameNumber, true, packet.viewCount, packet.x, packet.y))
     {
         ImmVulkanRenderGraphDiagnostic("Host recording: commandBuffer=%d renderPass=%d framebuffer=%d subpass=%d",
             recording.commandBuffer != nullptr, recording.renderPass != 0,
@@ -236,6 +238,8 @@ inline int32_t ProcessImmVulkanRenderGraph(ImmVulkanRenderGraphState& state,
         return reject("host render-pass frame", failed);
     }
     ImmShared::ImmEngineBridge::ViewportInfo viewport = {};
+    viewport.x = static_cast<float>(packet.x);
+    viewport.y = static_cast<float>(packet.y);
     viewport.width = static_cast<float>(packet.width);
     viewport.height = static_cast<float>(packet.height);
     viewport.forceViewport = true;
