@@ -117,29 +117,45 @@ namespace ImmPlayer.Authoring
             }
         }
 
-        /// <summary>Show the evaluated drawing, or keep the layer hidden while the host renders its fallback.</summary>
-        public bool TryPresent(int frame, Matrix4x4 documentToWorld)
+        /// <summary>Request the host's current frame before the player's LateUpdate processes seeks.
+        /// Returns true once its drawing is evaluated at the current track revision.</summary>
+        public bool PrepareFrame(int frame)
         {
             Pump();
             if (_disposed || _target == null || _presented != _target || Error != null ||
                 frame < 0 || frame >= _target.Frames.Length || _seek != 0)
+                return false;
+
+            // Held exposures in this single static paint layer share the evaluated drawing.
+            if (_evaluatedFrame >= 0 && _presented.Frames[_evaluatedFrame] == _presented.Frames[frame])
+                return true;
+
+            try
+            {
+                // Seek inside the frame so native tick rounding cannot select its predecessor.
+                long ticks = (2L * frame + 1) * ExportLayerTiming.TicksPerSecond / (2L * _fps);
+                _seek = _document.RequestSetTime(ticks, 0);
+                _seekFrame = frame;
+                _evaluatedFrame = -1;
+            }
+            catch (Exception ex)
+            {
+                Fail(ex);
+            }
+            return false;
+        }
+
+        /// <summary>Show the evaluated drawing, or keep the layer hidden while the host renders its fallback.
+        /// A host that only calls this method can still start a seek here.</summary>
+        public bool TryPresent(int frame, Matrix4x4 documentToWorld)
+        {
+            if (!PrepareFrame(frame))
             {
                 Hide();
                 return false;
             }
             try
             {
-                // This document contains one static paint layer. Held frames referencing the
-                // same drawing already have the requested appearance at this presented revision.
-                if (_evaluatedFrame < 0 || _presented.Frames[_evaluatedFrame] != _presented.Frames[frame])
-                {
-                    Hide();
-                    // Seek inside the frame so native tick rounding cannot select its predecessor.
-                    long ticks = (2L * frame + 1) * ExportLayerTiming.TicksPerSecond / (2L * _fps);
-                    _seek = _document.RequestSetTime(ticks, 0);
-                    _seekFrame = frame;
-                    return false;
-                }
                 if (!_visible || _matrix != documentToWorld)
                 {
                     _document.SetTransform(documentToWorld);
