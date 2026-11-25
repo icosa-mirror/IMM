@@ -169,6 +169,7 @@ namespace ImmPlayer
         #region State
 
         private bool _isInitialized = false;
+        internal bool UsesGammaPaint { get; private set; }
         private ImmRenderGraphSession _renderGraphSession;
         private Dictionary<int, ImmDocument> _loadedDocuments = new Dictionary<int, ImmDocument>();
         private Dictionary<int, IntPtr> _documentMemoryPtrs = new Dictionary<int, IntPtr>(); // Track memory for async loading
@@ -419,7 +420,8 @@ namespace ImmPlayer
 #if UNITY_IOS && !UNITY_EDITOR
                     ImmNativePlugin.ImmUnityRegisterRenderingPlugin();
 #endif
-                    _renderGraphSession = ImmRenderGraphSession.Start(QualitySettings.activeColorSpace == ColorSpace.Linear, true, urpPaintRenderingTechnique);
+                    UsesGammaPaint = QualitySettings.activeColorSpace != ColorSpace.Linear;
+                    _renderGraphSession = ImmRenderGraphSession.Start(!UsesGammaPaint, true, urpPaintRenderingTechnique);
                     _isInitialized = true;
                     return true;
                 }
@@ -441,7 +443,8 @@ namespace ImmPlayer
             }
 #endif
 
-            int colorSpace = useLinearColorSpace ? 0 : 1;
+            UsesGammaPaint = !useLinearColorSpace;
+            int colorSpace = UsesGammaPaint ? 1 : 0;
 
             // Use Unity's temporary cache path for temporary files
             string tempFolder = Application.temporaryCachePath;
