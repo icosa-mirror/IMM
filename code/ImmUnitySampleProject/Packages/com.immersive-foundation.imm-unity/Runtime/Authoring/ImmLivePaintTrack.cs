@@ -129,7 +129,9 @@ namespace ImmPlayer.Authoring
             }
             try
             {
-                if (_evaluatedFrame != frame)
+                // This document contains one static paint layer. Held frames referencing the
+                // same drawing already have the requested appearance at this presented revision.
+                if (_evaluatedFrame < 0 || _presented.Frames[_evaluatedFrame] != _presented.Frames[frame])
                 {
                     Hide();
                     // Seek inside the frame so native tick rounding cannot select its predecessor.
