@@ -31,6 +31,9 @@ namespace ImmPlayer
 		bool PresentDrawingReplacement(ImmImporter::Drawing * active,
 			ImmImporter::Drawing * replacement, uint64_t token, uint64_t revision,
 			ImmCore::piLog * log) override;
+        bool PresentStrokeColors(ImmCore::piRenderer *renderer, ImmImporter::Drawing *drawing,
+            uint32_t strokeIndex, const std::vector<float> &rgba, uint64_t revision, ImmCore::piLog *log) override;
+
 		bool PresentDrawingCreation(ImmImporter::Drawing * created,
 			ImmImporter::Drawing * prepared, uint64_t token, uint64_t revision,
 			ImmCore::piLog * log) override;

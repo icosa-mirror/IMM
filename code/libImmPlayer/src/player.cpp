@@ -742,6 +742,15 @@ namespace ImmPlayer
         return doc->QueueDrawingDeletion(layerId, drawingId);
     }
 
+    int32_t Player::QueueStrokeColors(int docId, uint32_t layerId, uint64_t drawingId,
+        uint64_t expectedRevision, uint32_t strokeIndex, std::vector<float> rgba)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        auto *doc = static_cast<Document *>(mDocuments.GetAddress(docId));
+        return doc == nullptr ? -1 : doc->QueueStrokeColors(layerId, drawingId,
+            expectedRevision, strokeIndex, std::move(rgba));
+    }
+
     int32_t Player::QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
         std::vector<Document::AuthoringElementGeometry> elements,
         Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)

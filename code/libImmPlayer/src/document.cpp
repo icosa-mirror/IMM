@@ -1365,7 +1365,23 @@ namespace ImmPlayer
                 iDiscardPendingPresentation(layerPaintRender, renderer, log);
                 return mState.mPlaybackState != PlaybackState::PausedAndHidden;
             }
-            if (mPendingPresentation.mIsLayerReparent)
+            if (!mPendingPresentation.mStrokeColors.empty())
+            {
+                if (std::getenv("IMM_LIVE_EDIT_HOLD_GPU_PREPARED"))
+                    return mState.mPlaybackState != PlaybackState::PausedAndHidden;
+                if (layerPaintRender == nullptr || !layerPaintRender->PresentStrokeColors(renderer,
+                    mPendingPresentation.mActive, mPendingPresentation.mStrokeIndex,
+                    mPendingPresentation.mStrokeColors, revision, log))
+                    iRejectCommit(revision, -10, 0, mPendingPresentation.mObject);
+                else
+                {
+                    mPreparedRevision = mPresentedRevision = revision;
+                    if (status != nullptr)
+                        iSetCommitState(status, AuthoringCommitState::Presented);
+                }
+                mPendingPresentation = PendingPresentation{};
+            }
+            else if (mPendingPresentation.mIsLayerReparent)
             {
                 Layer * layer = mPendingPresentation.mLayer;
                 Layer * parent = mPendingPresentation.mLayerCreationParent;
@@ -2271,6 +2287,38 @@ namespace ImmPlayer
         }
 
         mOpenDrawingDeletions.push_back(DrawingDeletion{ layerId, drawingId });
+        return 0;
+    }
+
+    int32_t Document::QueueStrokeColors(uint32_t layerId, uint64_t drawingId,
+        uint64_t expectedRevision, uint32_t strokeIndex, std::vector<float> rgba)
+    {
+        if (!mEditing || mTimelinePreview || expectedRevision != mPresentedRevision)
+            return -4;
+        if (HasPendingEdits() || IsLoadingAsync(&mSequence) || !mOpenDrawingCreations.empty() ||
+            !mOpenGeometryEdits.empty() || !mOpenFrameMappings.empty() || !mOpenFrameSequences.empty() ||
+            !mOpenDrawingDeletions.empty() || !mOpenLayerPropertyEdits.empty() ||
+            !mOpenAnimationKeyEdits.empty() || !mOpenInitialSpawnAreaEdits.empty() ||
+            !mOpenSpawnAreaEdits.empty() || !mOpenLayerCreations.empty() ||
+            !mOpenLayerDeletions.empty() || !mOpenLayerReparents.empty())
+            return -7;
+        const auto *entry = iFindDrawingHandle(layerId, drawingId);
+        if (entry == nullptr)
+            return -1;
+        auto *paint = static_cast<LayerPaint *>(entry->mLayer->GetImplementation());
+        auto *drawing = paint != nullptr ? dynamic_cast<DrawingStatic *>(paint->GetDrawing(entry->mDrawingIndex)) : nullptr;
+        if (drawing == nullptr)
+            return -3;
+        const auto *range = drawing->GetStrokeRange(strokeIndex);
+        if (range == nullptr || rgba.size() != size_t(range->count) * 4)
+            return -6;
+        GeometryEdit edit;
+        edit.mLayerId = layerId;
+        edit.mDrawingId = drawingId;
+        edit.mStrokeIndex = strokeIndex;
+        edit.mExpectedRevision = expectedRevision;
+        edit.mStrokeColors = std::move(rgba);
+        mOpenGeometryEdits.push_back(std::move(edit));
         return 0;
     }
 
@@ -3907,6 +3955,23 @@ namespace ImmPlayer
             return;
         }
 
+        if (!edit.mStrokeColors.empty())
+        {
+            if (edit.mExpectedRevision != mPresentedRevision || activeStatic == nullptr ||
+                hasCreationFrameSequence || hasCreationFrameMapping ||
+                std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU"))
+            {
+                iRejectCommit(batch.mRevision, -4, 0, edit.mDrawingId);
+                return;
+            }
+            mPendingPresentation.mRevision = batch.mRevision;
+            mPendingPresentation.mObject = edit.mDrawingId;
+            mPendingPresentation.mActive = activeStatic;
+            mPendingPresentation.mStrokeIndex = edit.mStrokeIndex;
+            mPendingPresentation.mStrokeColors = std::move(edit.mStrokeColors);
+            return;
+        }
+
         std::unique_ptr<LayerPaintStatic::PreparedFrameTable> creationFrameTable;
         if (hasCreationFrameSequence)
         {
@@ -4135,7 +4200,8 @@ namespace ImmPlayer
             return;
         if (mPendingPresentation.mHasPaintCreationRendererToken && layerPaintRender != nullptr)
             layerPaintRender->CancelDrawingReplacement(renderer, mPendingPresentation.mRendererToken, log);
-        if (layerPaintRender != nullptr && (!mPendingPresentation.mHasFrameSequence || mPendingPresentation.mIsCreation) &&
+        if (layerPaintRender != nullptr && mPendingPresentation.mStrokeColors.empty() &&
+            (!mPendingPresentation.mHasFrameSequence || mPendingPresentation.mIsCreation) &&
             !mPendingPresentation.mIsFrameMapping &&
             !mPendingPresentation.mIsDeletion && !mPendingPresentation.mIsLayerPropertyEdit &&
             !mPendingPresentation.mIsAnimationKeyEdit &&

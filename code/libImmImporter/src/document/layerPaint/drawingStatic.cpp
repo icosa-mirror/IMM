@@ -7,6 +7,8 @@
 #include "libImmCore/src/libBasics/piColor.h"
 
 #include "drawingStatic.h"
+#include <algorithm>
+#include <new>
 
 using namespace ImmCore;
 
@@ -53,6 +55,26 @@ namespace ImmImporter
        #endif
     }
 
+    void DrawingStatic::SetVertexColor(MyVertexFormat &vertex, const vec3 &rgb, uint8_t alpha, ColorSpace colorSpace)
+    {
+        const vec3 col = colorSpace == ColorSpace::Gamma ? iConvert(rgb) : sqrt(rgb);
+        vertex.mCol[0] = uint8_t(255.0f * col.x);
+        vertex.mCol[1] = uint8_t(255.0f * col.y);
+        vertex.mCol[2] = uint8_t(255.0f * col.z);
+        vertex.mAlp = alpha;
+    }
+
+    const DrawingStatic::StrokeRange *DrawingStatic::GetStrokeRange(uint32_t index) const
+    {
+        return index < mStrokeRanges.size() ? &mStrokeRanges[index] : nullptr;
+    }
+
+    void DrawingStatic::PublishStrokeColors(const StrokeRange &range, const MyVertexFormat *vertices)
+    {
+        auto *first = mGeometry.mBuffers[range.brush].mPoints.GetAddress(range.start);
+        std::copy_n(vertices, range.count, first);
+    }
+
     static void iBuildGeometry(int vertexBase, DrawingStatic::MyVertexFormat *verts, uint16_t *index, const Element *ele, int numIndices, const int strokeID, Drawing::ColorSpace colorSpace, bool flipped)
     {
         piAssert( verts != nullptr );
@@ -71,7 +93,6 @@ namespace ImmImporter
         {
             const Point *p = points + j;
 
-            vec3 col = (colorSpace == Drawing::ColorSpace::Gamma) ? iConvert(p->mCol) : sqrt(p->mCol);
             vec3 dir = (visibleMode == Element::VisibilityType::Always) ? vec3(0.0f, 0.0f, 0.0f) : p->mDir;
             vec3 tan, bU, bV; ele->ComputeBasis(j, &tan, &bU, &bV);
             vec3 pos = p->mPos;
@@ -87,19 +108,15 @@ namespace ImmImporter
 
             // add the vertex data
             verts[j].mPos = pos;
-            verts[j].mCol[0] = uint8_t(255.0f * col.x);
-            verts[j].mCol[1] = uint8_t(255.0f * col.y);
-            verts[j].mCol[2] = uint8_t(255.0f * col.z);
+            DrawingStatic::SetVertexColor(verts[j], p->mCol, p->mTra, colorSpace);
             verts[j].mAxU = encodeUnitVector(bU);
             verts[j].mAxV = encodeUnitVector(bV);
             piAssert(verts[j].mAxU  != verts[j].mAxV);
 #if ST_VERTEX_FORMAT == 1
             verts[j].mWidInfo = (p->mWid << 8u) | ((uint8_t) ((static_cast<uint32_t>(visibleMode) << 7u) + (strokeID & 127u)));
             verts[j].mTim = p->mTim;
-            verts[j].mAlp = p->mTra;
 #else
             verts[j].mWid = p->mWid;
-            verts[j].mAlp = p->mTra;
             verts[j].mDir[0] = int(127.5f + 127.5f*dir.x);
             verts[j].mDir[1] = int(127.5f + 127.5f*dir.y);
             verts[j].mDir[2] = int(127.5f + 127.5f*dir.z);
@@ -230,6 +247,7 @@ namespace ImmImporter
 
     bool DrawingStatic::StartAdding(float biggestStroke)
     {
+        mStrokeRanges.clear();
         mGeometry.mBiggestStroke = biggestStroke;
         for (int i = 0; i < kNumBrushTypes; i++)
         {
@@ -287,6 +305,15 @@ namespace ImmImporter
             builder->lbox = bound3(1e20f);
         }
 
+        try
+        {
+            mStrokeRanges.push_back(StrokeRange{static_cast<uint32_t>(brushIDint),
+                static_cast<uint32_t>(buf->mPoints.GetLength()), numPoints, colorSpace});
+        }
+        catch (const std::bad_alloc &)
+        {
+            return false;
+        }
         iBuildGeometry(builder->mNumVertices, buf->mPoints.Alloc(numPoints, true), buf->mIndices.Alloc(numIndices, true), ele, builder->mNumIndices, mGeometry.mNumStrokes, colorSpace, flipped);
         builder->mNumPoints += numPoints;
         builder->mNumVertices += numVertices;
@@ -369,6 +396,7 @@ namespace ImmImporter
 
         // piTArray owns raw allocations and has an intentionally empty destructor. Swapping
         // the aggregate transfers those allocations without copying or freeing either side.
+        mStrokeRanges.swap(replacementStatic->mStrokeRanges);
         std::swap(mGeometry, replacementStatic->mGeometry);
         std::swap(mBBox, replacementStatic->mBBox);
         return true;

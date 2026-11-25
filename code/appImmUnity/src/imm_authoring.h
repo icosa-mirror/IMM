@@ -410,6 +410,11 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingCreate(int32
     uint64_t * drawingIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingDestroy(int32_t docId, int32_t layerId,
     uint64_t drawingId);
+// Queue the colors of one existing stroke against the document's presented revision.
+// rgba contains four linear floats per point and is copied before returning.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingSetStrokeColors(int32_t docId,
+    int32_t layerId, uint64_t drawingId, uint64_t expectedRevision, uint32_t strokeIndex,
+    uint32_t pointCount, const float *rgba);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingSetGeometry(int32_t docId, int32_t layerId,
     uint64_t drawingId, const ImmAuthoringDrawingGeometry * geometry);
 

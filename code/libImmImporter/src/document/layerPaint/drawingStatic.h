@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "libImmCore/src/libBasics/piString.h"
 #include "libImmCore/src/libBasics/piTArray.h"
 
@@ -110,6 +112,14 @@ namespace ImmImporter
 		const uint32_t GetNumGeometryChunks(uint32_t type) const override;
 		const Geometry::Chunk * GetGeometryChunk(uint32_t id, uint32_t type) const;
 		const Geometry *GetGeometry(void) const;
+        struct StrokeRange
+        {
+            uint32_t brush, start, count;
+            ColorSpace colorSpace;
+        };
+        const StrokeRange *GetStrokeRange(uint32_t index) const;
+        static void SetVertexColor(MyVertexFormat &vertex, const vec3 &rgb, uint8_t alpha, ColorSpace colorSpace);
+        void PublishStrokeColors(const StrokeRange &range, const MyVertexFormat *vertices);
 
 	private:
 		void iAppendChunk(const uint32_t vbase, const uint32_t ibase, const uint32_t pbase, const uint32_t numPoints, uint32_t numIndices, uint32_t numPolygons, const ImmCore::bound3 & bbox, const uint32_t type, const float biggestStroke) override;
@@ -118,6 +128,7 @@ namespace ImmImporter
         bound3   mBBox;
 		int      mGpuId;
 		Geometry mGeometry;
+        std::vector<StrokeRange> mStrokeRanges;
 
 	private:
 		struct Builder

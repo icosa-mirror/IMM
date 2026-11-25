@@ -3233,6 +3233,28 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Frame
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetStrokeColors(
+    int32_t docId, int32_t layerId, uint64_t drawingId, uint64_t expectedRevision, uint32_t strokeIndex,
+    uint32_t pointCount, const float *rgba)
+{
+    if (layerId < 0 || drawingId == 0 || rgba == nullptr || pointCount < IMM_AUTHORING_MIN_POINTS_PER_ELEMENT ||
+        pointCount > IMM_AUTHORING_MAX_POINTS_PER_ELEMENT)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const size_t count = size_t(pointCount) * 4;
+    for (size_t i = 0; i < count; ++i)
+        if (!(rgba[i] >= 0.0f && rgba[i] <= 1.0f))
+            return IMM_AUTHORING_VALIDATION_FAILED;
+    try
+    {
+        return iPlayer().QueueStrokeColors(docId, layerId, drawingId, expectedRevision, strokeIndex,
+            std::vector<float>(rgba, rgba + count));
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
     int32_t docId, int32_t layerId, uint64_t drawingId, const ImmAuthoringDrawingGeometry *geometry)
 {

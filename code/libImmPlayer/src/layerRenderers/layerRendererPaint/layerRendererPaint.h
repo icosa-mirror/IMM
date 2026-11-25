@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "../renderLayer.h"
 #include "libImmImporter/src/document/layerPaint/element.h"
 
@@ -57,6 +59,13 @@ namespace ImmPlayer
 			(void)active; (void)replacement; (void)token; (void)revision; (void)log;
 			return false;
 		}
+
+        virtual bool PresentStrokeColors(ImmCore::piRenderer *renderer, ImmImporter::Drawing *drawing,
+            uint32_t strokeIndex, const std::vector<float> &rgba, uint64_t revision, ImmCore::piLog *log)
+        {
+            (void)renderer; (void)drawing; (void)strokeIndex; (void)rgba; (void)revision; (void)log;
+            return false;
+        }
 
 		virtual bool PresentDrawingCreation(ImmImporter::Drawing * created,
 			ImmImporter::Drawing * prepared, uint64_t token, uint64_t revision,
