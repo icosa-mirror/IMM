@@ -356,6 +356,14 @@ namespace ImmPlayer
             }
             if (_isInitialized)
             {
+                try
+                {
+                    BeforeGlobalWork?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex, this);
+                }
                 ImmNativePlugin.GlobalWorkEx(1, _globalWorkBudgetMicroseconds);
                 ProcessPendingDocumentUnloads();
                 IssueNativeUnloadDrainEvent();
@@ -585,6 +593,10 @@ namespace ImmPlayer
         }
 
         public bool IsInitialized => _isInitialized;
+
+        /// <summary>Raised on the main thread immediately before the normal per-frame native update.
+        /// Hosts can submit the final playhead selected during this frame.</summary>
+        public event Action BeforeGlobalWork;
 
         public int OwnedInputBufferCount => _documentMemoryPtrs.Count;
 
