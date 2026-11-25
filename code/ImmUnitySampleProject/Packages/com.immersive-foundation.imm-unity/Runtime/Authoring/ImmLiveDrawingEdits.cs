@@ -125,6 +125,43 @@ namespace ImmPlayer.Authoring
             return ImmAuthoring_FrameSequenceSetHandles(document, layer, drawings, (uint)drawings.Length);
         }
 
+        internal static bool TrySetStrokeColors(int document, int layer, ulong drawing, ulong revision,
+            int strokeIndex, PaintPoint[] points)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            // The package can be linked with an older static player on iOS.
+            return false;
+#else
+            if (s_StrokeColorsUnavailable) return false;
+            var rgba = new float[points.Length * 4];
+            for (int i = 0; i < points.Length; ++i)
+            {
+                rgba[4 * i] = points[i].Color.r;
+                rgba[4 * i + 1] = points[i].Color.g;
+                rgba[4 * i + 2] = points[i].Color.b;
+                rgba[4 * i + 3] = points[i].Alpha;
+            }
+            try
+            {
+                return ImmAuthoring_DrawingSetStrokeColors(document, layer, drawing, revision, (uint)strokeIndex,
+                    (uint)points.Length, rgba) == 0;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                s_StrokeColorsUnavailable = true;
+                return false;
+            }
+#endif
+        }
+
+#if !UNITY_IOS || UNITY_EDITOR
+        private static bool s_StrokeColorsUnavailable;
+
+        [DllImport(Library)]
+        private static extern int ImmAuthoring_DrawingSetStrokeColors(int document, int layer, ulong drawing,
+            ulong revision, uint strokeIndex, uint pointCount, [In] float[] rgba);
+#endif
+
         /// <summary>Replace the entire drawing. Native code copies all stroke data before returning.</summary>
         public static int SetDrawingGeometry(int document, int layer, ulong drawing, Stroke[] strokes,
             float biggestStroke, bool gamma = false, bool flipped = false)

@@ -18,6 +18,38 @@ namespace ImmPlayer.Authoring
             public long Revision { get; }
             public ImmLiveDrawingEdits.Stroke[] Strokes { get; }
             public float BiggestStroke { get; }
+            internal int RecoloredStroke { get; } = -1;
+            internal long RevisionBeforeRecolor { get; }
+
+            private Drawing(Drawing previous, long revision, int index, ImmLiveDrawingEdits.Stroke[] strokes)
+                : this(previous.Id, revision, strokes, previous.BiggestStroke)
+            {
+                RecoloredStroke = index;
+                RevisionBeforeRecolor = previous.Revision;
+            }
+
+            /// <summary>Replace one stroke. When its geometry matches, the player can update only its colors.</summary>
+            public static Drawing WithRecoloredStroke(Drawing previous, long revision, int index,
+                ImmLiveDrawingEdits.Stroke replacement)
+            {
+                if (previous == null) throw new ArgumentNullException(nameof(previous));
+                if (index < 0 || index >= previous.Strokes.Length) throw new ArgumentOutOfRangeException(nameof(index));
+                var strokes = (ImmLiveDrawingEdits.Stroke[])previous.Strokes.Clone();
+                var old = strokes[index];
+                strokes[index] = replacement;
+                if (old.Brush != replacement.Brush || old.Visibility != replacement.Visibility ||
+                    replacement.Points == null || old.Points.Length != replacement.Points.Length)
+                    return new Drawing(previous.Id, revision, strokes, previous.BiggestStroke);
+                for (int i = 0; i < old.Points.Length; ++i)
+                {
+                    var a = old.Points[i];
+                    var b = replacement.Points[i];
+                    if (!a.Position.Equals(b.Position) || !a.Normal.Equals(b.Normal) ||
+                        !a.Direction.Equals(b.Direction) || a.Width != b.Width || a.Length != b.Length || a.Time != b.Time)
+                        return new Drawing(previous.Id, revision, strokes, previous.BiggestStroke);
+                }
+                return new Drawing(previous, revision, index, strokes);
+            }
 
             public Drawing(long id, long revision, ImmLiveDrawingEdits.Stroke[] strokes, float biggestStroke)
             {
@@ -50,7 +82,8 @@ namespace ImmPlayer.Authoring
         private Task<byte[]> _compile;
         private ImmDocument _document;
         private int _layer = -1;
-        private ulong _commit, _seek;
+        private ulong _commit, _seek, _nativePresented;
+        private bool _committingColors, _disableStrokeColors;
         private int _seekFrame = -1, _evaluatedFrame = -1;
         private Matrix4x4 _matrix;
         private bool _visible, _disposed;
@@ -102,11 +135,20 @@ namespace ImmPlayer.Authoring
                 {
                     Check(ImmLiveDrawingEdits.GetCommitStatus(_document.DocumentId, _commit, out var status));
                     if (status.State == ImmLiveDrawingEdits.CommitState.Rejected)
-                        throw new InvalidOperationException($"IMM rejected paint edit {_commit} ({status.Result}).");
-                    if (status.State != ImmLiveDrawingEdits.CommitState.Presented) return;
-                    _presented = _committing;
+                    {
+                        if (!_committingColors)
+                            throw new InvalidOperationException($"IMM rejected paint edit {_commit} ({status.Result}).");
+                        _disableStrokeColors = true;
+                    }
+                    else
+                    {
+                        if (status.State != ImmLiveDrawingEdits.CommitState.Presented) return;
+                        _presented = _committing;
+                        _nativePresented = _commit;
+                    }
                     _committing = null;
                     _commit = 0;
+                    _committingColors = false;
                 }
                 if (_presented != _target) UpdateTrack();
             }
@@ -299,8 +341,15 @@ namespace ImmPlayer.Authoring
                     Check(ImmLiveDrawingEdits.CreateDrawing(doc, _layer, out ulong handle));
                     _handles.Add(drawing.Id, handle);
                 }
-                Check(ImmLiveDrawingEdits.SetDrawingGeometry(doc, _layer, _handles[drawing.Id],
-                    drawing.Strokes, drawing.BiggestStroke, _manager.UsesGammaPaint));
+                ulong handleToEdit = _handles[drawing.Id];
+                int stroke = drawing.RecoloredStroke;
+                _committingColors = !_disableStrokeColors && !create && !remap && stroke >= 0 &&
+                    _presented.Drawings[drawing.Id].Revision == drawing.RevisionBeforeRecolor &&
+                    ImmLiveDrawingEdits.TrySetStrokeColors(doc, _layer, handleToEdit, _nativePresented, stroke,
+                        drawing.Strokes[stroke].Points);
+                if (!_committingColors)
+                    Check(ImmLiveDrawingEdits.SetDrawingGeometry(doc, _layer, handleToEdit,
+                        drawing.Strokes, drawing.BiggestStroke, _manager.UsesGammaPaint));
             }
             if (remap)
                 Check(ImmLiveDrawingEdits.SetFrameSequence(doc, _layer, _target.Frames.Select(id => _handles[id]).ToArray()));
@@ -337,7 +386,8 @@ namespace ImmPlayer.Authoring
             _presented = _installing = _committing = null;
             _handles.Clear();
             _layer = _evaluatedFrame = -1;
-            _commit = _seek = 0;
+            _commit = _seek = _nativePresented = 0;
+            _committingColors = _disableStrokeColors = false;
         }
 
         public void Dispose()
