@@ -107,7 +107,6 @@ namespace ImmPlayer.Authoring
                     _presented = _committing;
                     _committing = null;
                     _commit = 0;
-                    _evaluatedFrame = -1;
                 }
                 if (_presented != _target) UpdateTrack();
             }
@@ -312,6 +311,9 @@ namespace ImmPlayer.Authoring
             }
             Check(ImmLiveDrawingEdits.Commit(doc, out _commit));
             _committing = _target;
+            // Replacing geometry preserves the selected drawing handle. Structural edits
+            // can change what the last seek selected and must be evaluated again.
+            if (remap || create || removed.Length != 0) _evaluatedFrame = -1;
         }
 
         private static void Check(int result)
