@@ -542,7 +542,27 @@ jobs:
 
     - name: Build Godot GDExtension
       shell: pwsh
-      run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF
+      run: |
+        # The Godot syntax verifier uses clang++ with the runner's MSVC headers.
+        # MSVC 14.52 requires Clang 22 or newer.
+        $clang = Get-Command clang++ -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        $clangVersion = if ($clang) { & $clang.Source --version | Select-Object -First 1 }
+        if ($clangVersion -notmatch 'clang version (\d+)' -or [int]$Matches[1] -lt 22) {
+          $installer = Join-Path $env:RUNNER_TEMP "LLVM-22.1.8-win64.exe"
+          $llvm = Join-Path $env:RUNNER_TEMP "llvm-22.1.8"
+          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-win64.exe" -OutFile $installer
+          $expected = '16E5709785FEF73C854646241C4A92C5CD574318D1B33C63330DD7721903E55C'
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $expected) {
+            throw "LLVM installer checksum did not match"
+          }
+          $install = Start-Process -FilePath $installer -ArgumentList "/S /D=$llvm" -WindowStyle Hidden -Wait -PassThru
+          if ($install.ExitCode -ne 0 -or !(Test-Path -LiteralPath (Join-Path $llvm 'bin/clang++.exe'))) {
+            throw "Installing Clang 22 failed with exit code $($install.ExitCode)"
+          }
+          $env:PATH = "$(Join-Path $llvm 'bin');$env:PATH"
+        }
+        clang++ --version
+        .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF
 
     - name: Run native Godot smoke test
       shell: pwsh
