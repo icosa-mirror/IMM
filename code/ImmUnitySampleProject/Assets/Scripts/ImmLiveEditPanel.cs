@@ -5,6 +5,8 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using UnityEngine;
+using ImmPlayer.Authoring;
+using ImmPlayer.Exporter;
 using N = ImmPlayer.ImmLiveEditNative;
 
 namespace ImmPlayer
@@ -21,8 +23,7 @@ namespace ImmPlayer
         private int selected = -1;
         private N.Properties properties;
         private N.Pivot pivot;
-        private N.Status commit;
-        private N.Revisions revisions;
+        private ImmLiveDrawingEdits.Revisions revisions;
         private ulong pending;
         private bool awaitingCommit;
         private string awaitingCommitLabel;
@@ -101,14 +102,13 @@ namespace ImmPlayer
             {
                 try
                 {
-                    commit = N.Status.Empty;
-                    N.Check(N.ImmAuthoring_GetCommitStatus(document.DocumentId, pending, ref commit));
+                    N.Check(ImmLiveDrawingEdits.GetCommitStatus(document.DocumentId, pending, out var commit));
                     ReadRevisions();
-                    if (commit.state == 4 || commit.state == 5)
+                    if (commit.State == ImmLiveDrawingEdits.CommitState.Presented || commit.State == ImmLiveDrawingEdits.CommitState.Rejected)
                     {
                         ulong completed = pending;
                         pending = 0;
-                        if (commit.state == 4)
+                        if (commit.State == ImmLiveDrawingEdits.CommitState.Presented)
                         {
                             Refresh();
                             FinishTimelineHistory(true);
@@ -116,7 +116,7 @@ namespace ImmPlayer
                         }
                         else
                         {
-                            string reason = $"Revision {completed}: Rejected — {N.Result(commit.result)}; command {commit.command}, target {commit.target}";
+                            string reason = $"Revision {completed}: Rejected — {N.Result(commit.Result)}; command {commit.Command}, target {commit.Target}";
                             Run(Refresh);
                             FinishTimelineHistory(false);
                             Log(reason);
@@ -310,7 +310,7 @@ namespace ImmPlayer
             catch (Exception error)
             {
                 awaitingCommit = false; AbandonHistoryRequest();
-                try { N.ImmAuthoring_DiscardPending(Doc); } catch (Exception) { }
+                try { ImmLiveDrawingEdits.DiscardPending(Doc); } catch (Exception) { }
                 Log($"{label}: {error.Message}");
                 Run(ReadSelected);
             }
@@ -319,19 +319,18 @@ namespace ImmPlayer
         private void TryPublishQueuedCommit()
         {
             if (!awaitingCommit || document == null) return;
-            int result = N.ImmAuthoring_Commit(Doc, out ulong revision);
+            int result = ImmLiveDrawingEdits.Commit(Doc, out ulong revision);
             if (result == -7 && Time.unscaledTime < commitDeadline) return;
             awaitingCommit = false;
             if (result != 0)
             {
-                N.ImmAuthoring_DiscardPending(Doc);
+                ImmLiveDrawingEdits.DiscardPending(Doc);
                 AbandonHistoryRequest();
                 Log($"{awaitingCommitLabel}: {N.Result(result)}. No edit was committed.");
                 Run(ReadSelected);
                 return;
             }
             pending = revision; ReadRevisions();
-            commit = N.Status.Empty; commit.state = 1;
             Log($"{awaitingCommitLabel}: queued revision {pending}");
         }
 
@@ -354,8 +353,23 @@ namespace ImmPlayer
         {
             float size = (float)Number(markerSize);
             if (!(size > 0) || float.IsInfinity(size)) throw new ArgumentException("Marker size must be finite and positive.");
-            N.Check(N.ImmAuthoring_FrameGetDrawingHandle(Doc, selected, Integer(frame), out ulong drawing));
-            return N.ReplaceWithMarker(Doc, selected, drawing, size);
+            N.Check(ImmLiveDrawingEdits.GetFrameDrawing(Doc, selected, Integer(frame), out ulong drawing));
+            var points = new PaintPoint[4];
+            for (int i = 0; i < points.Length; ++i)
+            {
+                points[i] = new PaintPoint
+                {
+                    Position = new Vector3((i - 1.5f) * size / 3f, (i % 2) * size / 3f, 0),
+                    Normal = Vector3.forward,
+                    Direction = Vector3.right,
+                    Color = new Color(1, 0.1f, 0.8f),
+                    Alpha = 1,
+                    Width = size * 0.04f,
+                    Length = i * size / 3f
+                };
+            }
+            var marker = new ImmLiveDrawingEdits.Stroke(BrushSectionType.Circle, VisibilityType.Always, points);
+            return ImmLiveDrawingEdits.SetDrawingGeometry(Doc, selected, drawing, new[] { marker }, size * 0.04f);
         }
 
         private void CreateLayer(int type)
@@ -435,8 +449,7 @@ namespace ImmPlayer
 
         private void ReadRevisions()
         {
-            revisions = new N.Revisions { size = 32, version = 1 };
-            N.Check(N.ImmAuthoring_GetRevisions(Doc, ref revisions));
+            N.Check(ImmLiveDrawingEdits.GetRevisions(Doc, out revisions));
         }
 
         private void ReadViewpoints()
@@ -515,7 +528,7 @@ namespace ImmPlayer
                 if (document.GetStateInfo().Loading == ImmDocument.LoadingState.Failed) break;
                 if (document.IsSequenceReady())
                 {
-                    int result = N.ImmAuthoring_Attach(Doc);
+                    int result = ImmLiveDrawingEdits.Attach(Doc);
                     if (result == 0)
                     {
                         attached = true; loading = false; Run(Refresh);

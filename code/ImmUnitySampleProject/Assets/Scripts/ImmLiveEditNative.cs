@@ -1,11 +1,10 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
-using UnityEngine;
 
 namespace ImmPlayer
 {
-    // Sample-only bindings to imm_authoring.h. This does not change the managed SDK.
+    // Sample bindings for layer, key, and timeline controls.
     internal static class ImmLiveEditNative
     {
 #if UNITY_IOS && !UNITY_EDITOR
@@ -45,22 +44,6 @@ namespace ImmPlayer
             public double doubleValue;
         }
         [StructLayout(LayoutKind.Sequential)]
-        internal struct Status
-        {
-            public uint size, version;
-            public ulong revision;
-            public int state, result;
-            public uint command, reserved;
-            public ulong target;
-            public static Status Empty => new Status { size = 40, version = 1 };
-        }
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct Revisions
-        {
-            public uint size, version;
-            public ulong requested, prepared, presented;
-        }
-        [StructLayout(LayoutKind.Sequential)]
         internal struct TimelineClock
         {
             public int timeline, parentTimeline;
@@ -69,36 +52,6 @@ namespace ImmPlayer
             public uint canonicalRepeat, effectiveRepeat, flags, reserved;
             public ulong evaluationRevision, presentedRevision, requestedRevision;
         }
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Point
-        {
-            public Vector3 position, normal, direction, color;
-            public float alpha, width, length, time;
-        }
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Element
-        {
-            public uint size, version;
-            public int brush, visibility;
-            public uint count, reserved;
-            public IntPtr points;
-        }
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Geometry
-        {
-            public uint size, version, count, reserved;
-            public IntPtr elements;
-            public float biggestStroke;
-            public int colorSpace, flipped;
-            public uint reserved1;
-        }
-
-        [DllImport(Library)] internal static extern int ImmAuthoring_Attach(int doc);
-        [DllImport(Library)] internal static extern int ImmAuthoring_Detach(int doc);
-        [DllImport(Library)] internal static extern int ImmAuthoring_DiscardPending(int doc);
-        [DllImport(Library)] internal static extern int ImmAuthoring_Commit(int doc, out ulong revision);
-        [DllImport(Library)] internal static extern int ImmAuthoring_GetCommitStatus(int doc, ulong revision, ref Status status);
-        [DllImport(Library)] internal static extern int ImmAuthoring_GetRevisions(int doc, ref Revisions revisions);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerGetProperties(int doc, int layer, ref Properties value);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerSetProperties(int doc, int layer, ref Properties value);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerGetPivot(int doc, int layer, ref Pivot value);
@@ -119,11 +72,6 @@ namespace ImmPlayer
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerDestroy(int doc, int layer);
         [DllImport(Library)] internal static extern int ImmAuthoring_LayerReparent(int doc, int layer, int parent, int index);
         [DllImport(Library)] internal static extern int ImmAuthoring_PaintSetMaxRepeatCount(int doc, int layer, uint count);
-        [DllImport(Library)] internal static extern int ImmAuthoring_FrameGetDrawingHandle(int doc, int layer, int frame, out ulong drawing);
-        [DllImport(Library)] internal static extern int ImmAuthoring_FrameSetHandle(int doc, int layer, int frame, ulong drawing);
-        [DllImport(Library)] internal static extern int ImmAuthoring_FrameSequenceSetHandles(int doc, int layer, ulong[] drawings, uint count);
-        [DllImport(Library)] internal static extern int ImmAuthoring_DrawingGetHandle(int doc, int layer, int index, out ulong drawing);
-        [DllImport(Library)] private static extern int ImmAuthoring_DrawingSetGeometry(int doc, int layer, ulong drawing, ref Geometry geometry);
 
         internal static string ReadName(int doc, int layer)
         {
@@ -156,34 +104,10 @@ namespace ImmPlayer
             }
         }
 
-        internal static int ReplaceWithMarker(int doc, int layer, ulong drawing, float size)
-        {
-            var points = new Point[4];
-            for (int i = 0; i < points.Length; ++i)
-                points[i] = new Point { position = new Vector3((i - 1.5f) * size / 3f, (i % 2) * size / 3f, 0),
-                    normal = Vector3.forward, direction = Vector3.right, color = new Vector3(1, 0.1f, 0.8f),
-                    alpha = 1, width = size * 0.04f, length = i * size / 3f };
-            var pointPin = GCHandle.Alloc(points, GCHandleType.Pinned);
-            try
-            {
-                var elements = new[] { new Element { size = (uint)Marshal.SizeOf<Element>(), version = 1,
-                    brush = 2, visibility = 1, count = (uint)points.Length, points = pointPin.AddrOfPinnedObject() } };
-                var elementPin = GCHandle.Alloc(elements, GCHandleType.Pinned);
-                try
-                {
-                    var geometry = new Geometry { size = (uint)Marshal.SizeOf<Geometry>(), version = 1,
-                        count = 1, elements = elementPin.AddrOfPinnedObject(), biggestStroke = size * 0.04f };
-                    return ImmAuthoring_DrawingSetGeometry(doc, layer, drawing, ref geometry);
-                }
-                finally { elementPin.Free(); }
-            }
-            finally { pointPin.Free(); }
-        }
-
         internal static void ValidateLayouts()
         {
             if (Marshal.SizeOf<Properties>() != 64 || Marshal.SizeOf<Pivot>() != 48 ||
-                Marshal.SizeOf<Key>() != 80 || Marshal.SizeOf<Status>() != 40 || Marshal.SizeOf<Point>() != 64 ||
+                Marshal.SizeOf<Key>() != 80 ||
                 Marshal.OffsetOf<Key>(nameof(Key.doubleValue)).ToInt32() != 72 ||
                 Marshal.SizeOf<LayerDiagnosticsNative>() != 44 || Marshal.SizeOf<TimelineClock>() != 96 ||
                 Marshal.OffsetOf<TimelineClock>(nameof(TimelineClock.local)).ToInt32() != 32 ||

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using ImmPlayer.Authoring;
 using N = ImmPlayer.ImmLiveEditNative;
 
 namespace ImmPlayer
@@ -34,26 +35,24 @@ namespace ImmPlayer
         private const long HistoryByteLimit = 32 * 1024 * 1024;
         private const int HistoryEntryLimit = 64;
 
-        private N.Revisions HistoryRevisions()
+        private ImmLiveDrawingEdits.Revisions HistoryRevisions()
         {
-            var value = new N.Revisions { size = 32, version = 1 };
-            N.Check(N.ImmAuthoring_GetRevisions(Doc, ref value));
+            N.Check(ImmLiveDrawingEdits.GetRevisions(Doc, out var value));
             return value;
         }
 
-        private bool HistoryReady(N.Revisions value)
+        private bool HistoryReady(ImmLiveDrawingEdits.Revisions value)
         {
-            if (value.requested == value.presented) return true;
-            var state = N.Status.Empty;
-            N.Check(N.ImmAuthoring_GetCommitStatus(Doc, value.requested, ref state));
+            if (value.Requested == value.Presented) return true;
+            N.Check(ImmLiveDrawingEdits.GetCommitStatus(Doc, value.Requested, out var state));
             // A rejected request leaves the requested counter ahead permanently,
             // but has not changed the published track and must not poison undo.
-            return state.state == 5;
+            return state.State == ImmLiveDrawingEdits.CommitState.Rejected;
         }
 
         private TimelineState CaptureTimelineState(int layer, int property)
         {
-            N.Revisions before = HistoryRevisions();
+            ImmLiveDrawingEdits.Revisions before = HistoryRevisions();
             if (!HistoryReady(before))
                 throw new InvalidOperationException("Wait for the current edit to finish before changing this track.");
             var state = new TimelineState();
@@ -62,7 +61,7 @@ namespace ImmPlayer
                 N.Check(N.ImmAuthoring_LayerGetTimeline(Doc, layer, out _, out _, out _, out _, out uint count, out _));
                 state.Frames = new ulong[checked((int)count)];
                 for (int i = 0; i < state.Frames.Length; i++)
-                    N.Check(N.ImmAuthoring_FrameGetDrawingHandle(Doc, layer, i, out state.Frames[i]));
+                    N.Check(ImmLiveDrawingEdits.GetFrameDrawing(Doc, layer, i, out state.Frames[i]));
             }
             else if (property == -2)
             {
@@ -78,8 +77,8 @@ namespace ImmPlayer
                     N.Check(N.ImmAuthoring_KeyGet(Doc, layer, property, i, ref state.Keys[i]));
                 }
             }
-            N.Revisions after = HistoryRevisions();
-            if (before.presented != after.presented || !HistoryReady(after))
+            ImmLiveDrawingEdits.Revisions after = HistoryRevisions();
+            if (before.Presented != after.Presented || !HistoryReady(after))
                 throw new InvalidOperationException("The document changed while reading this track. Refresh and retry.");
             return state;
         }
@@ -88,7 +87,7 @@ namespace ImmPlayer
         {
             if (historyReplay != null || historyRecording != null) return;
             TimelineState state = CaptureTimelineState(layer, property);
-            if ((timelineUndo.Count > 0 || timelineRedo.Count > 0) && HistoryRevisions().presented != historyPresented)
+            if ((timelineUndo.Count > 0 || timelineRedo.Count > 0) && HistoryRevisions().Presented != historyPresented)
                 ClearTimelineHistory("History cleared because the document changed elsewhere.");
             historyRecording = new TimelineEdit { Layer = layer, Property = property, Before = state };
         }
@@ -97,7 +96,7 @@ namespace ImmPlayer
         {
             timelineUndo.Clear(); timelineRedo.Clear();
             historyRecording = historyReplay = null;
-            historyPresented = revisions.presented;
+            historyPresented = revisions.Presented;
             historyNotice = reason;
         }
 
@@ -124,7 +123,7 @@ namespace ImmPlayer
                 var from = replayIsUndo ? timelineUndo : timelineRedo;
                 var to = replayIsUndo ? timelineRedo : timelineUndo;
                 from.RemoveAt(from.Count - 1); to.Add(entry);
-                historyReplay = null; historyPresented = revisions.presented; historyNotice = "";
+                historyReplay = null; historyPresented = revisions.Presented; historyNotice = "";
                 return;
             }
             if (historyRecording == null)
@@ -133,7 +132,7 @@ namespace ImmPlayer
             historyRecording = null;
             recorded.Label = awaitingCommitLabel;
             recorded.After = CaptureTimelineState(recorded.Layer, recorded.Property);
-            historyPresented = revisions.presented;
+            historyPresented = revisions.Presented;
             if (SameTimelineState(recorded.Before, recorded.After)) return;
             timelineRedo.Clear();
             if (recorded.Bytes > HistoryByteLimit)
@@ -174,8 +173,8 @@ namespace ImmPlayer
             if (!attached || pending != 0 || awaitingCommit || historyReplay != null) return;
             var from = undo ? timelineUndo : timelineRedo;
             if (from.Count == 0) return;
-            N.Revisions currentRevision = HistoryRevisions();
-            if (currentRevision.presented != historyPresented)
+            ImmLiveDrawingEdits.Revisions currentRevision = HistoryRevisions();
+            if (currentRevision.Presented != historyPresented)
             { ClearTimelineHistory("History cleared because the document changed elsewhere."); Run(Refresh); return; }
             if (!HistoryReady(currentRevision))
             { Log("Wait for the current edit to finish before undoing or redoing."); return; }
@@ -205,7 +204,7 @@ namespace ImmPlayer
             Submit($"{(undo ? "Undo" : "Redo")} {entry.Label}", () =>
             {
                 if (entry.Property == -1)
-                    return N.ImmAuthoring_FrameSequenceSetHandles(Doc, entry.Layer, target.Frames, (uint)target.Frames.Length);
+                    return ImmLiveDrawingEdits.SetFrameSequence(Doc, entry.Layer, target.Frames);
                 if (entry.Property == -2) return N.ImmAuthoring_PaintSetMaxRepeatCount(Doc, entry.Layer, target.Repeat);
                 foreach (var key in removeKeys)
                     N.Check(N.ImmAuthoring_KeyRemove(Doc, entry.Layer, entry.Property, key.seconds));

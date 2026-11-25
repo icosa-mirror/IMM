@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
+using ImmPlayer.Authoring;
 using N = ImmPlayer.ImmLiveEditNative;
 
 namespace ImmPlayer
@@ -94,8 +95,8 @@ namespace ImmPlayer
             if (GUILayout.Button("Use drawing at frame")) Submit("Set frame drawing", () =>
             {
                 RecordTimelineBefore(selected, -1);
-                N.Check(N.ImmAuthoring_DrawingGetHandle(Doc, selected, Integer(drawingIndex), out ulong drawing));
-                return N.ImmAuthoring_FrameSetHandle(Doc, selected, Integer(frame), drawing);
+                N.Check(ImmLiveDrawingEdits.GetDrawing(Doc, selected, Integer(drawingIndex), out ulong drawing));
+                return ImmLiveDrawingEdits.SetFrameDrawing(Doc, selected, Integer(frame), drawing);
             });
             GUILayout.EndHorizontal();
             GUI.enabled = previous;
@@ -111,7 +112,7 @@ namespace ImmPlayer
                 if (index < 0 || index >= data.Drawings.Length) throw new ArgumentOutOfRangeException(nameof(frame));
                 var next = new List<ulong>(data.Drawings);
                 if (insertHold) next.Insert(index + 1, next[index]); else next.RemoveAt(index);
-                return N.ImmAuthoring_FrameSequenceSetHandles(Doc, selected, next.ToArray(), (uint)next.Count);
+                return ImmLiveDrawingEdits.SetFrameSequence(Doc, selected, next.ToArray());
             });
         }
 
@@ -147,7 +148,7 @@ namespace ImmPlayer
                 data.Drawings = new ulong[checked((int)frames)];
                 for (int i = 0; i < data.Drawings.Length; i++)
                 {
-                    result = N.ImmAuthoring_FrameGetDrawingHandle(Doc, layer.Id, i, out data.Drawings[i]);
+                    result = ImmLiveDrawingEdits.GetFrameDrawing(Doc, layer.Id, i, out data.Drawings[i]);
                     if (result != 0) { data.Drawings = Array.Empty<ulong>(); break; }
                 }
                 timelineData[layer.Id] = data;
