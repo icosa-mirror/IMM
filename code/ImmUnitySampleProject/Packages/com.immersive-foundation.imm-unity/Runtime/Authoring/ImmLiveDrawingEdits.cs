@@ -128,10 +128,6 @@ namespace ImmPlayer.Authoring
         internal static bool TrySetStrokeColors(int document, int layer, ulong drawing, ulong revision,
             int strokeIndex, PaintPoint[] points)
         {
-#if UNITY_IOS && !UNITY_EDITOR
-            // The package can be linked with an older static player on iOS.
-            return false;
-#else
             if (s_StrokeColorsUnavailable) return false;
             var rgba = new float[points.Length * 4];
             for (int i = 0; i < points.Length; ++i)
@@ -151,16 +147,13 @@ namespace ImmPlayer.Authoring
                 s_StrokeColorsUnavailable = true;
                 return false;
             }
-#endif
         }
 
-#if !UNITY_IOS || UNITY_EDITOR
         private static bool s_StrokeColorsUnavailable;
 
         [DllImport(Library)]
         private static extern int ImmAuthoring_DrawingSetStrokeColors(int document, int layer, ulong drawing,
             ulong revision, uint strokeIndex, uint pointCount, [In] float[] rgba);
-#endif
 
         /// <summary>Replace the entire drawing. Native code copies all stroke data before returning.</summary>
         public static int SetDrawingGeometry(int document, int layer, ulong drawing, Stroke[] strokes,

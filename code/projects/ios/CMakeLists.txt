@@ -463,11 +463,17 @@ if(IMMUNITY_COPY_TO_UPM_IOS)
 endif()
 
 file(WRITE "${CMAKE_BINARY_DIR}/unity_link_smoke.cpp"
+    "#include \"imm_authoring.h\"\n"
     "extern \"C\" void UnityPluginLoad(void *);\n"
     "extern \"C\" int Init(int, int, char *, char *);\n"
-    "int main() { UnityPluginLoad((void*)0); return Init(0, 0, (char*)0, (char*)0); }\n"
+    "int main() {\n"
+    "    UnityPluginLoad(nullptr);\n"
+    "    if (ImmAuthoring_DrawingSetStrokeColors(-1, -1, 0, 0, 0, 0, nullptr) != IMM_AUTHORING_INVALID_ARGUMENT) return 1;\n"
+    "    return Init(0, 0, nullptr, nullptr);\n"
+    "}\n"
 )
 add_executable(ImmUnityIOSLinkSmoke EXCLUDE_FROM_ALL "${CMAKE_BINARY_DIR}/unity_link_smoke.cpp")
+target_include_directories(ImmUnityIOSLinkSmoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../appImmUnity/src")
 add_dependencies(ImmUnityIOSLinkSmoke ImmUnity)
 target_link_options(ImmUnityIOSLinkSmoke PRIVATE "-Wl,-force_load,${CMAKE_BINARY_DIR}/unity/libImmUnityPlugin.a")
 target_link_libraries(ImmUnityIOSLinkSmoke PRIVATE
