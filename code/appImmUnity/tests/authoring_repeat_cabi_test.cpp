@@ -19,6 +19,108 @@ static void requireRepeat(bool condition, const char * message)
     }
 }
 
+// Exercise the frame the paused player actually evaluates, in addition to the stored table.
+template <typename Wait>
+static void checkSplitHold(const wchar_t * fixture, const Wait & wait)
+{
+    auto & player = iPlayer();
+    const int doc = player.Load(fixture);
+    requireRepeat(doc >= 0 && wait([&]() { return ImmAuthoring_Attach(doc) == IMM_AUTHORING_OK; }),
+        "attach to split-hold fixture");
+    player.Pause(doc);
+    const auto paused = [&]() {
+        Player::DocumentState state{};
+        player.GetDocumentState(state, doc);
+        return state.mPlaybackState == Player::PlaybackState::Paused;
+    };
+    requireRepeat(wait(paused), "pause split-hold fixture");
+    int layer = -1;
+    for (int i = 0; i < player.GetLayerCount(doc); ++i)
+    {
+        Player::LayerInfo info{};
+        requireRepeat(player.GetLayerInfoByIndex(doc, i, info), "read split-hold layer");
+        if (std::wcscmp(info.name, L"KeepPaint") == 0) layer = info.id;
+    }
+    uint64_t original = 0;
+    requireRepeat(layer >= 0 && ImmAuthoring_FrameGetDrawingHandle(doc, layer, 0, &original) == IMM_AUTHORING_OK,
+        "read original drawing handle");
+    const auto present = [&]() {
+        uint64_t revision = 0;
+        requireRepeat(ImmAuthoring_Commit(doc, &revision) == IMM_AUTHORING_OK && revision, "commit drawing edit");
+        requireRepeat(wait([&]() {
+            ImmAuthoringCommitStatus status{};
+            status.structSize = sizeof(status); status.structVersion = 1;
+            requireRepeat(ImmAuthoring_GetCommitStatus(doc, revision, &status) == IMM_AUTHORING_OK &&
+                status.state != IMM_AUTHORING_COMMIT_REJECTED, "drawing edit status");
+            return status.state == IMM_AUTHORING_COMMIT_PRESENTED;
+        }), "drawing edit reaches the player");
+        requireRepeat(paused(), "drawing edit preserves pause");
+    };
+    const auto evaluatedDrawing = [&]() -> uint64_t {
+        const int count = player.GetEditableLayerStates(doc, nullptr, 0);
+        requireRepeat(count > 0, "count evaluated paint layers");
+        std::vector<Player::EditableLayerState> states(count);
+        requireRepeat(player.GetEditableLayerStates(doc, states.data(), count) == count, "read evaluated paint layers");
+        for (const auto & state : states)
+        {
+            if (state.id != layer || !state.visible) continue;
+            uint64_t handle = 0;
+            requireRepeat(ImmAuthoring_DrawingGetHandle(doc, layer, state.drawing, &handle) == IMM_AUTHORING_OK,
+                "read evaluated drawing handle");
+            return handle;
+        }
+        return 0;
+    };
+    const auto checkFrames = [&](const uint64_t (&table)[4]) {
+        for (int frame = 0; frame < 4; ++frame)
+        {
+            uint64_t mapped = 0;
+            requireRepeat(ImmAuthoring_FrameGetDrawingHandle(doc, layer, frame, &mapped) == IMM_AUTHORING_OK &&
+                mapped == table[frame], "presented frame mapping");
+            // The fixture runs at 30 fps. Seek to each frame's midpoint (12,600 ticks/second).
+            const uint64_t request = player.RequestSetTime(doc, frame * 420 + 210, 0);
+            requireRepeat(request != 0 && wait([&]() {
+                ImmPlayer::SpawnAreaSnapshot snapshot{};
+                return player.GetSpawnAreaSnapshot(doc, snapshot, 0, nullptr) >= 0 &&
+                    snapshot.completedCommand == request &&
+                    snapshot.commandStatus == static_cast<int>(ImmPlayer::PlaybackRequestStatus::Applied);
+            }), "tracked paused seek completes");
+            requireRepeat(evaluatedDrawing() == table[frame] && paused(), "paused player shows requested drawing");
+        }
+    };
+
+    const uint64_t held[] = { original, original, original, original };
+    requireRepeat(ImmAuthoring_FrameSequenceSetHandles(doc, layer, held, 4) == IMM_AUTHORING_OK, "queue four-frame hold");
+    present();
+    checkFrames(held);
+    uint64_t edited = 0;
+    requireRepeat(ImmAuthoring_DrawingCreate(doc, layer, &edited) == IMM_AUTHORING_OK &&
+        edited != 0 && edited != original, "reserve split drawing");
+    ImmAuthoringPoint points[2]{};
+    for (auto & point : points)
+    {
+        point.ny = 1; point.dx = 1; point.r = 1; point.alpha = 1; point.width = 0.05f;
+    }
+    points[1].px = 1; points[1].length = 1;
+    ImmAuthoringElementGeometry stroke{ sizeof(ImmAuthoringElementGeometry), 1, 2, 1, 2, 0, points };
+    ImmAuthoringDrawingGeometry geometry{ sizeof(ImmAuthoringDrawingGeometry), 1, 1, 0, &stroke, 2, 0, 0, 0 };
+    requireRepeat(ImmAuthoring_DrawingSetGeometry(doc, layer, edited, &geometry) == IMM_AUTHORING_OK, "queue split stroke");
+    const uint64_t split[] = { original, original, edited, edited };
+    requireRepeat(ImmAuthoring_FrameSequenceSetHandles(doc, layer, split, 4) == IMM_AUTHORING_OK, "queue split mappings");
+    uint64_t beforeCommit = 0;
+    requireRepeat(ImmAuthoring_FrameGetDrawingHandle(doc, layer, 3, &beforeCommit) == IMM_AUTHORING_OK &&
+        beforeCommit == original, "queued split remains unpublished");
+    present();
+    requireRepeat(evaluatedDrawing() == edited, "split appears at the paused playhead without seeking");
+    checkFrames(split);
+    requireRepeat(ImmAuthoring_FrameSequenceSetHandles(doc, layer, held, 4) == IMM_AUTHORING_OK &&
+        ImmAuthoring_DrawingDestroy(doc, layer, edited) == IMM_AUTHORING_OK, "queue undo of split");
+    present();
+    requireRepeat(evaluatedDrawing() == original, "undo appears at the paused playhead without seeking");
+    checkFrames(held);
+    std::puts("[IMM_SPLIT_HOLD_CABI_TEST] pausedScrub=12 geometryAndTableAtomic=1 undo=1");
+}
+
 int wmain(int argc, wchar_t ** argv)
 {
     requireRepeat(argc == 2, "fixture argument");
@@ -1200,6 +1302,8 @@ int wmain(int argc, wchar_t ** argv)
     requireRepeat(player.GetInitialSpawnAreaLayerId(defaultDoc) == defaultAId && player.GetSpawnArea(defaultDoc) == activeDefaultOrdinal,
         "target deletion restores surviving effect and keeps active viewpoint");
     std::puts("[IMM_DEFAULT_ACTION_CABI_TEST] executionOrder=1 undo=1 explicitChoice=1 previewIsolation=1 exitReconcile=1 deletionFallback=1 activeSelectionStable=1");
+    player.UnloadAllSync();
+    checkSplitHold(argv[1], wait);
     player.UnloadAllSync();
     gImmUnityPlugin.mBridge.Shutdown();
     context->Release();
