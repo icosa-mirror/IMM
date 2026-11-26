@@ -111,9 +111,16 @@ namespace ImmPlayer
                             "Head-only culling did not reject the peripheral test scene.");
                         continue;
                     }
-                    Require(leftVisible > 100, "Left stereo slice has no scene.");
-                    Require(rightVisible > 100, "Right stereo slice has no scene.");
-                    Require(different > 100, "Stereo eye transforms produced identical images.");
+                    // Require the same coverage of the eye viewport at every render scale.
+                    int viewportArea = viewport.width * viewport.height;
+                    int targetArea = target.width * target.height;
+                    int minimumPixels = 100 * viewportArea / targetArea;
+                    Require(leftVisible > minimumPixels,
+                        $"Left stereo slice covers too little of {viewport}: {leftVisible} visible pixels, minimum {minimumPixels + 1}.");
+                    Require(rightVisible > minimumPixels,
+                        $"Right stereo slice covers too little of {viewport}: {rightVisible} visible pixels, minimum {minimumPixels + 1}.");
+                    Require(different > minimumPixels,
+                        $"Stereo eye images differ in too few pixels in {viewport}: {different} pixels, minimum {minimumPixels + 1}.");
                     if (viewportOrigin > 0)
                     {
                         var pixels = readback.GetData<Color32>();
