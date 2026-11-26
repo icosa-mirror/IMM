@@ -344,6 +344,22 @@ jobs:
       - name: Install inactive Unity performance probe in CI checkout
         run: python3 tests/tools/prepare_unity_ci_project.py --output code/ImmUnitySampleProject --install-performance-probe-only
 
+      - name: Install Unity Editor for the macOS Metal check
+        shell: bash
+        run: |
+          set -euo pipefail
+          editor_root=/Applications/Unity/Hub/Editor
+          editor="$editor_root/$UNITY_VERSION/Unity.app/Contents/MacOS/Unity"
+          if [ ! -x "$editor" ]; then
+            # Unity Hub no longer implements headless install on newer runner images.
+            if ! command -v unity >/dev/null 2>&1; then
+              brew install --cask unity-cli
+            fi
+            unity install-path --set "$editor_root"
+            unity install "$UNITY_VERSION" --architecture arm64 --module mac-il2cpp --child-modules --non-interactive --yes --accept-eula
+          fi
+          test -x "$editor"
+
       - name: Build Unity macOS Metal smoke player and run project Play-button smoke
         id: unity_macos_metal_player_build
         timeout-minutes: 25
