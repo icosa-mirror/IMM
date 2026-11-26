@@ -580,7 +580,7 @@ namespace ImmPlayer.Authoring
             Scale = transform.Scale
         };
 
-        private static PointNative[] ToNative(IReadOnlyList<PaintPoint> points)
+        internal static PointNative[] ToNative(IReadOnlyList<PaintPoint> points)
         {
             PointNative[] result = new PointNative[points.Count];
             for (int i = 0; i < points.Count; i++)

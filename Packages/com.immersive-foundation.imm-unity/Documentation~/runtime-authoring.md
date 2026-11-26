@@ -13,6 +13,30 @@ live editing or backend acceptance. `Supports` accepts combined
 `ImmAuthoringFeature` flags and returns true only when every requested feature
 is present.
 
+## Editing a loaded paint sequence
+
+Use `ImmLiveDrawingEdits` to edit a loaded static paint layer by its player layer
+ID. Pass the loaded `ImmDocument.DocumentId` to `Attach` and coordinate one
+writer per document. Handles returned by `GetFrameDrawing` are scoped to that
+attachment and layer. Discard cached handles on detach or unload. Editing a drawing changes every frame that holds its handle.
+
+To split a four-frame hold while paused:
+
+1. Read the original handle A with `GetFrameDrawing`. Reserve B with
+   `CreateDrawing`. Supply the complete edited strokes for B with
+   `SetDrawingGeometry`; creation alone does not copy A.
+2. Queue `SetFrameSequence` with the handles A, A, B, B, then call `Commit`.
+   Check every return code (zero indicates success). If queueing fails, call
+   `DiscardPending` to discard your open batch.
+3. Poll `GetCommitStatus` for the returned revision as the player updates.
+   Record the edit in application undo history once its state is `Presented`.
+   A `Rejected` status includes the native result and failing command.
+4. Undo by publishing A, A, A, A. Keep B while redo needs it, or queue
+   `DestroyDrawing` after removing its references. Detach when editing ends.
+
+These edits live in the loaded player. Reloading the source restores its saved
+content. The application owns the editable geometry and any save or undo data.
+
 ## Quill static paint conversion
 
 `QuillToImmConverter.ConvertStaticPaintProject(projectFolder, outputPath)` maps
