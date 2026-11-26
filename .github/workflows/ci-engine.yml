@@ -355,6 +355,9 @@ jobs:
             if ! command -v unity >/dev/null 2>&1; then
               brew install --cask unity-cli
             fi
+            if [ ! -d "$editor_root" ]; then
+              sudo install -d -o "$(id -un)" -g "$(id -gn)" "$editor_root"
+            fi
             unity install-path --set "$editor_root"
             unity install "$UNITY_VERSION" --architecture arm64 --module mac-il2cpp --child-modules --non-interactive --yes --accept-eula
           fi
