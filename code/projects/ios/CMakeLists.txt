@@ -469,6 +469,7 @@ file(WRITE "${CMAKE_BINARY_DIR}/unity_link_smoke.cpp"
     "int main() {\n"
     "    UnityPluginLoad(nullptr);\n"
     "    if (ImmAuthoring_DrawingSetStrokeColors(-1, -1, 0, 0, 0, 0, nullptr) != IMM_AUTHORING_INVALID_ARGUMENT) return 1;\n"
+    "    if (ImmAuthoring_DrawingSetStrokeColorBatch(-1, -1, 0, 0, 0, nullptr, 0, nullptr) != IMM_AUTHORING_INVALID_ARGUMENT) return 1;\n"
     "    return Init(0, 0, nullptr, nullptr);\n"
     "}\n"
 )

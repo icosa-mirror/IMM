@@ -159,7 +159,7 @@ namespace ImmPlayer {
         int32_t QueueDrawingDeletion(int docId, uint32_t layerId, uint64_t drawingId);
 
         int32_t QueueStrokeColors(int docId, uint32_t layerId, uint64_t drawingId,
-            uint64_t expectedRevision, uint32_t strokeIndex, std::vector<float> rgba);
+            uint64_t expectedRevision, std::vector<StrokeColorEdit> edits);
         int32_t QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
             std::vector<Document::AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);

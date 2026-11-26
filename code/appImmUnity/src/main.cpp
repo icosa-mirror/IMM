@@ -110,6 +110,7 @@
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
 #if defined(WINDOWS)
 #include <windows.h>
+#include <algorithm>
 #include <array>
 #include <string>
 #endif
@@ -3237,17 +3238,51 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Drawi
     int32_t docId, int32_t layerId, uint64_t drawingId, uint64_t expectedRevision, uint32_t strokeIndex,
     uint32_t pointCount, const float *rgba)
 {
-    if (layerId < 0 || drawingId == 0 || rgba == nullptr || pointCount < IMM_AUTHORING_MIN_POINTS_PER_ELEMENT ||
-        pointCount > IMM_AUTHORING_MAX_POINTS_PER_ELEMENT)
+    if (pointCount > IMM_AUTHORING_MAX_POINTS_PER_ELEMENT)
         return IMM_AUTHORING_INVALID_ARGUMENT;
-    const size_t count = size_t(pointCount) * 4;
-    for (size_t i = 0; i < count; ++i)
+    const ImmAuthoringStrokeColorEdit edit{strokeIndex, pointCount};
+    return ImmAuthoring_DrawingSetStrokeColorBatch(docId, layerId, drawingId, expectedRevision,
+        1, &edit, pointCount * 4, rgba);
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetStrokeColorBatch(
+    int32_t docId, int32_t layerId, uint64_t drawingId, uint64_t expectedRevision, uint32_t editCount,
+    const ImmAuthoringStrokeColorEdit *edits, uint32_t rgbaCount, const float *rgba)
+{
+    if (layerId < 0 || drawingId == 0 || edits == nullptr || rgba == nullptr || editCount == 0 ||
+        editCount > IMM_AUTHORING_MAX_ELEMENTS_PER_DRAWING || rgbaCount > IMM_AUTHORING_MAX_POINTS_PER_DRAWING * 4)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    size_t required = 0;
+    for (uint32_t i = 0; i < editCount; ++i)
+    {
+        if (edits[i].pointCount < IMM_AUTHORING_MIN_POINTS_PER_ELEMENT ||
+            edits[i].pointCount > IMM_AUTHORING_MAX_POINTS_PER_ELEMENT)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        required += size_t(edits[i].pointCount) * 4;
+    }
+    if (required != rgbaCount)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    for (uint32_t i = 0; i < rgbaCount; ++i)
         if (!(rgba[i] >= 0.0f && rgba[i] <= 1.0f))
             return IMM_AUTHORING_VALIDATION_FAILED;
     try
     {
-        return iPlayer().QueueStrokeColors(docId, layerId, drawingId, expectedRevision, strokeIndex,
-            std::vector<float>(rgba, rgba + count));
+        std::vector<ImmPlayer::StrokeColorEdit> pending;
+        pending.reserve(editCount);
+        const float *colors = rgba;
+        for (uint32_t i = 0; i < editCount; ++i)
+        {
+            const float *end = colors + size_t(edits[i].pointCount) * 4;
+            pending.push_back({edits[i].strokeIndex, std::vector<float>(colors, end)});
+            colors = end;
+        }
+        std::sort(pending.begin(), pending.end(), [](const auto &a, const auto &b) {
+            return a.strokeIndex < b.strokeIndex;
+        });
+        for (size_t i = 1; i < pending.size(); ++i)
+            if (pending[i - 1].strokeIndex == pending[i].strokeIndex)
+                return IMM_AUTHORING_INVALID_ARGUMENT;
+        return iPlayer().QueueStrokeColors(docId, layerId, drawingId, expectedRevision, std::move(pending));
     }
     catch (const std::bad_alloc &)
     {

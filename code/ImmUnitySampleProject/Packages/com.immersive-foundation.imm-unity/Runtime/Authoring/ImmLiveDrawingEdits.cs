@@ -130,13 +130,7 @@ namespace ImmPlayer.Authoring
         {
             if (s_StrokeColorsUnavailable) return false;
             var rgba = new float[points.Length * 4];
-            for (int i = 0; i < points.Length; ++i)
-            {
-                rgba[4 * i] = points[i].Color.r;
-                rgba[4 * i + 1] = points[i].Color.g;
-                rgba[4 * i + 2] = points[i].Color.b;
-                rgba[4 * i + 3] = points[i].Alpha;
-            }
+            WriteStrokeColors(points, rgba, 0);
             try
             {
                 return ImmAuthoring_DrawingSetStrokeColors(document, layer, drawing, revision, (uint)strokeIndex,
@@ -149,7 +143,66 @@ namespace ImmPlayer.Authoring
             }
         }
 
+        internal static bool TrySetStrokeColorBatch(int document, int layer, ulong drawing, ulong revision,
+            int[] indices, Stroke[] strokes)
+        {
+            if (s_StrokeColorBatchUnavailable || indices.Length > MaxStrokes) return false;
+            var edits = new StrokeColorEdit[indices.Length];
+            int pointCount = 0;
+            for (int i = 0; i < indices.Length; ++i)
+            {
+                int count = strokes[indices[i]].Points.Length;
+                if (count < 2 || count > MaxStrokePoints || count > MaxDrawingPoints - pointCount) return false;
+                edits[i] = new StrokeColorEdit { StrokeIndex = (uint)indices[i], PointCount = (uint)count };
+                pointCount += count;
+            }
+
+            var rgba = new float[pointCount * 4];
+            int offset = 0;
+            foreach (int index in indices)
+            {
+                var points = strokes[index].Points;
+                WriteStrokeColors(points, rgba, offset);
+                offset += points.Length * 4;
+            }
+
+            try
+            {
+                return ImmAuthoring_DrawingSetStrokeColorBatch(document, layer, drawing, revision,
+                    (uint)edits.Length, edits, (uint)rgba.Length, rgba) == 0;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                s_StrokeColorBatchUnavailable = true;
+                return false;
+            }
+        }
+
+        private static void WriteStrokeColors(PaintPoint[] points, float[] rgba, int offset)
+        {
+            for (int i = 0; i < points.Length; ++i)
+            {
+                int start = offset + 4 * i;
+                rgba[start] = points[i].Color.r;
+                rgba[start + 1] = points[i].Color.g;
+                rgba[start + 2] = points[i].Color.b;
+                rgba[start + 3] = points[i].Alpha;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct StrokeColorEdit
+        {
+            public uint StrokeIndex;
+            public uint PointCount;
+        }
+
+        [DllImport(Library)]
+        private static extern int ImmAuthoring_DrawingSetStrokeColorBatch(int document, int layer, ulong drawing,
+            ulong revision, uint editCount, [In] StrokeColorEdit[] edits, uint rgbaCount, [In] float[] rgba);
+
         private static bool s_StrokeColorsUnavailable;
+        private static bool s_StrokeColorBatchUnavailable;
 
         [DllImport(Library)]
         private static extern int ImmAuthoring_DrawingSetStrokeColors(int document, int layer, ulong drawing,

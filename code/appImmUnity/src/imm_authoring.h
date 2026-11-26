@@ -415,6 +415,19 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingDestroy(int3
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingSetStrokeColors(int32_t docId,
     int32_t layerId, uint64_t drawingId, uint64_t expectedRevision, uint32_t strokeIndex,
     uint32_t pointCount, const float *rgba);
+
+// Each entry identifies a distinct existing stroke and its point count. The RGBA data
+// is tightly packed in entry order, with four linear floats per point.
+typedef struct ImmAuthoringStrokeColorEdit
+{
+    uint32_t strokeIndex;
+    uint32_t pointCount;
+} ImmAuthoringStrokeColorEdit;
+
+// Queue all edits for one drawing against a single presented revision.
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingSetStrokeColorBatch(int32_t docId,
+    int32_t layerId, uint64_t drawingId, uint64_t expectedRevision, uint32_t editCount,
+    const ImmAuthoringStrokeColorEdit *edits, uint32_t rgbaCount, const float *rgba);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingSetGeometry(int32_t docId, int32_t layerId,
     uint64_t drawingId, const ImmAuthoringDrawingGeometry * geometry);
 

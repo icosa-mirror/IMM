@@ -3,6 +3,7 @@
 
 // IQ-TODO: check if Quest support glDrawIndirect, and if so, add it! 
 
+#include <array>
 #include <cstdlib>
 #include <new>
 #ifdef RENDER_BUDGET
@@ -669,7 +670,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     }
 
     bool LayerRendererPaintStatic::PresentStrokeColors(piRenderer *renderer, Drawing *drawing,
-        uint32_t strokeIndex, const std::vector<float> &rgba, uint64_t revision, piLog *log)
+        const std::vector<StrokeColorEdit> &edits, uint64_t revision, piLog *log)
     {
         std::lock_guard<std::recursive_mutex> lock(mLayerInfoMutex);
         if (std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_GPU") || std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT"))
@@ -677,37 +678,70 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         auto *active = dynamic_cast<DrawingStatic *>(drawing);
         if (active == nullptr || active->GetGpuId() < 0 || !mLayerInfo.IsUsed(active->GetGpuId()))
             return false;
-        const auto *range = active->GetStrokeRange(strokeIndex);
-        if (range == nullptr || rgba.size() != size_t(range->count) * 4)
-            return false;
         auto *info = static_cast<iSLayerDrawInfoStatic *>(mLayerInfo.GetAddress(active->GetGpuId()));
         if (info == nullptr)
             return false;
         if (!info->mUploaded && !info->Upload(renderer, log))
             return false;
 
-        const auto &points = active->GetGeometry()->mBuffers[range->brush].mPoints;
-        const auto *first = points.GetAddress(0);
-        std::vector<DrawingStatic::MyVertexFormat> vertices;
-        try { vertices.assign(first, first + points.GetLength()); }
-        catch (const std::bad_alloc &) { return false; }
-        for (uint32_t i = 0; i < range->count; ++i)
+        std::array<std::vector<DrawingStatic::MyVertexFormat>, kNumChunkTypes> vertices;
+        try
         {
-            const float *color = rgba.data() + 4 * i;
-            DrawingStatic::SetVertexColor(vertices[range->start + i],
-                vec3(color[0], color[1], color[2]), piQuantize::bits8(color[3]), range->colorSpace);
+            for (const auto &edit : edits)
+            {
+                const auto *range = active->GetStrokeRange(edit.strokeIndex);
+                if (range == nullptr || edit.rgba.size() != size_t(range->count) * 4)
+                    return false;
+                auto &brushVertices = vertices[range->brush];
+                if (brushVertices.empty())
+                {
+                    const auto &points = active->GetGeometry()->mBuffers[range->brush].mPoints;
+                    const auto *first = points.GetAddress(0);
+                    brushVertices.assign(first, first + points.GetLength());
+                }
+                for (uint32_t i = 0; i < range->count; ++i)
+                {
+                    const float *color = edit.rgba.data() + 4 * i;
+                    DrawingStatic::SetVertexColor(brushVertices[range->start + i],
+                        vec3(color[0], color[1], color[2]), piQuantize::bits8(color[3]), range->colorSpace);
+                }
+            }
         }
-        piBuffer fresh = renderer->CreateStructuredBuffer(vertices.data(), static_cast<uint32_t>(vertices.size()),
-            sizeof(DrawingStatic::MyVertexFormat), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::ShaderResource);
-        if (fresh == nullptr)
-            return false;
-        auto &buffer = info->mBuffers[range->brush].mVertexData;
-        piBuffer retired = buffer;
-        buffer = fresh;
-        active->PublishStrokeColors(*range, vertices.data() + range->start);
+        catch (const std::bad_alloc &) { return false; }
+
+        std::array<piBuffer, kNumChunkTypes> prepared{};
+        for (int brush = 0; brush < kNumChunkTypes; ++brush)
+        {
+            const auto &brushVertices = vertices[brush];
+            if (brushVertices.empty())
+                continue;
+            prepared[brush] = renderer->CreateStructuredBuffer(brushVertices.data(),
+                static_cast<uint32_t>(brushVertices.size()), sizeof(DrawingStatic::MyVertexFormat),
+                piRenderer::BufferType::Dynamic, piRenderer::BufferUse::ShaderResource);
+            if (prepared[brush] == nullptr)
+            {
+                for (auto buffer : prepared)
+                    if (buffer != nullptr) renderer->DestroyBuffer(buffer);
+                return false;
+            }
+        }
+
+        // All replacements are ready. Swap the affected buffers before publishing this revision.
+        for (int brush = 0; brush < kNumChunkTypes; ++brush)
+        {
+            if (prepared[brush] == nullptr)
+                continue;
+            auto &buffer = info->mBuffers[brush].mVertexData;
+            piBuffer retired = buffer;
+            buffer = prepared[brush];
+            if (retired != nullptr) renderer->DestroyBuffer(retired);
+        }
+        for (const auto &edit : edits)
+        {
+            const auto &range = *active->GetStrokeRange(edit.strokeIndex);
+            active->PublishStrokeColors(range, vertices[range.brush].data() + range.start);
+        }
         active->SetAuthoringRevision(revision);
-        if (retired != nullptr)
-            renderer->DestroyBuffer(retired);
         return true;
     }
 

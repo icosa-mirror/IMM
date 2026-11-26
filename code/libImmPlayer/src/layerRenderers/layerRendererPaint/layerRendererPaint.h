@@ -7,6 +7,11 @@
 
 namespace ImmPlayer
 {
+    struct StrokeColorEdit
+    {
+        uint32_t strokeIndex;
+        std::vector<float> rgba;
+    };
 	class LayerRendererPaint : public LayerRenderer
 	{
 	public:
@@ -61,9 +66,9 @@ namespace ImmPlayer
 		}
 
         virtual bool PresentStrokeColors(ImmCore::piRenderer *renderer, ImmImporter::Drawing *drawing,
-            uint32_t strokeIndex, const std::vector<float> &rgba, uint64_t revision, ImmCore::piLog *log)
+            const std::vector<StrokeColorEdit> &edits, uint64_t revision, ImmCore::piLog *log)
         {
-            (void)renderer; (void)drawing; (void)strokeIndex; (void)rgba; (void)revision; (void)log;
+            (void)renderer; (void)drawing; (void)edits; (void)revision; (void)log;
             return false;
         }
 

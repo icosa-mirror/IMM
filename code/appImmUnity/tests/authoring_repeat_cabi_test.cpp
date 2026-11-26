@@ -102,8 +102,11 @@ static void checkSplitHold(const wchar_t * fixture, const Wait & wait)
         point.ny = 1; point.dx = 1; point.r = 1; point.alpha = 1; point.width = 0.05f;
     }
     points[1].px = 1; points[1].length = 1;
-    ImmAuthoringElementGeometry stroke{ sizeof(ImmAuthoringElementGeometry), 1, 2, 1, 2, 0, points };
-    ImmAuthoringDrawingGeometry geometry{ sizeof(ImmAuthoringDrawingGeometry), 1, 1, 0, &stroke, 2, 0, 0, 0 };
+    const ImmAuthoringElementGeometry strokes[] = {
+        { sizeof(ImmAuthoringElementGeometry), 1, 2, 1, 2, 0, points },
+        { sizeof(ImmAuthoringElementGeometry), 1, 4, 1, 2, 0, points },
+    };
+    ImmAuthoringDrawingGeometry geometry{ sizeof(ImmAuthoringDrawingGeometry), 1, 2, 0, strokes, 2, 0, 0, 0 };
     requireRepeat(ImmAuthoring_DrawingSetGeometry(doc, layer, edited, &geometry) == IMM_AUTHORING_OK, "queue split stroke");
     const uint64_t split[] = { original, original, edited, edited };
     requireRepeat(ImmAuthoring_FrameSequenceSetHandles(doc, layer, split, 4) == IMM_AUTHORING_OK, "queue split mappings");
@@ -113,6 +116,23 @@ static void checkSplitHold(const wchar_t * fixture, const Wait & wait)
     present();
     requireRepeat(evaluatedDrawing() == edited, "split appears at the paused playhead without seeking");
     checkFrames(split);
+    ImmAuthoringRevisions colorRevision{};
+    colorRevision.structSize = sizeof(colorRevision);
+    colorRevision.structVersion = IMM_AUTHORING_STRUCT_VERSION_1;
+    requireRepeat(ImmAuthoring_GetRevisions(doc, &colorRevision) == IMM_AUTHORING_OK &&
+        colorRevision.presented > 0, "read the drawing revision before recolor");
+    const float colors[] = { 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1 };
+    const ImmAuthoringStrokeColorEdit colorEdits[] = { { 1, 2 }, { 0, 2 } };
+    const ImmAuthoringStrokeColorEdit invalidEdits[] = { { 1, 2 }, { 2, 2 } };
+    requireRepeat(ImmAuthoring_DrawingSetStrokeColorBatch(doc, layer, edited, colorRevision.presented - 1,
+        2, colorEdits, 16, colors) == IMM_AUTHORING_INVALID_STATE, "reject a stale recolor batch");
+    requireRepeat(ImmAuthoring_DrawingSetStrokeColorBatch(doc, layer, edited, colorRevision.presented,
+        2, invalidEdits, 16, colors) == IMM_AUTHORING_VALIDATION_FAILED, "reject a partially invalid recolor batch");
+    requireRepeat(ImmAuthoring_DrawingSetStrokeColorBatch(doc, layer, edited, colorRevision.presented,
+        2, colorEdits, 16, colors) == IMM_AUTHORING_OK, "queue a mixed-brush recolor batch");
+    present();
+    requireRepeat(evaluatedDrawing() == edited, "recolor preserves the drawing at the paused playhead");
+    std::puts("[IMM_COLOR_BATCH_CABI_TEST] pass=1 mixedBrushes=1 staleRejected=1 invalidRangeRejected=1 stableDrawing=1");
     requireRepeat(ImmAuthoring_FrameSequenceSetHandles(doc, layer, held, 4) == IMM_AUTHORING_OK &&
         ImmAuthoring_DrawingDestroy(doc, layer, edited) == IMM_AUTHORING_OK, "queue undo of split");
     present();

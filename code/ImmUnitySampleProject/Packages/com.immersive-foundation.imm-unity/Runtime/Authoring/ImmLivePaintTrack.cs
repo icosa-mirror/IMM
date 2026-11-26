@@ -18,13 +18,13 @@ namespace ImmPlayer.Authoring
             public long Revision { get; }
             public ImmLiveDrawingEdits.Stroke[] Strokes { get; }
             public float BiggestStroke { get; }
-            internal int RecoloredStroke { get; } = -1;
+            internal int[] RecoloredStrokes { get; }
             internal long RevisionBeforeRecolor { get; }
 
-            private Drawing(Drawing previous, long revision, int index, ImmLiveDrawingEdits.Stroke[] strokes)
+            private Drawing(Drawing previous, long revision, int[] indices, ImmLiveDrawingEdits.Stroke[] strokes)
                 : this(previous.Id, revision, strokes, previous.BiggestStroke)
             {
-                RecoloredStroke = index;
+                RecoloredStrokes = indices;
                 RevisionBeforeRecolor = previous.Revision;
             }
 
@@ -37,18 +37,49 @@ namespace ImmPlayer.Authoring
                 var strokes = (ImmLiveDrawingEdits.Stroke[])previous.Strokes.Clone();
                 var old = strokes[index];
                 strokes[index] = replacement;
+                return SameGeometry(old, replacement)
+                    ? new Drawing(previous, revision, new[] { index }, strokes)
+                    : new Drawing(previous.Id, revision, strokes, previous.BiggestStroke);
+            }
+
+            /// <summary>Replace several strokes. Replacements with matching geometry can be presented as one color edit.</summary>
+            public static Drawing WithRecoloredStrokes(Drawing previous, long revision,
+                IReadOnlyDictionary<int, ImmLiveDrawingEdits.Stroke> replacements)
+            {
+                if (previous == null) throw new ArgumentNullException(nameof(previous));
+                if (replacements == null) throw new ArgumentNullException(nameof(replacements));
+                if (replacements.Count == 0) throw new ArgumentException("Specify at least one stroke.", nameof(replacements));
+                var strokes = (ImmLiveDrawingEdits.Stroke[])previous.Strokes.Clone();
+                var indices = new int[replacements.Count];
+                int count = 0;
+                bool colorOnly = true;
+                foreach (var replacement in replacements)
+                {
+                    int index = replacement.Key;
+                    if (index < 0 || index >= strokes.Length) throw new ArgumentOutOfRangeException(nameof(replacements));
+                    colorOnly &= SameGeometry(strokes[index], replacement.Value);
+                    strokes[index] = replacement.Value;
+                    indices[count++] = index;
+                }
+                return colorOnly
+                    ? new Drawing(previous, revision, indices, strokes)
+                    : new Drawing(previous.Id, revision, strokes, previous.BiggestStroke);
+            }
+
+            private static bool SameGeometry(ImmLiveDrawingEdits.Stroke old, ImmLiveDrawingEdits.Stroke replacement)
+            {
                 if (old.Brush != replacement.Brush || old.Visibility != replacement.Visibility ||
-                    replacement.Points == null || old.Points.Length != replacement.Points.Length)
-                    return new Drawing(previous.Id, revision, strokes, previous.BiggestStroke);
+                    old.Points == null || replacement.Points == null || old.Points.Length != replacement.Points.Length)
+                    return false;
                 for (int i = 0; i < old.Points.Length; ++i)
                 {
                     var a = old.Points[i];
                     var b = replacement.Points[i];
                     if (!a.Position.Equals(b.Position) || !a.Normal.Equals(b.Normal) ||
                         !a.Direction.Equals(b.Direction) || a.Width != b.Width || a.Length != b.Length || a.Time != b.Time)
-                        return new Drawing(previous.Id, revision, strokes, previous.BiggestStroke);
+                        return false;
                 }
-                return new Drawing(previous, revision, index, strokes);
+                return true;
             }
 
             public Drawing(long id, long revision, ImmLiveDrawingEdits.Stroke[] strokes, float biggestStroke)
@@ -342,11 +373,14 @@ namespace ImmPlayer.Authoring
                     _handles.Add(drawing.Id, handle);
                 }
                 ulong handleToEdit = _handles[drawing.Id];
-                int stroke = drawing.RecoloredStroke;
-                _committingColors = !_disableStrokeColors && !create && !remap && stroke >= 0 &&
+                int[] strokes = drawing.RecoloredStrokes;
+                _committingColors = !_disableStrokeColors && !create && !remap && strokes != null &&
                     _presented.Drawings[drawing.Id].Revision == drawing.RevisionBeforeRecolor &&
-                    ImmLiveDrawingEdits.TrySetStrokeColors(doc, _layer, handleToEdit, _nativePresented, stroke,
-                        drawing.Strokes[stroke].Points);
+                    (strokes.Length == 1
+                        ? ImmLiveDrawingEdits.TrySetStrokeColors(doc, _layer, handleToEdit, _nativePresented,
+                            strokes[0], drawing.Strokes[strokes[0]].Points)
+                        : ImmLiveDrawingEdits.TrySetStrokeColorBatch(doc, _layer, handleToEdit, _nativePresented,
+                            strokes, drawing.Strokes));
                 if (!_committingColors)
                     Check(ImmLiveDrawingEdits.SetDrawingGeometry(doc, _layer, handleToEdit,
                         drawing.Strokes, drawing.BiggestStroke, _manager.UsesGammaPaint));

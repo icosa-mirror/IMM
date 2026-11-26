@@ -1370,8 +1370,7 @@ namespace ImmPlayer
                 if (std::getenv("IMM_LIVE_EDIT_HOLD_GPU_PREPARED"))
                     return mState.mPlaybackState != PlaybackState::PausedAndHidden;
                 if (layerPaintRender == nullptr || !layerPaintRender->PresentStrokeColors(renderer,
-                    mPendingPresentation.mActive, mPendingPresentation.mStrokeIndex,
-                    mPendingPresentation.mStrokeColors, revision, log))
+                    mPendingPresentation.mActive, mPendingPresentation.mStrokeColors, revision, log))
                     iRejectCommit(revision, -10, 0, mPendingPresentation.mObject);
                 else
                 {
@@ -2291,7 +2290,7 @@ namespace ImmPlayer
     }
 
     int32_t Document::QueueStrokeColors(uint32_t layerId, uint64_t drawingId,
-        uint64_t expectedRevision, uint32_t strokeIndex, std::vector<float> rgba)
+        uint64_t expectedRevision, std::vector<StrokeColorEdit> edits)
     {
         if (!mEditing || mTimelinePreview || expectedRevision != mPresentedRevision)
             return -4;
@@ -2309,15 +2308,17 @@ namespace ImmPlayer
         auto *drawing = paint != nullptr ? dynamic_cast<DrawingStatic *>(paint->GetDrawing(entry->mDrawingIndex)) : nullptr;
         if (drawing == nullptr)
             return -3;
-        const auto *range = drawing->GetStrokeRange(strokeIndex);
-        if (range == nullptr || rgba.size() != size_t(range->count) * 4)
-            return -6;
+        for (const auto &colorEdit : edits)
+        {
+            const auto *range = drawing->GetStrokeRange(colorEdit.strokeIndex);
+            if (range == nullptr || colorEdit.rgba.size() != size_t(range->count) * 4)
+                return -6;
+        }
         GeometryEdit edit;
         edit.mLayerId = layerId;
         edit.mDrawingId = drawingId;
-        edit.mStrokeIndex = strokeIndex;
         edit.mExpectedRevision = expectedRevision;
-        edit.mStrokeColors = std::move(rgba);
+        edit.mStrokeColors = std::move(edits);
         mOpenGeometryEdits.push_back(std::move(edit));
         return 0;
     }
@@ -3967,7 +3968,6 @@ namespace ImmPlayer
             mPendingPresentation.mRevision = batch.mRevision;
             mPendingPresentation.mObject = edit.mDrawingId;
             mPendingPresentation.mActive = activeStatic;
-            mPendingPresentation.mStrokeIndex = edit.mStrokeIndex;
             mPendingPresentation.mStrokeColors = std::move(edit.mStrokeColors);
             return;
         }

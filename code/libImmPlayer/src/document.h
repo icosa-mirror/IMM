@@ -266,7 +266,7 @@ namespace ImmPlayer {
         int32_t QueueDrawingCreation(uint32_t layerId, uint64_t * drawingIdOut);
         int32_t QueueDrawingDeletion(uint32_t layerId, uint64_t drawingId);
         int32_t QueueStrokeColors(uint32_t layerId, uint64_t drawingId,
-            uint64_t expectedRevision, uint32_t strokeIndex, std::vector<float> rgba);
+            uint64_t expectedRevision, std::vector<StrokeColorEdit> edits);
         int32_t QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
             std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
@@ -343,9 +343,8 @@ namespace ImmPlayer {
             uint32_t mLayerId = 0;
             uint64_t mDrawingId = 0;
             std::vector<AuthoringElementGeometry> mElements;
-            std::vector<float> mStrokeColors;
+            std::vector<StrokeColorEdit> mStrokeColors;
             uint64_t mExpectedRevision = 0;
-            uint32_t mStrokeIndex = 0;
             ImmImporter::Drawing::ColorSpace mColorSpace = ImmImporter::Drawing::ColorSpace::Linear;
             bool mFlipped = false;
             float mBiggestStroke = 0.0f;
@@ -541,8 +540,7 @@ namespace ImmPlayer {
             uint32_t mMappedDrawingIndex = 0;
             uint32_t mPreviousFrameDrawingIndex = 0;
             ImmImporter::Drawing * mActive = nullptr;
-            std::vector<float> mStrokeColors;
-            uint32_t mStrokeIndex = 0;
+            std::vector<StrokeColorEdit> mStrokeColors;
             std::unique_ptr<ImmImporter::Drawing> mReplacement;
             uint64_t mRendererToken = 0;
             bool mGPUPrepared = false;
